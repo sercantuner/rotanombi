@@ -157,9 +157,11 @@ serve(async (req) => {
       );
     }
 
-    // DIA v3 returns data in msg field
+    // DIA v3 returns data in result field (not msg!)
     let cariListe: any[] = [];
-    if (Array.isArray(cariData.msg)) {
+    if (Array.isArray(cariData.result)) {
+      cariListe = cariData.result;
+    } else if (Array.isArray(cariData.msg)) {
       cariListe = cariData.msg;
     } else if (Array.isArray(cariData.data)) {
       cariListe = cariData.data;
@@ -199,7 +201,9 @@ serve(async (req) => {
       console.log("DIA Vade Bakiye Response:", JSON.stringify(vadeBakiyeData).substring(0, 1000));
       
       let vadeBakiyeList: any[] = [];
-      if (Array.isArray(vadeBakiyeData.msg)) {
+      if (Array.isArray(vadeBakiyeData.result)) {
+        vadeBakiyeList = vadeBakiyeData.result;
+      } else if (Array.isArray(vadeBakiyeData.msg)) {
         vadeBakiyeList = vadeBakiyeData.msg;
       } else if (Array.isArray(vadeBakiyeData.data)) {
         vadeBakiyeList = vadeBakiyeData.data;
