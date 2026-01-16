@@ -116,15 +116,30 @@ serve(async (req) => {
 
     const faturaData = await faturaResponse.json();
     
-    if (faturaData.error || faturaData.hata) {
-      const errorMsg = faturaData.error?.message || faturaData.hata?.aciklama || "DIA veri çekme hatası";
+    console.log("DIA Fatura Response:", JSON.stringify(faturaData).substring(0, 500));
+    
+    // Check for DIA error
+    if (faturaData.code && faturaData.code !== "200") {
+      const errorMsg = faturaData.msg || "DIA veri çekme hatası";
       return new Response(
         JSON.stringify({ success: false, error: errorMsg }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const faturalar = faturaData.fat_fatura_listele?.data || faturaData.data || [];
+    // DIA v3 returns data in msg field or as array
+    let faturalar: any[] = [];
+    if (Array.isArray(faturaData.msg)) {
+      faturalar = faturaData.msg;
+    } else if (Array.isArray(faturaData.data)) {
+      faturalar = faturaData.data;
+    } else if (faturaData.fat_fatura_listele?.data) {
+      faturalar = faturaData.fat_fatura_listele.data;
+    } else if (Array.isArray(faturaData)) {
+      faturalar = faturaData;
+    }
+    
+    console.log(`Found ${faturalar.length} fatura records`);
 
     // Process sales data
     let toplamSatis = 0;

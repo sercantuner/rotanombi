@@ -115,7 +115,19 @@ serve(async (req) => {
 
     if (bankaResponse.ok) {
       const bankaData = await bankaResponse.json();
-      const bankalar = bankaData.bcs_bankahesabi_listele?.data || bankaData.data || [];
+      console.log("DIA Banka Response:", JSON.stringify(bankaData).substring(0, 500));
+      
+      // DIA v3 returns data in msg field
+      let bankalar: any[] = [];
+      if (Array.isArray(bankaData.msg)) {
+        bankalar = bankaData.msg;
+      } else if (Array.isArray(bankaData.data)) {
+        bankalar = bankaData.data;
+      } else if (bankaData.bcs_bankahesabi_listele?.data) {
+        bankalar = bankaData.bcs_bankahesabi_listele.data;
+      }
+      
+      console.log(`Found ${bankalar.length} banka records`);
       
       bankaHesaplari = bankalar.map((banka: any) => {
         const bakiye = parseFloat(banka.bakiye) || 0;
