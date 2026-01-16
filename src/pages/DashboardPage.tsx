@@ -14,7 +14,7 @@ import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { DetailedFiltersPanel } from '@/components/dashboard/DetailedFiltersPanel';
 import { VadeDetayListesi } from '@/components/dashboard/VadeDetayListesi';
 import { DashboardFilterProvider, useDashboardFilters } from '@/contexts/DashboardFilterContext';
-import { diaGetGenelRapor, diaGetFinansRapor, getDiaConnectionInfo } from '@/lib/diaClient';
+import { diaGetGenelRapor, diaGetFinansRapor, getDiaConnectionInfo, DiaConnectionInfo } from '@/lib/diaClient';
 import type { DiaGenelRapor, DiaFinansRapor, VadeYaslandirma } from '@/lib/diaClient';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -36,7 +36,7 @@ function DashboardContent() {
   const [genelRapor, setGenelRapor] = useState<DiaGenelRapor | null>(null);
   const [finansRapor, setFinansRapor] = useState<DiaFinansRapor | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isDiaConnected, setIsDiaConnected] = useState(false);
+  const [diaConnectionInfo, setDiaConnectionInfo] = useState<DiaConnectionInfo | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -44,19 +44,25 @@ function DashboardContent() {
     
     try {
       const diaInfo = await getDiaConnectionInfo();
-      setIsDiaConnected(diaInfo?.connected || false);
+      setDiaConnectionInfo(diaInfo);
 
-      if (diaInfo?.connected) {
+      // Eğer DIA bilgileri kayıtlı ise (credentials varsa), rapor çekmeyi dene
+      // Backend auto-login mekanizması session expired ise yeniden login yapacak
+      if (diaInfo?.hasCredentials) {
         const timestamp = Date.now();
-        console.log(`Fetching DIA data at ${timestamp}`);
+        console.log(`Fetching DIA data at ${timestamp}, session valid: ${diaInfo.sessionValid}`);
         
         const [genelResult, finansResult] = await Promise.all([
           diaGetGenelRapor(),
           diaGetFinansRapor(),
         ]);
 
+        // Sonuçları değerlendir
+        let dataFetched = false;
+
         if (genelResult.success && genelResult.data) {
           setGenelRapor(genelResult.data);
+          dataFetched = true;
           
           // Update filter options from data
           const cariler = genelResult.data.cariler || [];
@@ -69,22 +75,33 @@ function DashboardContent() {
           });
         } else {
           console.error('Genel rapor error:', genelResult.error);
-          toast.error(`Genel rapor hatası: ${genelResult.error}`);
+          // Session/auth hatası kontrolü
+          if (genelResult.error?.includes('session') || genelResult.error?.includes('Oturum')) {
+            toast.error('DIA oturumu sona erdi. Ayarlardan yeniden bağlanın.');
+          } else {
+            toast.error(`Genel rapor hatası: ${genelResult.error}`);
+          }
         }
 
         if (finansResult.success && finansResult.data) {
           setFinansRapor(finansResult.data);
+          dataFetched = true;
         } else {
           console.error('Finans rapor error:', finansResult.error);
-          toast.error(`Finans rapor hatası: ${finansResult.error}`);
+          if (!finansResult.error?.includes('session') && !finansResult.error?.includes('Oturum')) {
+            toast.error(`Finans rapor hatası: ${finansResult.error}`);
+          }
         }
 
-        if (genelResult.success || finansResult.success) {
+        if (dataFetched) {
           setLastUpdate(new Date());
           toast.success('DIA verileri güncellendi');
+          // Connection info'yu güncelle (backend auto-login yapmış olabilir)
+          const updatedInfo = await getDiaConnectionInfo();
+          setDiaConnectionInfo(updatedInfo);
         }
       } else {
-        toast.info('DIA bağlantısı yok. Ayarlardan bağlanabilirsiniz.');
+        toast.info('DIA bağlantı bilgileri eksik. Ayarlardan bağlantı yapın.');
       }
     } catch (error) {
       console.error('Dashboard fetch error:', error);
@@ -147,25 +164,45 @@ function DashboardContent() {
 
       <main className="flex-1 p-6 overflow-auto">
         {/* DIA Connection Status */}
-        {!isDiaConnected && (
+        {!diaConnectionInfo?.connected && (
           <div className="mb-6 p-4 rounded-xl bg-warning/10 border border-warning/30 flex items-center justify-between animate-fade-in">
             <div className="flex items-center gap-3">
               <Plug className="w-5 h-5 text-warning" />
               <div>
-                <p className="font-medium text-warning">DIA ERP bağlantısı yok</p>
-                <p className="text-sm text-muted-foreground">Gerçek veriler için DIA'ya bağlanın</p>
+                <p className="font-medium text-warning">
+                  {diaConnectionInfo?.hasCredentials 
+                    ? 'DIA oturumu sona erdi' 
+                    : 'DIA ERP bağlantısı yok'}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {diaConnectionInfo?.hasCredentials 
+                    ? 'Yenile butonuna basarak tekrar bağlanabilirsiniz' 
+                    : 'Gerçek veriler için DIA ayarlarını yapın'}
+                </p>
               </div>
             </div>
-            <button 
-              onClick={() => navigate('/settings')}
-              className="btn-secondary text-sm px-4 py-2"
-            >
-              Bağlan
-            </button>
+            <div className="flex items-center gap-2">
+              {diaConnectionInfo?.hasCredentials && (
+                <button 
+                  onClick={fetchData}
+                  disabled={isLoading}
+                  className="btn-primary text-sm px-4 py-2 flex items-center gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                  Yeniden Bağlan
+                </button>
+              )}
+              <button 
+                onClick={() => navigate('/ayarlar')}
+                className="btn-secondary text-sm px-4 py-2"
+              >
+                Ayarlar
+              </button>
+            </div>
           </div>
         )}
 
-        {isDiaConnected && lastUpdate && (
+        {diaConnectionInfo?.connected && lastUpdate && (
           <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
             <RefreshCw className="w-4 h-4" />
             <span>Son güncelleme: {lastUpdate.toLocaleTimeString('tr-TR')}</span>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import type { NavigationPage } from '@/lib/types';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   TrendingUp, 
@@ -12,21 +12,33 @@ import {
   User
 } from 'lucide-react';
 
-interface SidebarProps {
-  currentPage: NavigationPage;
-  onNavigate: (page: NavigationPage) => void;
+interface NavItem {
+  path: string;
+  label: string;
+  icon: React.ElementType;
 }
 
-const navItems: { id: NavigationPage; label: string; icon: React.ElementType }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'satis', label: 'Satış Raporu', icon: TrendingUp },
-  { id: 'finans', label: 'Finans Raporu', icon: Wallet },
-  { id: 'cari', label: 'Cari Hesaplar', icon: Users },
-  { id: 'ayarlar', label: 'Ayarlar', icon: Settings },
+const navItems: NavItem[] = [
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/satis', label: 'Satış Raporu', icon: TrendingUp },
+  { path: '/finans', label: 'Finans Raporu', icon: Wallet },
+  { path: '/cari', label: 'Cari Hesaplar', icon: Users },
+  { path: '/ayarlar', label: 'Ayarlar', icon: Settings },
 ];
 
-export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
+export function Sidebar() {
   const { user, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleNavigation = (path: string) => {
+    navigate(path);
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
 
   return (
     <aside className="w-64 h-screen fixed left-0 top-0 flex flex-col glass-card border-r border-border">
@@ -47,12 +59,12 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       <nav className="flex-1 p-4 space-y-1">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = currentPage === item.id;
+          const isActive = location.pathname === item.path;
           
           return (
             <button
-              key={item.id}
-              onClick={() => onNavigate(item.id)}
+              key={item.path}
+              onClick={() => handleNavigation(item.path)}
               className={`nav-item w-full ${isActive ? 'active' : ''}`}
             >
               <Icon className="w-5 h-5" />
@@ -77,7 +89,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
         )}
         
         <button
-          onClick={logout}
+          onClick={handleLogout}
           className="nav-item w-full text-destructive hover:bg-destructive/10"
         >
           <LogOut className="w-5 h-5" />
