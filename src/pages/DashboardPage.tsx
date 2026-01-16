@@ -22,7 +22,7 @@ import {
   Wallet, 
   CreditCard, 
   AlertTriangle,
-  PiggyBank,
+  Scale,
   Plug,
   RefreshCw,
   Building,
@@ -276,7 +276,7 @@ function DashboardContent() {
           <StatCard
             title="Net Bakiye"
             value={formatCurrency(netBakiye)}
-            icon={PiggyBank}
+            icon={Scale}
             trend={netBakiye >= 0 ? "up" : "down"}
             variant={netBakiye >= 0 ? "success" : "destructive"}
           />

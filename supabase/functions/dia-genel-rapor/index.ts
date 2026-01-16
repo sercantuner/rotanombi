@@ -422,11 +422,12 @@ serve(async (req) => {
     const diaUrl = `https://${sunucuAdi}.ws.dia.com.tr/api/v3/scf/json`;
 
     // 1. Fetch vade bakiye listesi with __borchareketler for FIFO aging (NO LIMIT)
+    // FİLTRE KALDIRILDI: Tüm carileri getir (aktif, pasif, potansiyel)
     const vadeBakiyePayload = {
       scf_carikart_vade_bakiye_listele: {
         session_id: sessionId,
         firma_kodu: firmaKodu,
-        filters: [{ field: "durum", operator: "=", value: "A" }],
+        filters: "",
         sorts: "",
         limit: 50000,
         offset: 0,
@@ -581,20 +582,16 @@ serve(async (req) => {
       toplamAcikBakiye += fifo.toplamAcikBakiye;
       gercekGecikmisBakiye += fifo.gercekGecikmisBakiye;
       
-      // Alacak/Borç hesaplama - FIFO öncelikli, fallback vadesigecentutar
+      // Alacak/Borç hesaplama - vadesigecentutar kullan, toplambakiye ile sınırla
       if (toplambakiye > 0) {
         toplamAlacak += toplambakiye;
-        // FIFO sonucu varsa kullan, yoksa DIA'nın vadesigecentutar'ını kullan
-        const gecikmisTutar = fifo.gercekGecikmisBakiye > 0 
-          ? fifo.gercekGecikmisBakiye 
-          : vadesigecentutar;
+        // Gecikmiş alacak: vadesigecentutar kullan, ama toplambakiye'yi aşamaz
+        const gecikmisTutar = Math.min(vadesigecentutar, toplambakiye);
         gecikimisAlacak += gecikmisTutar;
       } else if (toplambakiye < 0) {
         toplamBorc += Math.abs(toplambakiye);
-        // Borç için de fallback
-        const gecikmisTutar = fifo.gercekGecikmisBakiye > 0 
-          ? fifo.gercekGecikmisBakiye 
-          : 0;
+        // Gecikmiş borç: vadesigecentutar kullan, ama toplambakiye'yi (mutlak) aşamaz
+        const gecikmisTutar = Math.min(vadesigecentutar, Math.abs(toplambakiye));
         gecikimisBorc += gecikmisTutar;
       }
       
