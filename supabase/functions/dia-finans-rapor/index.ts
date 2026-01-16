@@ -6,6 +6,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+interface VadeYaslandirma {
+  guncel: number;
+  vade30: number;
+  vade60: number;
+  vade90: number;
+  vade90Plus: number;
+}
+
 interface BankaHesabi {
   hesapKodu: string;
   hesapAdi: string;
@@ -31,10 +39,55 @@ interface FinansRaporu {
   netBakiye: number;
   vadesiGecmis: number;
   vadesiBuGun: number;
+  yaslandirma: VadeYaslandirma;
   bankaHesaplari: BankaHesabi[];
   kasaHesaplari: KasaHesabi[];
   dovizBazliOzet: { doviz: string; banka: number; kasa: number; toplam: number }[];
   sonGuncelleme: string;
+}
+
+// FIFO Vade Yaşlandırma Hesaplaması
+function hesaplaYaslandirma(borcHareketler: any[]): VadeYaslandirma {
+  const yaslandirma: VadeYaslandirma = {
+    guncel: 0,
+    vade30: 0,
+    vade60: 0,
+    vade90: 0,
+    vade90Plus: 0,
+  };
+
+  if (!Array.isArray(borcHareketler)) return yaslandirma;
+
+  const bugun = new Date();
+  bugun.setHours(0, 0, 0, 0);
+
+  for (const hareket of borcHareketler) {
+    const vadetarihi = new Date(hareket.vadetarihi);
+    vadetarihi.setHours(0, 0, 0, 0);
+    
+    const tutar = parseFloat(hareket.kalantutar) || 0;
+    if (tutar <= 0) continue;
+
+    const farkGun = Math.floor((bugun.getTime() - vadetarihi.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (farkGun <= 0) {
+      yaslandirma.guncel += tutar;
+    } else if (farkGun <= 30) {
+      yaslandirma.vade30 += tutar;
+    } else if (farkGun <= 60) {
+      yaslandirma.vade60 += tutar;
+    } else if (farkGun <= 90) {
+      yaslandirma.vade90 += tutar;
+    } else {
+      yaslandirma.vade90Plus += tutar;
+    }
+  }
+
+  return yaslandirma;
+}
+
+function getToday(): string {
+  return new Date().toISOString().split("T")[0];
 }
 
 serve(async (req) => {
@@ -87,7 +140,7 @@ serve(async (req) => {
 
     const firmaKodu = parseInt(profile.firma_kodu) || 1;
 
-    // n8n workflow'a göre banka hesapları - bcs modülü
+    // Banka hesapları - bcs modülü
     const bankaUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/bcs/json`;
     const bankaPayload = {
       bcs_bankahesabi_listele: {
@@ -117,7 +170,6 @@ serve(async (req) => {
       const bankaData = await bankaResponse.json();
       console.log("DIA Banka Response:", JSON.stringify(bankaData).substring(0, 1000));
       
-      // DIA v3 returns data in result field (not msg!)
       let bankalar: any[] = [];
       if (Array.isArray(bankaData.result)) {
         bankalar = bankaData.result;
@@ -148,11 +200,11 @@ serve(async (req) => {
       console.log("Banka response not ok:", bankaResponse.status);
     }
 
-    // Kasa hesapları için ayrı istek (varsa)
+    // Kasa hesapları
     let kasaHesaplari: KasaHesabi[] = [];
     let toplamKasaBakiyesi = 0;
 
-    // Cari vade bakiye ile alacak/borç bilgisi al
+    // Cari vade bakiye ile alacak/borç ve FIFO yaşlandırma
     const scfUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/scf/json`;
     const vadeBakiyePayload = {
       scf_carikart_vade_bakiye_listele: {
@@ -172,6 +224,13 @@ serve(async (req) => {
     let toplamBorc = 0;
     let vadesiGecmis = 0;
     let vadesiBuGun = 0;
+    const genelYaslandirma: VadeYaslandirma = {
+      guncel: 0,
+      vade30: 0,
+      vade60: 0,
+      vade90: 0,
+      vade90Plus: 0,
+    };
 
     const vadeBakiyeResponse = await fetch(scfUrl, {
       method: "POST",
@@ -181,7 +240,7 @@ serve(async (req) => {
 
     if (vadeBakiyeResponse.ok) {
       const vadeBakiyeData = await vadeBakiyeResponse.json();
-      console.log("DIA Vade Bakiye Response:", JSON.stringify(vadeBakiyeData).substring(0, 1000));
+      console.log("DIA Vade Bakiye Response:", JSON.stringify(vadeBakiyeData).substring(0, 2000));
       
       let vadeBakiyeList: any[] = [];
       if (Array.isArray(vadeBakiyeData.result)) {
@@ -195,19 +254,31 @@ serve(async (req) => {
       console.log(`Found ${vadeBakiyeList.length} vade bakiye records`);
       
       for (const vade of vadeBakiyeList) {
-        const borc = parseFloat(vade.borc) || parseFloat(vade.borctoplam) || 0;
-        const alacak = parseFloat(vade.alacak) || parseFloat(vade.alacaktoplam) || 0;
-        const vadesiGecmisBakiye = parseFloat(vade.vadesi_gecmis) || 0;
-        const vadesiBugunBakiye = parseFloat(vade.vadesi_bugun) || 0;
+        // toplambakiye: net bakiye (pozitif = alacak, negatif = borç)
+        const toplambakiye = parseFloat(vade.toplambakiye) || 0;
+        const vadesigecentutar = parseFloat(vade.vadesigecentutar) || 0;
         
-        toplamBorc += borc;
-        toplamAlacak += alacak;
-        vadesiGecmis += vadesiGecmisBakiye;
-        vadesiBuGun += vadesiBugunBakiye;
+        if (toplambakiye > 0) {
+          toplamAlacak += toplambakiye;
+        } else {
+          toplamBorc += Math.abs(toplambakiye);
+        }
+        
+        vadesiGecmis += vadesigecentutar;
+
+        // FIFO yaşlandırma hesapla
+        const borcHareketler = Array.isArray(vade.__borchareketler) ? vade.__borchareketler : [];
+        const yaslandirma = hesaplaYaslandirma(borcHareketler);
+        
+        genelYaslandirma.guncel += yaslandirma.guncel;
+        genelYaslandirma.vade30 += yaslandirma.vade30;
+        genelYaslandirma.vade60 += yaslandirma.vade60;
+        genelYaslandirma.vade90 += yaslandirma.vade90;
+        genelYaslandirma.vade90Plus += yaslandirma.vade90Plus;
       }
     }
 
-    // Calculate currency-based summary
+    // Currency-based summary
     const dovizMap = new Map<string, { banka: number; kasa: number }>();
     
     for (const banka of bankaHesaplari) {
@@ -235,9 +306,10 @@ serve(async (req) => {
       toplamNakitPozisyon: toplamBankaBakiyesi + toplamKasaBakiyesi,
       toplamAlacak,
       toplamBorc,
-      netBakiye: toplamBorc - toplamAlacak,
+      netBakiye: toplamAlacak - toplamBorc,
       vadesiGecmis,
       vadesiBuGun,
+      yaslandirma: genelYaslandirma,
       bankaHesaplari,
       kasaHesaplari,
       dovizBazliOzet,
@@ -245,6 +317,7 @@ serve(async (req) => {
     };
 
     console.log(`Finans raporu generated for user ${user.id}`);
+    console.log(`Yaşlandırma: güncel=${genelYaslandirma.guncel}, 30=${genelYaslandirma.vade30}, 60=${genelYaslandirma.vade60}, 90=${genelYaslandirma.vade90}, 90+=${genelYaslandirma.vade90Plus}`);
 
     return new Response(
       JSON.stringify({ success: true, data: rapor }),
@@ -260,7 +333,3 @@ serve(async (req) => {
     );
   }
 });
-
-function getToday(): string {
-  return new Date().toISOString().split("T")[0];
-}

@@ -6,20 +6,42 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+interface VadeYaslandirma {
+  guncel: number;
+  vade30: number;
+  vade60: number;
+  vade90: number;
+  vade90Plus: number;
+}
+
 interface CariHesap {
+  _key: string;
   cariKodu: string;
   cariAdi: string;
   bakiye: number;
-  vadeBakiyesi: number;
-  sonIslemTarihi: string;
+  toplambakiye: number;
+  vadesigecentutar: number;
+  ozelkod1kod: string;
+  ozelkod2kod: string;
+  ozelkod3kod: string;
+  satiselemani: string;
+  sehir: string;
+  telefon: string;
+  eposta: string;
   riskSkoru: number;
-  vadeDagilimi: {
-    guncel: number;
-    vade30: number;
-    vade60: number;
-    vade90: number;
-    vade90Plus: number;
-  };
+  yaslandirma: VadeYaslandirma;
+}
+
+interface OzelkodDagilimi {
+  kod: string;
+  toplam: number;
+  adet: number;
+}
+
+interface SatisElemaniDagilimi {
+  eleman: string;
+  toplam: number;
+  adet: number;
 }
 
 interface GenelRapor {
@@ -27,29 +49,70 @@ interface GenelRapor {
   toplamBorc: number;
   netBakiye: number;
   vadesiGecmis: number;
-  vadesiBugun: number;
-  vadesiYaklasan: number;
+  yaslandirma: VadeYaslandirma;
+  ozelkodDagilimi: OzelkodDagilimi[];
+  satisElemaniDagilimi: SatisElemaniDagilimi[];
   cariler: CariHesap[];
   sonGuncelleme: string;
 }
 
 // Risk score calculation based on n8n workflow logic
-function hesaplaRiskSkoru(cari: any): number {
+function hesaplaRiskSkoru(bakiye: number, vadesiGecmis: number): number {
   let skor = 0;
-  
-  const borcToplam = parseFloat(cari.borctoplam) || 0;
-  const alacakToplam = parseFloat(cari.alacaktoplam) || 0;
-  const bakiye = borcToplam - alacakToplam;
   
   // Yüksek bakiye riski
   if (bakiye > 100000) skor += 30;
   else if (bakiye > 50000) skor += 20;
   else if (bakiye > 10000) skor += 10;
   
-  // Potansiyel durumu
-  if (cari.potansiyel === "True" || cari.potansiyel === true) skor += 10;
+  // Vadesi geçmiş riski
+  if (vadesiGecmis > 50000) skor += 40;
+  else if (vadesiGecmis > 20000) skor += 25;
+  else if (vadesiGecmis > 5000) skor += 15;
+  else if (vadesiGecmis > 0) skor += 5;
   
   return Math.min(100, Math.round(skor));
+}
+
+// FIFO Vade Yaşlandırma Hesaplaması
+function hesaplaYaslandirma(borcHareketler: any[]): VadeYaslandirma {
+  const yaslandirma: VadeYaslandirma = {
+    guncel: 0,
+    vade30: 0,
+    vade60: 0,
+    vade90: 0,
+    vade90Plus: 0,
+  };
+
+  if (!Array.isArray(borcHareketler)) return yaslandirma;
+
+  const bugun = new Date();
+  bugun.setHours(0, 0, 0, 0);
+
+  for (const hareket of borcHareketler) {
+    const vadetarihi = new Date(hareket.vadetarihi);
+    vadetarihi.setHours(0, 0, 0, 0);
+    
+    // kalantutar: ödenmemiş kalan tutar (FIFO için kritik)
+    const tutar = parseFloat(hareket.kalantutar) || 0;
+    if (tutar <= 0) continue;
+
+    const farkGun = Math.floor((bugun.getTime() - vadetarihi.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (farkGun <= 0) {
+      yaslandirma.guncel += tutar;
+    } else if (farkGun <= 30) {
+      yaslandirma.vade30 += tutar;
+    } else if (farkGun <= 60) {
+      yaslandirma.vade60 += tutar;
+    } else if (farkGun <= 90) {
+      yaslandirma.vade90 += tutar;
+    } else {
+      yaslandirma.vade90Plus += tutar;
+    }
+  }
+
+  return yaslandirma;
 }
 
 function getToday(): string {
@@ -109,7 +172,62 @@ serve(async (req) => {
     const diaUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/scf/json`;
     const firmaKodu = parseInt(profile.firma_kodu) || 1;
 
-    // 1. Fetch cari kart listesi - n8n formatına göre
+    // 1. Fetch vade bakiye listesi with __borchareketler for FIFO aging
+    const vadeBakiyePayload = {
+      scf_carikart_vade_bakiye_listele: {
+        session_id: profile.dia_session_id,
+        firma_kodu: firmaKodu,
+        filters: [{ field: "durum", operator: "=", value: "A" }],
+        sorts: "",
+        params: {
+          irsaliyeleriDahilEt: "True",
+          tarihreferans: getToday(),
+          detaygoster: "True"
+        }
+      }
+    };
+
+    console.log(`Fetching genel rapor for user ${user.id}`);
+    console.log("Vade bakiye payload:", JSON.stringify(vadeBakiyePayload));
+
+    const vadeBakiyeResponse = await fetch(diaUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(vadeBakiyePayload),
+    });
+
+    if (!vadeBakiyeResponse.ok) {
+      return new Response(
+        JSON.stringify({ success: false, error: `DIA API hatası: ${vadeBakiyeResponse.status}` }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const vadeBakiyeData = await vadeBakiyeResponse.json();
+    console.log("DIA Vade Bakiye Response:", JSON.stringify(vadeBakiyeData).substring(0, 2000));
+    
+    // Check for DIA error
+    if (vadeBakiyeData.code && vadeBakiyeData.code !== "200") {
+      const errorMsg = vadeBakiyeData.msg || "DIA veri çekme hatası";
+      return new Response(
+        JSON.stringify({ success: false, error: errorMsg }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Parse vade bakiye response
+    let vadeBakiyeList: any[] = [];
+    if (Array.isArray(vadeBakiyeData.result)) {
+      vadeBakiyeList = vadeBakiyeData.result;
+    } else if (Array.isArray(vadeBakiyeData.msg)) {
+      vadeBakiyeList = vadeBakiyeData.msg;
+    } else if (Array.isArray(vadeBakiyeData.data)) {
+      vadeBakiyeList = vadeBakiyeData.data;
+    }
+    
+    console.log(`Found ${vadeBakiyeList.length} vade bakiye records`);
+
+    // 2. Fetch cari kart listesi for additional info (ozelkod, satiselemani, etc.)
     const cariListePayload = {
       scf_carikart_listele: {
         session_id: profile.dia_session_id,
@@ -129,156 +247,145 @@ serve(async (req) => {
       }
     };
 
-    console.log(`Fetching cari list for user ${user.id}`);
-    console.log("Cari payload:", JSON.stringify(cariListePayload));
-
     const cariResponse = await fetch(diaUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cariListePayload),
     });
 
-    if (!cariResponse.ok) {
-      return new Response(
-        JSON.stringify({ success: false, error: `DIA API hatası: ${cariResponse.status}` }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const cariData = await cariResponse.json();
-    console.log("DIA Cari Response:", JSON.stringify(cariData).substring(0, 1000));
-    
-    // Check for DIA error
-    if (cariData.code && cariData.code !== "200") {
-      const errorMsg = cariData.msg || "DIA veri çekme hatası";
-      return new Response(
-        JSON.stringify({ success: false, error: errorMsg }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // DIA v3 returns data in result field (not msg!)
-    let cariListe: any[] = [];
-    if (Array.isArray(cariData.result)) {
-      cariListe = cariData.result;
-    } else if (Array.isArray(cariData.msg)) {
-      cariListe = cariData.msg;
-    } else if (Array.isArray(cariData.data)) {
-      cariListe = cariData.data;
-    } else if (Array.isArray(cariData)) {
-      cariListe = cariData;
-    }
-    
-    console.log(`Found ${cariListe.length} cari records`);
-
-    // 2. Fetch vade bakiye listesi - n8n formatına göre
-    const vadeBakiyePayload = {
-      scf_carikart_vade_bakiye_listele: {
-        session_id: profile.dia_session_id,
-        firma_kodu: firmaKodu,
-        filters: [{ field: "durum", operator: "=", value: "A" }],
-        sorts: "",
-        params: {
-          irsaliyeleriDahilEt: "True",
-          tarihreferans: getToday(),
-          detaygoster: "True"
-        }
-      }
-    };
-
-    console.log("Vade bakiye payload:", JSON.stringify(vadeBakiyePayload));
-
-    const vadeBakiyeResponse = await fetch(diaUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(vadeBakiyePayload),
-    });
-
-    let vadeBakiyeMap = new Map<string, any>();
-    
-    if (vadeBakiyeResponse.ok) {
-      const vadeBakiyeData = await vadeBakiyeResponse.json();
-      console.log("DIA Vade Bakiye Response:", JSON.stringify(vadeBakiyeData).substring(0, 1000));
+    let cariMap = new Map<string, any>();
+    if (cariResponse.ok) {
+      const cariData = await cariResponse.json();
+      console.log("DIA Cari Response:", JSON.stringify(cariData).substring(0, 1000));
       
-      let vadeBakiyeList: any[] = [];
-      if (Array.isArray(vadeBakiyeData.result)) {
-        vadeBakiyeList = vadeBakiyeData.result;
-      } else if (Array.isArray(vadeBakiyeData.msg)) {
-        vadeBakiyeList = vadeBakiyeData.msg;
-      } else if (Array.isArray(vadeBakiyeData.data)) {
-        vadeBakiyeList = vadeBakiyeData.data;
+      let cariListe: any[] = [];
+      if (Array.isArray(cariData.result)) {
+        cariListe = cariData.result;
+      } else if (Array.isArray(cariData.msg)) {
+        cariListe = cariData.msg;
+      } else if (Array.isArray(cariData.data)) {
+        cariListe = cariData.data;
       }
       
-      console.log(`Found ${vadeBakiyeList.length} vade bakiye records`);
-      
-      // Map by _key_scf_carikart for easy lookup
-      for (const vade of vadeBakiyeList) {
-        const key = vade._key_scf_carikart || vade._key;
-        if (key) {
-          vadeBakiyeMap.set(key, vade);
-        }
+      for (const cari of cariListe) {
+        cariMap.set(cari._key, cari);
       }
+      console.log(`Found ${cariListe.length} cari records for enrichment`);
     }
 
+    // Process data
     let toplamAlacak = 0;
     let toplamBorc = 0;
     let vadesiGecmis = 0;
-    let vadesiBugun = 0;
-    let vadesiYaklasan = 0;
+    const genelYaslandirma: VadeYaslandirma = {
+      guncel: 0,
+      vade30: 0,
+      vade60: 0,
+      vade90: 0,
+      vade90Plus: 0,
+    };
 
-    const cariler: CariHesap[] = cariListe.slice(0, 100).map((cari: any) => {
-      const borcToplam = parseFloat(cari.borctoplam) || 0;
-      const alacakToplam = parseFloat(cari.alacaktoplam) || 0;
-      const bakiye = borcToplam - alacakToplam;
+    // Özelkod ve satış elemanı dağılımları için
+    const ozelkodMap = new Map<string, { toplam: number; adet: number }>();
+    const satisElemaniMap = new Map<string, { toplam: number; adet: number }>();
+
+    const cariler: CariHesap[] = vadeBakiyeList.map((vade: any) => {
+      // Get toplambakiye and vadesigecentutar from correct fields
+      const toplambakiye = parseFloat(vade.toplambakiye) || 0;
+      const vadesigecentutar = parseFloat(vade.vadesigecentutar) || 0;
       
-      toplamAlacak += alacakToplam;
-      toplamBorc += borcToplam;
+      // FIFO yaşlandırma hesapla
+      const borcHareketler = Array.isArray(vade.__borchareketler) ? vade.__borchareketler : [];
+      const yaslandirma = hesaplaYaslandirma(borcHareketler);
+      
+      // Genel yaşlandırmaya ekle
+      genelYaslandirma.guncel += yaslandirma.guncel;
+      genelYaslandirma.vade30 += yaslandirma.vade30;
+      genelYaslandirma.vade60 += yaslandirma.vade60;
+      genelYaslandirma.vade90 += yaslandirma.vade90;
+      genelYaslandirma.vade90Plus += yaslandirma.vade90Plus;
 
-      // Vade bilgisi varsa al
-      const vadeInfo = vadeBakiyeMap.get(cari._key);
-      let vadeBakiyesi = bakiye;
-      let vadeDagilimi = {
-        guncel: 0,
-        vade30: 0,
-        vade60: 0,
-        vade90: 0,
-        vade90Plus: 0,
-      };
+      // Toplam alacak/borç hesapla
+      if (toplambakiye > 0) {
+        toplamAlacak += toplambakiye;
+      } else {
+        toplamBorc += Math.abs(toplambakiye);
+      }
+      
+      vadesiGecmis += vadesigecentutar;
 
-      if (vadeInfo) {
-        vadeBakiyesi = parseFloat(vadeInfo.bakiye) || bakiye;
-        // Vade yaşlandırma hesapla
-        const vadesiGecmisBakiye = parseFloat(vadeInfo.vadesi_gecmis) || 0;
-        if (vadesiGecmisBakiye > 0) {
-          vadesiGecmis += vadesiGecmisBakiye;
-        }
+      // Get additional cari info from cari liste
+      const cariKey = vade._key_scf_carikart || vade._key;
+      const cariInfo = cariMap.get(cariKey) || {};
+
+      const ozelkod1 = cariInfo.ozelkod1kod || vade.cariozelkodaciklama || "";
+      const ozelkod2 = cariInfo.ozelkod2kod || vade.cariozelkod2aciklama || "";
+      const ozelkod3 = cariInfo.ozelkod3kod || vade.cariozelkod3aciklama || "";
+      const satiselemani = cariInfo.satiselemani || vade.carisatiselemaniaciklama || "";
+      
+      // Özelkod dağılımı (ozelkod2 kullan - örn: "DİA")
+      if (ozelkod2) {
+        const mevcut = ozelkodMap.get(ozelkod2) || { toplam: 0, adet: 0 };
+        mevcut.toplam += toplambakiye;
+        mevcut.adet += 1;
+        ozelkodMap.set(ozelkod2, mevcut);
       }
 
-      const riskSkoru = hesaplaRiskSkoru(cari);
+      // Satış elemanı dağılımı
+      if (satiselemani) {
+        const mevcut = satisElemaniMap.get(satiselemani) || { toplam: 0, adet: 0 };
+        mevcut.toplam += toplambakiye;
+        mevcut.adet += 1;
+        satisElemaniMap.set(satiselemani, mevcut);
+      }
+
+      const riskSkoru = hesaplaRiskSkoru(toplambakiye, vadesigecentutar);
 
       return {
-        cariKodu: cari.carikartkodu || cari.kod || "",
-        cariAdi: cari.unvan || cari.adi || "",
-        bakiye,
-        vadeBakiyesi,
-        sonIslemTarihi: cari.cariyedonusmetarihi || "",
+        _key: cariKey,
+        cariKodu: vade.carikartkodu || cariInfo.carikartkodu || "",
+        cariAdi: vade.cariunvan || cariInfo.unvan || "",
+        bakiye: toplambakiye,
+        toplambakiye,
+        vadesigecentutar,
+        ozelkod1kod: ozelkod1,
+        ozelkod2kod: ozelkod2,
+        ozelkod3kod: ozelkod3,
+        satiselemani,
+        sehir: cariInfo.sehir || "",
+        telefon: cariInfo.telefon1 || cariInfo.ceptel || vade.caritelefon1 || vade.cariceptel || "",
+        eposta: cariInfo.eposta || "",
         riskSkoru,
-        vadeDagilimi,
+        yaslandirma,
       };
     });
+
+    // Sort cariler by toplambakiye descending
+    cariler.sort((a, b) => b.toplambakiye - a.toplambakiye);
+
+    // Convert maps to arrays
+    const ozelkodDagilimi: OzelkodDagilimi[] = Array.from(ozelkodMap.entries())
+      .map(([kod, data]) => ({ kod, toplam: data.toplam, adet: data.adet }))
+      .sort((a, b) => b.toplam - a.toplam);
+
+    const satisElemaniDagilimi: SatisElemaniDagilimi[] = Array.from(satisElemaniMap.entries())
+      .map(([eleman, data]) => ({ eleman, toplam: data.toplam, adet: data.adet }))
+      .sort((a, b) => b.toplam - a.toplam);
 
     const rapor: GenelRapor = {
       toplamAlacak,
       toplamBorc,
-      netBakiye: toplamBorc - toplamAlacak,
+      netBakiye: toplamAlacak - toplamBorc,
       vadesiGecmis,
-      vadesiBugun,
-      vadesiYaklasan,
+      yaslandirma: genelYaslandirma,
+      ozelkodDagilimi,
+      satisElemaniDagilimi,
       cariler,
       sonGuncelleme: new Date().toISOString(),
     };
 
-    console.log(`Genel rapor generated for user ${user.id}: ${cariler.length} cari`);
+    console.log(`Genel rapor generated for user ${user.id}: ${cariler.length} cari, vadesi geçmiş: ${vadesiGecmis}`);
+    console.log(`Yaşlandırma: güncel=${genelYaslandirma.guncel}, 30=${genelYaslandirma.vade30}, 60=${genelYaslandirma.vade60}, 90=${genelYaslandirma.vade90}, 90+=${genelYaslandirma.vade90Plus}`);
 
     return new Response(
       JSON.stringify({ success: true, data: rapor }),

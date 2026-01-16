@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/layout/Header';
 import { StatCard } from '@/components/dashboard/StatCard';
-import { RevenueChart } from '@/components/dashboard/RevenueChart';
-import { RecentTransactions } from '@/components/dashboard/RecentTransactions';
 import { TopCustomers } from '@/components/dashboard/TopCustomers';
-import { getDashboardStats } from '@/lib/api';
+import { BankaHesaplari } from '@/components/dashboard/BankaHesaplari';
+import { VadeYaslandirmasi } from '@/components/dashboard/VadeYaslandirmasi';
+import { OzelkodDagilimi } from '@/components/dashboard/OzelkodDagilimi';
+import { SatisElemaniPerformans } from '@/components/dashboard/SatisElemaniPerformans';
 import { diaGetGenelRapor, diaGetFinansRapor, getDiaConnectionInfo } from '@/lib/diaClient';
-import type { DashboardStats } from '@/lib/types';
+import type { DiaGenelRapor, DiaFinansRapor, VadeYaslandirma } from '@/lib/diaClient';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { 
@@ -14,20 +15,21 @@ import {
   Wallet, 
   CreditCard, 
   AlertTriangle,
-  DollarSign,
   PiggyBank,
   Plug,
-  RefreshCw
+  RefreshCw,
+  Building
 } from 'lucide-react';
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [genelRapor, setGenelRapor] = useState<DiaGenelRapor | null>(null);
+  const [finansRapor, setFinansRapor] = useState<DiaFinansRapor | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDiaConnected, setIsDiaConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     
     try {
@@ -36,62 +38,65 @@ export function DashboardPage() {
       setIsDiaConnected(diaInfo?.connected || false);
 
       if (diaInfo?.connected) {
-        // Fetch real data from DIA
+        // Fetch real data from DIA with cache-busting
+        const timestamp = Date.now();
+        console.log(`Fetching DIA data at ${timestamp}`);
+        
         const [genelResult, finansResult] = await Promise.all([
           diaGetGenelRapor(),
           diaGetFinansRapor(),
         ]);
 
-        if (genelResult.success && genelResult.data && finansResult.success && finansResult.data) {
-          const genelData = genelResult.data;
-          const finansData = finansResult.data;
+        if (genelResult.success && genelResult.data) {
+          setGenelRapor(genelResult.data);
+        } else {
+          console.error('Genel rapor error:', genelResult.error);
+          toast.error(`Genel rapor hatası: ${genelResult.error}`);
+        }
 
-          setStats({
-            toplamCiro: finansData.toplamNakitPozisyon + genelData.toplamAlacak,
-            gunlukSatis: 0, // Will be populated from satis rapor
-            toplamAlacak: genelData.toplamAlacak,
-            toplamBorc: genelData.toplamBorc,
-            netBakiye: genelData.netBakiye,
-            vadesiGecmis: genelData.vadesiGecmis,
-          });
+        if (finansResult.success && finansResult.data) {
+          setFinansRapor(finansResult.data);
+        } else {
+          console.error('Finans rapor error:', finansResult.error);
+          toast.error(`Finans rapor hatası: ${finansResult.error}`);
+        }
+
+        if (genelResult.success || finansResult.success) {
           setLastUpdate(new Date());
           toast.success('DIA verileri güncellendi');
-        } else {
-          // Show error but don't fail completely
-          const error = genelResult.error || finansResult.error;
-          if (error?.includes('oturum')) {
-            toast.error('DIA oturumu sona ermiş. Ayarlardan tekrar bağlanın.');
-          } else {
-            toast.error(`DIA hatası: ${error}`);
-          }
-          // Fall back to mock data
-          await loadMockData();
         }
       } else {
-        // No DIA connection, use mock data
-        await loadMockData();
+        toast.info('DIA bağlantısı yok. Ayarlardan bağlanabilirsiniz.');
       }
     } catch (error) {
       console.error('Dashboard fetch error:', error);
-      await loadMockData();
+      toast.error('Veri çekme hatası');
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const loadMockData = async () => {
-    const result = await getDashboardStats();
-    if (result.success && result.data) {
-      setStats(result.data);
-    }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   const formatCurrency = (value: number) => {
-    return `₺${value.toLocaleString('tr-TR')}`;
+    return `₺${value.toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  };
+
+  // Calculate stats from reports
+  const toplamAlacak = genelRapor?.toplamAlacak || 0;
+  const toplamBorc = genelRapor?.toplamBorc || 0;
+  const netBakiye = genelRapor?.netBakiye || 0;
+  const vadesiGecmis = genelRapor?.vadesiGecmis || 0;
+  const toplamBanka = finansRapor?.toplamBankaBakiyesi || 0;
+
+  const yaslandirma: VadeYaslandirma = genelRapor?.yaslandirma || finansRapor?.yaslandirma || {
+    guncel: 0,
+    vade30: 0,
+    vade60: 0,
+    vade90: 0,
+    vade90Plus: 0,
   };
 
   return (
@@ -134,102 +139,74 @@ export function DashboardPage() {
         )}
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
           <StatCard
-            title="Toplam Ciro"
-            value={stats ? formatCurrency(stats.toplamCiro) : '—'}
-            icon={TrendingUp}
-            trend="up"
-            trendValue={isDiaConnected ? undefined : "+12% bu ay"}
-            variant="default"
-          />
-          <StatCard
-            title="Günlük Satış"
-            value={stats ? formatCurrency(stats.gunlukSatis) : '—'}
-            icon={DollarSign}
-            trend="up"
-            trendValue={isDiaConnected ? undefined : "+8% dün"}
-            variant="success"
-          />
-          <StatCard
-            title="Toplam Alacak"
-            value={stats ? formatCurrency(stats.toplamAlacak) : '—'}
-            icon={Wallet}
+            title="Banka Bakiyesi"
+            value={formatCurrency(toplamBanka)}
+            icon={Building}
             trend="neutral"
             variant="default"
           />
           <StatCard
+            title="Toplam Alacak"
+            value={formatCurrency(toplamAlacak)}
+            icon={Wallet}
+            trend="up"
+            variant="success"
+          />
+          <StatCard
             title="Toplam Borç"
-            value={stats ? formatCurrency(stats.toplamBorc) : '—'}
+            value={formatCurrency(toplamBorc)}
             icon={CreditCard}
             trend="down"
-            trendValue={isDiaConnected ? undefined : "-5% bu ay"}
             variant="warning"
           />
           <StatCard
             title="Net Bakiye"
-            value={stats ? formatCurrency(stats.netBakiye) : '—'}
+            value={formatCurrency(netBakiye)}
             icon={PiggyBank}
-            trend="up"
-            trendValue={isDiaConnected ? undefined : "+18%"}
-            variant="success"
+            trend={netBakiye >= 0 ? "up" : "down"}
+            variant={netBakiye >= 0 ? "success" : "destructive"}
           />
           <StatCard
             title="Vadesi Geçmiş"
-            value={stats ? formatCurrency(stats.vadesiGecmis) : '—'}
+            value={formatCurrency(vadesiGecmis)}
             icon={AlertTriangle}
             variant="destructive"
           />
         </div>
 
-        {/* Charts Row */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
-          <div className="xl:col-span-2">
-            <RevenueChart />
-          </div>
-          <div>
-            <TopCustomers />
-          </div>
+        {/* Main Content Row */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+          <TopCustomers 
+            cariler={genelRapor?.cariler || []} 
+            isLoading={isLoading} 
+          />
+          <BankaHesaplari 
+            bankaHesaplari={finansRapor?.bankaHesaplari || []} 
+            toplamBakiye={toplamBanka}
+            isLoading={isLoading} 
+          />
         </div>
 
-        {/* Bottom Row */}
+        {/* Yaşlandırma Row */}
+        <div className="mb-6">
+          <VadeYaslandirmasi 
+            yaslandirma={yaslandirma} 
+            isLoading={isLoading} 
+          />
+        </div>
+
+        {/* Metrics Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <RecentTransactions />
-          
-          {/* Quick Actions */}
-          <div className="glass-card rounded-xl p-6 animate-slide-up">
-            <h3 className="text-lg font-semibold mb-4">Hızlı İşlemler</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <button 
-                onClick={() => navigate('/satis')}
-                className="btn-secondary text-sm py-4"
-              >
-                <span className="block text-lg mb-1">📊</span>
-                Satış Raporu
-              </button>
-              <button 
-                onClick={() => navigate('/finans')}
-                className="btn-secondary text-sm py-4"
-              >
-                <span className="block text-lg mb-1">💰</span>
-                Finans Raporu
-              </button>
-              <button 
-                onClick={() => navigate('/cari')}
-                className="btn-secondary text-sm py-4"
-              >
-                <span className="block text-lg mb-1">👥</span>
-                Cari Listesi
-              </button>
-              <button 
-                onClick={() => navigate('/settings')}
-                className="btn-secondary text-sm py-4"
-              >
-                <span className="block text-lg mb-1">⚙️</span>
-                Ayarlar
-              </button>
-            </div>
-          </div>
+          <OzelkodDagilimi 
+            ozelkodlar={genelRapor?.ozelkodDagilimi || []} 
+            isLoading={isLoading} 
+          />
+          <SatisElemaniPerformans 
+            satisElemanlari={genelRapor?.satisElemaniDagilimi || []} 
+            isLoading={isLoading} 
+          />
         </div>
       </main>
     </div>
