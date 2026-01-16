@@ -52,13 +52,13 @@ function DashboardContent() {
         const timestamp = Date.now();
         console.log(`Fetching DIA data at ${timestamp}, session valid: ${diaInfo.sessionValid}`);
         
-        const [genelResult, finansResult] = await Promise.all([
-          diaGetGenelRapor(),
-          diaGetFinansRapor(),
-        ]);
-
-        // Sonuçları değerlendir
         let dataFetched = false;
+
+        // SIRALALI ÇAĞRI: Paralel çağrı yapınca auto-login race condition oluşuyor
+        // (disconnect_same_user: true olduğu için iki login aynı anda olursa biri diğerini iptal eder)
+        
+        // Önce genel rapor çek (bu auto-login'i tetikler)
+        const genelResult = await diaGetGenelRapor();
 
         if (genelResult.success && genelResult.data) {
           setGenelRapor(genelResult.data);
@@ -75,20 +75,45 @@ function DashboardContent() {
           });
         } else {
           console.error('Genel rapor error:', genelResult.error);
-          // Session/auth hatası kontrolü
-          if (genelResult.error?.includes('session') || genelResult.error?.includes('Oturum')) {
-            toast.error('DIA oturumu sona erdi. Ayarlardan yeniden bağlanın.');
+          const isSessionError = genelResult.error?.toLowerCase().includes('session') || 
+                                  genelResult.error?.toLowerCase().includes('invalid');
+          
+          if (isSessionError) {
+            // Session hatası - retry with delay (auto-login'in tamamlanması için bekle)
+            console.log('Session error detected, retrying after delay...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            const retryResult = await diaGetGenelRapor();
+            if (retryResult.success && retryResult.data) {
+              setGenelRapor(retryResult.data);
+              dataFetched = true;
+              
+              const cariler = retryResult.data.cariler || [];
+              setFilterOptions({
+                ozelkodlar1: [...new Set(cariler.map(c => c.ozelkod1kod).filter(Boolean))],
+                ozelkodlar2: [...new Set(cariler.map(c => c.ozelkod2kod).filter(Boolean))],
+                ozelkodlar3: [...new Set(cariler.map(c => c.ozelkod3kod).filter(Boolean))],
+                sehirler: [...new Set(cariler.map(c => c.sehir).filter(Boolean))],
+                satisTemsilcileri: [...new Set(cariler.map(c => c.satiselemani).filter(Boolean))],
+              });
+            } else {
+              toast.error('DIA oturumu sona erdi. Lütfen tekrar deneyin veya Ayarlardan yeniden bağlanın.');
+            }
           } else {
             toast.error(`Genel rapor hatası: ${genelResult.error}`);
           }
         }
 
+        // Sonra finans rapor çek (session artık geçerli olmalı)
+        const finansResult = await diaGetFinansRapor();
+        
         if (finansResult.success && finansResult.data) {
           setFinansRapor(finansResult.data);
           dataFetched = true;
         } else {
           console.error('Finans rapor error:', finansResult.error);
-          if (!finansResult.error?.includes('session') && !finansResult.error?.includes('Oturum')) {
+          // Finans hatası için session error kontrolü yapma, genel rapor zaten denerdi
+          if (!finansResult.error?.toLowerCase().includes('session')) {
             toast.error(`Finans rapor hatası: ${finansResult.error}`);
           }
         }
