@@ -86,23 +86,23 @@ serve(async (req) => {
     }
 
     const firmaKodu = parseInt(profile.firma_kodu) || 1;
-    const donemKodu = parseInt(profile.donem_kodu) || 0;
 
-    // Fetch banka hesapları
+    // n8n workflow'a göre banka hesapları - bcs modülü
     const bankaUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/bcs/json`;
     const bankaPayload = {
       bcs_bankahesabi_listele: {
         session_id: profile.dia_session_id,
+        donem_kodu: 0,
         firma_kodu: firmaKodu,
-        donem_kodu: donemKodu,
         filters: "",
         sorts: "",
         params: "",
-        offset: 0,
-      },
+        offset: 0
+      }
     };
 
     console.log(`Fetching finans raporu for user ${user.id}`);
+    console.log("Banka payload:", JSON.stringify(bankaPayload));
 
     const bankaResponse = await fetch(bankaUrl, {
       method: "POST",
@@ -115,7 +115,7 @@ serve(async (req) => {
 
     if (bankaResponse.ok) {
       const bankaData = await bankaResponse.json();
-      console.log("DIA Banka Response:", JSON.stringify(bankaData).substring(0, 500));
+      console.log("DIA Banka Response:", JSON.stringify(bankaData).substring(0, 1000));
       
       // DIA v3 returns data in msg field
       let bankalar: any[] = [];
@@ -134,64 +134,36 @@ serve(async (req) => {
         toplamBankaBakiyesi += bakiye;
         
         return {
-          hesapKodu: banka.hesap_kodu || banka.kod || "",
-          hesapAdi: banka.hesap_adi || banka.adi || "",
-          bankaAdi: banka.banka_adi || "",
-          dovizCinsi: banka.doviz_cinsi || "TRY",
+          hesapKodu: banka.hesapkodu || banka.kod || banka._key || "",
+          hesapAdi: banka.hesapadi || banka.adi || "",
+          bankaAdi: banka.bankaadi || banka.banka || "",
+          dovizCinsi: banka.dovizcinsi || banka.doviz || "TRY",
           bakiye,
           kullanilabilirBakiye: parseFloat(banka.kullanilabilir_bakiye) || bakiye,
         };
       });
+    } else {
+      console.log("Banka response not ok:", bankaResponse.status);
     }
 
-    // Fetch kasa hesapları
-    const kasaUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/kcs/json`;
-    const kasaPayload = {
-      kcs_kasa_listele: {
-        session_id: profile.dia_session_id,
-        firma_kodu: firmaKodu,
-        donem_kodu: donemKodu,
-        filters: "",
-        sorts: "",
-        params: "",
-        offset: 0,
-      },
-    };
-
-    const kasaResponse = await fetch(kasaUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(kasaPayload),
-    });
-
+    // Kasa hesapları için ayrı istek (varsa)
     let kasaHesaplari: KasaHesabi[] = [];
     let toplamKasaBakiyesi = 0;
 
-    if (kasaResponse.ok) {
-      const kasaData = await kasaResponse.json();
-      const kasalar = kasaData.kcs_kasa_listele?.data || kasaData.data || [];
-      
-      kasaHesaplari = kasalar.map((kasa: any) => {
-        const bakiye = parseFloat(kasa.bakiye) || 0;
-        toplamKasaBakiyesi += bakiye;
-        
-        return {
-          kasaKodu: kasa.kasa_kodu || kasa.kod || "",
-          kasaAdi: kasa.kasa_adi || kasa.adi || "",
-          dovizCinsi: kasa.doviz_cinsi || "TRY",
-          bakiye,
-        };
-      });
-    }
-
-    // Fetch cari bakiye özeti for alacak/borç
+    // Cari vade bakiye ile alacak/borç bilgisi al
     const scfUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/scf/json`;
-    const cariOzetPayload = {
-      scf_carikart_bakiye_ozet: {
+    const vadeBakiyePayload = {
+      scf_carikart_vade_bakiye_listele: {
         session_id: profile.dia_session_id,
         firma_kodu: firmaKodu,
-        donem_kodu: donemKodu,
-      },
+        filters: [{ field: "durum", operator: "=", value: "A" }],
+        sorts: "",
+        params: {
+          irsaliyeleriDahilEt: "True",
+          tarihreferans: getToday(),
+          detaygoster: "True"
+        }
+      }
     };
 
     let toplamAlacak = 0;
@@ -199,20 +171,36 @@ serve(async (req) => {
     let vadesiGecmis = 0;
     let vadesiBuGun = 0;
 
-    const cariOzetResponse = await fetch(scfUrl, {
+    const vadeBakiyeResponse = await fetch(scfUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cariOzetPayload),
+      body: JSON.stringify(vadeBakiyePayload),
     });
 
-    if (cariOzetResponse.ok) {
-      const cariOzetData = await cariOzetResponse.json();
-      const ozet = cariOzetData.scf_carikart_bakiye_ozet?.data || cariOzetData.data || {};
+    if (vadeBakiyeResponse.ok) {
+      const vadeBakiyeData = await vadeBakiyeResponse.json();
+      console.log("DIA Vade Bakiye Response:", JSON.stringify(vadeBakiyeData).substring(0, 1000));
       
-      toplamAlacak = parseFloat(ozet.toplam_alacak) || 0;
-      toplamBorc = parseFloat(ozet.toplam_borc) || 0;
-      vadesiGecmis = parseFloat(ozet.vadesi_gecmis) || 0;
-      vadesiBuGun = parseFloat(ozet.vadesi_bugun) || 0;
+      let vadeBakiyeList: any[] = [];
+      if (Array.isArray(vadeBakiyeData.msg)) {
+        vadeBakiyeList = vadeBakiyeData.msg;
+      } else if (Array.isArray(vadeBakiyeData.data)) {
+        vadeBakiyeList = vadeBakiyeData.data;
+      }
+      
+      console.log(`Found ${vadeBakiyeList.length} vade bakiye records`);
+      
+      for (const vade of vadeBakiyeList) {
+        const borc = parseFloat(vade.borc) || parseFloat(vade.borctoplam) || 0;
+        const alacak = parseFloat(vade.alacak) || parseFloat(vade.alacaktoplam) || 0;
+        const vadesiGecmisBakiye = parseFloat(vade.vadesi_gecmis) || 0;
+        const vadesiBugunBakiye = parseFloat(vade.vadesi_bugun) || 0;
+        
+        toplamBorc += borc;
+        toplamAlacak += alacak;
+        vadesiGecmis += vadesiGecmisBakiye;
+        vadesiBuGun += vadesiBugunBakiye;
+      }
     }
 
     // Calculate currency-based summary
@@ -243,7 +231,7 @@ serve(async (req) => {
       toplamNakitPozisyon: toplamBankaBakiyesi + toplamKasaBakiyesi,
       toplamAlacak,
       toplamBorc,
-      netBakiye: toplamAlacak - toplamBorc,
+      netBakiye: toplamBorc - toplamAlacak,
       vadesiGecmis,
       vadesiBuGun,
       bankaHesaplari,
@@ -268,3 +256,7 @@ serve(async (req) => {
     );
   }
 });
+
+function getToday(): string {
+  return new Date().toISOString().split("T")[0];
+}
