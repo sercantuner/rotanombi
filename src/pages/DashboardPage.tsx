@@ -7,13 +7,14 @@ import { VadeYaslandirmasi } from '@/components/dashboard/VadeYaslandirmasi';
 import { OzelkodDagilimi } from '@/components/dashboard/OzelkodDagilimi';
 import { SatisElemaniPerformans } from '@/components/dashboard/SatisElemaniPerformans';
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
-import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
+import { DetailedFiltersPanel } from '@/components/dashboard/DetailedFiltersPanel';
+import { VadeDetayListesi } from '@/components/dashboard/VadeDetayListesi';
+import { DashboardFilterProvider, useDashboardFilters } from '@/contexts/DashboardFilterContext';
 import { diaGetGenelRapor, diaGetFinansRapor, getDiaConnectionInfo } from '@/lib/diaClient';
 import type { DiaGenelRapor, DiaFinansRapor, VadeYaslandirma } from '@/lib/diaClient';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { 
-  TrendingUp, 
   Wallet, 
   CreditCard, 
   AlertTriangle,
@@ -25,6 +26,7 @@ import {
 
 function DashboardContent() {
   const navigate = useNavigate();
+  const { setFilterOptions } = useDashboardFilters();
   const [genelRapor, setGenelRapor] = useState<DiaGenelRapor | null>(null);
   const [finansRapor, setFinansRapor] = useState<DiaFinansRapor | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,12 +37,10 @@ function DashboardContent() {
     setIsLoading(true);
     
     try {
-      // Check DIA connection
       const diaInfo = await getDiaConnectionInfo();
       setIsDiaConnected(diaInfo?.connected || false);
 
       if (diaInfo?.connected) {
-        // Fetch real data from DIA with cache-busting
         const timestamp = Date.now();
         console.log(`Fetching DIA data at ${timestamp}`);
         
@@ -51,6 +51,16 @@ function DashboardContent() {
 
         if (genelResult.success && genelResult.data) {
           setGenelRapor(genelResult.data);
+          
+          // Update filter options from data
+          const cariler = genelResult.data.cariler || [];
+          setFilterOptions({
+            ozelkodlar1: [...new Set(cariler.map(c => c.ozelkod1kod).filter(Boolean))],
+            ozelkodlar2: [...new Set(cariler.map(c => c.ozelkod2kod).filter(Boolean))],
+            ozelkodlar3: [...new Set(cariler.map(c => c.ozelkod3kod).filter(Boolean))],
+            sehirler: [...new Set(cariler.map(c => c.sehir).filter(Boolean))],
+            satisTemsilcileri: [...new Set(cariler.map(c => c.satiselemani).filter(Boolean))],
+          });
         } else {
           console.error('Genel rapor error:', genelResult.error);
           toast.error(`Genel rapor hatası: ${genelResult.error}`);
@@ -76,7 +86,7 @@ function DashboardContent() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [setFilterOptions]);
 
   useEffect(() => {
     fetchData();
@@ -86,7 +96,6 @@ function DashboardContent() {
     return `₺${value.toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   };
 
-  // Calculate stats from reports
   const toplamAlacak = genelRapor?.toplamAlacak || 0;
   const toplamBorc = genelRapor?.toplamBorc || 0;
   const netBakiye = genelRapor?.netBakiye || 0;
@@ -144,8 +153,11 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* Filters */}
+        {/* Quick Filters */}
         <DashboardFilters totalCustomers={genelRapor?.cariler?.length || 0} />
+
+        {/* Detailed Filters Panel */}
+        <DetailedFiltersPanel cariler={genelRapor?.cariler || []} />
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
@@ -193,8 +205,14 @@ function DashboardContent() {
           />
         </div>
 
+        {/* Vade Detay Listesi - Shows when a bar is clicked */}
+        <VadeDetayListesi 
+          cariler={genelRapor?.cariler || []} 
+          yaslandirma={yaslandirma}
+        />
+
         {/* Main Content Row */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6 mt-6">
           <TopCustomers 
             cariler={genelRapor?.cariler || []} 
             isLoading={isLoading} 
