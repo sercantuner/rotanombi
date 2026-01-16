@@ -101,6 +101,9 @@ serve(async (req) => {
 
     const diaData = await diaResponse.json();
 
+    // Debug: Log the full DIA response structure
+    console.log("DIA Response:", JSON.stringify(diaData, null, 2));
+
     // Check for DIA error response
     if (diaData.error || diaData.hata) {
       const errorMsg = diaData.error?.message || diaData.hata?.aciklama || "DIA giriş hatası";
@@ -111,14 +114,50 @@ serve(async (req) => {
       );
     }
 
-    // Extract session info
-    const sessionId = diaData.login?.session_id || diaData.session_id;
+    // Extract session info - try multiple possible response structures
+    // DIA API may return session_id in different places depending on version
+    let sessionId = null;
+    
+    // Try various possible paths
+    if (diaData.login?.session_id) {
+      sessionId = diaData.login.session_id;
+    } else if (diaData.session_id) {
+      sessionId = diaData.session_id;
+    } else if (diaData.result?.session_id) {
+      sessionId = diaData.result.session_id;
+    } else if (diaData.data?.session_id) {
+      sessionId = diaData.data.session_id;
+    } else if (diaData.login?.result?.session_id) {
+      sessionId = diaData.login.result.session_id;
+    } else if (typeof diaData.login === 'string') {
+      // Sometimes session_id is returned directly as the login value
+      sessionId = diaData.login;
+    }
+
+    // If still no session, check if the entire response might be the session
+    if (!sessionId && typeof diaData === 'object') {
+      // Look for any key containing 'session'
+      for (const key of Object.keys(diaData)) {
+        if (key.toLowerCase().includes('session') && typeof diaData[key] === 'string') {
+          sessionId = diaData[key];
+          break;
+        }
+      }
+    }
+
     if (!sessionId) {
+      console.error("Could not find session_id in DIA response:", JSON.stringify(diaData));
       return new Response(
-        JSON.stringify({ success: false, error: "DIA oturum ID alınamadı" }),
+        JSON.stringify({ 
+          success: false, 
+          error: "DIA oturum ID alınamadı. API yanıt yapısı beklenenden farklı.",
+          debug: diaData 
+        }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    console.log(`DIA session obtained: ${sessionId.substring(0, 8)}...`);
 
     // Session expires in 30 minutes
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
