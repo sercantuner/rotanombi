@@ -118,7 +118,10 @@ export function DonutChart({
               );
             })}
           </Pie>
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip 
+            content={<CustomTooltip />} 
+            wrapperStyle={{ zIndex: 1000 }}
+          />
         </PieChart>
       </ResponsiveContainer>
       
