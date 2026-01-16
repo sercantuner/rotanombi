@@ -182,18 +182,25 @@ serve(async (req) => {
       }
       
       console.log(`Found ${bankalar.length} banka records`);
+      if (bankalar.length > 0) {
+        console.log("Raw banka sample:", JSON.stringify(bankalar[0]));
+      }
       
       bankaHesaplari = bankalar.map((banka: any) => {
-        const bakiye = parseFloat(banka.bakiye) || 0;
+        // DIA'dan gelen alan adları: hesapkodu, hesapadi, bankaadi, doviz, genelbakiye
+        const bakiye = parseFloat(banka.genelbakiye) || parseFloat(banka.bakiye) || 0;
         toplamBankaBakiyesi += bakiye;
         
+        // DIA "TL" döndürüyor, TRY'ye dönüştür
+        const doviz = banka.doviz === "TL" ? "TRY" : (banka.doviz || "TRY");
+        
         return {
-          hesapKodu: banka.hesapkodu || banka.kod || banka._key || "",
-          hesapAdi: banka.hesapadi || banka.adi || "",
-          bankaAdi: banka.bankaadi || banka.banka || "",
-          dovizCinsi: banka.dovizcinsi || banka.doviz || "TRY",
+          hesapKodu: banka.hesapkodu || banka._key || "",
+          hesapAdi: banka.hesapadi || "",
+          bankaAdi: banka.bankaadi || "",
+          dovizCinsi: doviz,
           bakiye,
-          kullanilabilirBakiye: parseFloat(banka.kullanilabilir_bakiye) || bakiye,
+          kullanilabilirBakiye: bakiye,
         };
       });
     } else {

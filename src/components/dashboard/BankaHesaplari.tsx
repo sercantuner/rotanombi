@@ -10,6 +10,7 @@ interface Props {
 
 export function BankaHesaplari({ bankaHesaplari, toplamBakiye, isLoading }: Props) {
   const formatCurrency = (value: number, doviz: string = 'TRY') => {
+    // TL ve TRY'yi aynı şekilde işle
     const symbol = doviz === 'USD' ? '$' : doviz === 'EUR' ? '€' : '₺';
     return `${symbol}${Math.abs(value).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
