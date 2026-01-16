@@ -144,11 +144,16 @@ async function callEdgeFunction<T>(functionName: string, body?: object): Promise
   }
 
   try {
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/${functionName}`, {
+    // Cache-busting için timestamp ekle
+    const timestamp = Date.now();
+    const url = `${SUPABASE_URL}/functions/v1/${functionName}?_t=${timestamp}`;
+    
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache, no-store',
       },
       body: body ? JSON.stringify(body) : undefined,
     });
