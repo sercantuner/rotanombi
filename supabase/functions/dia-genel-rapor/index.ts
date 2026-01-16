@@ -7,11 +7,18 @@ const corsHeaders = {
 };
 
 interface VadeYaslandirma {
-  guncel: number;
-  vade30: number;
-  vade60: number;
-  vade90: number;
+  // Vadesi geçmiş
   vade90Plus: number;
+  vade90: number;
+  vade60: number;
+  vade30: number;
+  // Güncel
+  guncel: number;
+  // Gelecek vadeler
+  gelecek30: number;
+  gelecek60: number;
+  gelecek90: number;
+  gelecek90Plus: number;
 }
 
 interface CariHesap {
@@ -74,14 +81,21 @@ function hesaplaRiskSkoru(bakiye: number, vadesiGecmis: number): number {
   return Math.min(100, Math.round(skor));
 }
 
-// FIFO Vade Yaşlandırma Hesaplaması
+// FIFO Vade Yaşlandırma Hesaplaması - Geçmiş ve Gelecek vadeler
 function hesaplaYaslandirma(borcHareketler: any[]): VadeYaslandirma {
   const yaslandirma: VadeYaslandirma = {
-    guncel: 0,
-    vade30: 0,
-    vade60: 0,
-    vade90: 0,
+    // Vadesi geçmiş
     vade90Plus: 0,
+    vade90: 0,
+    vade60: 0,
+    vade30: 0,
+    // Güncel
+    guncel: 0,
+    // Gelecek vadeler
+    gelecek30: 0,
+    gelecek60: 0,
+    gelecek90: 0,
+    gelecek90Plus: 0,
   };
 
   if (!Array.isArray(borcHareketler)) return yaslandirma;
@@ -97,18 +111,31 @@ function hesaplaYaslandirma(borcHareketler: any[]): VadeYaslandirma {
     const tutar = parseFloat(hareket.kalantutar) || 0;
     if (tutar <= 0) continue;
 
+    // farkGun: pozitif = vadesi geçmiş, negatif = gelecek vade
     const farkGun = Math.floor((bugun.getTime() - vadetarihi.getTime()) / (1000 * 60 * 60 * 24));
 
-    if (farkGun <= 0) {
-      yaslandirma.guncel += tutar;
-    } else if (farkGun <= 30) {
-      yaslandirma.vade30 += tutar;
-    } else if (farkGun <= 60) {
-      yaslandirma.vade60 += tutar;
-    } else if (farkGun <= 90) {
-      yaslandirma.vade90 += tutar;
-    } else {
+    if (farkGun > 90) {
       yaslandirma.vade90Plus += tutar;
+    } else if (farkGun > 60) {
+      yaslandirma.vade90 += tutar;
+    } else if (farkGun > 30) {
+      yaslandirma.vade60 += tutar;
+    } else if (farkGun > 0) {
+      yaslandirma.vade30 += tutar;
+    } else if (farkGun === 0) {
+      yaslandirma.guncel += tutar;
+    } else if (farkGun >= -30) {
+      // 1-30 gün sonra
+      yaslandirma.gelecek30 += tutar;
+    } else if (farkGun >= -60) {
+      // 31-60 gün sonra
+      yaslandirma.gelecek60 += tutar;
+    } else if (farkGun >= -90) {
+      // 61-90 gün sonra
+      yaslandirma.gelecek90 += tutar;
+    } else {
+      // 90+ gün sonra
+      yaslandirma.gelecek90Plus += tutar;
     }
   }
 
@@ -278,11 +305,15 @@ serve(async (req) => {
     let toplamBorc = 0;
     let vadesiGecmis = 0;
     const genelYaslandirma: VadeYaslandirma = {
-      guncel: 0,
-      vade30: 0,
-      vade60: 0,
-      vade90: 0,
       vade90Plus: 0,
+      vade90: 0,
+      vade60: 0,
+      vade30: 0,
+      guncel: 0,
+      gelecek30: 0,
+      gelecek60: 0,
+      gelecek90: 0,
+      gelecek90Plus: 0,
     };
 
     // Özelkod ve satış elemanı dağılımları için
@@ -299,11 +330,15 @@ serve(async (req) => {
       const yaslandirma = hesaplaYaslandirma(borcHareketler);
       
       // Genel yaşlandırmaya ekle
-      genelYaslandirma.guncel += yaslandirma.guncel;
-      genelYaslandirma.vade30 += yaslandirma.vade30;
-      genelYaslandirma.vade60 += yaslandirma.vade60;
-      genelYaslandirma.vade90 += yaslandirma.vade90;
       genelYaslandirma.vade90Plus += yaslandirma.vade90Plus;
+      genelYaslandirma.vade90 += yaslandirma.vade90;
+      genelYaslandirma.vade60 += yaslandirma.vade60;
+      genelYaslandirma.vade30 += yaslandirma.vade30;
+      genelYaslandirma.guncel += yaslandirma.guncel;
+      genelYaslandirma.gelecek30 += yaslandirma.gelecek30;
+      genelYaslandirma.gelecek60 += yaslandirma.gelecek60;
+      genelYaslandirma.gelecek90 += yaslandirma.gelecek90;
+      genelYaslandirma.gelecek90Plus += yaslandirma.gelecek90Plus;
 
       // Toplam alacak/borç hesapla
       if (toplambakiye > 0) {

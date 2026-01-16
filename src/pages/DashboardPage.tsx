@@ -6,6 +6,8 @@ import { BankaHesaplari } from '@/components/dashboard/BankaHesaplari';
 import { VadeYaslandirmasi } from '@/components/dashboard/VadeYaslandirmasi';
 import { OzelkodDagilimi } from '@/components/dashboard/OzelkodDagilimi';
 import { SatisElemaniPerformans } from '@/components/dashboard/SatisElemaniPerformans';
+import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
+import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
 import { diaGetGenelRapor, diaGetFinansRapor, getDiaConnectionInfo } from '@/lib/diaClient';
 import type { DiaGenelRapor, DiaFinansRapor, VadeYaslandirma } from '@/lib/diaClient';
 import { useNavigate } from 'react-router-dom';
@@ -21,7 +23,7 @@ import {
   Building
 } from 'lucide-react';
 
-export function DashboardPage() {
+function DashboardContent() {
   const navigate = useNavigate();
   const [genelRapor, setGenelRapor] = useState<DiaGenelRapor | null>(null);
   const [finansRapor, setFinansRapor] = useState<DiaFinansRapor | null>(null);
@@ -92,11 +94,15 @@ export function DashboardPage() {
   const toplamBanka = finansRapor?.toplamBankaBakiyesi || 0;
 
   const yaslandirma: VadeYaslandirma = genelRapor?.yaslandirma || finansRapor?.yaslandirma || {
-    guncel: 0,
-    vade30: 0,
-    vade60: 0,
-    vade90: 0,
     vade90Plus: 0,
+    vade90: 0,
+    vade60: 0,
+    vade30: 0,
+    guncel: 0,
+    gelecek30: 0,
+    gelecek60: 0,
+    gelecek90: 0,
+    gelecek90Plus: 0,
   };
 
   return (
@@ -138,6 +144,9 @@ export function DashboardPage() {
           </div>
         )}
 
+        {/* Filters */}
+        <DashboardFilters totalCustomers={genelRapor?.cariler?.length || 0} />
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
           <StatCard
@@ -176,6 +185,14 @@ export function DashboardPage() {
           />
         </div>
 
+        {/* Vade Yaşlandırma - Full Width Bar Chart */}
+        <div className="mb-6">
+          <VadeYaslandirmasi 
+            yaslandirma={yaslandirma} 
+            isLoading={isLoading} 
+          />
+        </div>
+
         {/* Main Content Row */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
           <TopCustomers 
@@ -185,14 +202,6 @@ export function DashboardPage() {
           <BankaHesaplari 
             bankaHesaplari={finansRapor?.bankaHesaplari || []} 
             toplamBakiye={toplamBanka}
-            isLoading={isLoading} 
-          />
-        </div>
-
-        {/* Yaşlandırma Row */}
-        <div className="mb-6">
-          <VadeYaslandirmasi 
-            yaslandirma={yaslandirma} 
             isLoading={isLoading} 
           />
         </div>
@@ -210,5 +219,13 @@ export function DashboardPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export function DashboardPage() {
+  return (
+    <DashboardFilterProvider>
+      <DashboardContent />
+    </DashboardFilterProvider>
   );
 }
