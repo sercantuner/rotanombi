@@ -54,6 +54,12 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          dia_api_key: string | null
+          dia_session_expires: string | null
+          dia_session_id: string | null
+          dia_sunucu_adi: string | null
+          dia_ws_kullanici: string | null
+          dia_ws_sifre: string | null
           display_name: string | null
           donem_kodu: string | null
           email: string | null
@@ -65,6 +71,12 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          dia_api_key?: string | null
+          dia_session_expires?: string | null
+          dia_session_id?: string | null
+          dia_sunucu_adi?: string | null
+          dia_ws_kullanici?: string | null
+          dia_ws_sifre?: string | null
           display_name?: string | null
           donem_kodu?: string | null
           email?: string | null
@@ -76,6 +88,12 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
+          dia_api_key?: string | null
+          dia_session_expires?: string | null
+          dia_session_id?: string | null
+          dia_sunucu_adi?: string | null
+          dia_ws_kullanici?: string | null
+          dia_ws_sifre?: string | null
           display_name?: string | null
           donem_kodu?: string | null
           email?: string | null
