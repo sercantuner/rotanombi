@@ -9,11 +9,11 @@ interface Props {
 }
 
 export function KaynakDagilimi({ cariler, isLoading }: Props) {
-  // Kaynak bilgisi ozelkod2'den geldiğini varsayıyoruz
+  // Kaynak bilgisi 'kaynak' alanından geliyor
   const chartData = useMemo(() => {
     const grouped = cariler.reduce((acc, cari) => {
-      // Kaynak bilgisi için ozelkod2 kullanılıyor
-      const kaynak = cari.ozelkod2kod || 'Diğer';
+      // Kaynak bilgisi için kaynak alanı kullanılıyor
+      const kaynak = cari.kaynak || 'Tanımsız';
       if (!acc[kaynak]) {
         acc[kaynak] = { name: kaynak, value: 0 };
       }

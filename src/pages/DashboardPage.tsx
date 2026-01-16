@@ -9,7 +9,6 @@ import { SektorDagilimi } from '@/components/dashboard/SektorDagilimi';
 import { KaynakDagilimi } from '@/components/dashboard/KaynakDagilimi';
 import { LokasyonDagilimi } from '@/components/dashboard/LokasyonDagilimi';
 import { CariDonusumTrend } from '@/components/dashboard/CariDonusumTrend';
-import { NakitAkisMetrikleri } from '@/components/dashboard/NakitAkisMetrikleri';
 import { SatisElemaniPerformans } from '@/components/dashboard/SatisElemaniPerformans';
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { DetailedFiltersPanel } from '@/components/dashboard/DetailedFiltersPanel';
@@ -110,14 +109,9 @@ function DashboardContent() {
   const vadesiGecmis = genelRapor?.vadesiGecmis || 0;
   const toplamBanka = finansRapor?.toplamBankaBakiyesi || 0;
   
-  // Gecikmiş alacak ve borç hesaplama
-  const gecikimisAlacak = genelRapor?.yaslandirma 
-    ? (genelRapor.yaslandirma.vade30 + genelRapor.yaslandirma.vade60 + genelRapor.yaslandirma.vade90 + genelRapor.yaslandirma.vade90Plus)
-    : vadesiGecmis;
-  
-  // Borç tarafında gecikmiş tutarı hesapla (varsayımsal olarak toplamBorc'un %100'ü gecikmiş)
-  const gecikmisBorcOrani = toplamAlacak > 0 ? (gecikimisAlacak / toplamAlacak) : 1;
-  const gecikimisBorc = toplamBorc * gecikmisBorcOrani;
+  // Gecikmiş alacak ve borç - backend'den geliyor
+  const gecikimisAlacak = genelRapor?.gecikimisAlacak || vadesiGecmis;
+  const gecikimisBorc = genelRapor?.gecikimisBorc || 0;
 
   const yaslandirma: VadeYaslandirma = genelRapor?.yaslandirma || finansRapor?.yaslandirma || {
     vade90Plus: 0,
@@ -215,20 +209,12 @@ function DashboardContent() {
           />
         </div>
 
-        {/* Nakit Akış Projeksiyonu + Metrikler */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
-          <div className="xl:col-span-2">
-            <VadeYaslandirmasi 
-              yaslandirma={yaslandirma} 
-              isLoading={isLoading} 
-            />
-          </div>
-          <div>
-            <NakitAkisMetrikleri 
-              yaslandirma={yaslandirma}
-              isLoading={isLoading}
-            />
-          </div>
+        {/* Nakit Akış Projeksiyonu */}
+        <div className="mb-6">
+          <VadeYaslandirmasi 
+            yaslandirma={yaslandirma} 
+            isLoading={isLoading} 
+          />
         </div>
 
         {/* Vade Detay Listesi - Shows when a bar is clicked */}
