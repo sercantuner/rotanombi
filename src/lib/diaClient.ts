@@ -52,6 +52,8 @@ export interface SatisElemaniDagilimi {
 export interface DiaGenelRapor {
   toplamAlacak: number;
   toplamBorc: number;
+  gecikimisAlacak: number;
+  gecikimisBorc: number;
   netBakiye: number;
   vadesiGecmis: number;
   yaslandirma: VadeYaslandirma;
@@ -77,6 +79,15 @@ export interface DiaCari {
   eposta: string;
   riskSkoru: number;
   yaslandirma: VadeYaslandirma;
+  // Yeni alanlar
+  sektorler: string;
+  kaynak: string;
+  carikarttipi: string;
+  potansiyel: boolean;
+  potansiyeleklemetarihi: string | null;
+  cariyedonusmetarihi: string | null;
+  borctoplam: number;
+  alacaktoplam: number;
 }
 
 export interface DiaSatisRapor {

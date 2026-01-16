@@ -23,8 +23,9 @@ export function LokasyonDagilimi({ cariler, isLoading }: Props) {
       return acc;
     }, {} as Record<string, { name: string; value: number; count: number }>);
 
+    // Cari sayısına göre sırala (bakiye yerine)
     return Object.values(grouped)
-      .sort((a, b) => b.value - a.value)
+      .sort((a, b) => b.count - a.count)
       .slice(0, 10);
   }, [cariler]);
 
@@ -50,8 +51,8 @@ export function LokasyonDagilimi({ cariler, isLoading }: Props) {
       return (
         <div className="bg-card border border-border rounded-lg shadow-lg p-3">
           <p className="font-semibold text-sm">{data.name}</p>
-          <p className="text-lg font-bold text-primary">{formatFullCurrency(data.value)}</p>
-          <p className="text-xs text-muted-foreground">{data.count} cari</p>
+          <p className="text-lg font-bold text-primary">{data.count} cari</p>
+          <p className="text-xs text-muted-foreground">Toplam: {formatFullCurrency(data.value)}</p>
         </div>
       );
     }
@@ -78,7 +79,7 @@ export function LokasyonDagilimi({ cariler, isLoading }: Props) {
         <div>
           <h3 className="text-lg font-semibold">Lokasyon Dağılımı</h3>
           <p className="text-sm text-muted-foreground">
-            {chartData.length} şehir · Tıklayarak filtrele
+            {chartData.length} şehir · Cari sayısına göre · Tıklayarak filtrele
           </p>
         </div>
         <div className="w-10 h-10 rounded-lg bg-teal-500/10 flex items-center justify-center">
@@ -92,10 +93,11 @@ export function LokasyonDagilimi({ cariler, isLoading }: Props) {
             <CartesianGrid strokeDasharray="3 3" className="stroke-border" horizontal={true} vertical={false} />
             <XAxis
               type="number"
-              tickFormatter={(value) => formatCurrency(value)}
+              tickFormatter={(value) => value.toString()}
               tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
               tickLine={false}
               axisLine={{ stroke: 'hsl(var(--border))' }}
+              label={{ value: 'Cari Sayısı', position: 'bottom', offset: -5, style: { fontSize: 10, fill: 'hsl(var(--muted-foreground))' } }}
             />
             <YAxis
               type="category"
@@ -107,7 +109,7 @@ export function LokasyonDagilimi({ cariler, isLoading }: Props) {
             />
             <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--muted)/0.2)' }} />
             <Bar
-              dataKey="value"
+              dataKey="count"
               radius={[0, 4, 4, 0]}
               cursor="pointer"
               onClick={(data) => handleBarClick(data)}

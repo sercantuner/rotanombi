@@ -38,6 +38,15 @@ interface CariHesap {
   eposta: string;
   riskSkoru: number;
   yaslandirma: VadeYaslandirma;
+  // Yeni alanlar
+  sektorler: string;
+  kaynak: string;
+  carikarttipi: string;
+  potansiyel: boolean;
+  potansiyeleklemetarihi: string | null;
+  cariyedonusmetarihi: string | null;
+  borctoplam: number;
+  alacaktoplam: number;
 }
 
 interface OzelkodDagilimi {
@@ -55,6 +64,8 @@ interface SatisElemaniDagilimi {
 interface GenelRapor {
   toplamAlacak: number;
   toplamBorc: number;
+  gecikimisAlacak: number;
+  gecikimisBorc: number;
   netBakiye: number;
   vadesiGecmis: number;
   yaslandirma: VadeYaslandirma;
@@ -292,6 +303,8 @@ serve(async (req) => {
     // Process data
     let toplamAlacak = 0;
     let toplamBorc = 0;
+    let gecikimisAlacak = 0;
+    let gecikimisBorc = 0;
     let vadesiGecmis = 0;
     const genelYaslandirma: VadeYaslandirma = {
       vade90Plus: 0,
@@ -310,9 +323,38 @@ serve(async (req) => {
     const satisElemaniMap = new Map<string, { toplam: number; adet: number }>();
 
     const cariler: CariHesap[] = vadeBakiyeList.map((vade: any) => {
-      // Get toplambakiye and vadesigecentutar from correct fields
-      const toplambakiye = parseFloat(vade.toplambakiye) || 0;
+      // Get additional cari info from cari liste
+      const cariKey = vade._key_scf_carikart || vade._key;
+      const cariInfo = cariMap.get(cariKey) || {};
+      
+      // Borç ve Alacak toplamları
+      const borctoplam = parseFloat(cariInfo.borctoplam) || parseFloat(vade.borctoplam) || 0;
+      const alacaktoplam = parseFloat(cariInfo.alacaktoplam) || parseFloat(vade.alacaktoplam) || 0;
+      
+      // bakiye = borç - alacak
+      // bakiye > 0 → bizim alacağımız (müşteri bize borçlu)
+      // bakiye < 0 → bizim borcumuz (biz müşteriye borçluyuz)
+      const toplambakiye = parseFloat(vade.toplambakiye) || (borctoplam - alacaktoplam);
       const vadesigecentutar = parseFloat(vade.vadesigecentutar) || 0;
+      
+      // Alacak/Borç hesaplama: 
+      // toplambakiye > 0 ise bizim alacağımız (borç bakiye)
+      // toplambakiye < 0 ise bizim borcumuz (alacak bakiye - mutlak değer)
+      if (toplambakiye > 0) {
+        toplamAlacak += toplambakiye;
+        // Vadesi geçmiş alacak
+        if (vadesigecentutar > 0) {
+          gecikimisAlacak += vadesigecentutar;
+        }
+      } else if (toplambakiye < 0) {
+        toplamBorc += Math.abs(toplambakiye);
+        // Vadesi geçmiş borç
+        if (vadesigecentutar > 0) {
+          gecikimisBorc += vadesigecentutar;
+        }
+      }
+      
+      vadesiGecmis += vadesigecentutar;
       
       // FIFO yaşlandırma hesapla
       const borcHareketler = Array.isArray(vade.__borchareketler) ? vade.__borchareketler : [];
@@ -329,23 +371,16 @@ serve(async (req) => {
       genelYaslandirma.gelecek90 += yaslandirma.gelecek90;
       genelYaslandirma.gelecek90Plus += yaslandirma.gelecek90Plus;
 
-      // Toplam alacak/borç hesapla
-      if (toplambakiye > 0) {
-        toplamAlacak += toplambakiye;
-      } else {
-        toplamBorc += Math.abs(toplambakiye);
-      }
-      
-      vadesiGecmis += vadesigecentutar;
-
-      // Get additional cari info from cari liste
-      const cariKey = vade._key_scf_carikart || vade._key;
-      const cariInfo = cariMap.get(cariKey) || {};
-
       const ozelkod1 = cariInfo.ozelkod1kod || vade.cariozelkodaciklama || "";
       const ozelkod2 = cariInfo.ozelkod2kod || vade.cariozelkod2aciklama || "";
       const ozelkod3 = cariInfo.ozelkod3kod || vade.cariozelkod3aciklama || "";
       const satiselemani = cariInfo.satiselemani || vade.carisatiselemaniaciklama || "";
+      const sektorler = cariInfo.sektorler || "";
+      const kaynak = cariInfo.kaynak || "";
+      const carikarttipi = cariInfo.carikarttipi || "";
+      const potansiyel = cariInfo.potansiyel === true || cariInfo.potansiyel === "True";
+      const potansiyeleklemetarihi = cariInfo.potansiyeleklemetarihi || null;
+      const cariyedonusmetarihi = cariInfo.cariyedonusmetarihi || null;
       
       // Özelkod dağılımı (ozelkod2 kullan - örn: "DİA")
       if (ozelkod2) {
@@ -381,6 +416,15 @@ serve(async (req) => {
         eposta: cariInfo.eposta || "",
         riskSkoru,
         yaslandirma,
+        // Yeni alanlar
+        sektorler,
+        kaynak,
+        carikarttipi,
+        potansiyel,
+        potansiyeleklemetarihi,
+        cariyedonusmetarihi,
+        borctoplam,
+        alacaktoplam,
       };
     });
 
@@ -399,6 +443,8 @@ serve(async (req) => {
     const rapor: GenelRapor = {
       toplamAlacak,
       toplamBorc,
+      gecikimisAlacak,
+      gecikimisBorc,
       netBakiye: toplamAlacak - toplamBorc,
       vadesiGecmis,
       yaslandirma: genelYaslandirma,

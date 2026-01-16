@@ -9,11 +9,11 @@ interface Props {
 }
 
 export function SektorDagilimi({ cariler, isLoading }: Props) {
-  // Sektör bilgisi ozelkod1'den geldiğini varsayıyoruz
+  // Sektör bilgisi 'sektorler' alanından geliyor
   const chartData = useMemo(() => {
     const grouped = cariler.reduce((acc, cari) => {
-      // Sektör bilgisi için ozelkod1 kullanılıyor
-      const sektor = cari.ozelkod1kod || 'Diğer';
+      // Sektör bilgisi için sektorler alanı kullanılıyor
+      const sektor = cari.sektorler || 'Tanımsız';
       if (!acc[sektor]) {
         acc[sektor] = { name: sektor, value: 0 };
       }
