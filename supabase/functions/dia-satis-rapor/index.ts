@@ -16,9 +16,32 @@ interface SatisSatiri {
   tarih: string;
   faturaNo: string;
   cariAdi: string;
+  faturaTuru: number;
+  satiselemani: string;
+  marka: string;
+}
+
+interface SatisElemaniPerformans {
+  eleman: string;
+  brutSatis: number;
+  iadeToplamı: number;
+  netSatis: number;
+  iadeOrani: number;
+  faturaSayisi: number;
+  ortSepet: number;
+}
+
+interface MarkaDagilimi {
+  marka: string;
+  toplamMiktar: number;
+  satisTutar: number;
+  iadeTutar: number;
+  netTutar: number;
+  iadeOrani: number;
 }
 
 interface SatisRaporu {
+  // Mevcut alanlar
   toplamSatis: number;
   gunlukSatis: number;
   aylikSatis: number;
@@ -27,7 +50,22 @@ interface SatisRaporu {
   urunBazli: { stokKodu: string; stokAdi: string; toplamMiktar: number; toplamTutar: number }[];
   cariBazli: { cariKodu: string; cariAdi: string; toplamTutar: number; faturaAdedi: number }[];
   sonGuncelleme: string;
+  // Yeni alanlar
+  brutSatis: number;
+  iadeToplamı: number;
+  netSatis: number;
+  iadeOrani: number;
+  ortSepet: number;
+  markaBazli: MarkaDagilimi[];
+  satisElemaniPerformans: SatisElemaniPerformans[];
 }
+
+// Fatura türleri:
+// Satış: 2 (Satış Faturası), 3 (Perakende), 10 (Proforma)
+// İade:  7 (Satış İade), 8 (Perakende İade)
+// Diğer: 5 (İrsaliye)
+const SATIS_TURLERI = [2, 3, 10];
+const IADE_TURLERI = [7, 8];
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -70,7 +108,7 @@ serve(async (req) => {
     const { sessionId, sunucuAdi, firmaKodu } = diaResult.session;
     const diaUrl = `https://${sunucuAdi}.ws.dia.com.tr/api/v3/scf/json`;
 
-    // n8n workflow'a göre fatura listele - turu: 2,3,5,7,8,10 satış faturaları
+    // Fatura listele - turu: 2,3,5,7,8,10 satış faturaları
     const faturaPayload = {
       scf_fatura_listele: {
         session_id: sessionId,
@@ -107,7 +145,6 @@ serve(async (req) => {
     const faturaData = await faturaResponse.json();
     console.log("DIA Fatura Response:", JSON.stringify(faturaData).substring(0, 1000));
     
-    // Check for DIA error
     if (faturaData.code && faturaData.code !== "200") {
       const errorMsg = faturaData.msg || "DIA veri çekme hatası";
       return new Response(
@@ -116,7 +153,6 @@ serve(async (req) => {
       );
     }
 
-    // DIA v3 returns data in result field (not msg!)
     let faturalar: any[] = [];
     if (Array.isArray(faturaData.result)) {
       faturalar = faturaData.result;
@@ -177,52 +213,74 @@ serve(async (req) => {
       console.log(`Found ${faturaKalemleri.length} fatura kalemi records`);
     }
 
-    // Process sales data
-    let toplamSatis = 0;
+    // Net Satış Hesaplama
+    let brutSatis = 0;
+    let iadeToplamı = 0;
     let gunlukSatis = 0;
     let aylikSatis = 0;
     const satirlar: SatisSatiri[] = [];
     const urunMap = new Map<string, { stokAdi: string; toplamMiktar: number; toplamTutar: number }>();
     const cariMap = new Map<string, { cariAdi: string; toplamTutar: number; faturaAdedi: number }>();
+    const faturaSayisiSet = new Set<string>();
+
+    // Marka bazlı hesaplama
+    const markaMap = new Map<string, { toplamMiktar: number; satisTutar: number; iadeTutar: number }>();
+    
+    // Satış elemanı performansı
+    const satisElemaniMap = new Map<string, { 
+      brutSatis: number; 
+      iadeToplamı: number; 
+      faturaSayisi: Set<string>;
+    }>();
 
     const bugun = getToday();
     const ayBasi = getMonthStart();
 
-    // Fatura bazlı toplama
-    for (const fatura of faturalar) {
-      if (fatura.iptal === "True" || fatura.iptal === true) continue;
-      
-      const tutar = parseFloat(fatura.net) || parseFloat(fatura.toplam) || 0;
-      const tarih = fatura.tarih || "";
-      
-      toplamSatis += tutar;
-      if (tarih === bugun) gunlukSatis += tutar;
-      if (tarih >= ayBasi) aylikSatis += tutar;
-    }
-
     // Kalem bazlı işleme
     for (const kalem of faturaKalemleri) {
+      const turu = parseInt(kalem.turu) || 0;
+      const tutar = Math.abs(parseFloat(kalem.sontutaryerel) || parseFloat(kalem.kdvharictutar) || 0);
+      const miktar = Math.abs(parseFloat(kalem.miktar) || 0);
+      const tarih = kalem.tarih || "";
+      const faturaKey = kalem._key_scf_fatura || "";
+      const satiselemani = kalem.satiselemani || "";
+      const marka = kalem.stokkartmarka || "Diğer";
       const stokKodu = kalem.kartozelkodu1 || "";
       const stokAdi = kalem.kartaciklama || "";
-      const miktar = parseFloat(kalem.miktar) || 0;
       const birim = kalem.fatbirimi || "AD";
-      const tutar = parseFloat(kalem.sontutaryerel) || parseFloat(kalem.kdvharictutar) || 0;
-      const tarih = kalem.tarih || "";
       const cariAdi = kalem.unvan || "";
 
+      // Satış mı, iade mi?
+      const isSatis = SATIS_TURLERI.includes(turu);
+      const isIade = IADE_TURLERI.includes(turu);
+
+      if (isSatis) {
+        brutSatis += tutar;
+        faturaSayisiSet.add(faturaKey);
+        
+        if (tarih === bugun) gunlukSatis += tutar;
+        if (tarih >= ayBasi) aylikSatis += tutar;
+      } else if (isIade) {
+        iadeToplamı += tutar;
+      }
+
+      // Satır kaydet
       satirlar.push({
         stokKodu,
         stokAdi,
         miktar,
         birim,
-        tutar,
+        tutar: isSatis ? tutar : -tutar,
         tarih,
-        faturaNo: kalem._key_scf_fatura || "",
+        faturaNo: faturaKey,
         cariAdi,
+        faturaTuru: turu,
+        satiselemani,
+        marka,
       });
 
-      // Ürün bazlı toplama
-      if (stokKodu) {
+      // Ürün bazlı toplama (sadece satışlar)
+      if (isSatis && stokKodu) {
         const mevcutUrun = urunMap.get(stokKodu) || { stokAdi, toplamMiktar: 0, toplamTutar: 0 };
         mevcutUrun.toplamMiktar += miktar;
         mevcutUrun.toplamTutar += tutar;
@@ -232,11 +290,43 @@ serve(async (req) => {
       // Cari bazlı toplama
       if (cariAdi) {
         const mevcutCari = cariMap.get(cariAdi) || { cariAdi, toplamTutar: 0, faturaAdedi: 0 };
-        mevcutCari.toplamTutar += tutar;
-        mevcutCari.faturaAdedi += 1;
+        mevcutCari.toplamTutar += isSatis ? tutar : -tutar;
+        if (isSatis) mevcutCari.faturaAdedi += 1;
         cariMap.set(cariAdi, mevcutCari);
       }
+
+      // Marka bazlı toplama
+      const mevcutMarka = markaMap.get(marka) || { toplamMiktar: 0, satisTutar: 0, iadeTutar: 0 };
+      mevcutMarka.toplamMiktar += miktar;
+      if (isSatis) {
+        mevcutMarka.satisTutar += tutar;
+      } else if (isIade) {
+        mevcutMarka.iadeTutar += tutar;
+      }
+      markaMap.set(marka, mevcutMarka);
+
+      // Satış elemanı performansı
+      if (satiselemani) {
+        const mevcutEleman = satisElemaniMap.get(satiselemani) || { 
+          brutSatis: 0, 
+          iadeToplamı: 0, 
+          faturaSayisi: new Set<string>() 
+        };
+        if (isSatis) {
+          mevcutEleman.brutSatis += tutar;
+          mevcutEleman.faturaSayisi.add(faturaKey);
+        } else if (isIade) {
+          mevcutEleman.iadeToplamı += tutar;
+        }
+        satisElemaniMap.set(satiselemani, mevcutEleman);
+      }
     }
+
+    // Net satış ve oranlar
+    const netSatis = brutSatis - iadeToplamı;
+    const iadeOrani = brutSatis > 0 ? (iadeToplamı / (brutSatis + iadeToplamı)) * 100 : 0;
+    const faturaSayisi = faturaSayisiSet.size;
+    const ortSepet = faturaSayisi > 0 ? netSatis / faturaSayisi : 0;
 
     // Convert maps to arrays and sort
     const urunBazli = Array.from(urunMap.entries())
@@ -249,18 +339,56 @@ serve(async (req) => {
       .sort((a, b) => b.toplamTutar - a.toplamTutar)
       .slice(0, 20);
 
+    const markaBazli: MarkaDagilimi[] = Array.from(markaMap.entries())
+      .map(([marka, data]) => ({
+        marka,
+        toplamMiktar: data.toplamMiktar,
+        satisTutar: data.satisTutar,
+        iadeTutar: data.iadeTutar,
+        netTutar: data.satisTutar - data.iadeTutar,
+        iadeOrani: data.satisTutar > 0 ? (data.iadeTutar / (data.satisTutar + data.iadeTutar)) * 100 : 0,
+      }))
+      .sort((a, b) => b.netTutar - a.netTutar)
+      .slice(0, 15);
+
+    const satisElemaniPerformans: SatisElemaniPerformans[] = Array.from(satisElemaniMap.entries())
+      .map(([eleman, data]) => {
+        const netSatisEleman = data.brutSatis - data.iadeToplamı;
+        const faturaSayisiEleman = data.faturaSayisi.size;
+        return {
+          eleman,
+          brutSatis: data.brutSatis,
+          iadeToplamı: data.iadeToplamı,
+          netSatis: netSatisEleman,
+          iadeOrani: data.brutSatis > 0 ? (data.iadeToplamı / (data.brutSatis + data.iadeToplamı)) * 100 : 0,
+          faturaSayisi: faturaSayisiEleman,
+          ortSepet: faturaSayisiEleman > 0 ? netSatisEleman / faturaSayisiEleman : 0,
+        };
+      })
+      .sort((a, b) => b.netSatis - a.netSatis);
+
     const rapor: SatisRaporu = {
-      toplamSatis,
+      toplamSatis: netSatis,
       gunlukSatis,
       aylikSatis,
-      toplamFatura: faturalar.filter(f => f.iptal !== "True" && f.iptal !== true).length,
+      toplamFatura: faturaSayisi,
       satirlar: satirlar.slice(0, 100),
       urunBazli,
       cariBazli,
       sonGuncelleme: new Date().toISOString(),
+      // Yeni alanlar
+      brutSatis,
+      iadeToplamı,
+      netSatis,
+      iadeOrani,
+      ortSepet,
+      markaBazli,
+      satisElemaniPerformans,
     };
 
-    console.log(`Satis raporu generated for user ${user.id}: ${faturalar.length} fatura`);
+    console.log(`Satis raporu generated for user ${user.id}`);
+    console.log(`Net Satış: brutSatis=${brutSatis.toFixed(2)}, iadeToplamı=${iadeToplamı.toFixed(2)}, netSatis=${netSatis.toFixed(2)}, iadeOrani=${iadeOrani.toFixed(2)}%`);
+    console.log(`Markalar: ${markaBazli.length}, Satış Elemanları: ${satisElemaniPerformans.length}`);
 
     return new Response(
       JSON.stringify({ success: true, data: rapor }),
