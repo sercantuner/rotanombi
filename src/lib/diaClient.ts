@@ -257,30 +257,40 @@ export async function diaGetFinansRapor(): Promise<ApiResult<DiaFinansRapor>> {
 }
 
 // Profildeki DIA bağlantı bilgilerini al
-export async function getDiaConnectionInfo(): Promise<{
-  connected: boolean;
+export interface DiaConnectionInfo {
+  hasCredentials: boolean;  // DIA bilgileri kayıtlı mı
+  hasSession: boolean;      // Session ID var mı
+  sessionValid: boolean;    // Session süresi geçerli mi
+  connected: boolean;       // Hem bilgiler hem session geçerli mi
   sunucuAdi?: string;
   wsKullanici?: string;
   sessionExpires?: string;
-} | null> {
+}
+
+export async function getDiaConnectionInfo(): Promise<DiaConnectionInfo | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('dia_sunucu_adi, dia_ws_kullanici, dia_session_id, dia_session_expires')
+    .select('dia_sunucu_adi, dia_ws_kullanici, dia_ws_sifre, dia_api_key, dia_session_id, dia_session_expires')
     .eq('user_id', user.id)
     .single();
 
   if (!profile) return null;
 
-  const hasConnection = !!(profile.dia_sunucu_adi && profile.dia_session_id);
+  // Credentials check: sunucu adı ve ws kullanıcı/şifre/apikey var mı
+  const hasCredentials = !!(profile.dia_sunucu_adi && profile.dia_ws_kullanici && profile.dia_ws_sifre && profile.dia_api_key);
+  const hasSession = !!profile.dia_session_id;
   const sessionValid = profile.dia_session_expires 
     ? new Date(profile.dia_session_expires) > new Date()
     : false;
 
   return {
-    connected: hasConnection && sessionValid,
+    hasCredentials,
+    hasSession,
+    sessionValid,
+    connected: hasCredentials && hasSession && sessionValid,
     sunucuAdi: profile.dia_sunucu_adi || undefined,
     wsKullanici: profile.dia_ws_kullanici || undefined,
     sessionExpires: profile.dia_session_expires || undefined,
