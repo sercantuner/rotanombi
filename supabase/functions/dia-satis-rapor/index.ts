@@ -126,9 +126,11 @@ serve(async (req) => {
       );
     }
 
-    // DIA v3 returns data in msg field
+    // DIA v3 returns data in result field (not msg!)
     let faturalar: any[] = [];
-    if (Array.isArray(faturaData.msg)) {
+    if (Array.isArray(faturaData.result)) {
+      faturalar = faturaData.result;
+    } else if (Array.isArray(faturaData.msg)) {
       faturalar = faturaData.msg;
     } else if (Array.isArray(faturaData.data)) {
       faturalar = faturaData.data;
@@ -175,7 +177,9 @@ serve(async (req) => {
       const faturaAyrintiliData = await faturaAyrintiliResponse.json();
       console.log("DIA Fatura Ayrintili Response:", JSON.stringify(faturaAyrintiliData).substring(0, 1000));
       
-      if (Array.isArray(faturaAyrintiliData.msg)) {
+      if (Array.isArray(faturaAyrintiliData.result)) {
+        faturaKalemleri = faturaAyrintiliData.result;
+      } else if (Array.isArray(faturaAyrintiliData.msg)) {
         faturaKalemleri = faturaAyrintiliData.msg;
       } else if (Array.isArray(faturaAyrintiliData.data)) {
         faturaKalemleri = faturaAyrintiliData.data;

@@ -117,9 +117,11 @@ serve(async (req) => {
       const bankaData = await bankaResponse.json();
       console.log("DIA Banka Response:", JSON.stringify(bankaData).substring(0, 1000));
       
-      // DIA v3 returns data in msg field
+      // DIA v3 returns data in result field (not msg!)
       let bankalar: any[] = [];
-      if (Array.isArray(bankaData.msg)) {
+      if (Array.isArray(bankaData.result)) {
+        bankalar = bankaData.result;
+      } else if (Array.isArray(bankaData.msg)) {
         bankalar = bankaData.msg;
       } else if (Array.isArray(bankaData.data)) {
         bankalar = bankaData.data;
@@ -182,7 +184,9 @@ serve(async (req) => {
       console.log("DIA Vade Bakiye Response:", JSON.stringify(vadeBakiyeData).substring(0, 1000));
       
       let vadeBakiyeList: any[] = [];
-      if (Array.isArray(vadeBakiyeData.msg)) {
+      if (Array.isArray(vadeBakiyeData.result)) {
+        vadeBakiyeList = vadeBakiyeData.result;
+      } else if (Array.isArray(vadeBakiyeData.msg)) {
         vadeBakiyeList = vadeBakiyeData.msg;
       } else if (Array.isArray(vadeBakiyeData.data)) {
         vadeBakiyeList = vadeBakiyeData.data;
