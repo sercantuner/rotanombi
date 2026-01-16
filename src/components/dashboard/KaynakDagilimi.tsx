@@ -62,9 +62,9 @@ export function KaynakDagilimi({ cariler, isLoading }: Props) {
         </div>
       </div>
 
-      <div className="flex gap-4">
-        {/* Donut Chart */}
-        <div className="h-40 w-40 flex-shrink-0">
+      {/* Chart centered */}
+      <div className="flex justify-center mb-4">
+        <div className="h-36 w-36">
           <DonutChart
             data={chartDataWithColors}
             title="Kaynak"
@@ -73,25 +73,23 @@ export function KaynakDagilimi({ cariler, isLoading }: Props) {
             isLoading={isLoading}
           />
         </div>
+      </div>
 
-        {/* Legend */}
-        <div className="flex-1 space-y-2 overflow-y-auto max-h-40">
-          {chartDataWithColors.map((item) => (
+      {/* Legend as 2-column grid */}
+      <div className="grid grid-cols-2 gap-2">
+        {chartDataWithColors.map((item) => (
+          <div
+            key={item.name}
+            className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-secondary/50"
+          >
             <div
-              key={item.name}
-              className="flex items-center justify-between p-2 rounded-lg hover:bg-secondary/50"
-            >
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-3 h-3 rounded-sm"
-                  style={{ backgroundColor: item.color }}
-                />
-                <span className="text-sm truncate max-w-[100px]">{item.name}</span>
-              </div>
-              <span className="text-sm font-semibold">{formatCurrency(item.value)}</span>
-            </div>
-          ))}
-        </div>
+              className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+              style={{ backgroundColor: item.color }}
+            />
+            <span className="text-xs truncate flex-1" title={item.name}>{item.name}</span>
+            <span className="text-xs font-semibold text-muted-foreground">{formatCurrency(item.value)}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

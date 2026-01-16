@@ -34,7 +34,7 @@ export function OzelKodDonutChart({ cariler, isLoading }: Props) {
 
     return Object.values(grouped)
       .sort((a, b) => b.value - a.value)
-      .slice(0, 8);
+      .slice(0, 6);
   }, [cariler, selectedType]);
 
   const formatCurrency = (value: number) => {
@@ -57,13 +57,27 @@ export function OzelKodDonutChart({ cariler, isLoading }: Props) {
     ozelkod3: 'ÖK3',
   };
 
+  const COLORS = [
+    'hsl(var(--primary))',
+    'hsl(var(--success))',
+    'hsl(var(--warning))',
+    'hsl(var(--destructive))',
+    'hsl(220 70% 50%)',
+    'hsl(280 70% 50%)',
+  ];
+
+  const chartDataWithColors = chartData.map((item, index) => ({
+    ...item,
+    color: COLORS[index % COLORS.length],
+  }));
+
   return (
     <div className="glass-card rounded-xl p-6 animate-slide-up">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold">Özel Kod Dağılımı</h3>
           <p className="text-sm text-muted-foreground">
-            {chartData.length} kategori · Tıklayarak filtrele
+            {chartData.length} kategori
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -73,7 +87,7 @@ export function OzelKodDonutChart({ cariler, isLoading }: Props) {
               <button
                 key={type}
                 onClick={() => setSelectedType(type)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${
                   selectedType === type
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
@@ -89,11 +103,11 @@ export function OzelKodDonutChart({ cariler, isLoading }: Props) {
         </div>
       </div>
 
-      <div className="flex gap-4">
-        {/* Donut Chart */}
-        <div className="h-48 w-48 flex-shrink-0">
+      {/* Chart centered */}
+      <div className="flex justify-center mb-4">
+        <div className="h-36 w-36">
           <DonutChart
-            data={chartData}
+            data={chartDataWithColors}
             title="Özel Kod"
             centerLabel={typeLabels[selectedType]}
             centerValue={formatCurrency(total)}
@@ -102,45 +116,36 @@ export function OzelKodDonutChart({ cariler, isLoading }: Props) {
             isLoading={isLoading}
           />
         </div>
+      </div>
 
-        {/* Legend */}
-        <div className="flex-1 space-y-2 overflow-y-auto max-h-48">
-          {chartData.map((item, index) => {
-            const isSelected = selectedSegments.includes(item.name);
-            const colors = [
-              'bg-primary',
-              'bg-success',
-              'bg-warning',
-              'bg-destructive',
-              'bg-blue-500',
-              'bg-purple-500',
-              'bg-teal-500',
-              'bg-pink-500',
-            ];
-            return (
+      {/* Legend as 2-column grid */}
+      <div className="grid grid-cols-2 gap-2">
+        {chartDataWithColors.map((item) => {
+          const isSelected = selectedSegments.includes(item.name);
+          return (
+            <div
+              key={item.name}
+              onClick={() => handleSegmentClick(item.name)}
+              className={`flex items-center gap-2 p-1.5 rounded-lg cursor-pointer transition-all ${
+                isSelected
+                  ? 'bg-primary/20 ring-1 ring-primary'
+                  : 'hover:bg-secondary/50'
+              }`}
+            >
               <div
-                key={item.name}
-                onClick={() => handleSegmentClick(item.name)}
-                className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all ${
-                  isSelected
-                    ? 'bg-primary/20 border border-primary'
-                    : 'hover:bg-secondary/50'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-sm ${colors[index % colors.length]}`} />
-                  <span className="text-sm truncate max-w-[120px]">{item.name}</span>
-                </div>
-                <span className="text-sm font-semibold">{formatCurrency(item.value)}</span>
-              </div>
-            );
-          })}
-        </div>
+                className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                style={{ backgroundColor: item.color }}
+              />
+              <span className="text-xs truncate flex-1" title={item.name}>{item.name}</span>
+              <span className="text-xs font-semibold text-muted-foreground">{formatCurrency(item.value)}</span>
+            </div>
+          );
+        })}
       </div>
 
       {/* Selected filter indicator */}
       {selectedSegments.length > 0 && (
-        <div className="mt-4 pt-3 border-t border-border">
+        <div className="mt-3 pt-3 border-t border-border">
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">{selectedSegments.length} seçili</span>
             <button
