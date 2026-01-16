@@ -14,7 +14,78 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      app_settings: {
+        Row: {
+          auto_refresh: boolean | null
+          created_at: string
+          id: string
+          language: string | null
+          refresh_interval: number | null
+          theme: string | null
+          timezone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_refresh?: boolean | null
+          created_at?: string
+          id?: string
+          language?: string | null
+          refresh_interval?: number | null
+          theme?: string | null
+          timezone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_refresh?: boolean | null
+          created_at?: string
+          id?: string
+          language?: string | null
+          refresh_interval?: number | null
+          theme?: string | null
+          timezone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          donem_kodu: string | null
+          email: string | null
+          firma_kodu: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          donem_kodu?: string | null
+          email?: string | null
+          firma_kodu?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          donem_kodu?: string | null
+          email?: string | null
+          firma_kodu?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
