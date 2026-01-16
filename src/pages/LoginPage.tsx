@@ -1,41 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { BarChart3, Server, User, Lock, Loader2 } from 'lucide-react';
+import { BarChart3, Mail, Lock, Loader2, UserPlus } from 'lucide-react';
 
 export function LoginPage() {
-  const { login, isLoading, rememberedCredentials } = useAuth();
+  const { login, register, isLoading } = useAuth();
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [formData, setFormData] = useState({
-    sunucuAdi: '',
-    kullaniciAdi: '',
-    sifre: '',
-    rememberMe: false,
+    email: '',
+    password: '',
+    displayName: '',
   });
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (rememberedCredentials) {
-      setFormData({
-        sunucuAdi: rememberedCredentials.sunucuAdi,
-        kullaniciAdi: rememberedCredentials.kullaniciAdi,
-        sifre: rememberedCredentials.sifre,
-        rememberMe: true,
-      });
-    }
-  }, [rememberedCredentials]);
+  const [success, setSuccess] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
 
-    const result = await login({
-      sunucuAdi: formData.sunucuAdi,
-      kullaniciAdi: formData.kullaniciAdi,
-      sifre: formData.sifre,
-      rememberMe: formData.rememberMe,
-    });
-
-    if (!result.success) {
-      setError(result.error || 'Giriş başarısız');
+    if (isRegisterMode) {
+      const result = await register(formData.email, formData.password, formData.displayName);
+      if (!result.success) {
+        setError(result.error || 'Kayıt başarısız');
+      } else {
+        setSuccess('Kayıt başarılı! Giriş yapabilirsiniz.');
+        setIsRegisterMode(false);
+        setFormData({ ...formData, password: '', displayName: '' });
+      }
+    } else {
+      const result = await login(formData.email, formData.password);
+      if (!result.success) {
+        setError(result.error || 'Giriş başarısız');
+      }
     }
   };
 
@@ -59,40 +55,43 @@ export function LoginPage() {
 
         {/* Login Form */}
         <div className="glass-card rounded-2xl p-8 animate-slide-up">
-          <h2 className="text-xl font-semibold text-center mb-6">Sisteme Giriş</h2>
+          <h2 className="text-xl font-semibold text-center mb-6">
+            {isRegisterMode ? 'Kayıt Ol' : 'Sisteme Giriş'}
+          </h2>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Server Name */}
-            <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-2">
-                Sunucu Adı
-              </label>
-              <div className="relative">
-                <Server className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={formData.sunucuAdi}
-                  onChange={(e) => setFormData({ ...formData, sunucuAdi: e.target.value })}
-                  className="input-field pl-11"
-                  placeholder="ornek_sunucu"
-                  required
-                />
+            {/* Display Name (only for register) */}
+            {isRegisterMode && (
+              <div>
+                <label className="block text-sm font-medium text-muted-foreground mb-2">
+                  Ad Soyad
+                </label>
+                <div className="relative">
+                  <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={formData.displayName}
+                    onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+                    className="input-field pl-11"
+                    placeholder="Ad Soyad"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Username */}
+            {/* Email */}
             <div>
               <label className="block text-sm font-medium text-muted-foreground mb-2">
-                Kullanıcı Adı
+                E-posta
               </label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <input
-                  type="text"
-                  value={formData.kullaniciAdi}
-                  onChange={(e) => setFormData({ ...formData, kullaniciAdi: e.target.value })}
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="input-field pl-11"
-                  placeholder="kullanici_adi"
+                  placeholder="email@example.com"
                   required
                 />
               </div>
@@ -107,30 +106,27 @@ export function LoginPage() {
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <input
                   type="password"
-                  value={formData.sifre}
-                  onChange={(e) => setFormData({ ...formData, sifre: e.target.value })}
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="input-field pl-11"
                   placeholder="••••••••"
                   required
+                  minLength={6}
                 />
               </div>
             </div>
-
-            {/* Remember Me */}
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.rememberMe}
-                onChange={(e) => setFormData({ ...formData, rememberMe: e.target.checked })}
-                className="w-4 h-4 rounded border-border bg-secondary text-primary focus:ring-primary focus:ring-offset-background"
-              />
-              <span className="text-sm text-muted-foreground">Beni Hatırla</span>
-            </label>
 
             {/* Error Message */}
             {error && (
               <div className="p-3 rounded-lg bg-destructive/20 border border-destructive/30 text-destructive text-sm">
                 {error}
+              </div>
+            )}
+
+            {/* Success Message */}
+            {success && (
+              <div className="p-3 rounded-lg bg-green-500/20 border border-green-500/30 text-green-500 text-sm">
+                {success}
               </div>
             )}
 
@@ -143,13 +139,30 @@ export function LoginPage() {
               {isLoading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Giriş Yapılıyor...
+                  {isRegisterMode ? 'Kayıt Yapılıyor...' : 'Giriş Yapılıyor...'}
                 </>
               ) : (
-                'Giriş Yap'
+                isRegisterMode ? 'Kayıt Ol' : 'Giriş Yap'
               )}
             </button>
           </form>
+
+          {/* Toggle Mode */}
+          <div className="mt-6 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegisterMode(!isRegisterMode);
+                setError('');
+                setSuccess('');
+              }}
+              className="text-sm text-primary hover:underline"
+            >
+              {isRegisterMode 
+                ? 'Zaten hesabınız var mı? Giriş yapın' 
+                : 'Hesabınız yok mu? Kayıt olun'}
+            </button>
+          </div>
         </div>
 
         {/* Footer */}
