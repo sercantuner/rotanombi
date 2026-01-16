@@ -1,29 +1,138 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   User, 
   Server, 
   Bell, 
   Shield, 
-  Palette, 
   Database,
   Key,
   Globe,
   Save,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 
 export function SettingsPage() {
-  const { session } = useAuth();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('genel');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // Profile state
+  const [profile, setProfile] = useState({
+    displayName: '',
+    email: '',
+    firmaKodu: '',
+    donemKodu: '',
+  });
+
+  // Settings state
+  const [settings, setSettings] = useState({
+    language: 'tr',
+    timezone: 'Europe/Istanbul',
+    autoRefresh: true,
+    refreshInterval: 5,
+  });
 
   const tabs = [
     { id: 'genel', label: 'Genel', icon: User },
-    { id: 'sunucu', label: 'Sunucu', icon: Server },
+    { id: 'sunucu', label: 'Bağlantı', icon: Server },
     { id: 'bildirimler', label: 'Bildirimler', icon: Bell },
     { id: 'guvenlik', label: 'Güvenlik', icon: Shield },
   ];
+
+  // Load profile and settings
+  useEffect(() => {
+    async function loadData() {
+      if (!user) return;
+      setIsLoading(true);
+      
+      try {
+        // Load profile
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+
+        if (profileData) {
+          setProfile({
+            displayName: profileData.display_name || '',
+            email: profileData.email || user.email || '',
+            firmaKodu: profileData.firma_kodu || '',
+            donemKodu: profileData.donem_kodu || '',
+          });
+        }
+
+        // Load settings
+        const { data: settingsData } = await supabase
+          .from('app_settings')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+
+        if (settingsData) {
+          setSettings({
+            language: settingsData.language || 'tr',
+            timezone: settingsData.timezone || 'Europe/Istanbul',
+            autoRefresh: settingsData.auto_refresh ?? true,
+            refreshInterval: settingsData.refresh_interval || 5,
+          });
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadData();
+  }, [user]);
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    setIsSaving(true);
+
+    try {
+      await supabase
+        .from('profiles')
+        .upsert({
+          user_id: user.id,
+          display_name: profile.displayName,
+          email: profile.email,
+          firma_kodu: profile.firmaKodu,
+          donem_kodu: profile.donemKodu,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+
+      await supabase
+        .from('app_settings')
+        .upsert({
+          user_id: user.id,
+          language: settings.language,
+          timezone: settings.timezone,
+          auto_refresh: settings.autoRefresh,
+          refresh_interval: settings.refreshInterval,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+
+    } catch (error) {
+      console.error('Error saving:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col">
@@ -71,13 +180,14 @@ export function SettingsPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-muted-foreground mb-2">
-                        Kullanıcı Adı
+                        Ad Soyad
                       </label>
                       <input
                         type="text"
-                        value={session?.kullaniciAdi || ''}
+                        value={profile.displayName}
+                        onChange={(e) => setProfile({ ...profile, displayName: e.target.value })}
                         className="input-field"
-                        disabled
+                        placeholder="Ad Soyad"
                       />
                     </div>
                     <div>
@@ -86,8 +196,9 @@ export function SettingsPage() {
                       </label>
                       <input
                         type="email"
-                        placeholder="email@example.com"
+                        value={profile.email}
                         className="input-field"
+                        disabled
                       />
                     </div>
                   </div>
@@ -96,7 +207,11 @@ export function SettingsPage() {
                     <label className="block text-sm font-medium text-muted-foreground mb-2">
                       Dil
                     </label>
-                    <select className="input-field">
+                    <select 
+                      className="input-field"
+                      value={settings.language}
+                      onChange={(e) => setSettings({ ...settings, language: e.target.value })}
+                    >
                       <option value="tr">Türkçe</option>
                       <option value="en">English</option>
                     </select>
@@ -106,65 +221,85 @@ export function SettingsPage() {
                     <label className="block text-sm font-medium text-muted-foreground mb-2">
                       Saat Dilimi
                     </label>
-                    <select className="input-field">
+                    <select 
+                      className="input-field"
+                      value={settings.timezone}
+                      onChange={(e) => setSettings({ ...settings, timezone: e.target.value })}
+                    >
                       <option value="Europe/Istanbul">Europe/Istanbul (GMT+3)</option>
                       <option value="UTC">UTC</option>
                     </select>
                   </div>
 
-                  <button className="btn-primary flex items-center gap-2">
-                    <Save className="w-4 h-4" />
+                  <button 
+                    onClick={handleSaveProfile}
+                    disabled={isSaving}
+                    className="btn-primary flex items-center gap-2"
+                  >
+                    {isSaving ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
                     Kaydet
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Server Settings */}
+            {/* Server/Connection Settings */}
             {activeTab === 'sunucu' && (
               <div className="glass-card rounded-xl p-6 animate-slide-up">
                 <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
                   <Server className="w-5 h-5 text-primary" />
-                  Sunucu Ayarları
+                  Bağlantı Ayarları
                 </h3>
 
                 <div className="space-y-6">
                   <div className="p-4 rounded-lg bg-secondary/50">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-muted-foreground">Bağlı Sunucu</span>
-                      <span className="badge badge-success">Aktif</span>
+                      <span className="text-sm text-muted-foreground">Lovable Cloud</span>
+                      <span className="px-2 py-1 text-xs rounded-full bg-green-500/20 text-green-500">Aktif</span>
                     </div>
-                    <p className="font-semibold">{session?.sunucuAdi || 'Bilinmiyor'}</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-muted-foreground mb-2">
-                      API Endpoint
-                    </label>
-                    <input
-                      type="text"
-                      value={`https://${session?.sunucuAdi || 'sunucu'}.ws.dia.com.tr/api/v3/sis/json`}
-                      className="input-field font-mono text-sm"
-                      disabled
-                    />
+                    <p className="font-semibold">Bağlı</p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 rounded-lg bg-secondary/50">
                       <Database className="w-5 h-5 text-primary mb-2" />
                       <p className="text-sm text-muted-foreground">Firma Kodu</p>
-                      <p className="font-semibold">{session?.firmKodu || '—'}</p>
+                      <input
+                        type="text"
+                        value={profile.firmaKodu}
+                        onChange={(e) => setProfile({ ...profile, firmaKodu: e.target.value })}
+                        className="input-field mt-2"
+                        placeholder="Firma kodu"
+                      />
                     </div>
                     <div className="p-4 rounded-lg bg-secondary/50">
                       <Globe className="w-5 h-5 text-primary mb-2" />
                       <p className="text-sm text-muted-foreground">Dönem Kodu</p>
-                      <p className="font-semibold">{session?.donemKodu || '—'}</p>
+                      <input
+                        type="text"
+                        value={profile.donemKodu}
+                        onChange={(e) => setProfile({ ...profile, donemKodu: e.target.value })}
+                        className="input-field mt-2"
+                        placeholder="Dönem kodu"
+                      />
                     </div>
                   </div>
 
-                  <button className="btn-secondary flex items-center gap-2">
-                    <RefreshCw className="w-4 h-4" />
-                    Bağlantıyı Yenile
+                  <button 
+                    onClick={handleSaveProfile}
+                    disabled={isSaving}
+                    className="btn-secondary flex items-center gap-2"
+                  >
+                    {isSaving ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                    Kaydet
                   </button>
                 </div>
               </div>
@@ -243,11 +378,11 @@ export function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-lg bg-warning/10 border border-warning/20">
+                  <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
                     <div className="flex items-start gap-3">
-                      <Key className="w-5 h-5 text-warning mt-0.5" />
+                      <Key className="w-5 h-5 text-yellow-500 mt-0.5" />
                       <div>
-                        <p className="font-medium text-warning">İki Faktörlü Doğrulama</p>
+                        <p className="font-medium text-yellow-500">İki Faktörlü Doğrulama</p>
                         <p className="text-sm text-muted-foreground mt-1">
                           Hesabınızın güvenliğini artırmak için iki faktörlü doğrulamayı etkinleştirin.
                         </p>

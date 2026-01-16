@@ -9,7 +9,7 @@ import {
   Settings, 
   LogOut,
   BarChart3,
-  Server
+  User
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -26,7 +26,7 @@ const navItems: { id: NavigationPage; label: string; icon: React.ElementType }[]
 ];
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
-  const { session, logout } = useAuth();
+  const { user, logout } = useAuth();
 
   return (
     <aside className="w-64 h-screen fixed left-0 top-0 flex flex-col glass-card border-r border-border">
@@ -64,12 +64,14 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
 
       {/* User Info & Logout */}
       <div className="p-4 border-t border-border space-y-3">
-        {session && (
+        {user && (
           <div className="flex items-center gap-3 px-4 py-2">
-            <Server className="w-4 h-4 text-muted-foreground" />
+            <User className="w-4 h-4 text-muted-foreground" />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{session.kullaniciAdi}</p>
-              <p className="text-xs text-muted-foreground truncate">{session.sunucuAdi}</p>
+              <p className="text-sm font-medium truncate">
+                {user.user_metadata?.full_name || user.email?.split('@')[0] || 'Kullanıcı'}
+              </p>
+              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
             </div>
           </div>
         )}
