@@ -4,7 +4,12 @@ import { StatCard } from '@/components/dashboard/StatCard';
 import { TopCustomers } from '@/components/dashboard/TopCustomers';
 import { BankaHesaplari } from '@/components/dashboard/BankaHesaplari';
 import { VadeYaslandirmasi } from '@/components/dashboard/VadeYaslandirmasi';
-import { OzelkodDagilimi } from '@/components/dashboard/OzelkodDagilimi';
+import { OzelKodDonutChart } from '@/components/dashboard/OzelKodDonutChart';
+import { SektorDagilimi } from '@/components/dashboard/SektorDagilimi';
+import { KaynakDagilimi } from '@/components/dashboard/KaynakDagilimi';
+import { LokasyonDagilimi } from '@/components/dashboard/LokasyonDagilimi';
+import { CariDonusumTrend } from '@/components/dashboard/CariDonusumTrend';
+import { NakitAkisMetrikleri } from '@/components/dashboard/NakitAkisMetrikleri';
 import { SatisElemaniPerformans } from '@/components/dashboard/SatisElemaniPerformans';
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { DetailedFiltersPanel } from '@/components/dashboard/DetailedFiltersPanel';
@@ -21,7 +26,9 @@ import {
   PiggyBank,
   Plug,
   RefreshCw,
-  Building
+  Building,
+  TrendingDown,
+  Clock
 } from 'lucide-react';
 
 function DashboardContent() {
@@ -93,14 +100,24 @@ function DashboardContent() {
   }, [fetchData]);
 
   const formatCurrency = (value: number) => {
-    return `₺${value.toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    return `₺${value.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
+  // KPI Değerleri
   const toplamAlacak = genelRapor?.toplamAlacak || 0;
   const toplamBorc = genelRapor?.toplamBorc || 0;
   const netBakiye = genelRapor?.netBakiye || 0;
   const vadesiGecmis = genelRapor?.vadesiGecmis || 0;
   const toplamBanka = finansRapor?.toplamBankaBakiyesi || 0;
+  
+  // Gecikmiş alacak ve borç hesaplama
+  const gecikimisAlacak = genelRapor?.yaslandirma 
+    ? (genelRapor.yaslandirma.vade30 + genelRapor.yaslandirma.vade60 + genelRapor.yaslandirma.vade90 + genelRapor.yaslandirma.vade90Plus)
+    : vadesiGecmis;
+  
+  // Borç tarafında gecikmiş tutarı hesapla (varsayımsal olarak toplamBorc'un %100'ü gecikmiş)
+  const gecikmisBorcOrani = toplamAlacak > 0 ? (gecikimisAlacak / toplamAlacak) : 1;
+  const gecikimisBorc = toplamBorc * gecikmisBorcOrani;
 
   const yaslandirma: VadeYaslandirma = genelRapor?.yaslandirma || finansRapor?.yaslandirma || {
     vade90Plus: 0,
@@ -159,15 +176,8 @@ function DashboardContent() {
         {/* Detailed Filters Panel */}
         <DetailedFiltersPanel cariler={genelRapor?.cariler || []} />
 
-        {/* Stats Grid */}
+        {/* KPI Stats Grid - 5 KPI */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
-          <StatCard
-            title="Banka Bakiyesi"
-            value={formatCurrency(toplamBanka)}
-            icon={Building}
-            trend="neutral"
-            variant="default"
-          />
           <StatCard
             title="Toplam Alacak"
             value={formatCurrency(toplamAlacak)}
@@ -176,11 +186,25 @@ function DashboardContent() {
             variant="success"
           />
           <StatCard
+            title="Gecikmiş Alacak"
+            value={formatCurrency(gecikimisAlacak)}
+            icon={Clock}
+            trend="neutral"
+            variant="warning"
+          />
+          <StatCard
             title="Toplam Borç"
             value={formatCurrency(toplamBorc)}
             icon={CreditCard}
             trend="down"
-            variant="warning"
+            variant="destructive"
+          />
+          <StatCard
+            title="Gecikmiş Borç"
+            value={formatCurrency(gecikimisBorc)}
+            icon={AlertTriangle}
+            trend="neutral"
+            variant="destructive"
           />
           <StatCard
             title="Net Bakiye"
@@ -189,20 +213,22 @@ function DashboardContent() {
             trend={netBakiye >= 0 ? "up" : "down"}
             variant={netBakiye >= 0 ? "success" : "destructive"}
           />
-          <StatCard
-            title="Vadesi Geçmiş"
-            value={formatCurrency(vadesiGecmis)}
-            icon={AlertTriangle}
-            variant="destructive"
-          />
         </div>
 
-        {/* Vade Yaşlandırma - Full Width Bar Chart */}
-        <div className="mb-6">
-          <VadeYaslandirmasi 
-            yaslandirma={yaslandirma} 
-            isLoading={isLoading} 
-          />
+        {/* Nakit Akış Projeksiyonu + Metrikler */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+          <div className="xl:col-span-2">
+            <VadeYaslandirmasi 
+              yaslandirma={yaslandirma} 
+              isLoading={isLoading} 
+            />
+          </div>
+          <div>
+            <NakitAkisMetrikleri 
+              yaslandirma={yaslandirma}
+              isLoading={isLoading}
+            />
+          </div>
         </div>
 
         {/* Vade Detay Listesi - Shows when a bar is clicked */}
@@ -211,8 +237,36 @@ function DashboardContent() {
           yaslandirma={yaslandirma}
         />
 
-        {/* Main Content Row */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6 mt-6">
+        {/* Donut Charts Row - Özel Kod, Sektör, Kaynak */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6 mt-6">
+          <OzelKodDonutChart 
+            cariler={genelRapor?.cariler || []} 
+            isLoading={isLoading} 
+          />
+          <SektorDagilimi 
+            cariler={genelRapor?.cariler || []} 
+            isLoading={isLoading} 
+          />
+          <KaynakDagilimi 
+            cariler={genelRapor?.cariler || []} 
+            isLoading={isLoading} 
+          />
+        </div>
+
+        {/* Lokasyon + Cari Dönüşüm Trend */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+          <LokasyonDagilimi 
+            cariler={genelRapor?.cariler || []} 
+            isLoading={isLoading} 
+          />
+          <CariDonusumTrend 
+            cariler={genelRapor?.cariler || []} 
+            isLoading={isLoading} 
+          />
+        </div>
+
+        {/* Top Customers + Banka Hesapları */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
           <TopCustomers 
             cariler={genelRapor?.cariler || []} 
             isLoading={isLoading} 
@@ -224,12 +278,8 @@ function DashboardContent() {
           />
         </div>
 
-        {/* Metrics Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <OzelkodDagilimi 
-            ozelkodlar={genelRapor?.ozelkodDagilimi || []} 
-            isLoading={isLoading} 
-          />
+        {/* Satış Elemanı Performans */}
+        <div className="mb-6">
           <SatisElemaniPerformans 
             satisElemanlari={genelRapor?.satisElemaniDagilimi || []} 
             isLoading={isLoading} 
