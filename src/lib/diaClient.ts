@@ -49,6 +49,34 @@ export interface SatisElemaniDagilimi {
   adet: number;
 }
 
+export interface AcikFatura {
+  belgeno: string;
+  tarih: string;
+  vadetarihi: string;
+  tutar: number;
+  kalan: number;
+  gecikmeGunu: number;
+  durum: 'acik' | 'kismi' | 'kapali';
+}
+
+export interface FifoSonuc {
+  acikFaturalar: AcikFatura[];
+  gercekGecikmisBakiye: number;
+  odemeHavuzu: number;
+  toplamAcikBakiye: number;
+}
+
+export interface RiskAnalizi {
+  guvenSkoru: number;
+  riskSkoru: number;
+  odemeAliskanligi: number;
+  sonOdemeTarihi: string | null;
+  siparisSkikligi: number;
+  maxGecikmeGunu: number;
+  acikFaturaSayisi: number;
+  kapaliOranı: number;
+}
+
 export interface DiaGenelRapor {
   toplamAlacak: number;
   toplamBorc: number;
@@ -61,6 +89,11 @@ export interface DiaGenelRapor {
   satisElemaniDagilimi: SatisElemaniDagilimi[];
   cariler: DiaCari[];
   sonGuncelleme: string;
+  fifoOzet: {
+    toplamAcikFatura: number;
+    toplamAcikBakiye: number;
+    gercekGecikmisBakiye: number;
+  };
 }
 
 export interface DiaCari {
@@ -79,7 +112,6 @@ export interface DiaCari {
   eposta: string;
   riskSkoru: number;
   yaslandirma: VadeYaslandirma;
-  // Yeni alanlar
   sektorler: string;
   kaynak: string;
   carikarttipi: string;
@@ -88,6 +120,9 @@ export interface DiaCari {
   cariyedonusmetarihi: string | null;
   borctoplam: number;
   alacaktoplam: number;
+  // FIFO ve Risk alanları
+  fifo: FifoSonuc;
+  riskAnalizi: RiskAnalizi;
 }
 
 export interface DiaSatisRapor {

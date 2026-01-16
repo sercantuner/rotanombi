@@ -22,6 +22,37 @@ interface VadeYaslandirma {
   gelecek90Plus: number;
 }
 
+// FIFO Açık Fatura
+interface AcikFatura {
+  belgeno: string;
+  tarih: string;
+  vadetarihi: string;
+  tutar: number;
+  kalan: number;
+  gecikmeGunu: number;
+  durum: 'acik' | 'kismi' | 'kapali';
+}
+
+// FIFO Hesaplama Sonucu
+interface FifoSonuc {
+  acikFaturalar: AcikFatura[];
+  gercekGecikmisBakiye: number;
+  odemeHavuzu: number;
+  toplamAcikBakiye: number;
+}
+
+// Hibrit Risk Analizi
+interface RiskAnalizi {
+  guvenSkoru: number;       // 100'den başla, ceza kes (yüksek = iyi)
+  riskSkoru: number;        // 0'dan başla, risk ekle (düşük = iyi)
+  odemeAliskanligi: number; // +15 ile -15 arası
+  sonOdemeTarihi: string | null;
+  siparisSkikligi: number;  // Ortalama gün
+  maxGecikmeGunu: number;
+  acikFaturaSayisi: number;
+  kapaliOranı: number;      // Kapanan faturaların oranı
+}
+
 interface CariHesap {
   _key: string;
   cariKodu: string;
@@ -38,7 +69,7 @@ interface CariHesap {
   eposta: string;
   riskSkoru: number;
   yaslandirma: VadeYaslandirma;
-  // Yeni alanlar
+  // Mevcut alanlar
   sektorler: string;
   kaynak: string;
   carikarttipi: string;
@@ -47,6 +78,9 @@ interface CariHesap {
   cariyedonusmetarihi: string | null;
   borctoplam: number;
   alacaktoplam: number;
+  // FIFO ve Risk alanları (yeni)
+  fifo: FifoSonuc;
+  riskAnalizi: RiskAnalizi;
 }
 
 interface OzelkodDagilimi {
@@ -73,43 +107,251 @@ interface GenelRapor {
   satisElemaniDagilimi: SatisElemaniDagilimi[];
   cariler: CariHesap[];
   sonGuncelleme: string;
+  // FIFO özet (yeni)
+  fifoOzet: {
+    toplamAcikFatura: number;
+    toplamAcikBakiye: number;
+    gercekGecikmisBakiye: number;
+  };
 }
 
-// Risk score calculation based on n8n workflow logic
-function hesaplaRiskSkoru(bakiye: number, vadesiGecmis: number): number {
-  let skor = 0;
-  
+function getToday(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+function hesaplaGunFarki(tarihStr: string): number {
+  if (!tarihStr) return 0;
+  const bugun = new Date();
+  bugun.setHours(0, 0, 0, 0);
+  const tarih = new Date(tarihStr);
+  tarih.setHours(0, 0, 0, 0);
+  return Math.floor((bugun.getTime() - tarih.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function hesaplaGecikme(vadetarihiStr: string): number {
+  if (!vadetarihiStr) return 0;
+  const bugun = new Date();
+  bugun.setHours(0, 0, 0, 0);
+  const vadetarihi = new Date(vadetarihiStr);
+  vadetarihi.setHours(0, 0, 0, 0);
+  const fark = Math.floor((bugun.getTime() - vadetarihi.getTime()) / (1000 * 60 * 60 * 24));
+  return fark > 0 ? fark : 0; // Sadece gecikmiş günleri döndür
+}
+
+// FIFO Açık Hesap Kapatma Algoritması
+function hesaplaFIFO(hareketler: any[]): FifoSonuc {
+  const sonuc: FifoSonuc = {
+    acikFaturalar: [],
+    gercekGecikmisBakiye: 0,
+    odemeHavuzu: 0,
+    toplamAcikBakiye: 0,
+  };
+
+  if (!Array.isArray(hareketler) || hareketler.length === 0) {
+    return sonuc;
+  }
+
+  // 1. Hareketleri tarih sırasına göre sırala
+  const sirali = [...hareketler].sort((a, b) => {
+    const tarihA = new Date(a.tarih || a.islemtarihi || "1900-01-01").getTime();
+    const tarihB = new Date(b.tarih || b.islemtarihi || "1900-01-01").getTime();
+    return tarihA - tarihB;
+  });
+
+  // 2. Ödeme havuzunu oluştur (alacak hareketleri toplamı = müşteriden gelen ödemeler)
+  let odemeHavuzu = 0;
+  for (const h of sirali) {
+    const alacak = parseFloat(h.alacak) || 0;
+    if (alacak > 0) {
+      odemeHavuzu += alacak;
+    }
+  }
+  sonuc.odemeHavuzu = odemeHavuzu;
+
+  // 3. Faturaları (borç) FIFO ile eşleştir
+  let kalanOdeme = odemeHavuzu;
+  const borcHareketleri = sirali.filter(h => (parseFloat(h.borc) || 0) > 0);
+
+  for (const hareket of borcHareketleri) {
+    const borcTutar = parseFloat(hareket.borc) || 0;
+    const vadetarihi = hareket.vadetarihi || hareket.tarih;
+    const belgeno = hareket.belgeno2 || hareket.fisno || hareket.belgeno || "";
+    const tarih = hareket.tarih || hareket.islemtarihi || "";
+    const gecikmeGunu = hesaplaGecikme(vadetarihi);
+
+    let kalan = 0;
+    let durum: 'acik' | 'kismi' | 'kapali' = 'kapali';
+
+    if (kalanOdeme >= borcTutar) {
+      // Tam ödendi
+      kalanOdeme -= borcTutar;
+      durum = 'kapali';
+      kalan = 0;
+    } else if (kalanOdeme > 0) {
+      // Kısmi ödendi
+      kalan = borcTutar - kalanOdeme;
+      kalanOdeme = 0;
+      durum = 'kismi';
+    } else {
+      // Hiç ödenmedi
+      kalan = borcTutar;
+      durum = 'acik';
+    }
+
+    // Sadece açık veya kısmi faturalar listeye ekle
+    if (durum !== 'kapali') {
+      sonuc.acikFaturalar.push({
+        belgeno,
+        tarih,
+        vadetarihi,
+        tutar: borcTutar,
+        kalan,
+        gecikmeGunu,
+        durum,
+      });
+
+      sonuc.toplamAcikBakiye += kalan;
+
+      // Vadesi geçmiş ise gecikmiş bakiyeye ekle
+      if (gecikmeGunu > 0) {
+        sonuc.gercekGecikmisBakiye += kalan;
+      }
+    }
+  }
+
+  return sonuc;
+}
+
+// Hibrit Risk Puanı Algoritması
+function hesaplaRiskAnalizi(
+  hareketler: any[],
+  bakiye: number,
+  fifoSonuc: FifoSonuc
+): RiskAnalizi {
+  const analiz: RiskAnalizi = {
+    guvenSkoru: 100,
+    riskSkoru: 0,
+    odemeAliskanligi: 0,
+    sonOdemeTarihi: null,
+    siparisSkikligi: 0,
+    maxGecikmeGunu: 0,
+    acikFaturaSayisi: fifoSonuc.acikFaturalar.length,
+    kapaliOranı: 0,
+  };
+
+  if (!Array.isArray(hareketler) || hareketler.length === 0) {
+    return analiz;
+  }
+
+  // 1. GÜVEN SKORU (100'den düş)
+  // Gecikme oranına göre ceza
+  const gecikmeOrani = bakiye > 0 ? fifoSonuc.gercekGecikmisBakiye / bakiye : 0;
+  const cezaPuani = Math.round(gecikmeOrani * 100 * 0.6);
+  analiz.guvenSkoru = Math.max(0, 100 - cezaPuani);
+
+  // 2. RİSK SKORU (0'dan artır) - mevcut mantık
   // Yüksek bakiye riski
-  if (bakiye > 100000) skor += 30;
-  else if (bakiye > 50000) skor += 20;
-  else if (bakiye > 10000) skor += 10;
-  
+  if (bakiye > 100000) analiz.riskSkoru += 30;
+  else if (bakiye > 50000) analiz.riskSkoru += 20;
+  else if (bakiye > 10000) analiz.riskSkoru += 10;
+
   // Vadesi geçmiş riski
-  if (vadesiGecmis > 50000) skor += 40;
-  else if (vadesiGecmis > 20000) skor += 25;
-  else if (vadesiGecmis > 5000) skor += 15;
-  else if (vadesiGecmis > 0) skor += 5;
-  
-  return Math.min(100, Math.round(skor));
+  if (fifoSonuc.gercekGecikmisBakiye > 50000) analiz.riskSkoru += 40;
+  else if (fifoSonuc.gercekGecikmisBakiye > 20000) analiz.riskSkoru += 25;
+  else if (fifoSonuc.gercekGecikmisBakiye > 5000) analiz.riskSkoru += 15;
+  else if (fifoSonuc.gercekGecikmisBakiye > 0) analiz.riskSkoru += 5;
+
+  analiz.riskSkoru = Math.min(100, analiz.riskSkoru);
+
+  // 3. SON ÖDEME TARİHİ ve ALIŞ­KAN­LIK
+  const odemeler = hareketler
+    .filter(h => (parseFloat(h.alacak) || 0) > 0)
+    .sort((a, b) => {
+      const tarihA = new Date(a.tarih || a.islemtarihi || "1900-01-01").getTime();
+      const tarihB = new Date(b.tarih || b.islemtarihi || "1900-01-01").getTime();
+      return tarihB - tarihA; // En yeni en üstte
+    });
+
+  if (odemeler.length > 0) {
+    analiz.sonOdemeTarihi = odemeler[0].tarih || odemeler[0].islemtarihi || null;
+    const gunFarki = analiz.sonOdemeTarihi ? hesaplaGunFarki(analiz.sonOdemeTarihi) : 999;
+
+    // Ödeme alışkanlığı puanı
+    if (gunFarki <= 15) analiz.odemeAliskanligi = 15;
+    else if (gunFarki <= 30) analiz.odemeAliskanligi = 10;
+    else if (gunFarki <= 45) analiz.odemeAliskanligi = 0;
+    else if (gunFarki <= 60) analiz.odemeAliskanligi = -10;
+    else analiz.odemeAliskanligi = -15;
+
+    // Güven skoruna ekle
+    analiz.guvenSkoru = Math.max(0, Math.min(100, analiz.guvenSkoru + analiz.odemeAliskanligi));
+  }
+
+  // 4. SİPARİŞ SIKLIĞI
+  const faturalar = hareketler.filter(h => (parseFloat(h.borc) || 0) > 0);
+  if (faturalar.length > 1) {
+    const tarihler = faturalar
+      .map(f => new Date(f.tarih || f.islemtarihi || "1900-01-01").getTime())
+      .filter(t => t > 0)
+      .sort((a, b) => a - b);
+    
+    if (tarihler.length > 1) {
+      const toplam = tarihler[tarihler.length - 1] - tarihler[0];
+      analiz.siparisSkikligi = Math.round(toplam / (1000 * 60 * 60 * 24) / (tarihler.length - 1));
+    }
+  }
+
+  // 5. MAX GECİKME GÜNÜ
+  analiz.maxGecikmeGunu = Math.max(0, ...fifoSonuc.acikFaturalar.map(f => f.gecikmeGunu));
+
+  // 6. KAPALI ORANI (toplam fatura sayısına göre)
+  const toplamFaturaSayisi = faturalar.length;
+  const kapananFaturaSayisi = toplamFaturaSayisi - fifoSonuc.acikFaturalar.length;
+  analiz.kapaliOranı = toplamFaturaSayisi > 0 ? (kapananFaturaSayisi / toplamFaturaSayisi) * 100 : 100;
+
+  return analiz;
 }
 
-// FIFO Vade Yaşlandırma Hesaplaması - Geçmiş ve Gelecek vadeler
-function hesaplaYaslandirma(borcHareketler: any[]): VadeYaslandirma {
+// Vade Yaşlandırma Hesaplaması (FIFO verisiyle veya kalantutar ile)
+function hesaplaYaslandirma(borcHareketler: any[], fifoAcikFaturalar?: AcikFatura[]): VadeYaslandirma {
   const yaslandirma: VadeYaslandirma = {
-    // Vadesi geçmiş
     vade90Plus: 0,
     vade90: 0,
     vade60: 0,
     vade30: 0,
-    // Güncel
     guncel: 0,
-    // Gelecek vadeler
     gelecek30: 0,
     gelecek60: 0,
     gelecek90: 0,
     gelecek90Plus: 0,
   };
 
+  // FIFO açık faturalardan yaşlandırma yap
+  if (fifoAcikFaturalar && fifoAcikFaturalar.length > 0) {
+    const bugun = new Date();
+    bugun.setHours(0, 0, 0, 0);
+
+    for (const fatura of fifoAcikFaturalar) {
+      const vadetarihi = new Date(fatura.vadetarihi);
+      vadetarihi.setHours(0, 0, 0, 0);
+      const tutar = fatura.kalan;
+
+      const farkGun = Math.floor((bugun.getTime() - vadetarihi.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (farkGun > 90) yaslandirma.vade90Plus += tutar;
+      else if (farkGun > 60) yaslandirma.vade90 += tutar;
+      else if (farkGun > 30) yaslandirma.vade60 += tutar;
+      else if (farkGun > 0) yaslandirma.vade30 += tutar;
+      else if (farkGun === 0) yaslandirma.guncel += tutar;
+      else if (farkGun >= -30) yaslandirma.gelecek30 += tutar;
+      else if (farkGun >= -60) yaslandirma.gelecek60 += tutar;
+      else if (farkGun >= -90) yaslandirma.gelecek90 += tutar;
+      else yaslandirma.gelecek90Plus += tutar;
+    }
+    return yaslandirma;
+  }
+
+  // Fallback: DIA'nın kalantutar alanını kullan
   if (!Array.isArray(borcHareketler)) return yaslandirma;
 
   const bugun = new Date();
@@ -119,43 +361,23 @@ function hesaplaYaslandirma(borcHareketler: any[]): VadeYaslandirma {
     const vadetarihi = new Date(hareket.vadetarihi);
     vadetarihi.setHours(0, 0, 0, 0);
     
-    // kalantutar: ödenmemiş kalan tutar (FIFO için kritik)
     const tutar = parseFloat(hareket.kalantutar) || 0;
     if (tutar <= 0) continue;
 
-    // farkGun: pozitif = vadesi geçmiş, negatif = gelecek vade
     const farkGun = Math.floor((bugun.getTime() - vadetarihi.getTime()) / (1000 * 60 * 60 * 24));
 
-    if (farkGun > 90) {
-      yaslandirma.vade90Plus += tutar;
-    } else if (farkGun > 60) {
-      yaslandirma.vade90 += tutar;
-    } else if (farkGun > 30) {
-      yaslandirma.vade60 += tutar;
-    } else if (farkGun > 0) {
-      yaslandirma.vade30 += tutar;
-    } else if (farkGun === 0) {
-      yaslandirma.guncel += tutar;
-    } else if (farkGun >= -30) {
-      // 1-30 gün sonra
-      yaslandirma.gelecek30 += tutar;
-    } else if (farkGun >= -60) {
-      // 31-60 gün sonra
-      yaslandirma.gelecek60 += tutar;
-    } else if (farkGun >= -90) {
-      // 61-90 gün sonra
-      yaslandirma.gelecek90 += tutar;
-    } else {
-      // 90+ gün sonra
-      yaslandirma.gelecek90Plus += tutar;
-    }
+    if (farkGun > 90) yaslandirma.vade90Plus += tutar;
+    else if (farkGun > 60) yaslandirma.vade90 += tutar;
+    else if (farkGun > 30) yaslandirma.vade60 += tutar;
+    else if (farkGun > 0) yaslandirma.vade30 += tutar;
+    else if (farkGun === 0) yaslandirma.guncel += tutar;
+    else if (farkGun >= -30) yaslandirma.gelecek30 += tutar;
+    else if (farkGun >= -60) yaslandirma.gelecek60 += tutar;
+    else if (farkGun >= -90) yaslandirma.gelecek90 += tutar;
+    else yaslandirma.gelecek90Plus += tutar;
   }
 
   return yaslandirma;
-}
-
-function getToday(): string {
-  return new Date().toISOString().split("T")[0];
 }
 
 serve(async (req) => {
@@ -233,7 +455,6 @@ serve(async (req) => {
     const vadeBakiyeData = await vadeBakiyeResponse.json();
     console.log("DIA Vade Bakiye Response:", JSON.stringify(vadeBakiyeData).substring(0, 2000));
     
-    // Check for DIA error
     if (vadeBakiyeData.code && vadeBakiyeData.code !== "200") {
       const errorMsg = vadeBakiyeData.msg || "DIA veri çekme hatası";
       return new Response(
@@ -242,7 +463,6 @@ serve(async (req) => {
       );
     }
 
-    // Parse vade bakiye response
     let vadeBakiyeList: any[] = [];
     if (Array.isArray(vadeBakiyeData.result)) {
       vadeBakiyeList = vadeBakiyeData.result;
@@ -254,7 +474,7 @@ serve(async (req) => {
     
     console.log(`Found ${vadeBakiyeList.length} vade bakiye records`);
 
-    // 2. Fetch cari kart listesi for additional info (ozelkod, satiselemani, etc.)
+    // 2. Fetch cari kart listesi for additional info
     const cariListePayload = {
       scf_carikart_listele: {
         session_id: sessionId,
@@ -318,55 +538,59 @@ serve(async (req) => {
       gelecek90Plus: 0,
     };
 
-    // Özelkod ve satış elemanı dağılımları için
+    // FIFO özet
+    let toplamAcikFatura = 0;
+    let toplamAcikBakiye = 0;
+    let gercekGecikmisBakiye = 0;
+
     const ozelkodMap = new Map<string, { toplam: number; adet: number }>();
     const satisElemaniMap = new Map<string, { toplam: number; adet: number }>();
 
     const cariler: CariHesap[] = vadeBakiyeList.map((vade: any, index: number) => {
-      // Get additional cari info from cari liste
       const cariKey = vade._key_scf_carikart || vade._key;
       const cariInfo = cariMap.get(cariKey) || {};
       
-      // Borç ve Alacak toplamları (cari kart listesinden)
       const borctoplam = parseFloat(cariInfo.borctoplam) || parseFloat(vade.borctoplam) || 0;
       const alacaktoplam = parseFloat(cariInfo.alacaktoplam) || parseFloat(vade.alacaktoplam) || 0;
-      
-      // bakiye = borç - alacak (vade bakiye listesinden geliyor)
-      // bakiye > 0 → bizim alacağımız (müşteri bize borçlu)
-      // bakiye < 0 → bizim borcumuz (biz müşteriye borçluyuz)
       const toplambakiye = parseFloat(vade.toplambakiye) || (borctoplam - alacaktoplam);
       const vadesigecentutar = parseFloat(vade.vadesigecentutar) || 0;
       
-      // DEBUG: İlk 5 cari için detaylı log
-      if (index < 5) {
+      // DEBUG: İlk 3 cari için detaylı log
+      if (index < 3) {
         console.log(`DEBUG Cari ${index + 1}: ${vade.cariunvan || cariInfo.unvan}`);
         console.log(`  - toplambakiye: ${toplambakiye}, vadesigecentutar: ${vadesigecentutar}`);
-        console.log(`  - borctoplam: ${borctoplam}, alacaktoplam: ${alacaktoplam}`);
-        console.log(`  - carikarttipi: ${cariInfo.carikarttipi}`);
+        console.log(`  - __borchareketler count: ${Array.isArray(vade.__borchareketler) ? vade.__borchareketler.length : 0}`);
       }
       
-      // Alacak/Borç hesaplama: 
-      // toplambakiye > 0 ise bizim alacağımız (borç bakiye)
-      // toplambakiye < 0 ise bizim borcumuz (alacak bakiye - mutlak değer)
+      // FIFO hesaplama (ham hareket verilerinden)
+      const borcHareketler = Array.isArray(vade.__borchareketler) ? vade.__borchareketler : [];
+      const fifo = hesaplaFIFO(borcHareketler);
+      
+      // Hibrit Risk Analizi
+      const riskAnalizi = hesaplaRiskAnalizi(borcHareketler, toplambakiye, fifo);
+      
+      // Yaşlandırma (FIFO bazlı)
+      const yaslandirma = hesaplaYaslandirma(borcHareketler, fifo.acikFaturalar);
+      
+      // FIFO özete ekle
+      toplamAcikFatura += fifo.acikFaturalar.length;
+      toplamAcikBakiye += fifo.toplamAcikBakiye;
+      gercekGecikmisBakiye += fifo.gercekGecikmisBakiye;
+      
+      // Alacak/Borç hesaplama
       if (toplambakiye > 0) {
         toplamAlacak += toplambakiye;
-        // Vadesi geçmiş alacak
-        if (vadesigecentutar > 0) {
-          gecikimisAlacak += vadesigecentutar;
+        if (fifo.gercekGecikmisBakiye > 0) {
+          gecikimisAlacak += fifo.gercekGecikmisBakiye;
         }
       } else if (toplambakiye < 0) {
         toplamBorc += Math.abs(toplambakiye);
-        // Vadesi geçmiş borç
-        if (vadesigecentutar > 0) {
-          gecikimisBorc += vadesigecentutar;
+        if (fifo.gercekGecikmisBakiye > 0) {
+          gecikimisBorc += fifo.gercekGecikmisBakiye;
         }
       }
       
       vadesiGecmis += vadesigecentutar;
-      
-      // FIFO yaşlandırma hesapla
-      const borcHareketler = Array.isArray(vade.__borchareketler) ? vade.__borchareketler : [];
-      const yaslandirma = hesaplaYaslandirma(borcHareketler);
       
       // Genel yaşlandırmaya ekle
       genelYaslandirma.vade90Plus += yaslandirma.vade90Plus;
@@ -390,7 +614,7 @@ serve(async (req) => {
       const potansiyeleklemetarihi = cariInfo.potansiyeleklemetarihi || null;
       const cariyedonusmetarihi = cariInfo.cariyedonusmetarihi || null;
       
-      // Özelkod dağılımı (ozelkod2 kullan - örn: "DİA")
+      // Özelkod dağılımı
       if (ozelkod2) {
         const mevcut = ozelkodMap.get(ozelkod2) || { toplam: 0, adet: 0 };
         mevcut.toplam += toplambakiye;
@@ -406,8 +630,6 @@ serve(async (req) => {
         satisElemaniMap.set(satiselemani, mevcut);
       }
 
-      const riskSkoru = hesaplaRiskSkoru(toplambakiye, vadesigecentutar);
-
       return {
         _key: cariKey,
         cariKodu: vade.carikartkodu || cariInfo.carikartkodu || "",
@@ -422,9 +644,8 @@ serve(async (req) => {
         sehir: cariInfo.sehir || "",
         telefon: cariInfo.telefon1 || cariInfo.ceptel || vade.caritelefon1 || vade.cariceptel || "",
         eposta: cariInfo.eposta || "",
-        riskSkoru,
+        riskSkoru: riskAnalizi.riskSkoru,
         yaslandirma,
-        // Yeni alanlar
         sektorler,
         kaynak,
         carikarttipi,
@@ -433,13 +654,15 @@ serve(async (req) => {
         cariyedonusmetarihi,
         borctoplam,
         alacaktoplam,
+        // Yeni FIFO ve Risk alanları
+        fifo,
+        riskAnalizi,
       };
     });
 
     // Sort cariler by toplambakiye descending
     cariler.sort((a, b) => b.toplambakiye - a.toplambakiye);
 
-    // Convert maps to arrays
     const ozelkodDagilimi: OzelkodDagilimi[] = Array.from(ozelkodMap.entries())
       .map(([kod, data]) => ({ kod, toplam: data.toplam, adet: data.adet }))
       .sort((a, b) => b.toplam - a.toplam);
@@ -460,11 +683,16 @@ serve(async (req) => {
       satisElemaniDagilimi,
       cariler,
       sonGuncelleme: new Date().toISOString(),
+      fifoOzet: {
+        toplamAcikFatura,
+        toplamAcikBakiye,
+        gercekGecikmisBakiye,
+      },
     };
 
     console.log(`Genel rapor generated for user ${user.id}: ${cariler.length} cari`);
+    console.log(`FIFO Özet: toplamAcikFatura=${toplamAcikFatura}, toplamAcikBakiye=${toplamAcikBakiye.toFixed(2)}, gercekGecikmisBakiye=${gercekGecikmisBakiye.toFixed(2)}`);
     console.log(`DEBUG Özet: toplamAlacak=${toplamAlacak.toFixed(2)}, toplamBorc=${toplamBorc.toFixed(2)}, gecikimisAlacak=${gecikimisAlacak.toFixed(2)}, gecikimisBorc=${gecikimisBorc.toFixed(2)}`);
-    console.log(`Yaşlandırma: güncel=${genelYaslandirma.guncel}, 30=${genelYaslandirma.vade30}, 60=${genelYaslandirma.vade60}, 90=${genelYaslandirma.vade90}, 90+=${genelYaslandirma.vade90Plus}`);
 
     return new Response(
       JSON.stringify({ success: true, data: rapor }),
