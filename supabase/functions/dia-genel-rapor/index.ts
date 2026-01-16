@@ -322,20 +322,28 @@ serve(async (req) => {
     const ozelkodMap = new Map<string, { toplam: number; adet: number }>();
     const satisElemaniMap = new Map<string, { toplam: number; adet: number }>();
 
-    const cariler: CariHesap[] = vadeBakiyeList.map((vade: any) => {
+    const cariler: CariHesap[] = vadeBakiyeList.map((vade: any, index: number) => {
       // Get additional cari info from cari liste
       const cariKey = vade._key_scf_carikart || vade._key;
       const cariInfo = cariMap.get(cariKey) || {};
       
-      // Borç ve Alacak toplamları
+      // Borç ve Alacak toplamları (cari kart listesinden)
       const borctoplam = parseFloat(cariInfo.borctoplam) || parseFloat(vade.borctoplam) || 0;
       const alacaktoplam = parseFloat(cariInfo.alacaktoplam) || parseFloat(vade.alacaktoplam) || 0;
       
-      // bakiye = borç - alacak
+      // bakiye = borç - alacak (vade bakiye listesinden geliyor)
       // bakiye > 0 → bizim alacağımız (müşteri bize borçlu)
       // bakiye < 0 → bizim borcumuz (biz müşteriye borçluyuz)
       const toplambakiye = parseFloat(vade.toplambakiye) || (borctoplam - alacaktoplam);
       const vadesigecentutar = parseFloat(vade.vadesigecentutar) || 0;
+      
+      // DEBUG: İlk 5 cari için detaylı log
+      if (index < 5) {
+        console.log(`DEBUG Cari ${index + 1}: ${vade.cariunvan || cariInfo.unvan}`);
+        console.log(`  - toplambakiye: ${toplambakiye}, vadesigecentutar: ${vadesigecentutar}`);
+        console.log(`  - borctoplam: ${borctoplam}, alacaktoplam: ${alacaktoplam}`);
+        console.log(`  - carikarttipi: ${cariInfo.carikarttipi}`);
+      }
       
       // Alacak/Borç hesaplama: 
       // toplambakiye > 0 ise bizim alacağımız (borç bakiye)
@@ -454,7 +462,8 @@ serve(async (req) => {
       sonGuncelleme: new Date().toISOString(),
     };
 
-    console.log(`Genel rapor generated for user ${user.id}: ${cariler.length} cari, vadesi geçmiş: ${vadesiGecmis}`);
+    console.log(`Genel rapor generated for user ${user.id}: ${cariler.length} cari`);
+    console.log(`DEBUG Özet: toplamAlacak=${toplamAlacak.toFixed(2)}, toplamBorc=${toplamBorc.toFixed(2)}, gecikimisAlacak=${gecikimisAlacak.toFixed(2)}, gecikimisBorc=${gecikimisBorc.toFixed(2)}`);
     console.log(`Yaşlandırma: güncel=${genelYaslandirma.guncel}, 30=${genelYaslandirma.vade30}, 60=${genelYaslandirma.vade60}, 90=${genelYaslandirma.vade90}, 90+=${genelYaslandirma.vade90Plus}`);
 
     return new Response(
