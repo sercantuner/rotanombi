@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getDiaSession } from "../_shared/diaAutoLogin.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -138,33 +139,23 @@ serve(async (req) => {
       );
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("user_id", user.id)
-      .single();
-
-    if (profileError || !profile?.dia_session_id) {
+    // Get valid DIA session (auto-renews if expired)
+    const diaResult = await getDiaSession(supabase, user.id);
+    
+    if (!diaResult.success || !diaResult.session) {
       return new Response(
-        JSON.stringify({ success: false, error: "DIA bağlantısı bulunamadı" }),
+        JSON.stringify({ success: false, error: diaResult.error || "DIA bağlantısı kurulamadı" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (new Date(profile.dia_session_expires) < new Date()) {
-      return new Response(
-        JSON.stringify({ success: false, error: "DIA oturumu sona ermiş" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const firmaKodu = parseInt(profile.firma_kodu) || 1;
+    const { sessionId, sunucuAdi, firmaKodu } = diaResult.session;
 
     // Banka hesapları - bcs modülü
-    const bankaUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/bcs/json`;
+    const bankaUrl = `https://${sunucuAdi}.ws.dia.com.tr/api/v3/bcs/json`;
     const bankaPayload = {
       bcs_bankahesabi_listele: {
-        session_id: profile.dia_session_id,
+        session_id: sessionId,
         donem_kodu: 0,
         firma_kodu: firmaKodu,
         filters: "",
@@ -232,10 +223,10 @@ serve(async (req) => {
     let toplamKasaBakiyesi = 0;
 
     // Cari vade bakiye ile alacak/borç ve FIFO yaşlandırma
-    const scfUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/scf/json`;
+    const scfUrl = `https://${sunucuAdi}.ws.dia.com.tr/api/v3/scf/json`;
     const vadeBakiyePayload = {
       scf_carikart_vade_bakiye_listele: {
-        session_id: profile.dia_session_id,
+        session_id: sessionId,
         firma_kodu: firmaKodu,
         filters: [{ field: "durum", operator: "=", value: "A" }],
         sorts: "",
