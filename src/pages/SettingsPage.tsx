@@ -87,11 +87,13 @@ export function SettingsPage() {
             donemKodu: profileData.donem_kodu || '',
           });
 
-          // Load DIA connection info
+          // Load DIA connection info - TÜM bilgileri oku
           setDiaConnection(prev => ({
             ...prev,
             sunucuAdi: profileData.dia_sunucu_adi || '',
+            apiKey: profileData.dia_api_key || '',
             wsKullanici: profileData.dia_ws_kullanici || '',
+            wsSifre: profileData.dia_ws_sifre || '',
           }));
         }
 
@@ -135,6 +137,7 @@ export function SettingsPage() {
     setIsSaving(true);
 
     try {
+      // Profil ve DIA bağlantı bilgilerini birlikte kaydet
       await supabase
         .from('profiles')
         .upsert({
@@ -143,6 +146,11 @@ export function SettingsPage() {
           email: profile.email,
           firma_kodu: profile.firmaKodu,
           donem_kodu: profile.donemKodu,
+          // DIA bağlantı bilgileri
+          dia_sunucu_adi: diaConnection.sunucuAdi || null,
+          dia_api_key: diaConnection.apiKey || null,
+          dia_ws_kullanici: diaConnection.wsKullanici || null,
+          dia_ws_sifre: diaConnection.wsSifre || null,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' });
 

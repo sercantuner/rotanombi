@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getDiaSession } from "../_shared/diaAutoLogin.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -56,34 +57,23 @@ serve(async (req) => {
       );
     }
 
-    // Get user's DIA connection info
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("user_id", user.id)
-      .single();
-
-    if (profileError || !profile?.dia_session_id) {
+    // Get valid DIA session (auto-renews if expired)
+    const diaResult = await getDiaSession(supabase, user.id);
+    
+    if (!diaResult.success || !diaResult.session) {
       return new Response(
-        JSON.stringify({ success: false, error: "DIA bağlantısı bulunamadı" }),
+        JSON.stringify({ success: false, error: diaResult.error || "DIA bağlantısı kurulamadı" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (new Date(profile.dia_session_expires) < new Date()) {
-      return new Response(
-        JSON.stringify({ success: false, error: "DIA oturumu sona ermiş" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const diaUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/scf/json`;
-    const firmaKodu = parseInt(profile.firma_kodu) || 1;
+    const { sessionId, sunucuAdi, firmaKodu } = diaResult.session;
+    const diaUrl = `https://${sunucuAdi}.ws.dia.com.tr/api/v3/scf/json`;
 
     // n8n workflow'a göre fatura listele - turu: 2,3,5,7,8,10 satış faturaları
     const faturaPayload = {
       scf_fatura_listele: {
-        session_id: profile.dia_session_id,
+        session_id: sessionId,
         donem_kodu: 0,
         firma_kodu: firmaKodu,
         filters: [{ field: "turu", operator: "IN", value: "2,3,5,7,8,10" }],
@@ -143,7 +133,7 @@ serve(async (req) => {
     // Ayrıntılı fatura kalemi listele
     const faturaAyrintiliPayload = {
       scf_fatura_listele_ayrintili: {
-        session_id: profile.dia_session_id,
+        session_id: sessionId,
         donem_kodu: 0,
         firma_kodu: firmaKodu,
         filters: [{ field: "turu", operator: "IN", value: "2,3,5,7,8,10" }],
