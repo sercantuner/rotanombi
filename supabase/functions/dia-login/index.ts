@@ -65,10 +65,10 @@ serve(async (req) => {
       );
     }
 
-    // Build DIA API URL
+    // Build DIA API URL - Format: https://{sunucu}.ws.dia.com.tr/api/v3/sis/json
     const diaUrl = `https://${sunucuAdi}.ws.dia.com.tr/api/v3/sis/json`;
 
-    // DIA Login Request
+    // DIA Login Request payload
     const loginPayload = {
       login: {
         username: wsKullanici,
@@ -81,7 +81,9 @@ serve(async (req) => {
       },
     };
 
-    console.log(`DIA Login attempt for user ${user.id} to ${sunucuAdi}`);
+    console.log(`DIA Login attempt for user ${user.id}`);
+    console.log(`DIA URL: ${diaUrl}`);
+    console.log(`DIA Payload: ${JSON.stringify(loginPayload)}`);
 
     const diaResponse = await fetch(diaUrl, {
       method: "POST",
@@ -90,6 +92,8 @@ serve(async (req) => {
       },
       body: JSON.stringify(loginPayload),
     });
+    
+    console.log(`DIA Response status: ${diaResponse.status}`);
 
     if (!diaResponse.ok) {
       console.error(`DIA API error: ${diaResponse.status}`);
@@ -114,12 +118,17 @@ serve(async (req) => {
       );
     }
 
-    // Extract session info - try multiple possible response structures
-    // DIA API may return session_id in different places depending on version
+    // Extract session info - DIA returns session_id in "msg" field when code is "200"
+    // Response format: { "code": "200", "msg": "session_id_here", "warnings": [] }
     let sessionId = null;
     
-    // Try various possible paths
-    if (diaData.login?.session_id) {
+    // DIA v3 format: session_id is in the "msg" field when login is successful
+    if (diaData.code === "200" && diaData.msg) {
+      sessionId = diaData.msg;
+      console.log("Session ID found in msg field");
+    }
+    // Try other possible paths as fallback
+    else if (diaData.login?.session_id) {
       sessionId = diaData.login.session_id;
     } else if (diaData.session_id) {
       sessionId = diaData.session_id;
@@ -127,22 +136,9 @@ serve(async (req) => {
       sessionId = diaData.result.session_id;
     } else if (diaData.data?.session_id) {
       sessionId = diaData.data.session_id;
-    } else if (diaData.login?.result?.session_id) {
-      sessionId = diaData.login.result.session_id;
-    } else if (typeof diaData.login === 'string') {
-      // Sometimes session_id is returned directly as the login value
-      sessionId = diaData.login;
-    }
-
-    // If still no session, check if the entire response might be the session
-    if (!sessionId && typeof diaData === 'object') {
-      // Look for any key containing 'session'
-      for (const key of Object.keys(diaData)) {
-        if (key.toLowerCase().includes('session') && typeof diaData[key] === 'string') {
-          sessionId = diaData[key];
-          break;
-        }
-      }
+    } else if (typeof diaData.msg === 'string' && diaData.msg.length > 20) {
+      // msg might be session_id even without code check
+      sessionId = diaData.msg;
     }
 
     if (!sessionId) {
