@@ -176,16 +176,31 @@ serve(async (req) => {
 
     const cariData = await cariResponse.json();
     
-    if (cariData.error || cariData.hata) {
-      const errorMsg = cariData.error?.message || cariData.hata?.aciklama || "DIA veri çekme hatası";
+    console.log("DIA Cari Response:", JSON.stringify(cariData).substring(0, 500));
+    
+    // Check for DIA error - code !== "200" means error
+    if (cariData.code && cariData.code !== "200") {
+      const errorMsg = cariData.msg || "DIA veri çekme hatası";
       return new Response(
         JSON.stringify({ success: false, error: errorMsg }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Process cari data - adapt based on actual DIA response structure
-    const cariListe = cariData.scf_carikart_listele?.data || cariData.data || [];
+    // DIA v3 returns data in msg field or as array
+    // Try multiple possible response structures
+    let cariListe: any[] = [];
+    if (Array.isArray(cariData.msg)) {
+      cariListe = cariData.msg;
+    } else if (Array.isArray(cariData.data)) {
+      cariListe = cariData.data;
+    } else if (cariData.scf_carikart_listele?.data) {
+      cariListe = cariData.scf_carikart_listele.data;
+    } else if (Array.isArray(cariData)) {
+      cariListe = cariData;
+    }
+    
+    console.log(`Found ${cariListe.length} cari records`);
     
     let toplamAlacak = 0;
     let toplamBorc = 0;
