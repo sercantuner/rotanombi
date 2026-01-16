@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Search, RefreshCw } from 'lucide-react';
+import { Bell, Search, RefreshCw, Sun, Moon } from 'lucide-react';
+import { useTheme } from '@/hooks/useTheme';
 
 interface HeaderProps {
   title: string;
@@ -10,6 +11,7 @@ interface HeaderProps {
 
 export function Header({ title, subtitle, onRefresh, isRefreshing }: HeaderProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -25,7 +27,7 @@ export function Header({ title, subtitle, onRefresh, isRefreshing }: HeaderProps
       </div>
 
       {/* Right: Actions */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         {/* Search */}
         <div className="relative hidden md:block">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -42,15 +44,29 @@ export function Header({ title, subtitle, onRefresh, isRefreshing }: HeaderProps
             onClick={onRefresh}
             disabled={isRefreshing}
             className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors disabled:opacity-50"
+            title="Yenile"
           >
             <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
           </button>
         )}
 
+        {/* Theme Toggle */}
+        <button
+          onClick={toggleTheme}
+          className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
+          title={theme === 'dark' ? 'Aydınlık Mod' : 'Karanlık Mod'}
+        >
+          {theme === 'dark' ? (
+            <Sun className="w-5 h-5 text-warning" />
+          ) : (
+            <Moon className="w-5 h-5 text-primary" />
+          )}
+        </button>
+
         {/* Notifications */}
         <button className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors relative">
           <Bell className="w-5 h-5" />
-          <span className="absolute -top-1 -right-1 w-4 h-4 bg-destructive rounded-full text-xs flex items-center justify-center">
+          <span className="absolute -top-1 -right-1 w-4 h-4 bg-destructive rounded-full text-xs flex items-center justify-center text-destructive-foreground">
             3
           </span>
         </button>

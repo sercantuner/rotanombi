@@ -5,67 +5,129 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 @layer base {
+  /* Light Theme */
   :root {
-    /* Dark Navy SaaS Theme */
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
+    --background: 210 20% 98%;
+    --foreground: 220 15% 20%;
 
-    --card: 222 47% 14%;
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 20%;
 
-    --popover: 222 47% 14%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 20%;
 
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 11%;
+    --primary: 217 91% 50%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 217 33% 22%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 220 14% 92%;
+    --secondary-foreground: 220 15% 25%;
 
-    --muted: 217 33% 18%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 220 14% 95%;
+    --muted-foreground: 220 10% 45%;
 
     --accent: 160 84% 39%;
-    --accent-foreground: 210 40% 98%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 100%;
 
     --success: 142 76% 36%;
-    --success-foreground: 210 40% 98%;
+    --success-foreground: 0 0% 100%;
 
     --warning: 38 92% 50%;
-    --warning-foreground: 222 47% 11%;
+    --warning-foreground: 220 15% 20%;
 
-    --border: 217 33% 25%;
-    --input: 217 33% 22%;
-    --ring: 217 91% 60%;
+    --border: 220 14% 88%;
+    --input: 220 14% 92%;
+    --ring: 217 91% 50%;
 
     --radius: 0.75rem;
 
-    /* Custom gradients */
+    /* Custom gradients - Light */
+    --gradient-primary: linear-gradient(135deg, hsl(217 91% 50%) 0%, hsl(260 84% 55%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(160 84% 39%) 0%, hsl(180 76% 40%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%) 0%, hsl(220 14% 98%) 100%);
+    --gradient-hero: linear-gradient(180deg, hsl(210 20% 98%) 0%, hsl(220 14% 96%) 100%);
+
+    /* Glass effect - Light */
+    --glass-bg: hsla(0, 0%, 100%, 0.85);
+    --glass-border: hsla(220, 14%, 80%, 0.5);
+
+    /* Shadows - Light */
+    --shadow-sm: 0 1px 2px 0 hsla(220, 15%, 20%, 0.05);
+    --shadow-md: 0 4px 6px -1px hsla(220, 15%, 20%, 0.08), 0 2px 4px -2px hsla(220, 15%, 20%, 0.04);
+    --shadow-lg: 0 10px 15px -3px hsla(220, 15%, 20%, 0.1), 0 4px 6px -4px hsla(220, 15%, 20%, 0.06);
+    --shadow-glow: 0 0 30px -5px hsla(217, 91%, 50%, 0.2);
+
+    --sidebar-background: 220 14% 96%;
+    --sidebar-foreground: 220 15% 25%;
+    --sidebar-primary: 217 91% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 92%;
+    --sidebar-accent-foreground: 220 15% 20%;
+    --sidebar-border: 220 14% 88%;
+    --sidebar-ring: 217 91% 50%;
+  }
+
+  /* Dark Anthracite Theme */
+  .dark {
+    --background: 220 10% 10%;
+    --foreground: 210 20% 95%;
+
+    --card: 220 10% 13%;
+    --card-foreground: 210 20% 95%;
+
+    --popover: 220 10% 13%;
+    --popover-foreground: 210 20% 95%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 220 10% 10%;
+
+    --secondary: 220 10% 18%;
+    --secondary-foreground: 210 20% 95%;
+
+    --muted: 220 10% 16%;
+    --muted-foreground: 220 10% 55%;
+
+    --accent: 160 84% 39%;
+    --accent-foreground: 210 20% 95%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 20% 95%;
+
+    --success: 142 76% 40%;
+    --success-foreground: 210 20% 95%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 220 10% 10%;
+
+    --border: 220 10% 22%;
+    --input: 220 10% 18%;
+    --ring: 217 91% 60%;
+
+    /* Custom gradients - Anthracite */
     --gradient-primary: linear-gradient(135deg, hsl(217 91% 60%) 0%, hsl(260 84% 55%) 100%);
     --gradient-accent: linear-gradient(135deg, hsl(160 84% 39%) 0%, hsl(180 76% 40%) 100%);
-    --gradient-card: linear-gradient(145deg, hsl(222 47% 16%) 0%, hsl(222 47% 12%) 100%);
-    --gradient-hero: linear-gradient(180deg, hsl(222 47% 11%) 0%, hsl(222 47% 8%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(220 10% 15%) 0%, hsl(220 10% 11%) 100%);
+    --gradient-hero: linear-gradient(180deg, hsl(220 10% 10%) 0%, hsl(220 10% 7%) 100%);
 
-    /* Glass effect */
-    --glass-bg: hsla(222, 47%, 16%, 0.7);
-    --glass-border: hsla(217, 33%, 35%, 0.3);
+    /* Glass effect - Anthracite */
+    --glass-bg: hsla(220, 10%, 14%, 0.8);
+    --glass-border: hsla(220, 10%, 28%, 0.4);
 
-    /* Shadows */
-    --shadow-sm: 0 1px 2px 0 hsla(222, 47%, 5%, 0.3);
-    --shadow-md: 0 4px 6px -1px hsla(222, 47%, 5%, 0.4), 0 2px 4px -2px hsla(222, 47%, 5%, 0.3);
-    --shadow-lg: 0 10px 15px -3px hsla(222, 47%, 5%, 0.5), 0 4px 6px -4px hsla(222, 47%, 5%, 0.4);
-    --shadow-glow: 0 0 30px -5px hsla(217, 91%, 60%, 0.3);
+    /* Shadows - Anthracite */
+    --shadow-sm: 0 1px 2px 0 hsla(220, 10%, 3%, 0.4);
+    --shadow-md: 0 4px 6px -1px hsla(220, 10%, 3%, 0.5), 0 2px 4px -2px hsla(220, 10%, 3%, 0.4);
+    --shadow-lg: 0 10px 15px -3px hsla(220, 10%, 3%, 0.6), 0 4px 6px -4px hsla(220, 10%, 3%, 0.5);
+    --shadow-glow: 0 0 30px -5px hsla(217, 91%, 60%, 0.35);
 
-    --sidebar-background: 222 47% 9%;
-    --sidebar-foreground: 210 40% 90%;
+    --sidebar-background: 220 10% 8%;
+    --sidebar-foreground: 210 20% 90%;
     --sidebar-primary: 217 91% 60%;
-    --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 217 33% 18%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217 33% 20%;
+    --sidebar-primary-foreground: 210 20% 95%;
+    --sidebar-accent: 220 10% 16%;
+    --sidebar-accent-foreground: 210 20% 95%;
+    --sidebar-border: 220 10% 18%;
     --sidebar-ring: 217 91% 60%;
   }
 }
