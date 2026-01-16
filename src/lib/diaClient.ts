@@ -160,7 +160,6 @@ async function callEdgeFunction<T>(functionName: string, body?: object): Promise
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
-        'Cache-Control': 'no-cache, no-store',
       },
       body: body ? JSON.stringify(body) : undefined,
     });
