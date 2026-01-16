@@ -22,31 +22,54 @@ export interface DiaLoginResult {
   expires_at: string;
 }
 
+export interface VadeYaslandirma {
+  guncel: number;
+  vade30: number;
+  vade60: number;
+  vade90: number;
+  vade90Plus: number;
+}
+
+export interface OzelkodDagilimi {
+  kod: string;
+  toplam: number;
+  adet: number;
+}
+
+export interface SatisElemaniDagilimi {
+  eleman: string;
+  toplam: number;
+  adet: number;
+}
+
 export interface DiaGenelRapor {
   toplamAlacak: number;
   toplamBorc: number;
   netBakiye: number;
   vadesiGecmis: number;
-  vadesiBugun: number;
-  vadesiYaklasan: number;
+  yaslandirma: VadeYaslandirma;
+  ozelkodDagilimi: OzelkodDagilimi[];
+  satisElemaniDagilimi: SatisElemaniDagilimi[];
   cariler: DiaCari[];
   sonGuncelleme: string;
 }
 
 export interface DiaCari {
+  _key: string;
   cariKodu: string;
   cariAdi: string;
   bakiye: number;
-  vadeBakiyesi: number;
-  sonIslemTarihi: string;
+  toplambakiye: number;
+  vadesigecentutar: number;
+  ozelkod1kod: string;
+  ozelkod2kod: string;
+  ozelkod3kod: string;
+  satiselemani: string;
+  sehir: string;
+  telefon: string;
+  eposta: string;
   riskSkoru: number;
-  vadeDagilimi: {
-    guncel: number;
-    vade30: number;
-    vade60: number;
-    vade90: number;
-    vade90Plus: number;
-  };
+  yaslandirma: VadeYaslandirma;
 }
 
 export interface DiaSatisRapor {
@@ -80,6 +103,7 @@ export interface DiaFinansRapor {
   netBakiye: number;
   vadesiGecmis: number;
   vadesiBuGun: number;
+  yaslandirma: VadeYaslandirma;
   bankaHesaplari: DiaBankaHesabi[];
   kasaHesaplari: DiaKasaHesabi[];
   dovizBazliOzet: { doviz: string; banka: number; kasa: number; toplam: number }[];
