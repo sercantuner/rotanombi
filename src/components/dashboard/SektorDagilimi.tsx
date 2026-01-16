@@ -9,20 +9,20 @@ interface Props {
 }
 
 export function SektorDagilimi({ cariler, isLoading }: Props) {
-  // Sektör bilgisi 'sektorler' alanından geliyor
+  // Sektör bilgisi 'sektorler' alanından geliyor - CARİ SAYISI (value) + TUTAR (tutar)
   const chartData = useMemo(() => {
     const grouped = cariler.reduce((acc, cari) => {
-      // Sektör bilgisi için sektorler alanı kullanılıyor
       const sektor = cari.sektorler || 'Tanımsız';
       if (!acc[sektor]) {
-        acc[sektor] = { name: sektor, value: 0 };
+        acc[sektor] = { name: sektor, value: 0, tutar: 0 };
       }
-      acc[sektor].value += Math.abs(cari.bakiye);
+      acc[sektor].value += 1; // Cari sayısı
+      acc[sektor].tutar += Math.abs(cari.bakiye); // Toplam tutar
       return acc;
-    }, {} as Record<string, { name: string; value: number }>);
+    }, {} as Record<string, { name: string; value: number; tutar: number }>);
 
     return Object.values(grouped)
-      .sort((a, b) => b.value - a.value)
+      .sort((a, b) => b.value - a.value) // Cari sayısına göre sırala
       .slice(0, 6);
   }, [cariler]);
 
@@ -32,7 +32,7 @@ export function SektorDagilimi({ cariler, isLoading }: Props) {
     return `₺${value.toLocaleString('tr-TR')}`;
   };
 
-  const total = chartData.reduce((sum, item) => sum + item.value, 0);
+  const totalCount = chartData.reduce((sum, item) => sum + item.value, 0);
 
   const COLORS = [
     'hsl(220 70% 50%)',
@@ -68,14 +68,14 @@ export function SektorDagilimi({ cariler, isLoading }: Props) {
           <DonutChart
             data={chartDataWithColors}
             title="Sektör"
-            centerLabel="Toplam"
-            centerValue={formatCurrency(total)}
+            centerLabel="Cari"
+            centerValue={`${totalCount}`}
             isLoading={isLoading}
           />
         </div>
       </div>
 
-      {/* Legend as 2-column grid */}
+      {/* Legend as 2-column grid - showing count and tutar */}
       <div className="grid grid-cols-2 gap-2">
         {chartDataWithColors.map((item) => (
           <div
@@ -87,7 +87,7 @@ export function SektorDagilimi({ cariler, isLoading }: Props) {
               style={{ backgroundColor: item.color }}
             />
             <span className="text-xs truncate flex-1" title={item.name}>{item.name}</span>
-            <span className="text-xs font-semibold text-muted-foreground">{formatCurrency(item.value)}</span>
+            <span className="text-xs font-semibold text-muted-foreground">{item.value}</span>
           </div>
         ))}
       </div>

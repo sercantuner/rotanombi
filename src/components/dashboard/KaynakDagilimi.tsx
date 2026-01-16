@@ -9,20 +9,20 @@ interface Props {
 }
 
 export function KaynakDagilimi({ cariler, isLoading }: Props) {
-  // Kaynak bilgisi 'kaynak' alanından geliyor
+  // Kaynak bilgisi 'kaynak' alanından geliyor - CARİ SAYISI (value) + TUTAR (tutar)
   const chartData = useMemo(() => {
     const grouped = cariler.reduce((acc, cari) => {
-      // Kaynak bilgisi için kaynak alanı kullanılıyor
       const kaynak = cari.kaynak || 'Tanımsız';
       if (!acc[kaynak]) {
-        acc[kaynak] = { name: kaynak, value: 0 };
+        acc[kaynak] = { name: kaynak, value: 0, tutar: 0 };
       }
-      acc[kaynak].value += Math.abs(cari.bakiye);
+      acc[kaynak].value += 1; // Cari sayısı
+      acc[kaynak].tutar += Math.abs(cari.bakiye); // Toplam tutar
       return acc;
-    }, {} as Record<string, { name: string; value: number }>);
+    }, {} as Record<string, { name: string; value: number; tutar: number }>);
 
     return Object.values(grouped)
-      .sort((a, b) => b.value - a.value)
+      .sort((a, b) => b.value - a.value) // Cari sayısına göre sırala
       .slice(0, 6);
   }, [cariler]);
 
@@ -32,7 +32,7 @@ export function KaynakDagilimi({ cariler, isLoading }: Props) {
     return `₺${value.toLocaleString('tr-TR')}`;
   };
 
-  const total = chartData.reduce((sum, item) => sum + item.value, 0);
+  const totalCount = chartData.reduce((sum, item) => sum + item.value, 0);
 
   const COLORS = [
     'hsl(280 70% 50%)',
@@ -68,14 +68,14 @@ export function KaynakDagilimi({ cariler, isLoading }: Props) {
           <DonutChart
             data={chartDataWithColors}
             title="Kaynak"
-            centerLabel="Toplam"
-            centerValue={formatCurrency(total)}
+            centerLabel="Cari"
+            centerValue={`${totalCount}`}
             isLoading={isLoading}
           />
         </div>
       </div>
 
-      {/* Legend as 2-column grid */}
+      {/* Legend as 2-column grid - showing count */}
       <div className="grid grid-cols-2 gap-2">
         {chartDataWithColors.map((item) => (
           <div
@@ -87,7 +87,7 @@ export function KaynakDagilimi({ cariler, isLoading }: Props) {
               style={{ backgroundColor: item.color }}
             />
             <span className="text-xs truncate flex-1" title={item.name}>{item.name}</span>
-            <span className="text-xs font-semibold text-muted-foreground">{formatCurrency(item.value)}</span>
+            <span className="text-xs font-semibold text-muted-foreground">{item.value}</span>
           </div>
         ))}
       </div>
