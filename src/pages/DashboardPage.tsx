@@ -98,7 +98,18 @@ function DashboardContent() {
     fetchData();
   }, [fetchData]);
 
+  // Büyük rakamlar için akıllı kısaltma (999.000.000 TL'ye kadar)
   const formatCurrency = (value: number) => {
+    const absValue = Math.abs(value);
+    if (absValue >= 1000000000) {
+      return `₺${(value / 1000000000).toFixed(2)}B`;
+    }
+    if (absValue >= 1000000) {
+      return `₺${(value / 1000000).toFixed(2)}M`;
+    }
+    if (absValue >= 100000) {
+      return `₺${(value / 1000).toFixed(0)}K`;
+    }
     return `₺${value.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
@@ -164,8 +175,8 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* Quick Filters */}
-        <DashboardFilters totalCustomers={genelRapor?.cariler?.length || 0} />
+        {/* Quick Filters - Müşteri sayısı: potansiyel = false olan tüm cariler */}
+        <DashboardFilters totalCustomers={genelRapor?.cariler?.filter(c => !c.potansiyel).length || 0} />
 
         {/* Detailed Filters Panel */}
         <DetailedFiltersPanel cariler={genelRapor?.cariler || []} />

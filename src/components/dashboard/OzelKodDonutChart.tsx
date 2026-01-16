@@ -15,6 +15,7 @@ export function OzelKodDonutChart({ cariler, isLoading }: Props) {
   const { filters, toggleArrayFilter } = useDashboardFilters();
   const [selectedType, setSelectedType] = useState<OzelKodType>('ozelkod1');
 
+  // CARİ SAYISI (value) + TUTAR (tutar)
   const chartData = useMemo(() => {
     const fieldMap: Record<OzelKodType, keyof DiaCari> = {
       ozelkod1: 'ozelkod1kod',
@@ -26,14 +27,15 @@ export function OzelKodDonutChart({ cariler, isLoading }: Props) {
     const grouped = cariler.reduce((acc, cari) => {
       const key = (cari[field] as string) || 'Tanımsız';
       if (!acc[key]) {
-        acc[key] = { name: key, value: 0 };
+        acc[key] = { name: key, value: 0, tutar: 0 };
       }
-      acc[key].value += Math.abs(cari.bakiye);
+      acc[key].value += 1; // Cari sayısı
+      acc[key].tutar += Math.abs(cari.bakiye); // Toplam tutar
       return acc;
-    }, {} as Record<string, { name: string; value: number }>);
+    }, {} as Record<string, { name: string; value: number; tutar: number }>);
 
     return Object.values(grouped)
-      .sort((a, b) => b.value - a.value)
+      .sort((a, b) => b.value - a.value) // Cari sayısına göre sırala
       .slice(0, 6);
   }, [cariler, selectedType]);
 
@@ -43,7 +45,7 @@ export function OzelKodDonutChart({ cariler, isLoading }: Props) {
     return `₺${value.toLocaleString('tr-TR')}`;
   };
 
-  const total = chartData.reduce((sum, item) => sum + item.value, 0);
+  const totalCount = chartData.reduce((sum, item) => sum + item.value, 0);
 
   const handleSegmentClick = (name: string) => {
     toggleArrayFilter(selectedType, name);
@@ -110,7 +112,7 @@ export function OzelKodDonutChart({ cariler, isLoading }: Props) {
             data={chartDataWithColors}
             title="Özel Kod"
             centerLabel={typeLabels[selectedType]}
-            centerValue={formatCurrency(total)}
+            centerValue={`${totalCount}`}
             onSegmentClick={handleSegmentClick}
             selectedSegments={selectedSegments}
             isLoading={isLoading}
@@ -118,7 +120,7 @@ export function OzelKodDonutChart({ cariler, isLoading }: Props) {
         </div>
       </div>
 
-      {/* Legend as 2-column grid */}
+      {/* Legend as 2-column grid - showing count */}
       <div className="grid grid-cols-2 gap-2">
         {chartDataWithColors.map((item) => {
           const isSelected = selectedSegments.includes(item.name);
@@ -137,7 +139,7 @@ export function OzelKodDonutChart({ cariler, isLoading }: Props) {
                 style={{ backgroundColor: item.color }}
               />
               <span className="text-xs truncate flex-1" title={item.name}>{item.name}</span>
-              <span className="text-xs font-semibold text-muted-foreground">{formatCurrency(item.value)}</span>
+              <span className="text-xs font-semibold text-muted-foreground">{item.value}</span>
             </div>
           );
         })}

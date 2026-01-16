@@ -4,6 +4,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 interface DonutChartData {
   name: string;
   value: number;
+  tutar?: number; // Opsiyonel tutar alanı - tooltip için
   color?: string;
 }
 
@@ -54,8 +55,14 @@ export function DonutChart({
         <div className="bg-card border border-border rounded-lg shadow-lg p-3">
           <p className="font-semibold text-sm">{item.name}</p>
           <p className="text-lg font-bold text-primary">
-            {formatCurrency(item.value)}
+            {item.value} Cari
           </p>
+          {/* Tutar bilgisi varsa göster */}
+          {item.tutar !== undefined && item.tutar > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Toplam: {formatCurrency(item.tutar)}
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
             {((item.value / total) * 100).toFixed(1)}%
           </p>

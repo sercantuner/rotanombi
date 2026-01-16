@@ -421,13 +421,15 @@ serve(async (req) => {
     const { sessionId, sunucuAdi, firmaKodu } = diaResult.session;
     const diaUrl = `https://${sunucuAdi}.ws.dia.com.tr/api/v3/scf/json`;
 
-    // 1. Fetch vade bakiye listesi with __borchareketler for FIFO aging
+    // 1. Fetch vade bakiye listesi with __borchareketler for FIFO aging (NO LIMIT)
     const vadeBakiyePayload = {
       scf_carikart_vade_bakiye_listele: {
         session_id: sessionId,
         firma_kodu: firmaKodu,
         filters: [{ field: "durum", operator: "=", value: "A" }],
         sorts: "",
+        limit: 50000,
+        offset: 0,
         params: {
           irsaliyeleriDahilEt: "True",
           tarihreferans: getToday(),
@@ -474,13 +476,15 @@ serve(async (req) => {
     
     console.log(`Found ${vadeBakiyeList.length} vade bakiye records`);
 
-    // 2. Fetch cari kart listesi for additional info
+    // 2. Fetch cari kart listesi for additional info (NO LIMIT)
     const cariListePayload = {
       scf_carikart_listele: {
         session_id: sessionId,
         firma_kodu: firmaKodu,
         filters: "",
         sorts: [{ field: "carikartkodu", sorttype: "DESC" }],
+        limit: 50000,
+        offset: 0,
         params: {
           irsaliyeleriDahilEt: "False",
           selectedcolumns: [
@@ -577,17 +581,21 @@ serve(async (req) => {
       toplamAcikBakiye += fifo.toplamAcikBakiye;
       gercekGecikmisBakiye += fifo.gercekGecikmisBakiye;
       
-      // Alacak/Borç hesaplama
+      // Alacak/Borç hesaplama - FIFO öncelikli, fallback vadesigecentutar
       if (toplambakiye > 0) {
         toplamAlacak += toplambakiye;
-        if (fifo.gercekGecikmisBakiye > 0) {
-          gecikimisAlacak += fifo.gercekGecikmisBakiye;
-        }
+        // FIFO sonucu varsa kullan, yoksa DIA'nın vadesigecentutar'ını kullan
+        const gecikmisTutar = fifo.gercekGecikmisBakiye > 0 
+          ? fifo.gercekGecikmisBakiye 
+          : vadesigecentutar;
+        gecikimisAlacak += gecikmisTutar;
       } else if (toplambakiye < 0) {
         toplamBorc += Math.abs(toplambakiye);
-        if (fifo.gercekGecikmisBakiye > 0) {
-          gecikimisBorc += fifo.gercekGecikmisBakiye;
-        }
+        // Borç için de fallback
+        const gecikmisTutar = fifo.gercekGecikmisBakiye > 0 
+          ? fifo.gercekGecikmisBakiye 
+          : 0;
+        gecikimisBorc += gecikmisTutar;
       }
       
       vadesiGecmis += vadesigecentutar;
