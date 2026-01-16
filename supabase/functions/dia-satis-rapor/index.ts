@@ -77,29 +77,29 @@ serve(async (req) => {
       );
     }
 
-    // Parse query parameters for date filtering
-    const url = new URL(req.url);
-    const baslangicTarihi = url.searchParams.get("baslangic") || getMonthStart();
-    const bitisTarihi = url.searchParams.get("bitis") || getToday();
-
-    const diaUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/fat/json`;
+    const diaUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/scf/json`;
     const firmaKodu = parseInt(profile.firma_kodu) || 1;
-    const donemKodu = parseInt(profile.donem_kodu) || 0;
 
-    // Fetch fatura listesi from DIA
+    // n8n workflow'a göre fatura listele - turu: 2,3,5,7,8,10 satış faturaları
     const faturaPayload = {
-      fat_fatura_listele: {
+      scf_fatura_listele: {
         session_id: profile.dia_session_id,
+        donem_kodu: 0,
         firma_kodu: firmaKodu,
-        donem_kodu: donemKodu,
-        filters: `tarih>='${baslangicTarihi}' AND tarih<='${bitisTarihi}' AND fatura_tipi=1`, // 1 = Satış faturası
-        sorts: "tarih DESC",
-        params: "",
-        offset: 0,
-      },
+        filters: [{ field: "turu", operator: "IN", value: "2,3,5,7,8,10" }],
+        sorts: "",
+        params: {
+          selectedcolumns: [
+            "_key", "turu", "__sourcesubeadi", "tarih", "toplam", 
+            "toplamkdvdvz", "net", "dovizkuru", "toplamkdv", "iptal"
+          ]
+        },
+        offset: 0
+      }
     };
 
     console.log(`Fetching satis raporu for user ${user.id}`);
+    console.log("Fatura payload:", JSON.stringify(faturaPayload));
 
     const faturaResponse = await fetch(diaUrl, {
       method: "POST",
@@ -115,8 +115,7 @@ serve(async (req) => {
     }
 
     const faturaData = await faturaResponse.json();
-    
-    console.log("DIA Fatura Response:", JSON.stringify(faturaData).substring(0, 500));
+    console.log("DIA Fatura Response:", JSON.stringify(faturaData).substring(0, 1000));
     
     // Check for DIA error
     if (faturaData.code && faturaData.code !== "200") {
@@ -127,19 +126,62 @@ serve(async (req) => {
       );
     }
 
-    // DIA v3 returns data in msg field or as array
+    // DIA v3 returns data in msg field
     let faturalar: any[] = [];
     if (Array.isArray(faturaData.msg)) {
       faturalar = faturaData.msg;
     } else if (Array.isArray(faturaData.data)) {
       faturalar = faturaData.data;
-    } else if (faturaData.fat_fatura_listele?.data) {
-      faturalar = faturaData.fat_fatura_listele.data;
     } else if (Array.isArray(faturaData)) {
       faturalar = faturaData;
     }
     
     console.log(`Found ${faturalar.length} fatura records`);
+
+    // Ayrıntılı fatura kalemi listele
+    const faturaAyrintiliPayload = {
+      scf_fatura_listele_ayrintili: {
+        session_id: profile.dia_session_id,
+        donem_kodu: 0,
+        firma_kodu: firmaKodu,
+        filters: [{ field: "turu", operator: "IN", value: "2,3,5,7,8,10" }],
+        sorts: "",
+        params: {
+          selectedcolumns: [
+            "turu", "kdvharictutar", "kdvtutari", "_key_scf_fatura", "miktar",
+            "satiselemani", "stokkartmarka", "kartozelkodu1", "kartozelkodu2",
+            "kartozelkodu3", "tarih", "kartaciklama", "unvan", "kalemdovizi",
+            "masrafmerkeziaciklama_kalem", "sonbirimfiyatifisdovizi", "fatbirimi",
+            "fatanabirimi", "faturaikincibirimmiktar", "faturaikincibirimi",
+            "toplambrutagirlik", "toplambruthacim", "toplamnetagirlik",
+            "toplamnethacim", "sontutaryerel", "kalemturu", "dovizkuru",
+            "kdvdurumu", "indirim1", "indirim2", "indirim3", "indirim4",
+            "indirim5", "indirimtoplam", "indirimtutari", "kdv", "sonbirimfiyati",
+            "yerelbirimfiyati", "birimfiyati"
+          ]
+        },
+        offset: 0
+      }
+    };
+
+    const faturaAyrintiliResponse = await fetch(diaUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(faturaAyrintiliPayload),
+    });
+
+    let faturaKalemleri: any[] = [];
+    if (faturaAyrintiliResponse.ok) {
+      const faturaAyrintiliData = await faturaAyrintiliResponse.json();
+      console.log("DIA Fatura Ayrintili Response:", JSON.stringify(faturaAyrintiliData).substring(0, 1000));
+      
+      if (Array.isArray(faturaAyrintiliData.msg)) {
+        faturaKalemleri = faturaAyrintiliData.msg;
+      } else if (Array.isArray(faturaAyrintiliData.data)) {
+        faturaKalemleri = faturaAyrintiliData.data;
+      }
+      console.log(`Found ${faturaKalemleri.length} fatura kalemi records`);
+    }
 
     // Process sales data
     let toplamSatis = 0;
@@ -152,51 +194,53 @@ serve(async (req) => {
     const bugun = getToday();
     const ayBasi = getMonthStart();
 
+    // Fatura bazlı toplama
     for (const fatura of faturalar) {
-      const tutar = parseFloat(fatura.genel_toplam) || 0;
+      if (fatura.iptal === "True" || fatura.iptal === true) continue;
+      
+      const tutar = parseFloat(fatura.net) || parseFloat(fatura.toplam) || 0;
       const tarih = fatura.tarih || "";
       
       toplamSatis += tutar;
       if (tarih === bugun) gunlukSatis += tutar;
       if (tarih >= ayBasi) aylikSatis += tutar;
+    }
 
-      // Cari bazlı toplama
-      const cariKodu = fatura.cari_kodu || "";
-      const cariAdi = fatura.cari_adi || "";
-      if (cariKodu) {
-        const mevcut = cariMap.get(cariKodu) || { cariAdi, toplamTutar: 0, faturaAdedi: 0 };
-        mevcut.toplamTutar += tutar;
-        mevcut.faturaAdedi += 1;
-        cariMap.set(cariKodu, mevcut);
+    // Kalem bazlı işleme
+    for (const kalem of faturaKalemleri) {
+      const stokKodu = kalem.kartozelkodu1 || "";
+      const stokAdi = kalem.kartaciklama || "";
+      const miktar = parseFloat(kalem.miktar) || 0;
+      const birim = kalem.fatbirimi || "AD";
+      const tutar = parseFloat(kalem.sontutaryerel) || parseFloat(kalem.kdvharictutar) || 0;
+      const tarih = kalem.tarih || "";
+      const cariAdi = kalem.unvan || "";
+
+      satirlar.push({
+        stokKodu,
+        stokAdi,
+        miktar,
+        birim,
+        tutar,
+        tarih,
+        faturaNo: kalem._key_scf_fatura || "",
+        cariAdi,
+      });
+
+      // Ürün bazlı toplama
+      if (stokKodu) {
+        const mevcutUrun = urunMap.get(stokKodu) || { stokAdi, toplamMiktar: 0, toplamTutar: 0 };
+        mevcutUrun.toplamMiktar += miktar;
+        mevcutUrun.toplamTutar += tutar;
+        urunMap.set(stokKodu, mevcutUrun);
       }
 
-      // Fatura kalemleri
-      const kalemler = fatura.kalemler || [];
-      for (const kalem of kalemler) {
-        const stokKodu = kalem.stok_kodu || "";
-        const stokAdi = kalem.stok_adi || "";
-        const miktar = parseFloat(kalem.miktar) || 0;
-        const birim = kalem.birim || "AD";
-        const kalemTutar = parseFloat(kalem.tutar) || 0;
-
-        satirlar.push({
-          stokKodu,
-          stokAdi,
-          miktar,
-          birim,
-          tutar: kalemTutar,
-          tarih,
-          faturaNo: fatura.fatura_no || "",
-          cariAdi,
-        });
-
-        // Ürün bazlı toplama
-        if (stokKodu) {
-          const mevcutUrun = urunMap.get(stokKodu) || { stokAdi, toplamMiktar: 0, toplamTutar: 0 };
-          mevcutUrun.toplamMiktar += miktar;
-          mevcutUrun.toplamTutar += kalemTutar;
-          urunMap.set(stokKodu, mevcutUrun);
-        }
+      // Cari bazlı toplama
+      if (cariAdi) {
+        const mevcutCari = cariMap.get(cariAdi) || { cariAdi, toplamTutar: 0, faturaAdedi: 0 };
+        mevcutCari.toplamTutar += tutar;
+        mevcutCari.faturaAdedi += 1;
+        cariMap.set(cariAdi, mevcutCari);
       }
     }
 
@@ -215,7 +259,7 @@ serve(async (req) => {
       toplamSatis,
       gunlukSatis,
       aylikSatis,
-      toplamFatura: faturalar.length,
+      toplamFatura: faturalar.filter(f => f.iptal !== "True" && f.iptal !== true).length,
       satirlar: satirlar.slice(0, 100),
       urunBazli,
       cariBazli,
