@@ -107,6 +107,9 @@ interface GenelRapor {
   satisElemaniDagilimi: SatisElemaniDagilimi[];
   cariler: CariHesap[];
   sonGuncelleme: string;
+  // Cari sayıları (cariListe'den)
+  toplamCariSayisi: number;
+  musteriSayisi: number; // potansiyel = false olanlar
   // FIFO özet (yeni)
   fifoOzet: {
     toplamAcikFatura: number;
@@ -506,6 +509,9 @@ serve(async (req) => {
     });
 
     let cariMap = new Map<string, any>();
+    let toplamCariSayisi = 0;
+    let musteriSayisi = 0;
+    
     if (cariResponse.ok) {
       const cariData = await cariResponse.json();
       console.log("DIA Cari Response:", JSON.stringify(cariData).substring(0, 1000));
@@ -519,10 +525,16 @@ serve(async (req) => {
         cariListe = cariData.data;
       }
       
+      // Cari sayılarını hesapla (scf_carikart_listele'den)
+      toplamCariSayisi = cariListe.length;
+      musteriSayisi = cariListe.filter(c => 
+        c.potansiyel !== true && c.potansiyel !== "True"
+      ).length;
+      
       for (const cari of cariListe) {
         cariMap.set(cari._key, cari);
       }
-      console.log(`Found ${cariListe.length} cari records for enrichment`);
+      console.log(`Found ${cariListe.length} cari records, ${musteriSayisi} müşteri (potansiyel hariç)`);
     }
 
     // Process data
@@ -688,6 +700,8 @@ serve(async (req) => {
       satisElemaniDagilimi,
       cariler,
       sonGuncelleme: new Date().toISOString(),
+      toplamCariSayisi,
+      musteriSayisi,
       fifoOzet: {
         toplamAcikFatura,
         toplamAcikBakiye,

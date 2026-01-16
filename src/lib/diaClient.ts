@@ -89,6 +89,8 @@ export interface DiaGenelRapor {
   satisElemaniDagilimi: SatisElemaniDagilimi[];
   cariler: DiaCari[];
   sonGuncelleme: string;
+  toplamCariSayisi: number;
+  musteriSayisi: number;
   fifoOzet: {
     toplamAcikFatura: number;
     toplamAcikBakiye: number;

@@ -237,8 +237,8 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* Quick Filters - Müşteri sayısı: potansiyel = false olan tüm cariler */}
-        <DashboardFilters totalCustomers={genelRapor?.cariler?.filter(c => !c.potansiyel).length || 0} />
+        {/* Quick Filters - Müşteri sayısı: scf_carikart_listele'den gelen musteriSayisi */}
+        <DashboardFilters totalCustomers={genelRapor?.musteriSayisi || 0} />
 
         {/* Detailed Filters Panel */}
         <DetailedFiltersPanel cariler={genelRapor?.cariler || []} />
