@@ -23,11 +23,18 @@ export interface DiaLoginResult {
 }
 
 export interface VadeYaslandirma {
-  guncel: number;
-  vade30: number;
-  vade60: number;
-  vade90: number;
-  vade90Plus: number;
+  // Vadesi geçmiş (geçmişe doğru)
+  vade90Plus: number;    // 90+ gün geçmiş
+  vade90: number;        // 61-90 gün geçmiş
+  vade60: number;        // 31-60 gün geçmiş
+  vade30: number;        // 1-30 gün geçmiş
+  // Güncel
+  guncel: number;        // Vadesi henüz gelmemiş veya bugün
+  // Gelecek vadeler (geleceğe doğru)
+  gelecek30: number;     // 1-30 gün sonra
+  gelecek60: number;     // 31-60 gün sonra
+  gelecek90: number;     // 61-90 gün sonra
+  gelecek90Plus: number; // 90+ gün sonra
 }
 
 export interface OzelkodDagilimi {
