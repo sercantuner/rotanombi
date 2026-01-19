@@ -12,6 +12,7 @@ import {
   FORMAT_OPTIONS,
   WidgetBuilderConfig,
 } from '@/lib/widgetBuilderTypes';
+import { testDiaApi, DiaApiTestResponse } from '@/lib/diaApiTest';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +27,7 @@ import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { 
   Wand2, Code, BarChart3, Settings2, Play, Save, Plus, Trash2, 
-  Hash, TrendingUp, Activity, PieChart, Circle, Table, List, Filter, LayoutGrid, Crosshair, Radar 
+  Hash, TrendingUp, Activity, PieChart, Circle, Table, List, Filter, LayoutGrid, Crosshair, Radar, CheckCircle, XCircle, AlertCircle
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -166,22 +167,59 @@ export function WidgetBuilder({ open, onOpenChange, onSave }: WidgetBuilderProps
 
   const handleTestApi = async () => {
     setIsTesting(true);
+    setTestResult(null);
+    
     try {
-      // Simüle edilmiş test
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setTestResult({
-        success: true,
-        recordCount: 150,
-        sampleFields: ['carikod', 'cariadi', 'toplambakiye', 'sehir', 'ozelkod1'],
-        sampleData: [
-          { carikod: 'C001', cariadi: 'Örnek Müşteri', toplambakiye: 15000 },
-          { carikod: 'C002', cariadi: 'Demo Şirket', toplambakiye: 25000 },
-        ],
+      // Filtre JSON'ını parse et
+      let filters = {};
+      if (customFilters.trim()) {
+        try {
+          filters = JSON.parse(customFilters);
+        } catch (e) {
+          toast.error('Geçersiz filtre JSON formatı');
+          setIsTesting(false);
+          return;
+        }
+      }
+
+      // Seçili kolonları parse et
+      const columns = selectedColumns
+        .split(',')
+        .map(c => c.trim())
+        .filter(c => c.length > 0);
+
+      // Gerçek DIA API testi
+      const result = await testDiaApi({
+        module: config.diaApi.module,
+        method: config.diaApi.method,
+        limit: config.diaApi.parameters.limit || 100,
+        filters,
+        selectedColumns: columns.length > 0 ? columns : undefined,
+        orderby: config.diaApi.parameters.orderby,
       });
-      toast.success('API testi başarılı!');
+
+      setTestResult(result);
+
+      if (result.success) {
+        toast.success(`API testi başarılı! ${result.recordCount} kayıt bulundu.`);
+        
+        // Alanları otomatik olarak value field seçeneklerine ekle
+        if (result.sampleFields && result.sampleFields.length > 0) {
+          // İlk sayısal alanı varsayılan olarak seç
+          const numericField = result.sampleFields.find(f => 
+            result.fieldTypes?.[f] === 'number' || result.fieldTypes?.[f] === 'number-string'
+          );
+          if (numericField && config.visualization.type === 'kpi' && !config.visualization.kpi?.valueField) {
+            handleKpiConfigChange('valueField', numericField);
+          }
+        }
+      } else {
+        toast.error(`API hatası: ${result.error}`);
+      }
     } catch (error) {
-      toast.error('API testi başarısız');
-      setTestResult({ success: false, error: 'Bağlantı hatası' });
+      const errorMessage = error instanceof Error ? error.message : 'Beklenmeyen hata';
+      toast.error(`API testi başarısız: ${errorMessage}`);
+      setTestResult({ success: false, error: errorMessage });
     } finally {
       setIsTesting(false);
     }
@@ -381,20 +419,64 @@ export function WidgetBuilder({ open, onOpenChange, onSave }: WidgetBuilderProps
                     )}>
                       <CardContent className="pt-4">
                         {testResult.success ? (
-                          <div className="space-y-2">
-                            <p className="text-sm font-medium text-green-600">
-                              ✓ {testResult.recordCount} kayıt bulundu
-                            </p>
-                            <div className="flex flex-wrap gap-1">
-                              {testResult.sampleFields.map((field: string) => (
-                                <Badge key={field} variant="secondary" className="text-xs">
-                                  {field}
-                                </Badge>
-                              ))}
+                          <div className="space-y-4">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle className="h-5 w-5 text-green-600" />
+                              <p className="text-sm font-medium text-green-600">
+                                {testResult.recordCount} kayıt bulundu
+                              </p>
                             </div>
+                            
+                            {/* Alanlar ve Tipleri */}
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium text-muted-foreground">Mevcut Alanlar:</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {testResult.sampleFields?.map((field: string) => {
+                                  const fieldType = testResult.fieldTypes?.[field] || 'unknown';
+                                  const typeColor = 
+                                    fieldType === 'number' || fieldType === 'number-string' ? 'bg-blue-500/10 text-blue-600 border-blue-500/30' :
+                                    fieldType === 'date' ? 'bg-amber-500/10 text-amber-600 border-amber-500/30' :
+                                    fieldType === 'boolean' ? 'bg-purple-500/10 text-purple-600 border-purple-500/30' :
+                                    'bg-muted text-muted-foreground';
+                                  
+                                  return (
+                                    <Badge 
+                                      key={field} 
+                                      variant="outline" 
+                                      className={cn('text-xs cursor-pointer hover:opacity-80', typeColor)}
+                                      onClick={() => {
+                                        // Alan adını panoya kopyala
+                                        navigator.clipboard.writeText(field);
+                                        toast.success(`"${field}" kopyalandı`);
+                                      }}
+                                    >
+                                      {field}
+                                      <span className="ml-1 opacity-60 text-[10px]">
+                                        ({fieldType === 'number-string' ? 'num' : fieldType.slice(0, 3)})
+                                      </span>
+                                    </Badge>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            
+                            {/* Örnek Veri */}
+                            {testResult.sampleData && testResult.sampleData.length > 0 && (
+                              <div className="space-y-2">
+                                <p className="text-xs font-medium text-muted-foreground">Örnek Veri (ilk {testResult.sampleData.length} kayıt):</p>
+                                <div className="max-h-40 overflow-auto rounded border">
+                                  <pre className="p-2 text-xs font-mono bg-muted/30">
+                                    {JSON.stringify(testResult.sampleData, null, 2)}
+                                  </pre>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ) : (
-                          <p className="text-sm text-destructive">{testResult.error}</p>
+                          <div className="flex items-center gap-2">
+                            <XCircle className="h-5 w-5 text-destructive" />
+                            <p className="text-sm text-destructive">{testResult.error}</p>
+                          </div>
                         )}
                       </CardContent>
                     </Card>
