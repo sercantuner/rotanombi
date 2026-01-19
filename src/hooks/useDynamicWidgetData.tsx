@@ -121,6 +121,8 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
       }
 
       const fetchedData = result.sampleData || [];
+      const recordCount = result.recordCount || fetchedData.length;
+      const fieldStats = result.fieldStats || {};
       setRawData(fetchedData);
 
       // Görselleştirme tipine göre veri işleme
@@ -128,11 +130,32 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
       
       if (vizType === 'kpi' && config.visualization.kpi) {
         const kpiConfig = config.visualization.kpi;
-        const kpiValue = calculateAggregation(
-          fetchedData, 
-          kpiConfig.valueField, 
-          kpiConfig.aggregation
-        );
+        
+        let kpiValue: number;
+        const valueField = kpiConfig.valueField;
+        const stats = fieldStats[valueField];
+        
+        // Aggregation tipine göre doğru değeri hesapla
+        if (kpiConfig.aggregation === 'count') {
+          // Count için API'den gelen gerçek recordCount değerini kullan
+          kpiValue = recordCount;
+        } else if (kpiConfig.aggregation === 'count_distinct') {
+          // Distinct count için mevcut mantık (sample data üzerinden)
+          kpiValue = new Set(fetchedData.map(item => item[valueField])).size;
+        } else if (kpiConfig.aggregation === 'sum' && stats?.sum !== undefined) {
+          // Sum için fieldStats kullan (tüm veri üzerinden hesaplanmış)
+          kpiValue = stats.sum;
+        } else if (kpiConfig.aggregation === 'min' && stats?.min !== undefined) {
+          kpiValue = stats.min;
+        } else if (kpiConfig.aggregation === 'max' && stats?.max !== undefined) {
+          kpiValue = stats.max;
+        } else if (kpiConfig.aggregation === 'avg' && stats?.sum !== undefined && recordCount > 0) {
+          // Avg için sum / count kullan
+          kpiValue = stats.sum / recordCount;
+        } else {
+          // Fallback: sample data üzerinden hesapla
+          kpiValue = calculateAggregation(fetchedData, valueField, kpiConfig.aggregation);
+        }
         
         setData({
           value: kpiValue,
@@ -140,7 +163,7 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
           prefix: kpiConfig.prefix,
           suffix: kpiConfig.suffix,
           decimals: kpiConfig.decimals,
-          recordCount: fetchedData.length,
+          recordCount: recordCount,
         });
       } else if (['bar', 'line', 'area'].includes(vizType) && config.visualization.chart) {
         const chartConfig = config.visualization.chart;
