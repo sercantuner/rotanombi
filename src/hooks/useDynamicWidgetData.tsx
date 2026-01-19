@@ -111,7 +111,12 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
           // Limit sadece config'de belirtilmişse gönder, yoksa API tüm veriyi döndürür
           ...(config.diaApi.parameters.limit && { limit: config.diaApi.parameters.limit }),
           filters: config.diaApi.parameters.filters,
-          selectedColumns: config.diaApi.parameters.selectedcolumns?.split(',').map(c => c.trim()),
+          selectedColumns: Array.isArray(config.diaApi.parameters.selectedcolumns) 
+            ? config.diaApi.parameters.selectedcolumns 
+            : typeof config.diaApi.parameters.selectedcolumns === 'string'
+              ? config.diaApi.parameters.selectedcolumns.split(',').map((c: string) => c.trim())
+              : undefined,
+          sorts: config.diaApi.parameters.sorts,
           orderby: config.diaApi.parameters.orderby,
         }),
       });

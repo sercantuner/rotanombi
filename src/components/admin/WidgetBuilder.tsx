@@ -13,8 +13,13 @@ import {
   FILTER_TYPES,
   WidgetBuilderConfig,
   WidgetFilterConfig,
+  DiaApiFilter,
+  DiaApiSort,
 } from '@/lib/widgetBuilderTypes';
 import { testDiaApi, DiaApiTestResponse, FieldStat } from '@/lib/diaApiTest';
+import { FilterBuilder } from './FilterBuilder';
+import { SortBuilder } from './SortBuilder';
+import { ColumnSelector } from './ColumnSelector';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -102,9 +107,10 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   // Builder config
   const [config, setConfig] = useState<WidgetBuilderConfig>(getEmptyConfig());
   
-  // API parametreleri için ayrı state'ler
-  const [customFilters, setCustomFilters] = useState('');
-  const [selectedColumns, setSelectedColumns] = useState('');
+  // API parametreleri için ayrı state'ler (no-code arrays)
+  const [apiFilters, setApiFilters] = useState<DiaApiFilter[]>([]);
+  const [apiSorts, setApiSorts] = useState<DiaApiSort[]>([]);
+  const [selectedColumnsArray, setSelectedColumnsArray] = useState<string[]>([]);
   const [rawPayload, setRawPayload] = useState(RAW_JSON_TEMPLATE);
   
   // Chart axis/series config
@@ -122,6 +128,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   
   // Aktif hedef alan (alan eşleme için)
   const [activeTarget, setActiveTarget] = useState<'xAxis' | 'yAxis' | 'legend' | 'value' | 'tooltip' | null>(null);
+  
   // Düzenleme modunda widget verilerini yükle
   useEffect(() => {
     if (editWidget && open) {
@@ -137,12 +144,21 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
         const bc = editWidget.builder_config;
         setConfig(bc);
         
-        // API parametrelerini ayarla
+        // API parametrelerini ayarla (yeni format)
         if (bc.diaApi.parameters.filters) {
-          setCustomFilters(JSON.stringify(bc.diaApi.parameters.filters, null, 2));
+          if (Array.isArray(bc.diaApi.parameters.filters)) {
+            setApiFilters(bc.diaApi.parameters.filters);
+          }
+        }
+        if (bc.diaApi.parameters.sorts) {
+          setApiSorts(bc.diaApi.parameters.sorts);
         }
         if (bc.diaApi.parameters.selectedcolumns) {
-          setSelectedColumns(bc.diaApi.parameters.selectedcolumns);
+          if (Array.isArray(bc.diaApi.parameters.selectedcolumns)) {
+            setSelectedColumnsArray(bc.diaApi.parameters.selectedcolumns);
+          } else if (typeof bc.diaApi.parameters.selectedcolumns === 'string') {
+            setSelectedColumnsArray(bc.diaApi.parameters.selectedcolumns.split(',').map(c => c.trim()).filter(c => c));
+          }
         }
         
         // Chart ayarlarını yükle
@@ -167,8 +183,9 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
     setWidgetSize('md');
     setDefaultPage('dashboard');
     setConfig(getEmptyConfig());
-    setCustomFilters('');
-    setSelectedColumns('');
+    setApiFilters([]);
+    setApiSorts([]);
+    setSelectedColumnsArray([]);
     setRawPayload(RAW_JSON_TEMPLATE);
     setXAxisField('');
     setYAxisField('');
@@ -269,29 +286,14 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
           rawPayload: rawPayload,
         });
       } else {
-        // Normal mode
-        let filters = {};
-        if (customFilters.trim()) {
-          try {
-            filters = JSON.parse(customFilters);
-          } catch (e) {
-            toast.error('Geçersiz filtre JSON formatı');
-            setIsTesting(false);
-            return;
-          }
-        }
-
-        const columns = selectedColumns
-          .split(',')
-          .map(c => c.trim())
-          .filter(c => c.length > 0);
-
+        // Normal mode - no-code filters
         result = await testDiaApi({
           module: config.diaApi.module,
           method: config.diaApi.method,
-          limit: config.diaApi.parameters.limit || 100,
-          filters,
-          selectedColumns: columns.length > 0 ? columns : undefined,
+          limit: config.diaApi.parameters.limit || 0, // 0 = limitsiz
+          filters: apiFilters.length > 0 ? apiFilters : undefined,
+          selectedColumns: selectedColumnsArray.length > 0 ? selectedColumnsArray : undefined,
+          sorts: apiSorts.length > 0 ? apiSorts : undefined,
           orderby: config.diaApi.parameters.orderby,
         });
       }
@@ -357,24 +359,15 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
       return;
     }
 
-    // builder_config'i oluştur
-    let parsedFilters = undefined;
-    if (customFilters.trim()) {
-      try {
-        parsedFilters = JSON.parse(customFilters);
-      } catch (e) {
-        toast.error('Geçersiz filtre JSON formatı');
-        return;
-      }
-    }
-
+    // builder_config'i oluştur - no-code arrays kullan
     const builderConfig: WidgetBuilderConfig = {
       diaApi: {
         ...config.diaApi,
         parameters: {
           ...config.diaApi.parameters,
-          filters: parsedFilters,
-          selectedcolumns: selectedColumns.trim() || undefined,
+          filters: apiFilters.length > 0 ? apiFilters : undefined,
+          sorts: apiSorts.length > 0 ? apiSorts : undefined,
+          selectedcolumns: selectedColumnsArray.length > 0 ? selectedColumnsArray : undefined,
         },
       },
       visualization: {
@@ -569,42 +562,42 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
 
                       <Separator />
 
-                  <div className="space-y-2">
-                    <Label>Selected Columns (Virgülle ayırın)</Label>
-                    <Input
-                      placeholder="carikod,cariadi,toplambakiye,sehir,ozelkod1"
-                      value={selectedColumns}
-                      onChange={(e) => setSelectedColumns(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Boş bırakırsanız tüm alanlar gelir
-                    </p>
-                  </div>
+                  {/* No-Code Column Selector */}
+                  <ColumnSelector
+                    availableFields={testResult?.sampleFields || []}
+                    selectedColumns={selectedColumnsArray}
+                    onChange={setSelectedColumnsArray}
+                    fieldTypes={testResult?.fieldTypes}
+                  />
 
-                  <div className="space-y-2">
-                    <Label>Filtreler (JSON formatında)</Label>
-                    <Textarea
-                      placeholder='{"potansiyel": "H", "aktif": "E"}'
-                      value={customFilters}
-                      onChange={(e) => setCustomFilters(e.target.value)}
-                      className="font-mono text-sm"
-                      rows={4}
-                    />
-                  </div>
+                  {/* No-Code Filter Builder */}
+                  <FilterBuilder
+                    filters={apiFilters}
+                    onChange={setApiFilters}
+                    availableFields={testResult?.sampleFields || []}
+                    fieldTypes={testResult?.fieldTypes}
+                  />
+
+                  {/* No-Code Sort Builder */}
+                  <SortBuilder
+                    sorts={apiSorts}
+                    onChange={setApiSorts}
+                    availableFields={testResult?.sampleFields || []}
+                  />
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Limit</Label>
+                      <Label>Limit (0 = limitsiz)</Label>
                       <Input
                         type="number"
-                        value={config.diaApi.parameters.limit || 1000}
+                        value={config.diaApi.parameters.limit || 0}
                         onChange={(e) => setConfig(prev => ({
                           ...prev,
                           diaApi: {
                             ...prev.diaApi,
                             parameters: {
                               ...prev.diaApi.parameters,
-                              limit: parseInt(e.target.value) || 1000,
+                              limit: parseInt(e.target.value) || 0,
                             },
                           },
                         }))}
