@@ -50,6 +50,51 @@ export type Database = {
         }
         Relationships: []
       }
+      container_widgets: {
+        Row: {
+          container_id: string
+          created_at: string
+          id: string
+          settings: Json | null
+          slot_index: number | null
+          updated_at: string
+          widget_id: string
+        }
+        Insert: {
+          container_id: string
+          created_at?: string
+          id?: string
+          settings?: Json | null
+          slot_index?: number | null
+          updated_at?: string
+          widget_id: string
+        }
+        Update: {
+          container_id?: string
+          created_at?: string
+          id?: string
+          settings?: Json | null
+          slot_index?: number | null
+          updated_at?: string
+          widget_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "container_widgets_container_id_fkey"
+            columns: ["container_id"]
+            isOneToOne: false
+            referencedRelation: "page_containers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "container_widgets_widget_id_fkey"
+            columns: ["widget_id"]
+            isOneToOne: false
+            referencedRelation: "widgets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           category: string | null
@@ -88,6 +133,47 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      page_containers: {
+        Row: {
+          container_type: Database["public"]["Enums"]["container_type"]
+          created_at: string
+          id: string
+          page_id: string
+          settings: Json | null
+          sort_order: number | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          container_type: Database["public"]["Enums"]["container_type"]
+          created_at?: string
+          id?: string
+          page_id: string
+          settings?: Json | null
+          sort_order?: number | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          container_type?: Database["public"]["Enums"]["container_type"]
+          created_at?: string
+          id?: string
+          page_id?: string
+          settings?: Json | null
+          sort_order?: number | null
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "page_containers_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "user_pages"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -172,6 +258,42 @@ export type Database = {
           layout?: Json
           page?: string
           updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_pages: {
+        Row: {
+          created_at: string
+          icon: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          slug: string
+          sort_order: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          slug: string
+          sort_order?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          slug?: string
+          sort_order?: number | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -278,6 +400,44 @@ export type Database = {
         }
         Relationships: []
       }
+      widget_permissions: {
+        Row: {
+          can_add: boolean | null
+          can_view: boolean | null
+          granted_at: string
+          granted_by: string | null
+          id: string
+          user_id: string
+          widget_id: string
+        }
+        Insert: {
+          can_add?: boolean | null
+          can_view?: boolean | null
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          user_id: string
+          widget_id: string
+        }
+        Update: {
+          can_add?: boolean | null
+          can_view?: boolean | null
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          user_id?: string
+          widget_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "widget_permissions_widget_id_fkey"
+            columns: ["widget_id"]
+            isOneToOne: false
+            referencedRelation: "widgets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       widgets: {
         Row: {
           available_filters: Json | null
@@ -367,6 +527,18 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user" | "viewer"
+      container_type:
+        | "kpi_row_5"
+        | "kpi_row_4"
+        | "kpi_row_3"
+        | "chart_full"
+        | "chart_half"
+        | "chart_third"
+        | "info_cards_3"
+        | "info_cards_2"
+        | "table_full"
+        | "list_full"
+        | "custom_grid"
       widget_category: "dashboard" | "satis" | "finans" | "cari"
     }
     CompositeTypes: {
@@ -496,6 +668,19 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user", "viewer"],
+      container_type: [
+        "kpi_row_5",
+        "kpi_row_4",
+        "kpi_row_3",
+        "chart_full",
+        "chart_half",
+        "chart_third",
+        "info_cards_3",
+        "info_cards_2",
+        "table_full",
+        "list_full",
+        "custom_grid",
+      ],
       widget_category: ["dashboard", "satis", "finans", "cari"],
     },
   },

@@ -8,12 +8,10 @@ import { UserSettingsProvider } from "@/contexts/UserSettingsContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
-import { SalesPage } from "@/pages/SalesPage";
-import { FinancePage } from "@/pages/FinancePage";
-import { CustomersPage } from "@/pages/CustomersPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import AdminPage from "@/pages/AdminPage";
 import SuperAdminPage from "@/pages/SuperAdminPage";
+import { DynamicPage } from "@/components/pages/DynamicPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,12 +30,12 @@ const App = () => (
                 
                 {/* Main app routes with layout */}
                 <Route path="/dashboard" element={<AppLayout><DashboardPage /></AppLayout>} />
-                <Route path="/satis" element={<AppLayout><SalesPage /></AppLayout>} />
-                <Route path="/finans" element={<AppLayout><FinancePage /></AppLayout>} />
-                <Route path="/cari" element={<AppLayout><CustomersPage /></AppLayout>} />
                 <Route path="/ayarlar" element={<AppLayout><SettingsPage /></AppLayout>} />
                 <Route path="/admin" element={<AppLayout><AdminPage /></AppLayout>} />
                 <Route path="/super-admin" element={<AppLayout><SuperAdminPage /></AppLayout>} />
+                
+                {/* Dynamic user pages */}
+                <Route path="/page/:pageSlug" element={<AppLayout><DynamicPage /></AppLayout>} />
                 
                 {/* Alias for settings (English path) */}
                 <Route path="/settings" element={<Navigate to="/ayarlar" replace />} />
@@ -48,6 +46,15 @@ const App = () => (
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
+            </UserSettingsProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </ThemeProvider>
+  </QueryClientProvider>
+);
+
+export default App;
             </UserSettingsProvider>
           </AuthProvider>
         </BrowserRouter>
