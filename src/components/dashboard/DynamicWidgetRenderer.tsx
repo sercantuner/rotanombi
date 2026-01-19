@@ -110,13 +110,6 @@ export function DynamicWidgetRenderer({
 
   const { genelRapor, finansRapor, satisRapor, cariler, yaslandirma, bankaHesaplari, toplamBankaBakiye } = data;
 
-  // Calculate derived values
-  const toplamAlacak = genelRapor?.toplamAlacak || 0;
-  const toplamBorc = genelRapor?.toplamBorc || 0;
-  const netBakiye = genelRapor?.netBakiye || (toplamAlacak - toplamBorc);
-  const gecikimisAlacak = genelRapor?.gecikimisAlacak || genelRapor?.vadesiGecmis || 0;
-  const gecikimisBorc = genelRapor?.gecikimisBorc || 0;
-
   // Widget filtrelerine göre cari listesini filtrele
   const getFilteredCariler = () => {
     if (!widgetFilters || !cariler) return cariler || [];
@@ -144,6 +137,58 @@ export function DynamicWidgetRenderer({
     });
   };
 
+  // Filtrelenmiş carilerden KPI değerlerini hesapla
+  const getFilteredKpis = () => {
+    // Eğer filtre yoksa orijinal değerleri kullan
+    if (!widgetFilters || !cariler) {
+      return {
+        toplamAlacak: genelRapor?.toplamAlacak || 0,
+        toplamBorc: genelRapor?.toplamBorc || 0,
+        netBakiye: genelRapor?.netBakiye || (genelRapor?.toplamAlacak || 0) - (genelRapor?.toplamBorc || 0),
+        gecikimisAlacak: genelRapor?.gecikimisAlacak || genelRapor?.vadesiGecmis || 0,
+        gecikimisBorc: genelRapor?.gecikimisBorc || 0,
+        musteriSayisi: genelRapor?.musteriSayisi || 0,
+        aktifCariSayisi: genelRapor?.aktifCariSayisi || 0,
+      };
+    }
+    
+    const filteredCariler = getFilteredCariler();
+    
+    let toplamAlacak = 0;
+    let toplamBorc = 0;
+    let gecikimisAlacak = 0;
+    let gecikimisBorc = 0;
+    let aktifCariSayisi = 0;
+    
+    filteredCariler.forEach(cari => {
+      const bakiye = cari.toplambakiye || 0;
+      const vadesiGecmis = cari.vadesigecentutar || 0;
+      
+      if (bakiye > 0) {
+        toplamAlacak += bakiye;
+        if (vadesiGecmis > 0) gecikimisAlacak += vadesiGecmis;
+      } else if (bakiye < 0) {
+        toplamBorc += Math.abs(bakiye);
+        if (vadesiGecmis < 0) gecikimisBorc += Math.abs(vadesiGecmis);
+      }
+      
+      if (cari.aktif === 'E') aktifCariSayisi++;
+    });
+    
+    return {
+      toplamAlacak,
+      toplamBorc,
+      netBakiye: toplamAlacak - toplamBorc,
+      gecikimisAlacak,
+      gecikimisBorc,
+      musteriSayisi: filteredCariler.filter(c => c.potansiyel !== 'E').length,
+      aktifCariSayisi,
+    };
+  };
+
+  // Filtrelenmiş KPI değerlerini al
+  const filteredKpis = getFilteredKpis();
+
   // Render widget based on ID
   const renderWidget = (): React.ReactNode => {
     switch (widgetId) {
@@ -152,7 +197,7 @@ export function DynamicWidgetRenderer({
         return (
           <FilterableStatCard
             title="Toplam Alacak"
-            value={formatCurrency(toplamAlacak)}
+            value={formatCurrency(filteredKpis.toplamAlacak)}
             icon={Wallet}
             trend="up"
             variant="success"
@@ -168,7 +213,7 @@ export function DynamicWidgetRenderer({
         return (
           <FilterableStatCard
             title="Gecikmiş Alacak"
-            value={formatCurrency(gecikimisAlacak)}
+            value={formatCurrency(filteredKpis.gecikimisAlacak)}
             icon={Clock}
             trend="neutral"
             variant="warning"
@@ -184,7 +229,7 @@ export function DynamicWidgetRenderer({
         return (
           <FilterableStatCard
             title="Toplam Borç"
-            value={formatCurrency(toplamBorc)}
+            value={formatCurrency(filteredKpis.toplamBorc)}
             icon={CreditCard}
             trend="down"
             variant="destructive"
@@ -200,7 +245,7 @@ export function DynamicWidgetRenderer({
         return (
           <FilterableStatCard
             title="Gecikmiş Borç"
-            value={formatCurrency(gecikimisBorc)}
+            value={formatCurrency(filteredKpis.gecikimisBorc)}
             icon={AlertTriangle}
             trend="neutral"
             variant="destructive"
@@ -216,10 +261,10 @@ export function DynamicWidgetRenderer({
         return (
           <FilterableStatCard
             title="Net Bakiye"
-            value={formatCurrency(netBakiye)}
+            value={formatCurrency(filteredKpis.netBakiye)}
             icon={Scale}
-            trend={netBakiye >= 0 ? "up" : "down"}
-            variant={netBakiye >= 0 ? "success" : "destructive"}
+            trend={filteredKpis.netBakiye >= 0 ? "up" : "down"}
+            variant={filteredKpis.netBakiye >= 0 ? "success" : "destructive"}
             widgetId={dbWidget?.id || widgetId}
             widgetKey={widgetId}
             containerWidgetId={containerWidgetId}
@@ -232,7 +277,7 @@ export function DynamicWidgetRenderer({
         return (
           <FilterableStatCard
             title="Müşteri Sayısı"
-            value={(genelRapor?.musteriSayisi || 0).toLocaleString('tr-TR')}
+            value={filteredKpis.musteriSayisi.toLocaleString('tr-TR')}
             icon={Users}
             trend="neutral"
             variant="default"
@@ -248,7 +293,7 @@ export function DynamicWidgetRenderer({
         return (
           <FilterableStatCard
             title="Aktif Cari"
-            value={genelRapor?.aktifCariSayisi?.toString() || '0'}
+            value={filteredKpis.aktifCariSayisi.toLocaleString('tr-TR')}
             icon={UserCheck}
             variant="success"
             widgetId={dbWidget?.id || widgetId}

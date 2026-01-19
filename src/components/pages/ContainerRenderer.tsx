@@ -187,7 +187,7 @@ export function ContainerRenderer({
               <Button
                 variant="destructive"
                 size="icon"
-                className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10"
+                className="absolute top-2 left-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-20"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleRemoveWidget(slotWidget.id, widgetDetail.name);
