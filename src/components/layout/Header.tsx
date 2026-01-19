@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Search, RefreshCw, Sun, Moon } from 'lucide-react';
+import { Search, RefreshCw, Sun, Moon } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { WidgetPicker } from '@/components/dashboard/WidgetPicker';
+import { CommandPalette } from '@/components/layout/CommandPalette';
+import { NotificationCenter } from '@/components/layout/NotificationCenter';
 import type { WidgetCategory } from '@/lib/widgetRegistry';
 
 interface HeaderProps {
@@ -15,6 +17,7 @@ interface HeaderProps {
 
 export function Header({ title, subtitle, onRefresh, isRefreshing, currentPage, showWidgetPicker = false }: HeaderProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [commandOpen, setCommandOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -32,15 +35,19 @@ export function Header({ title, subtitle, onRefresh, isRefreshing, currentPage, 
 
       {/* Right: Actions */}
       <div className="flex items-center gap-3">
-        {/* Search */}
+        {/* Search - Opens Command Palette */}
         <div className="relative hidden md:block">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Ara..."
-            className="input-field pl-10 py-2 w-64"
-          />
+          <button
+            onClick={() => setCommandOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors text-muted-foreground w-64"
+          >
+            <Search className="w-4 h-4" />
+            <span className="text-sm">Ara... (Ctrl+K)</span>
+          </button>
         </div>
+
+        {/* Command Palette */}
+        <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
 
         {/* Widget Picker */}
         {showWidgetPicker && currentPage && (
@@ -73,12 +80,7 @@ export function Header({ title, subtitle, onRefresh, isRefreshing, currentPage, 
         </button>
 
         {/* Notifications */}
-        <button className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors relative">
-          <Bell className="w-5 h-5" />
-          <span className="absolute -top-1 -right-1 w-4 h-4 bg-destructive rounded-full text-xs flex items-center justify-center text-destructive-foreground">
-            3
-          </span>
-        </button>
+        <NotificationCenter />
 
         {/* Time */}
         <div className="text-right hidden lg:block">
