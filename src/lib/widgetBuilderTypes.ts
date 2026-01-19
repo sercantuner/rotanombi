@@ -24,15 +24,54 @@ export type AggregationType =
   | 'first'
   | 'last';
 
+// DIA API Filtre Yapısı
+export type FilterOperator = '<' | '>' | '<=' | '>=' | '=' | '!' | '!=' | 'IN' | 'NOT IN' | 'contains';
+
+export interface DiaApiFilter {
+  field: string;
+  operator?: FilterOperator;
+  value: string;
+}
+
+// DIA API Sıralama Yapısı
+export type SortType = 'ASC' | 'DESC';
+
+export interface DiaApiSort {
+  field: string;
+  sorttype: SortType;
+}
+
+// Operatör seçenekleri
+export const FILTER_OPERATORS: { id: FilterOperator; name: string; example: string }[] = [
+  { id: '=', name: 'Eşittir', example: 'carikarttipi = "AL"' },
+  { id: '!=', name: 'Eşit Değil', example: 'carikartkodu != "001"' },
+  { id: '>', name: 'Büyük', example: 'toplambakiye > 1000' },
+  { id: '<', name: 'Küçük', example: 'toplambakiye < 1000' },
+  { id: '>=', name: 'Büyük Eşit', example: 'toplambakiye >= 1000' },
+  { id: '<=', name: 'Küçük Eşit', example: 'toplambakiye <= 1000' },
+  { id: 'IN', name: 'İçinde (Çoklu)', example: 'carikartkodu IN "001,002,003"' },
+  { id: 'NOT IN', name: 'İçinde Değil', example: 'sehir NOT IN "İstanbul,Ankara"' },
+  { id: '!', name: 'İçermiyor', example: 'unvan ! "ANONİM"' },
+  { id: 'contains', name: 'İçeriyor', example: 'unvan "ANONİM" (operatör olmadan)' },
+];
+
+// Sıralama seçenekleri
+export const SORT_TYPES: { id: SortType; name: string }[] = [
+  { id: 'ASC', name: 'Artan (A-Z, 0-9)' },
+  { id: 'DESC', name: 'Azalan (Z-A, 9-0)' },
+];
+
 export interface DiaApiConfig {
   // DIA API endpoint bilgileri
-  module: 'scf' | 'bcs' | 'fat' | 'sis' | 'stk';
+  module: 'scf' | 'bcs' | 'fat' | 'sis' | 'stk' | 'gts';
   method: string;
   parameters: {
-    filters?: Record<string, any>;
-    selectedcolumns?: string;
+    filters?: DiaApiFilter[] | Record<string, any>;  // Array (yeni) veya Object (eski uyumluluk)
+    sorts?: DiaApiSort[];      // Array olarak no-code sıralama
+    selectedcolumns?: string[] | string;  // Array (yeni) veya string (eski uyumluluk)
+    params?: Record<string, any>; // Ekstra parametreler
     limit?: number;
-    orderby?: string;
+    orderby?: string; // Eski uyumluluk için
   };
 }
 

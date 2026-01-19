@@ -17,8 +17,9 @@ export interface DiaApiTestRequest {
   module: string;
   method: string;
   limit?: number;
-  filters?: Record<string, any>;
+  filters?: any; // Array veya Object
   selectedColumns?: string[];
+  sorts?: { field: string; sorttype: string }[];
   orderby?: string;
   // Raw mode için yeni alanlar
   rawMode?: boolean;
