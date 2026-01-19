@@ -227,10 +227,11 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
             body: JSON.stringify({
               module: query.module,
               method: query.method,
-              ...(query.parameters.limit && { limit: query.parameters.limit }),
+              ...(query.parameters.limit && query.parameters.limit > 0 && { limit: query.parameters.limit }),
               filters: query.parameters.filters,
               selectedColumns: query.parameters.selectedcolumns,
               sorts: query.parameters.sorts,
+              returnAllData: true, // Tüm veriyi al
             }),
           });
           const result = await response.json();
@@ -249,6 +250,7 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
         }
       } else {
         // Tekli sorgu
+        const diaApiLimit = config.diaApi.parameters.limit;
         const response = await fetch(`${SUPABASE_URL}/functions/v1/dia-api-test`, {
           method: 'POST',
           headers: {
@@ -258,7 +260,8 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
           body: JSON.stringify({
             module: config.diaApi.module,
             method: config.diaApi.method,
-            ...(config.diaApi.parameters.limit && { limit: config.diaApi.parameters.limit }),
+            // Limit: 0 veya undefined ise gönderme (limitsiz), pozitif ise gönder
+            ...(diaApiLimit && diaApiLimit > 0 && { limit: diaApiLimit }),
             filters: config.diaApi.parameters.filters,
             selectedColumns: Array.isArray(config.diaApi.parameters.selectedcolumns) 
               ? config.diaApi.parameters.selectedcolumns 
@@ -267,6 +270,7 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
                 : undefined,
             sorts: config.diaApi.parameters.sorts,
             orderby: config.diaApi.parameters.orderby,
+            returnAllData: true, // Tüm veriyi al
           }),
         });
 
