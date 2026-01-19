@@ -13,6 +13,11 @@ import { Plus, Trash2, GripVertical, Settings, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { KpiFilter } from '@/components/dashboard/KpiFilterModal';
+
+interface ContainerWidgetSettings {
+  filters?: KpiFilter;
+}
 
 interface ContainerRendererProps {
   container: PageContainer;
@@ -136,6 +141,24 @@ export function ContainerRenderer({
   const showTitle = localContainer.settings?.showTitle !== false;
   const isCompact = localContainer.settings?.compact === true;
 
+  // Widget filtre değişikliğini handle et
+  const handleWidgetFilterChange = async (containerWidgetId: string, filters: KpiFilter) => {
+    try {
+      const { error } = await supabase
+        .from('container_widgets')
+        .update({
+          settings: { filters } as any,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', containerWidgetId);
+
+      if (error) throw error;
+      refreshWidgets();
+    } catch (error) {
+      console.error('Error saving widget filters:', error);
+    }
+  };
+
   // Slot'ların render'ını oluştur
   const renderSlots = () => {
     return Array.from({ length: template.slots }).map((_, slotIndex) => {
@@ -143,6 +166,10 @@ export function ContainerRenderer({
       const widgetDetail = slotWidget ? widgetDetails[slotWidget.widget_id] : null;
 
       if (slotWidget && widgetDetail) {
+        // Widget ayarlarını parse et
+        const widgetSettings = slotWidget.settings as ContainerWidgetSettings | null;
+        const widgetFilters = widgetSettings?.filters;
+
         // Widget var, render et
         return (
           <div key={slotIndex} className="relative group min-h-[120px]">
@@ -151,7 +178,10 @@ export function ContainerRenderer({
               data={widgetData}
               isLoading={isLoading}
               currentPage="dashboard"
-              dbWidget={widgetDetail} // builder_config için widget bilgisini ilet
+              dbWidget={widgetDetail}
+              containerWidgetId={slotWidget.id}
+              widgetFilters={widgetFilters}
+              onFiltersChange={(filters) => handleWidgetFilterChange(slotWidget.id, filters)}
             />
             {!isDragMode && (
               <Button
