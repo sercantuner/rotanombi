@@ -1,11 +1,13 @@
 // Filtrelenebilir KPI Kartı
-// StatCard'ın filtre ikonu eklenmiş versiyonu
+// StatCard'ın filtre ve ayar ikonu eklenmiş versiyonu
 
-import React, { useState } from 'react';
-import { TrendingUp, TrendingDown, Minus, Filter, FilterX } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { TrendingUp, TrendingDown, Minus, Filter, FilterX, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { KpiFilterModal, KpiFilter } from './KpiFilterModal';
+import { KpiSettingsModal, KpiSettings, DEFAULT_KPI_SETTINGS } from './KpiSettingsModal';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 
 interface FilterableStatCardProps {
   title: string;
@@ -40,6 +42,27 @@ export function FilterableStatCard({
   showFilterButton = true,
 }: FilterableStatCardProps) {
   const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [kpiSettings, setKpiSettings] = useState<KpiSettings>(DEFAULT_KPI_SETTINGS);
+
+  // KPI settings'i yükle
+  useEffect(() => {
+    const loadSettings = async () => {
+      if (!containerWidgetId) return;
+      
+      const { data } = await supabase
+        .from('container_widgets')
+        .select('settings')
+        .eq('id', containerWidgetId)
+        .single();
+      
+      if (data?.settings && (data.settings as any).kpiSettings) {
+        setKpiSettings((data.settings as any).kpiSettings);
+      }
+    };
+    
+    loadSettings();
+  }, [containerWidgetId]);
   
   const variantStyles = {
     default: 'text-primary',
@@ -60,6 +83,13 @@ export function FilterableStatCard({
     neutral: 'text-muted-foreground',
   };
 
+  const fontSizeClasses = {
+    sm: 'text-lg',
+    md: 'text-2xl',
+    lg: 'text-3xl',
+    xl: 'text-4xl',
+  };
+
   const TrendIcon = trendIcons[trend];
   const hasActiveFilters = currentFilters && (
     currentFilters.gorunumModu !== 'hepsi' ||
@@ -70,48 +100,79 @@ export function FilterableStatCard({
     currentFilters.ozelKod3
   );
 
-  // Filtre butonunu göster koşulu
+  // Filtre ve ayar butonlarını göster koşulu
   const canShowFilterButton = showFilterButton && onFiltersChange;
+  const canShowSettingsButton = !!containerWidgetId;
 
   return (
     <>
       <div className="stat-card animate-slide-up group relative">
-        {/* Filter Button - Hover'da görünür */}
-        {canShowFilterButton && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              'absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity z-10',
-              hasActiveFilters && 'opacity-100 bg-primary/10 text-primary'
-            )}
-            onClick={(e) => {
-              e.stopPropagation();
-              setFilterModalOpen(true);
-            }}
-          >
-            {hasActiveFilters ? (
-              <FilterX className="h-4 w-4" />
-            ) : (
-              <Filter className="h-4 w-4" />
-            )}
-          </Button>
-        )}
+        {/* Control Buttons - Hover'da görünür, sağ üstte yan yana */}
+        <div className={cn(
+          'absolute top-2 right-2 flex items-center gap-1 z-10 transition-opacity',
+          'opacity-0 group-hover:opacity-100',
+          (hasActiveFilters) && 'opacity-100'
+        )}>
+          {/* Settings Button */}
+          {canShowSettingsButton && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 bg-background/60 backdrop-blur-sm hover:bg-background"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSettingsModalOpen(true);
+              }}
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          )}
+          
+          {/* Filter Button */}
+          {canShowFilterButton && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                'h-7 w-7 bg-background/60 backdrop-blur-sm hover:bg-background',
+                hasActiveFilters && 'bg-primary/10 text-primary'
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                setFilterModalOpen(true);
+              }}
+            >
+              {hasActiveFilters ? (
+                <FilterX className="h-4 w-4" />
+              ) : (
+                <Filter className="h-4 w-4" />
+              )}
+            </Button>
+          )}
+        </div>
 
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0 pr-2">
             <p className="metric-label mb-1">{title}</p>
-            <p className={`metric-value ${variantStyles[variant]}`}>{value}</p>
-            {subtitle && (
+            <p className={cn(
+              'metric-value',
+              variantStyles[variant],
+              fontSizeClasses[kpiSettings.fontSize]
+            )}>
+              {value}
+            </p>
+            {subtitle && kpiSettings.showSubtitle && (
               <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
             )}
           </div>
-          <div className={`p-3 rounded-lg bg-secondary ${variantStyles[variant]} flex-shrink-0`}>
-            <Icon className="w-6 h-6" />
-          </div>
+          {kpiSettings.showIcon && (
+            <div className={`p-3 rounded-lg bg-secondary ${variantStyles[variant]} flex-shrink-0`}>
+              <Icon className="w-6 h-6" />
+            </div>
+          )}
         </div>
         
-        {trendValue && (
+        {trendValue && kpiSettings.showTrend && (
           <div className={`flex items-center gap-1 mt-3 text-sm ${trendColors[trend]}`}>
             <TrendIcon className="w-4 h-4" />
             <span>{trendValue}</span>
@@ -136,6 +197,16 @@ export function FilterableStatCard({
         containerWidgetId={containerWidgetId}
         currentFilters={currentFilters}
         onFiltersChange={onFiltersChange}
+      />
+
+      {/* Settings Modal */}
+      <KpiSettingsModal
+        open={settingsModalOpen}
+        onOpenChange={setSettingsModalOpen}
+        containerWidgetId={containerWidgetId}
+        widgetName={title}
+        currentSettings={kpiSettings}
+        onSettingsChange={setKpiSettings}
       />
     </>
   );
