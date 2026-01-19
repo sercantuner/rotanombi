@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, Search, RefreshCw, Sun, Moon } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { WidgetPicker } from '@/components/dashboard/WidgetPicker';
+import type { WidgetCategory } from '@/lib/widgetRegistry';
 
 interface HeaderProps {
   title: string;
   subtitle?: string;
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  currentPage?: WidgetCategory;
+  showWidgetPicker?: boolean;
 }
 
-export function Header({ title, subtitle, onRefresh, isRefreshing }: HeaderProps) {
+export function Header({ title, subtitle, onRefresh, isRefreshing, currentPage, showWidgetPicker = false }: HeaderProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const { theme, toggleTheme } = useTheme();
 
@@ -37,6 +41,11 @@ export function Header({ title, subtitle, onRefresh, isRefreshing }: HeaderProps
             className="input-field pl-10 py-2 w-64"
           />
         </div>
+
+        {/* Widget Picker */}
+        {showWidgetPicker && currentPage && (
+          <WidgetPicker currentPage={currentPage} />
+        )}
 
         {/* Refresh Button */}
         {onRefresh && (

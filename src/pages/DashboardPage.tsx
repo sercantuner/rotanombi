@@ -156,6 +156,8 @@ function DashboardContent() {
         subtitle="Günlük özet ve kritik bilgiler"
         onRefresh={fetchData}
         isRefreshing={isLoading}
+        currentPage="dashboard"
+        showWidgetPicker={true}
       />
 
       <main className="flex-1 p-6 overflow-auto">
