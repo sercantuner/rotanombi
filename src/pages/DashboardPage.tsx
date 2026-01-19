@@ -1,19 +1,19 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/Header';
 import { VadeDetayListesi } from '@/components/dashboard/VadeDetayListesi';
-import { DynamicWidgetRenderer } from '@/components/dashboard/DynamicWidgetRenderer';
+import { DraggableWidgetGrid } from '@/components/dashboard/DraggableWidgetGrid';
 import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
 import { diaGetGenelRapor, diaGetFinansRapor, getDiaConnectionInfo, DiaConnectionInfo } from '@/lib/diaClient';
 import type { DiaGenelRapor, DiaFinansRapor, VadeYaslandirma, DiaCari } from '@/lib/diaClient';
-import { getDefaultLayoutForPage, WidgetLayout, WidgetSize } from '@/lib/widgetRegistry';
+import { getDefaultLayoutForPage } from '@/lib/widgetRegistry';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Plug, RefreshCw } from 'lucide-react';
 
 function DashboardContent() {
   const navigate = useNavigate();
-  const { getPageLayout } = useUserSettings();
+  const { getPageLayout, updateWidgetOrder } = useUserSettings();
   const [genelRapor, setGenelRapor] = useState<DiaGenelRapor | null>(null);
   const [finansRapor, setFinansRapor] = useState<DiaFinansRapor | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -127,21 +127,10 @@ function DashboardContent() {
   const defaultLayout = getDefaultLayoutForPage('dashboard');
   const widgets = pageLayout.widgets.length > 0 ? pageLayout.widgets : defaultLayout.widgets;
 
-  // Group widgets by size for proper grid layout
-  const getGridClass = (size: WidgetSize | undefined): string => {
-    switch (size) {
-      case 'sm': return 'col-span-1';
-      case 'md': return 'col-span-1 lg:col-span-2';
-      case 'lg': return 'col-span-1 lg:col-span-3';
-      case 'xl': return 'col-span-1 lg:col-span-4';
-      case 'full': return 'col-span-full';
-      default: return 'col-span-1';
-    }
-  };
-
-  // Separate KPI widgets from other widgets for special grid treatment
-  const kpiWidgets = widgets.filter(w => w.id.startsWith('kpi_') && w.visible !== false);
-  const otherWidgets = widgets.filter(w => !w.id.startsWith('kpi_') && w.visible !== false);
+  // Handle widget reorder
+  const handleReorder = useCallback(async (newOrder: string[]) => {
+    await updateWidgetOrder('dashboard', newOrder);
+  }, [updateWidgetOrder]);
 
   return (
     <div className="flex-1 flex flex-col">
@@ -204,44 +193,22 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* KPI Stats Grid - Special 6 column layout */}
-        {kpiWidgets.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-            {kpiWidgets
-              .sort((a, b) => a.order - b.order)
-              .map((widget) => (
-                <DynamicWidgetRenderer
-                  key={widget.id}
-                  widgetId={widget.id}
-                  currentPage="dashboard"
-                  data={widgetData}
-                  isLoading={isLoading}
-                />
-              ))}
-          </div>
-        )}
-
-        {/* Other Widgets - Dynamic Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
-          {otherWidgets
-            .sort((a, b) => a.order - b.order)
-            .map((widget) => (
-              <div key={widget.id} className={getGridClass(widget.size)}>
-                <DynamicWidgetRenderer
-                  widgetId={widget.id}
-                  currentPage="dashboard"
-                  data={widgetData}
-                  isLoading={isLoading}
-                />
-              </div>
-            ))}
-        </div>
+        {/* Draggable Widget Grid */}
+        <DraggableWidgetGrid
+          widgets={widgets}
+          currentPage="dashboard"
+          data={widgetData}
+          isLoading={isLoading}
+          onReorder={handleReorder}
+        />
 
         {/* Vade Detay Listesi - Shows when a bar is clicked (cross-filtering) */}
-        <VadeDetayListesi 
-          cariler={cariler} 
-          yaslandirma={yaslandirma}
-        />
+        <div className="mt-6">
+          <VadeDetayListesi 
+            cariler={cariler} 
+            yaslandirma={yaslandirma}
+          />
+        </div>
       </main>
     </div>
   );
