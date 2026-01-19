@@ -65,7 +65,9 @@ export type Database = {
           email: string | null
           firma_kodu: string | null
           id: string
+          is_demo_account: boolean | null
           updated_at: string
+          use_mock_data: boolean | null
           user_id: string
         }
         Insert: {
@@ -82,7 +84,9 @@ export type Database = {
           email?: string | null
           firma_kodu?: string | null
           id?: string
+          is_demo_account?: boolean | null
           updated_at?: string
+          use_mock_data?: boolean | null
           user_id: string
         }
         Update: {
@@ -99,8 +103,64 @@ export type Database = {
           email?: string | null
           firma_kodu?: string | null
           id?: string
+          is_demo_account?: boolean | null
           updated_at?: string
+          use_mock_data?: boolean | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      user_dashboard_settings: {
+        Row: {
+          created_at: string | null
+          id: string
+          layout: Json
+          page: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          layout?: Json
+          page: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          layout?: Json
+          page?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_widget_filters: {
+        Row: {
+          created_at: string | null
+          filters: Json
+          id: string
+          updated_at: string | null
+          user_id: string
+          widget_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          filters?: Json
+          id?: string
+          updated_at?: string | null
+          user_id: string
+          widget_id: string
+        }
+        Update: {
+          created_at?: string | null
+          filters?: Json
+          id?: string
+          updated_at?: string | null
+          user_id?: string
+          widget_id?: string
         }
         Relationships: []
       }
@@ -112,7 +172,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      widget_category: "dashboard" | "satis" | "finans" | "cari"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -239,6 +299,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      widget_category: ["dashboard", "satis", "finans", "cari"],
+    },
   },
 } as const
