@@ -70,11 +70,14 @@ export function FilterableStatCard({
     currentFilters.ozelKod3
   );
 
+  // Filtre butonunu göster koşulu
+  const canShowFilterButton = showFilterButton && onFiltersChange;
+
   return (
     <>
       <div className="stat-card animate-slide-up group relative">
         {/* Filter Button - Hover'da görünür */}
-        {showFilterButton && (
+        {canShowFilterButton && (
           <Button
             variant="ghost"
             size="icon"
@@ -96,14 +99,14 @@ export function FilterableStatCard({
         )}
 
         <div className="flex items-start justify-between">
-          <div className="flex-1">
+          <div className="flex-1 min-w-0 pr-2">
             <p className="metric-label mb-1">{title}</p>
             <p className={`metric-value ${variantStyles[variant]}`}>{value}</p>
             {subtitle && (
               <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
             )}
           </div>
-          <div className={`p-3 rounded-lg bg-secondary ${variantStyles[variant]}`}>
+          <div className={`p-3 rounded-lg bg-secondary ${variantStyles[variant]} flex-shrink-0`}>
             <Icon className="w-6 h-6" />
           </div>
         </div>

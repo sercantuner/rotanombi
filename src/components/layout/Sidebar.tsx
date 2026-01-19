@@ -84,13 +84,13 @@ export function Sidebar() {
           <span className="font-medium">Dashboard</span>
         </button>
 
-        {/* Kullanıcı Sayfaları */}
-        {pages.length > 0 && (
+        {/* Kullanıcı Sayfaları (main-dashboard hariç) */}
+        {pages.filter(p => p.slug !== 'main-dashboard').length > 0 && (
           <div className="pt-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide px-4 mb-2">
               Sayfalarım
             </p>
-            {pages.map((page) => {
+            {pages.filter(p => p.slug !== 'main-dashboard').map((page) => {
               const Icon = (LucideIcons as any)[page.icon] || LayoutDashboard;
               const isActive = location.pathname === `/page/${page.slug}`;
               

@@ -117,6 +117,33 @@ export function DynamicWidgetRenderer({
   const gecikimisAlacak = genelRapor?.gecikimisAlacak || genelRapor?.vadesiGecmis || 0;
   const gecikimisBorc = genelRapor?.gecikimisBorc || 0;
 
+  // Widget filtrelerine göre cari listesini filtrele
+  const getFilteredCariler = () => {
+    if (!widgetFilters || !cariler) return cariler || [];
+    
+    return cariler.filter(cari => {
+      // Görünüm modu: potansiyel / cari / hepsi
+      if (widgetFilters.gorunumModu === 'potansiyel' && cari.potansiyel !== 'E') return false;
+      if (widgetFilters.gorunumModu === 'cari' && cari.potansiyel === 'E') return false;
+      
+      // Durum: aktif / pasif / hepsi
+      if (widgetFilters.durum === 'aktif' && cari.aktif !== 'E') return false;
+      if (widgetFilters.durum === 'pasif' && cari.aktif === 'E') return false;
+      
+      // Cari kart tipi: AL, AS, ST
+      if (widgetFilters.cariKartTipi.length > 0 && widgetFilters.cariKartTipi.length < 3) {
+        if (!widgetFilters.cariKartTipi.includes(cari.carikarttip || 'AL')) return false;
+      }
+      
+      // Özel kodlar
+      if (widgetFilters.ozelKod1 && cari.ozelkod1kod !== widgetFilters.ozelKod1) return false;
+      if (widgetFilters.ozelKod2 && cari.ozelkod2kod !== widgetFilters.ozelKod2) return false;
+      if (widgetFilters.ozelKod3 && cari.ozelkod3kod !== widgetFilters.ozelKod3) return false;
+      
+      return true;
+    });
+  };
+
   // Render widget based on ID
   const renderWidget = (): React.ReactNode => {
     switch (widgetId) {
@@ -314,16 +341,16 @@ export function DynamicWidgetRenderer({
 
       // ========== LIST WIDGETS ==========
       case 'liste_bugun_vade':
-        return <BugununVadeleri cariler={cariler || []} isLoading={isLoading} />;
+        return <BugununVadeleri cariler={getFilteredCariler()} isLoading={isLoading} />;
       
       case 'liste_aranacak_musteriler':
-        return <AranacakMusteriler cariler={cariler || []} isLoading={isLoading} />;
+        return <AranacakMusteriler cariler={getFilteredCariler()} isLoading={isLoading} />;
       
       case 'liste_kritik_stok':
         return <KritikStokUyarilari isLoading={isLoading} />;
 
       case 'liste_en_borclu':
-        return <TopCustomers cariler={cariler || []} isLoading={isLoading} />;
+        return <TopCustomers cariler={getFilteredCariler()} isLoading={isLoading} />;
 
       case 'liste_banka_hesaplari':
         return (
@@ -364,7 +391,7 @@ export function DynamicWidgetRenderer({
       case 'grafik_ozelkod_dagilimi':
         return (
           <OzelKodDonutChart
-            cariler={cariler || []}
+            cariler={getFilteredCariler()}
             isLoading={isLoading}
           />
         );
@@ -372,7 +399,7 @@ export function DynamicWidgetRenderer({
       case 'grafik_sektor_dagilimi':
         return (
           <SektorDagilimi
-            cariler={cariler || []}
+            cariler={getFilteredCariler()}
             isLoading={isLoading}
           />
         );
@@ -380,7 +407,7 @@ export function DynamicWidgetRenderer({
       case 'grafik_kaynak_dagilimi':
         return (
           <KaynakDagilimi
-            cariler={cariler || []}
+            cariler={getFilteredCariler()}
             isLoading={isLoading}
           />
         );
@@ -388,7 +415,7 @@ export function DynamicWidgetRenderer({
       case 'grafik_lokasyon_dagilimi':
         return (
           <LokasyonDagilimi
-            cariler={cariler || []}
+            cariler={getFilteredCariler()}
             isLoading={isLoading}
           />
         );
@@ -396,7 +423,7 @@ export function DynamicWidgetRenderer({
       case 'grafik_cari_donusum_trend':
         return (
           <CariDonusumTrend
-            cariler={cariler || []}
+            cariler={getFilteredCariler()}
             isLoading={isLoading}
           />
         );
@@ -405,7 +432,7 @@ export function DynamicWidgetRenderer({
       case 'liste_cari':
         return (
           <CariListesi
-            cariler={cariler || []}
+            cariler={getFilteredCariler()}
             isLoading={isLoading}
           />
         );
