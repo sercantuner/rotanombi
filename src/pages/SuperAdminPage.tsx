@@ -17,8 +17,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Edit, Trash2, Eye, EyeOff, RefreshCw, LayoutGrid, Search, Shield, AlertTriangle } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, RefreshCw, LayoutGrid, Search, Shield, AlertTriangle, Wand2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { WidgetBuilder } from '@/components/admin/WidgetBuilder';
 import * as LucideIcons from 'lucide-react';
 
 // Dinamik icon renderer
@@ -57,6 +58,7 @@ export default function SuperAdminPage() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [editingWidget, setEditingWidget] = useState<Widget | null>(null);
   const [formData, setFormData] = useState<WidgetFormData>(getEmptyFormData());
 
@@ -172,6 +174,10 @@ export default function SuperAdminPage() {
           <Button variant="outline" onClick={() => refetch()}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Yenile
+          </Button>
+          <Button variant="secondary" onClick={() => setIsBuilderOpen(true)}>
+            <Wand2 className="h-4 w-4 mr-2" />
+            Widget Builder
           </Button>
           <Button onClick={() => openForm()}>
             <Plus className="h-4 w-4 mr-2" />
@@ -534,6 +540,13 @@ export default function SuperAdminPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Widget Builder */}
+      <WidgetBuilder
+        open={isBuilderOpen}
+        onOpenChange={setIsBuilderOpen}
+        onSave={() => refetch()}
+      />
     </div>
   );
 }
