@@ -55,12 +55,3 @@ const App = () => (
 );
 
 export default App;
-            </UserSettingsProvider>
-          </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
-);
-
-export default App;
