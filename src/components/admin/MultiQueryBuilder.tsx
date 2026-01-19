@@ -512,112 +512,115 @@ export function MultiQueryBuilder({ multiQuery, onChange }: MultiQueryBuilderPro
   });
   
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="overflow-hidden">
+      <CardHeader className="py-2 px-3">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-base flex items-center gap-2">
+            <CardTitle className="text-sm flex items-center gap-2">
               <Database className="h-4 w-4" />
               Çoklu Veri Kaynağı
-              <Badge variant="secondary" className="ml-2">{multiQuery.queries.length} sorgu</Badge>
+              <Badge variant="secondary" className="text-xs">{multiQuery.queries.length} sorgu</Badge>
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs">
               Sorgular sırayla çalıştırılır ve birleştirilir
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={addQuery} disabled={multiQuery.queries.length >= 5}>
-              <Plus className="h-4 w-4 mr-1" />
+            <Button size="sm" variant="outline" onClick={addQuery} disabled={multiQuery.queries.length >= 5} className="h-7 text-xs">
+              <Plus className="h-3 w-3 mr-1" />
               Sorgu Ekle
             </Button>
-            <Button size="sm" variant="ghost" onClick={disableMultiQuery} className="text-destructive hover:text-destructive">
-              <Trash2 className="h-4 w-4 mr-1" />
+            <Button size="sm" variant="ghost" onClick={disableMultiQuery} className="h-7 text-xs text-destructive hover:text-destructive">
+              <Trash2 className="h-3 w-3 mr-1" />
               Kaldır
             </Button>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3 p-4">
+      <CardContent className="space-y-2 p-3 pt-0">
         {/* Sorgular - Kompakt scroll alanı */}
-        <ScrollArea className="max-h-[280px] pr-2">
-          <div className="space-y-2">
-            {multiQuery.queries.map((query, index) => (
-              <div key={query.id}>
-                <QueryEditor
-                  query={query}
-                  index={index}
-                  isPrimary={multiQuery.primaryQueryId === query.id || (index === 0 && !multiQuery.primaryQueryId)}
-                  onChange={(q) => updateQuery(index, q)}
-                  onDelete={() => deleteQuery(index)}
-                  onTest={() => testQuery(query, index)}
-                  isTesting={testingQueryId === query.id}
-                  canDelete={multiQuery.queries.length > 1}
-                />
-                {index < multiQuery.queries.length - 1 && (
-                  <div className="flex justify-center my-1">
-                    <ArrowDown className="h-3 w-3 text-muted-foreground" />
-                  </div>
-                )}
-              </div>
-            ))}
+        <div className="border rounded-md">
+          <div className="p-2 bg-muted/30 border-b">
+            <Label className="text-xs font-medium">Sorgular</Label>
           </div>
-        </ScrollArea>
+          <ScrollArea className="h-[200px]">
+            <div className="p-2 space-y-2">
+              {multiQuery.queries.map((query, index) => (
+                <div key={query.id}>
+                  <QueryEditor
+                    query={query}
+                    index={index}
+                    isPrimary={multiQuery.primaryQueryId === query.id || (index === 0 && !multiQuery.primaryQueryId)}
+                    onChange={(q) => updateQuery(index, q)}
+                    onDelete={() => deleteQuery(index)}
+                    onTest={() => testQuery(query, index)}
+                    isTesting={testingQueryId === query.id}
+                    canDelete={multiQuery.queries.length > 1}
+                  />
+                  {index < multiQuery.queries.length - 1 && (
+                    <div className="flex justify-center my-1">
+                      <ArrowDown className="h-3 w-3 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
         
         {/* Birleştirmeler - Ayrı scroll alanı */}
         {multiQuery.queries.length >= 2 && (
-          <>
-            <Separator className="my-2" />
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-medium flex items-center gap-2">
-                  <Link2 className="h-3.5 w-3.5" />
-                  Birleştirmeler
-                </Label>
-                <Button size="sm" variant="outline" onClick={addMerge} className="h-7 text-xs px-2">
-                  <Plus className="h-3 w-3 mr-1" />
-                  Ekle
-                </Button>
-              </div>
-              
-              <ScrollArea className="max-h-[150px]">
-                {multiQuery.merges.length > 0 ? (
-                  <div className="space-y-1.5 pr-2">
-                    {multiQuery.merges.map((merge, index) => (
-                      <MergeEditor
-                        key={index}
-                        merge={merge}
-                        queries={multiQuery.queries}
-                        onChange={(m) => updateMerge(index, m)}
-                        onDelete={() => deleteMerge(index)}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-3 text-xs text-muted-foreground">
-                    <Link2 className="h-6 w-6 mx-auto mb-1 opacity-30" />
-                    <p>Sorgular arasında bağlantı yok</p>
-                  </div>
-                )}
-              </ScrollArea>
+          <div className="border rounded-md">
+            <div className="p-2 bg-muted/30 border-b flex items-center justify-between">
+              <Label className="text-xs font-medium flex items-center gap-2">
+                <Link2 className="h-3 w-3" />
+                Birleştirmeler
+              </Label>
+              <Button size="sm" variant="ghost" onClick={addMerge} className="h-6 text-xs px-2">
+                <Plus className="h-3 w-3 mr-1" />
+                Ekle
+              </Button>
             </div>
-          </>
+            <ScrollArea className="h-[120px]">
+              {multiQuery.merges.length > 0 ? (
+                <div className="p-2 space-y-1.5">
+                  {multiQuery.merges.map((merge, index) => (
+                    <MergeEditor
+                      key={index}
+                      merge={merge}
+                      queries={multiQuery.queries}
+                      onChange={(m) => updateMerge(index, m)}
+                      onDelete={() => deleteMerge(index)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4 text-xs text-muted-foreground">
+                  <Link2 className="h-5 w-5 mx-auto mb-1 opacity-30" />
+                  <p>Sorgular arasında bağlantı yok</p>
+                </div>
+              )}
+            </ScrollArea>
+          </div>
         )}
         
         {/* Birleştirilmiş Alanlar Önizleme */}
         {allFields.size > 0 && (
-          <>
-            <Separator />
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Birleştirilmiş Alanlar (önizleme)</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {Array.from(allFields).map(field => (
-                  <Badge key={field} variant="outline" className="text-xs">
-                    {field}
-                  </Badge>
-                ))}
-              </div>
+          <div className="border rounded-md p-2">
+            <Label className="text-xs text-muted-foreground mb-1.5 block">Birleştirilmiş Alanlar</Label>
+            <div className="flex flex-wrap gap-1">
+              {Array.from(allFields).slice(0, 15).map(field => (
+                <Badge key={field} variant="outline" className="text-[10px] py-0">
+                  {field}
+                </Badge>
+              ))}
+              {allFields.size > 15 && (
+                <Badge variant="secondary" className="text-[10px] py-0">
+                  +{allFields.size - 15} daha
+                </Badge>
+              )}
             </div>
-          </>
+          </div>
         )}
       </CardContent>
     </Card>
