@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { WidgetBuilderConfig, AggregationType } from '@/lib/widgetBuilderTypes';
+import { WidgetBuilderConfig, AggregationType, CalculatedField, CalculationExpression, QueryMerge } from '@/lib/widgetBuilderTypes';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -55,7 +55,7 @@ function groupDataForChart(
   groupField: string, 
   valueField: string, 
   aggregation: AggregationType = 'sum',
-  displayLimit: number = 10 // Grafikte gösterilecek kayıt sayısı
+  displayLimit: number = 10
 ): { name: string; value: number }[] {
   if (!data || data.length === 0) return [];
 
@@ -73,7 +73,119 @@ function groupDataForChart(
       value: calculateAggregation(items, valueField, aggregation),
     }))
     .sort((a, b) => b.value - a.value)
-    .slice(0, displayLimit); // Görsel limit (sadece grafikte gösterim için)
+    .slice(0, displayLimit);
+}
+
+// ============= BİRLEŞTİRME FONKSİYONLARI =============
+
+function leftJoin(left: any[], right: any[], leftKey: string, rightKey: string): any[] {
+  const rightMap = new Map(right.map(r => [r[rightKey], r]));
+  return left.map(l => ({ ...l, ...rightMap.get(l[leftKey]) || {} }));
+}
+
+function innerJoin(left: any[], right: any[], leftKey: string, rightKey: string): any[] {
+  const rightMap = new Map(right.map(r => [r[rightKey], r]));
+  return left.filter(l => rightMap.has(l[leftKey])).map(l => ({ ...l, ...rightMap.get(l[leftKey]) }));
+}
+
+function rightJoin(left: any[], right: any[], leftKey: string, rightKey: string): any[] {
+  return leftJoin(right, left, rightKey, leftKey);
+}
+
+function fullJoin(left: any[], right: any[], leftKey: string, rightKey: string): any[] {
+  const rightMap = new Map(right.map(r => [r[rightKey], r]));
+  const leftKeys = new Set(left.map(l => l[leftKey]));
+  const joined = left.map(l => ({ ...l, ...rightMap.get(l[leftKey]) || {} }));
+  const rightOnly = right.filter(r => !leftKeys.has(r[rightKey]));
+  return [...joined, ...rightOnly];
+}
+
+function unionData(left: any[], right: any[], columnMapping?: { left: string; right: string }[]): any[] {
+  const mappedRight = right.map(r => {
+    if (!columnMapping) return r;
+    const mapped: any = {};
+    columnMapping.forEach(m => { mapped[m.left] = r[m.right]; });
+    return mapped;
+  });
+  const combined = [...left, ...mappedRight];
+  return [...new Map(combined.map(item => [JSON.stringify(item), item])).values()];
+}
+
+function unionAllData(left: any[], right: any[], columnMapping?: { left: string; right: string }[]): any[] {
+  const mappedRight = right.map(r => {
+    if (!columnMapping) return r;
+    const mapped: any = {};
+    columnMapping.forEach(m => { mapped[m.left] = r[m.right]; });
+    return mapped;
+  });
+  return [...left, ...mappedRight];
+}
+
+function applyMerge(left: any[], right: any[], merge: QueryMerge): any[] {
+  switch (merge.mergeType) {
+    case 'left_join': return leftJoin(left, right, merge.leftField, merge.rightField);
+    case 'inner_join': return innerJoin(left, right, merge.leftField, merge.rightField);
+    case 'right_join': return rightJoin(left, right, merge.leftField, merge.rightField);
+    case 'full_join': return fullJoin(left, right, merge.leftField, merge.rightField);
+    case 'union': return unionData(left, right, merge.columnMapping);
+    case 'union_all': return unionAllData(left, right, merge.columnMapping);
+    case 'cross_join': return left.flatMap(l => right.map(r => ({ ...l, ...r })));
+    default: return leftJoin(left, right, merge.leftField, merge.rightField);
+  }
+}
+
+// ============= HESAPLAMA FONKSİYONLARI =============
+
+function evaluateExpression(expr: CalculationExpression, row: Record<string, any>): number {
+  if (!expr) return 0;
+  
+  switch (expr.type) {
+    case 'field':
+      const val = row[expr.field!];
+      if (typeof val === 'number') return val;
+      if (typeof val === 'string') return parseFloat(val.replace(/[^\d.-]/g, '')) || 0;
+      return 0;
+    case 'constant':
+      return expr.value ?? 0;
+    case 'operation':
+      const left = evaluateExpression(expr.left!, row);
+      const right = evaluateExpression(expr.right!, row);
+      switch (expr.operator) {
+        case '+': return left + right;
+        case '-': return left - right;
+        case '*': return left * right;
+        case '/': return right !== 0 ? left / right : 0;
+        case '%': return left % right;
+        default: return 0;
+      }
+    case 'function':
+      const args = expr.arguments?.map(a => evaluateExpression(a, row)) || [];
+      switch (expr.functionName) {
+        case 'abs': return Math.abs(args[0] || 0);
+        case 'round': return Math.round(args[0] || 0);
+        case 'floor': return Math.floor(args[0] || 0);
+        case 'ceil': return Math.ceil(args[0] || 0);
+        case 'sqrt': return Math.sqrt(args[0] || 0);
+        case 'pow': return Math.pow(args[0] || 0, args[1] || 0);
+        case 'min': return Math.min(...args);
+        case 'max': return Math.max(...args);
+        default: return 0;
+      }
+    default:
+      return 0;
+  }
+}
+
+function applyCalculatedFields(data: any[], calculatedFields: CalculatedField[]): any[] {
+  if (!calculatedFields || calculatedFields.length === 0) return data;
+  
+  return data.map(row => {
+    const newRow = { ...row };
+    calculatedFields.forEach(cf => {
+      newRow[cf.name] = evaluateExpression(cf.expression, row);
+    });
+    return newRow;
+  });
 }
 
 export function useDynamicWidgetData(config: WidgetBuilderConfig | null): DynamicWidgetDataResult {
@@ -98,38 +210,79 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
         throw new Error('Oturum bulunamadı');
       }
 
-      // DIA API çağrısı
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/dia-api-test`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          module: config.diaApi.module,
-          method: config.diaApi.method,
-          // Limit sadece config'de belirtilmişse gönder, yoksa API tüm veriyi döndürür
-          ...(config.diaApi.parameters.limit && { limit: config.diaApi.parameters.limit }),
-          filters: config.diaApi.parameters.filters,
-          selectedColumns: Array.isArray(config.diaApi.parameters.selectedcolumns) 
-            ? config.diaApi.parameters.selectedcolumns 
-            : typeof config.diaApi.parameters.selectedcolumns === 'string'
-              ? config.diaApi.parameters.selectedcolumns.split(',').map((c: string) => c.trim())
-              : undefined,
-          sorts: config.diaApi.parameters.sorts,
-          orderby: config.diaApi.parameters.orderby,
-        }),
-      });
+      let fetchedData: any[] = [];
 
-      const result = await response.json();
+      // Çoklu sorgu varsa
+      if (config.multiQuery && config.multiQuery.queries.length > 0) {
+        const queryResults: Record<string, any[]> = {};
+        
+        // Her sorguyu sırayla çalıştır
+        for (const query of config.multiQuery.queries) {
+          const response = await fetch(`${SUPABASE_URL}/functions/v1/dia-api-test`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              module: query.module,
+              method: query.method,
+              ...(query.parameters.limit && { limit: query.parameters.limit }),
+              filters: query.parameters.filters,
+              selectedColumns: query.parameters.selectedcolumns,
+              sorts: query.parameters.sorts,
+            }),
+          });
+          const result = await response.json();
+          if (result.success) {
+            queryResults[query.id] = result.sampleData || [];
+          }
+        }
+        
+        // Birleştirmeleri uygula
+        const primaryId = config.multiQuery.primaryQueryId || config.multiQuery.queries[0]?.id;
+        fetchedData = queryResults[primaryId] || [];
+        
+        for (const merge of config.multiQuery.merges) {
+          const rightData = queryResults[merge.rightQueryId] || [];
+          fetchedData = applyMerge(fetchedData, rightData, merge);
+        }
+      } else {
+        // Tekli sorgu
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/dia-api-test`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            module: config.diaApi.module,
+            method: config.diaApi.method,
+            ...(config.diaApi.parameters.limit && { limit: config.diaApi.parameters.limit }),
+            filters: config.diaApi.parameters.filters,
+            selectedColumns: Array.isArray(config.diaApi.parameters.selectedcolumns) 
+              ? config.diaApi.parameters.selectedcolumns 
+              : typeof config.diaApi.parameters.selectedcolumns === 'string'
+                ? config.diaApi.parameters.selectedcolumns.split(',').map((c: string) => c.trim())
+                : undefined,
+            sorts: config.diaApi.parameters.sorts,
+            orderby: config.diaApi.parameters.orderby,
+          }),
+        });
 
-      if (!result.success) {
-        throw new Error(result.error || 'API hatası');
+        const result = await response.json();
+        if (!result.success) {
+          throw new Error(result.error || 'API hatası');
+        }
+        fetchedData = result.sampleData || [];
       }
 
-      const fetchedData = result.sampleData || [];
-      const recordCount = result.recordCount || fetchedData.length;
-      const fieldStats = result.fieldStats || {};
+      // Hesaplama alanlarını uygula
+      if (config.calculatedFields && config.calculatedFields.length > 0) {
+        fetchedData = applyCalculatedFields(fetchedData, config.calculatedFields);
+      }
+
+      const recordCount = fetchedData.length;
       setRawData(fetchedData);
 
       // Görselleştirme tipine göre veri işleme
@@ -137,32 +290,9 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
       
       if (vizType === 'kpi' && config.visualization.kpi) {
         const kpiConfig = config.visualization.kpi;
-        
-        let kpiValue: number;
-        const valueField = kpiConfig.valueField;
-        const stats = fieldStats[valueField];
-        
-        // Aggregation tipine göre doğru değeri hesapla
-        if (kpiConfig.aggregation === 'count') {
-          // Count için API'den gelen gerçek recordCount değerini kullan
-          kpiValue = recordCount;
-        } else if (kpiConfig.aggregation === 'count_distinct') {
-          // Distinct count için mevcut mantık (sample data üzerinden)
-          kpiValue = new Set(fetchedData.map(item => item[valueField])).size;
-        } else if (kpiConfig.aggregation === 'sum' && stats?.sum !== undefined) {
-          // Sum için fieldStats kullan (tüm veri üzerinden hesaplanmış)
-          kpiValue = stats.sum;
-        } else if (kpiConfig.aggregation === 'min' && stats?.min !== undefined) {
-          kpiValue = stats.min;
-        } else if (kpiConfig.aggregation === 'max' && stats?.max !== undefined) {
-          kpiValue = stats.max;
-        } else if (kpiConfig.aggregation === 'avg' && stats?.sum !== undefined && recordCount > 0) {
-          // Avg için sum / count kullan
-          kpiValue = stats.sum / recordCount;
-        } else {
-          // Fallback: sample data üzerinden hesapla
-          kpiValue = calculateAggregation(fetchedData, valueField, kpiConfig.aggregation);
-        }
+        const kpiValue = kpiConfig.aggregation === 'count' 
+          ? recordCount 
+          : calculateAggregation(fetchedData, kpiConfig.valueField, kpiConfig.aggregation);
         
         setData({
           value: kpiValue,
@@ -170,62 +300,23 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
           prefix: kpiConfig.prefix,
           suffix: kpiConfig.suffix,
           decimals: kpiConfig.decimals,
-          recordCount: recordCount,
+          recordCount,
         });
       } else if (['bar', 'line', 'area'].includes(vizType) && config.visualization.chart) {
         const chartConfig = config.visualization.chart;
-        const xField = chartConfig.xAxis?.field || '';
-        const yField = chartConfig.yAxis?.field || chartConfig.valueField || '';
-        const displayLimit = chartConfig.displayLimit || 10;
-        
         const chartData = groupDataForChart(
           fetchedData, 
-          xField, 
-          yField, 
+          chartConfig.xAxis?.field || '', 
+          chartConfig.yAxis?.field || chartConfig.valueField || '', 
           chartConfig.yAxis?.aggregation || 'sum',
-          displayLimit
+          chartConfig.displayLimit || 10
         );
-        
-        setData({
-          chartData,
-          xField,
-          yField,
-          showLegend: chartConfig.showLegend,
-          showGrid: chartConfig.showGrid,
-          stacked: chartConfig.stacked,
-        });
+        setData({ chartData, xField: chartConfig.xAxis?.field, yField: chartConfig.yAxis?.field });
       } else if (['pie', 'donut'].includes(vizType) && config.visualization.chart) {
         const chartConfig = config.visualization.chart;
-        const legendField = chartConfig.legendField || '';
-        const valueField = chartConfig.valueField || chartConfig.yAxis?.field || '';
-        const displayLimit = chartConfig.displayLimit || 10;
-        
-        const pieData = groupDataForChart(
-          fetchedData, 
-          legendField, 
-          valueField, 
-          'sum',
-          displayLimit
-        );
-        
-        setData({
-          chartData: pieData,
-          showLegend: chartConfig.showLegend,
-        });
-      } else if (vizType === 'table' && config.visualization.table) {
-        setData({
-          tableData: fetchedData.slice(0, config.visualization.table.pageSize || 10),
-          columns: config.visualization.table.columns,
-          pagination: config.visualization.table.pagination,
-          pageSize: config.visualization.table.pageSize,
-          searchable: config.visualization.table.searchable,
-        });
-      } else if (vizType === 'list') {
-        setData({
-          listData: fetchedData.slice(0, 10),
-        });
+        const pieData = groupDataForChart(fetchedData, chartConfig.legendField || '', chartConfig.valueField || '', 'sum', chartConfig.displayLimit || 10);
+        setData({ chartData: pieData });
       } else {
-        // Varsayılan - ham veri
         setData({ rawData: fetchedData });
       }
     } catch (err) {
@@ -240,11 +331,5 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
     fetchData();
   }, [fetchData]);
 
-  return {
-    data,
-    rawData,
-    isLoading,
-    error,
-    refetch: fetchData,
-  };
+  return { data, rawData, isLoading, error, refetch: fetchData };
 }

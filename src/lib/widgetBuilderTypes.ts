@@ -61,6 +61,128 @@ export const SORT_TYPES: { id: SortType; name: string }[] = [
   { id: 'DESC', name: 'Azalan (Z-A, 9-0)' },
 ];
 
+// ============= ÇOKLU SORGU VE BİRLEŞTİRME TİPLERİ =============
+
+// Birleştirme türleri
+export type MergeType = 
+  | 'left_join'     // Sol tablodaki tüm kayıtlar + eşleşen sağ
+  | 'inner_join'    // Sadece her iki tabloda eşleşenler
+  | 'right_join'    // Sağ tablodaki tüm kayıtlar + eşleşen sol
+  | 'full_join'     // Her iki tablodaki tüm kayıtlar
+  | 'union'         // Alt alta birleştir (aynı kolonlar)
+  | 'union_all'     // Alt alta birleştir (tekrarlar dahil)
+  | 'cross_join';   // Kartezyen çarpım (her satır x her satır)
+
+export const MERGE_TYPES: { id: MergeType; name: string; description: string; icon: string }[] = [
+  { id: 'left_join', name: 'LEFT JOIN', description: 'Ana tablodaki tüm kayıtlar + eşleşen ikinci tablo verileri', icon: 'ArrowLeftRight' },
+  { id: 'inner_join', name: 'INNER JOIN', description: 'Sadece her iki tabloda eşleşen kayıtlar', icon: 'Merge' },
+  { id: 'right_join', name: 'RIGHT JOIN', description: 'İkinci tablodaki tüm kayıtlar + eşleşen ana tablo verileri', icon: 'ArrowRightLeft' },
+  { id: 'full_join', name: 'FULL JOIN', description: 'Her iki tablodaki tüm kayıtlar (eşleşmeyenler dahil)', icon: 'Maximize2' },
+  { id: 'union', name: 'UNION', description: 'İki tabloyu alt alta birleştir (tekrarsız)', icon: 'Layers' },
+  { id: 'union_all', name: 'UNION ALL', description: 'İki tabloyu alt alta birleştir (tekrarlar dahil)', icon: 'Copy' },
+  { id: 'cross_join', name: 'CROSS JOIN', description: 'Kartezyen çarpım (dikkatli kullanın!)', icon: 'Grid3x3' },
+];
+
+// Tek bir sorgu tanımı
+export interface DiaApiQuery {
+  id: string;
+  name: string;
+  module: 'scf' | 'bcs' | 'fat' | 'sis' | 'stk' | 'gts';
+  method: string;
+  parameters: {
+    filters?: DiaApiFilter[];
+    sorts?: DiaApiSort[];
+    selectedcolumns?: string[];
+    limit?: number;
+  };
+  // Test sonuçları (geçici)
+  testResult?: {
+    sampleFields?: string[];
+    fieldTypes?: Record<string, string>;
+  };
+}
+
+// Sorgular arası birleştirme
+export interface QueryMerge {
+  leftQueryId: string;
+  leftField: string;        // JOIN için key alan
+  rightQueryId: string;
+  rightField: string;       // JOIN için key alan
+  mergeType: MergeType;
+  // UNION için kolon eşleştirmesi
+  columnMapping?: { left: string; right: string }[];
+}
+
+// Çoklu sorgu yapısı
+export interface MultiQueryConfig {
+  queries: DiaApiQuery[];
+  merges: QueryMerge[];
+  primaryQueryId: string;
+}
+
+// ============= HESAPLAMA ALANLARI =============
+
+// Matematiksel operatörler
+export type MathOperator = '+' | '-' | '*' | '/' | '%';
+
+// Hesaplama ifadesi (recursive yapı)
+export interface CalculationExpression {
+  type: 'field' | 'constant' | 'operation' | 'function';
+  // field için
+  field?: string;
+  // constant için
+  value?: number;
+  // operation için
+  operator?: MathOperator;
+  left?: CalculationExpression;
+  right?: CalculationExpression;
+  // function için (abs, round, vb.)
+  functionName?: 'abs' | 'round' | 'floor' | 'ceil' | 'min' | 'max' | 'sqrt' | 'pow';
+  arguments?: CalculationExpression[];
+}
+
+// Hesaplama alanı tanımı
+export interface CalculatedField {
+  id: string;              // Benzersiz ID
+  name: string;            // Alan adı (ör: "kar_marji")
+  label: string;           // Görüntülenecek ad (ör: "Kâr Marjı")
+  expression: CalculationExpression;
+  format?: 'currency' | 'number' | 'percentage';
+  decimals?: number;
+}
+
+// Önceden tanımlı hesaplama şablonları
+export const CALCULATION_TEMPLATES: { id: string; name: string; description: string; fields: string[] }[] = [
+  { id: 'margin', name: 'Kâr Marjı', description: '(satis - maliyet) / satis * 100', fields: ['satis', 'maliyet'] },
+  { id: 'difference', name: 'Fark', description: 'alan1 - alan2', fields: ['alan1', 'alan2'] },
+  { id: 'percentage', name: 'Yüzde', description: 'alan1 / alan2 * 100', fields: ['alan1', 'alan2'] },
+  { id: 'total', name: 'Toplam', description: 'alan1 + alan2', fields: ['alan1', 'alan2'] },
+  { id: 'average', name: 'Ortalama', description: '(alan1 + alan2) / 2', fields: ['alan1', 'alan2'] },
+  { id: 'net', name: 'Net Değer', description: 'brut - kesinti', fields: ['brut', 'kesinti'] },
+];
+
+// Matematiksel operatör listesi
+export const MATH_OPERATORS: { id: MathOperator; symbol: string; name: string }[] = [
+  { id: '+', symbol: '+', name: 'Toplama' },
+  { id: '-', symbol: '-', name: 'Çıkarma' },
+  { id: '*', symbol: '×', name: 'Çarpma' },
+  { id: '/', symbol: '÷', name: 'Bölme' },
+  { id: '%', symbol: '%', name: 'Mod (Kalan)' },
+];
+
+export const MATH_FUNCTIONS: { id: string; name: string; args: number; description: string }[] = [
+  { id: 'abs', name: 'ABS', args: 1, description: 'Mutlak değer' },
+  { id: 'round', name: 'ROUND', args: 1, description: 'Yuvarla' },
+  { id: 'floor', name: 'FLOOR', args: 1, description: 'Aşağı yuvarla' },
+  { id: 'ceil', name: 'CEIL', args: 1, description: 'Yukarı yuvarla' },
+  { id: 'sqrt', name: 'SQRT', args: 1, description: 'Karekök' },
+  { id: 'pow', name: 'POW', args: 2, description: 'Üs alma' },
+  { id: 'min', name: 'MIN', args: 2, description: 'Minimum' },
+  { id: 'max', name: 'MAX', args: 2, description: 'Maksimum' },
+];
+
+// ============= DIA API CONFIG =============
+
 export interface DiaApiConfig {
   // DIA API endpoint bilgileri
   module: 'scf' | 'bcs' | 'fat' | 'sis' | 'stk' | 'gts';
@@ -139,12 +261,20 @@ export interface WidgetFilterConfig {
 
 export interface WidgetBuilderConfig {
   diaApi: DiaApiConfig;
+  
+  // Çoklu sorgu (yeni)
+  multiQuery?: MultiQueryConfig;
+  
+  // Hesaplama alanları (yeni)
+  calculatedFields?: CalculatedField[];
+  
   visualization: {
     type: ChartType;
     kpi?: KpiConfig;
     chart?: ChartConfig;
     table?: TableConfig;
   };
+  
   availableFilters?: WidgetFilterConfig[]; // Widget için tanımlı filtreler
   refreshInterval?: number; // dakika
   // Raw mode için
