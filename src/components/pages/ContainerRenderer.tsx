@@ -5,12 +5,14 @@ import { useContainerWidgets } from '@/hooks/useUserPages';
 import { PageContainer, CONTAINER_TEMPLATES, ContainerType } from '@/lib/pageTypes';
 import { Widget } from '@/lib/widgetTypes';
 import { WidgetSlotPicker } from './WidgetSlotPicker';
+import { ContainerSettingsModal, getContainerStyleClasses } from './ContainerSettingsModal';
 import { DynamicWidgetRenderer } from '@/components/dashboard/DynamicWidgetRenderer';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Trash2, GripVertical, Settings } from 'lucide-react';
+import { Plus, Trash2, GripVertical, Settings, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface ContainerRendererProps {
   container: PageContainer;
@@ -29,8 +31,10 @@ export function ContainerRenderer({
 }: ContainerRendererProps) {
   const { widgets: containerWidgets, addWidget, removeWidget, refreshWidgets } = useContainerWidgets(container.id);
   const [widgetPickerOpen, setWidgetPickerOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<number>(0);
   const [widgetDetails, setWidgetDetails] = useState<Record<string, Widget>>({});
+  const [localContainer, setLocalContainer] = useState(container);
 
   const template = CONTAINER_TEMPLATES.find(t => t.id === container.container_type);
   if (!template) return null;
@@ -38,7 +42,10 @@ export function ContainerRenderer({
   // Widget detaylarını yükle
   useEffect(() => {
     const loadWidgetDetails = async () => {
-      if (containerWidgets.length === 0) return;
+      if (containerWidgets.length === 0) {
+        setWidgetDetails({});
+        return;
+      }
       
       const widgetIds = containerWidgets.map(w => w.widget_id);
       const { data } = await supabase
@@ -58,6 +65,11 @@ export function ContainerRenderer({
     loadWidgetDetails();
   }, [containerWidgets]);
 
+  // Container güncellenince localContainer'ı güncelle
+  useEffect(() => {
+    setLocalContainer(container);
+  }, [container]);
+
   const handleSlotClick = (slotIndex: number) => {
     // Bu slotta zaten widget var mı?
     const existingWidget = containerWidgets.find(w => w.slot_index === slotIndex);
@@ -70,12 +82,37 @@ export function ContainerRenderer({
   const handleWidgetSelect = async (widget: Widget) => {
     await addWidget(widget.id, selectedSlot);
     refreshWidgets();
+    toast.success(`${widget.name} eklendi`);
   };
 
-  const handleRemoveWidget = async (widgetRecordId: string) => {
-    await removeWidget(widgetRecordId);
-    refreshWidgets();
+  const handleRemoveWidget = async (containerWidgetId: string, widgetName?: string) => {
+    try {
+      await removeWidget(containerWidgetId);
+      refreshWidgets();
+      toast.success(widgetName ? `${widgetName} kaldırıldı` : 'Widget kaldırıldı');
+    } catch (error) {
+      console.error('Error removing widget:', error);
+      toast.error('Widget kaldırılamadı');
+    }
   };
+
+  const handleSettingsSave = async () => {
+    // Container'ı yeniden yükle
+    const { data } = await supabase
+      .from('page_containers')
+      .select('*')
+      .eq('id', container.id)
+      .single();
+    
+    if (data) {
+      setLocalContainer(data as unknown as PageContainer);
+    }
+  };
+
+  // Stil sınıflarını al
+  const styleClasses = getContainerStyleClasses(localContainer.settings || {});
+  const showTitle = localContainer.settings?.showTitle !== false;
+  const isCompact = localContainer.settings?.compact === true;
 
   // Slot'ların render'ını oluştur
   const renderSlots = () => {
@@ -97,10 +134,13 @@ export function ContainerRenderer({
               <Button
                 variant="destructive"
                 size="icon"
-                className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={() => handleRemoveWidget(slotWidget.id)}
+                className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemoveWidget(slotWidget.id, widgetDetail.name);
+                }}
               >
-                <Trash2 className="h-3 w-3" />
+                <X className="h-4 w-4" />
               </Button>
             )}
           </div>
@@ -128,33 +168,66 @@ export function ContainerRenderer({
   };
 
   return (
-    <Card className={cn('mb-4', isDragMode && 'ring-2 ring-primary/20')}>
-      <CardHeader className="py-3 px-4 flex flex-row items-center justify-between">
-        <div className="flex items-center gap-2">
-          {isDragMode && <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />}
-          <CardTitle className="text-sm font-medium">
-            {container.title || template.name}
-          </CardTitle>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-7 w-7">
-            <Settings className="h-3 w-3" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-7 w-7 text-destructive hover:text-destructive"
-            onClick={onDelete}
-          >
-            <Trash2 className="h-3 w-3" />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="p-4 pt-0">
-        <div className={cn('grid gap-4', template.gridClass)}>
-          {renderSlots()}
-        </div>
-      </CardContent>
+    <>
+      <Card className={cn(
+        'mb-4',
+        isDragMode && 'ring-2 ring-primary/20',
+        styleClasses
+      )}>
+        {showTitle && (
+          <CardHeader className={cn('flex flex-row items-center justify-between', isCompact ? 'py-2 px-3' : 'py-3 px-4')}>
+            <div className="flex items-center gap-2">
+              {isDragMode && <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />}
+              <CardTitle className="text-sm font-medium">
+                {localContainer.title || template.name}
+              </CardTitle>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-7 w-7"
+                onClick={() => setSettingsOpen(true)}
+              >
+                <Settings className="h-3 w-3" />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-7 w-7 text-destructive hover:text-destructive"
+                onClick={onDelete}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          </CardHeader>
+        )}
+        <CardContent className={cn(isCompact ? 'p-2' : 'p-4', showTitle ? 'pt-0' : '')}>
+          {!showTitle && (
+            <div className="absolute top-2 right-2 flex items-center gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button 
+                variant="secondary" 
+                size="icon" 
+                className="h-7 w-7"
+                onClick={() => setSettingsOpen(true)}
+              >
+                <Settings className="h-3 w-3" />
+              </Button>
+              <Button 
+                variant="destructive" 
+                size="icon" 
+                className="h-7 w-7"
+                onClick={onDelete}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
+          <div className={cn('grid gap-4', template.gridClass)}>
+            {renderSlots()}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Widget Picker */}
       <WidgetSlotPicker
@@ -163,6 +236,14 @@ export function ContainerRenderer({
         onSelectWidget={handleWidgetSelect}
         slotIndex={selectedSlot}
       />
-    </Card>
+
+      {/* Settings Modal */}
+      <ContainerSettingsModal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        container={localContainer}
+        onSave={handleSettingsSave}
+      />
+    </>
   );
 }
