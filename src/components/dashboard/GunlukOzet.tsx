@@ -1,9 +1,11 @@
-import React from 'react';
-import { TrendingUp, TrendingDown, Banknote, CreditCard, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { TrendingUp, Banknote, CreditCard, ArrowUpRight, ArrowDownRight, Minus, FlaskConical } from 'lucide-react';
+import { useUserSettings } from '@/contexts/UserSettingsContext';
+import { getMockGunlukOzet } from '@/lib/mockData';
 
 interface Props {
   isLoading?: boolean;
-  // Gerçek veriler geldiğinde kullanılacak
+  // Gerçek veriler DIA'dan geldiğinde kullanılacak
   satisVerisi?: {
     bugun: number;
     dun: number;
@@ -18,17 +20,28 @@ interface Props {
   };
 }
 
-// Mock data - ileride DIA'dan çekilecek
-const mockData = {
-  satis: { bugun: 85420, dun: 72150 },
-  tahsilat: { bugun: 42800, dun: 38500 },
-  odeme: { bugun: 18200, dun: 24600 },
-};
-
 export function GunlukOzet({ isLoading, satisVerisi, tahsilatVerisi, odemeVerisi }: Props) {
-  const satis = satisVerisi || mockData.satis;
-  const tahsilat = tahsilatVerisi || mockData.tahsilat;
-  const odeme = odemeVerisi || mockData.odeme;
+  const { useMockData } = useUserSettings();
+  
+  // Mock data'yı useMemo ile sakla (her renderda değişmesin)
+  const mockData = useMemo(() => {
+    if (useMockData) {
+      return getMockGunlukOzet();
+    }
+    return {
+      bugunSatis: 85420,
+      dunSatis: 72150,
+      bugunTahsilat: 42800,
+      dunTahsilat: 38500,
+      bugunOdeme: 18200,
+      dunOdeme: 24600,
+    };
+  }, [useMockData]);
+
+  // Veri kaynağı: prop > mock data
+  const satis = satisVerisi || { bugun: mockData.bugunSatis, dun: mockData.dunSatis };
+  const tahsilat = tahsilatVerisi || { bugun: mockData.bugunTahsilat, dun: mockData.dunTahsilat };
+  const odeme = odemeVerisi || { bugun: mockData.bugunOdeme, dun: mockData.dunOdeme };
 
   const formatCurrency = (value: number) => {
     if (value >= 1000000) {
@@ -88,7 +101,15 @@ export function GunlukOzet({ isLoading, satisVerisi, tahsilatVerisi, odemeVerisi
     <div className="glass-card rounded-xl p-5">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold">Günlük Özet</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold">Günlük Özet</h3>
+          {useMockData && (
+            <span className="px-2 py-0.5 text-xs rounded-full bg-amber-500/20 text-amber-500 font-medium flex items-center gap-1">
+              <FlaskConical className="w-3 h-3" />
+              Demo
+            </span>
+          )}
+        </div>
         <span className="text-xs text-muted-foreground">
           {new Date().toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' })}
         </span>

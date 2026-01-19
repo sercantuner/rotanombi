@@ -101,8 +101,8 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
       }
 
       // Load dashboard layouts
-      const { data: layoutData } = await supabase
-        .from('user_dashboard_settings')
+      const { data: layoutData } = await (supabase
+        .from('user_dashboard_settings') as any)
         .select('page, layout')
         .eq('user_id', user.id);
 
@@ -126,8 +126,8 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
       }
 
       // Load widget filters
-      const { data: filterData } = await supabase
-        .from('user_widget_filters')
+      const { data: filterData } = await (supabase
+        .from('user_widget_filters') as any)
         .select('widget_id, filters')
         .eq('user_id', user.id);
 
@@ -182,8 +182,9 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     if (!user) return;
     
     try {
-      await supabase
-        .from('user_dashboard_settings')
+      // Type assertion needed until Supabase types are regenerated
+      await (supabase
+        .from('user_dashboard_settings') as any)
         .upsert({
           user_id: user.id,
           page,
@@ -204,8 +205,8 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     const defaultLayout = getDefaultLayoutForPage(page);
     
     try {
-      await supabase
-        .from('user_dashboard_settings')
+      await (supabase
+        .from('user_dashboard_settings') as any)
         .delete()
         .eq('user_id', user.id)
         .eq('page', page);
@@ -293,8 +294,9 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     if (!user) return;
     
     try {
-      await supabase
-        .from('user_widget_filters')
+      // Type assertion needed until Supabase types are regenerated
+      await (supabase
+        .from('user_widget_filters') as any)
         .upsert({
           user_id: user.id,
           widget_id: widgetId,
@@ -314,8 +316,8 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     if (!user) return;
     
     try {
-      await supabase
-        .from('user_widget_filters')
+      await (supabase
+        .from('user_widget_filters') as any)
         .delete()
         .eq('user_id', user.id)
         .eq('widget_id', widgetId);
