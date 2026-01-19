@@ -251,19 +251,14 @@ export function DynamicWidgetRenderer({
       case 'grafik_satis_elemani':
         return (
           <SatisElemaniPerformans
-            cariler={cariler || []}
+            satisElemanlari={genelRapor?.satisElemanlari || []}
             isLoading={isLoading}
           />
         );
 
       // List widgets
       case 'liste_top_musteriler':
-        return (
-          <TopCustomers
-            cariler={cariler || []}
-            isLoading={isLoading}
-          />
-        );
+        return <TopCustomers cariler={cariler || []} isLoading={isLoading} />;
 
       default:
         console.warn(`No renderer for widget: ${widgetId}`);
