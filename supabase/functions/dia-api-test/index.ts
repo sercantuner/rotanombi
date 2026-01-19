@@ -20,6 +20,7 @@ interface TestApiRequest {
   // Raw mode için yeni alanlar
   rawMode?: boolean;
   rawPayload?: string; // JSON string
+  returnAllData?: boolean; // Tüm veriyi döndür (widget renderer için)
 }
 
 interface TestApiResponse {
@@ -31,6 +32,7 @@ interface TestApiResponse {
   sampleData?: any[];
   rawResponse?: any; // Raw mode için tam yanıt
   error?: string;
+  fullDataAvailable?: boolean; // Tüm veri döndürüldü mü
 }
 
 interface FieldStat {
@@ -175,12 +177,13 @@ serve(async (req) => {
     const { 
       module, 
       method, 
-      limit = 100, 
+      limit, // undefined olursa limitsiz çeker
       filters = {}, 
       selectedColumns = [], 
       orderby = '',
       rawMode = false,
-      rawPayload = ''
+      rawPayload = '',
+      returnAllData = false, // Tüm veriyi döndür (widget renderer için)
     } = body;
 
     // DIA session al
@@ -247,7 +250,7 @@ serve(async (req) => {
           firma_kodu: firmaKodu,
           donem_kodu: donemKodu,
           // Limit sadece belirtilmişse gönder, yoksa DIA API kendi varsayılanını kullanır
-          ...(limit > 0 && { limit }),
+          ...(limit !== undefined && limit > 0 && { limit }),
           offset: 0,
         }
       };
@@ -420,8 +423,8 @@ serve(async (req) => {
     // Alanları, tiplerini ve istatistiklerini çıkar
     const { fields, fieldTypes, fieldStats } = extractFieldsAndTypes(data);
 
-    // Örnek veri (ilk 10 kayıt)
-    const sampleData = data.slice(0, 10);
+    // returnAllData: true ise tüm veriyi, değilse sadece 10 örnek döndür
+    const sampleData = returnAllData ? data : data.slice(0, 10);
 
     const responseData: TestApiResponse = {
       success: true,
@@ -430,6 +433,8 @@ serve(async (req) => {
       fieldTypes,
       fieldStats,
       sampleData,
+      // Tüm veri istenmediyse, hesaplamalar için fieldStats kullan
+      fullDataAvailable: returnAllData,
     };
 
     return new Response(
