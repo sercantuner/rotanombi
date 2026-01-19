@@ -1,0 +1,266 @@
+// useWidgets Hook - Veritabanından widget listesini çeker ve yönetir
+
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Widget, WidgetCategory, WidgetFormData, PageLayout, WidgetLayout } from '@/lib/widgetTypes';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+
+export function useWidgets() {
+  const { user } = useAuth();
+  const [widgets, setWidgets] = useState<Widget[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Widget listesini çek
+  const fetchWidgets = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('widgets')
+        .select('*')
+        .order('sort_order', { ascending: true });
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      // Map database response to Widget type
+      const mappedWidgets: Widget[] = (data || []).map((w: any) => ({
+        id: w.id,
+        widget_key: w.widget_key,
+        name: w.name,
+        description: w.description,
+        category: w.category as WidgetCategory,
+        type: w.type,
+        data_source: w.data_source,
+        size: w.size,
+        icon: w.icon,
+        default_page: w.default_page as WidgetCategory,
+        default_visible: w.default_visible,
+        available_filters: Array.isArray(w.available_filters) ? w.available_filters : [],
+        default_filters: w.default_filters || {},
+        min_height: w.min_height,
+        grid_cols: w.grid_cols,
+        is_active: w.is_active,
+        sort_order: w.sort_order,
+        created_at: w.created_at,
+        updated_at: w.updated_at,
+        created_by: w.created_by,
+      }));
+
+      setWidgets(mappedWidgets);
+    } catch (err) {
+      console.error('Error fetching widgets:', err);
+      setError('Widget listesi yüklenemedi');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchWidgets();
+  }, [fetchWidgets]);
+
+  // Widget'ı key ile bul
+  const getWidgetByKey = useCallback((widgetKey: string): Widget | undefined => {
+    return widgets.find(w => w.widget_key === widgetKey);
+  }, [widgets]);
+
+  // Kategoriye göre widget'ları getir
+  const getWidgetsByCategory = useCallback((category: WidgetCategory): Widget[] => {
+    return widgets.filter(w => w.category === category && w.is_active);
+  }, [widgets]);
+
+  // Varsayılan sayfaya göre widget'ları getir
+  const getWidgetsByDefaultPage = useCallback((page: WidgetCategory): Widget[] => {
+    return widgets.filter(w => w.default_page === page && w.is_active);
+  }, [widgets]);
+
+  // Sayfa için varsayılan layout oluştur
+  const getDefaultLayoutForPage = useCallback((page: WidgetCategory): PageLayout => {
+    const pageWidgets = widgets
+      .filter(w => w.default_page === page && w.default_visible && w.is_active)
+      .map((w, index) => ({
+        id: w.widget_key,
+        visible: true,
+        order: index,
+        size: w.size,
+      }));
+
+    return { widgets: pageWidgets };
+  }, [widgets]);
+
+  // Sayfa için kullanılabilir tüm widget'ları getir
+  const getAvailableWidgetsForPage = useCallback((page: WidgetCategory): Widget[] => {
+    return widgets.filter(w => 
+      w.is_active && (w.default_page === page || w.category === page || w.category === 'dashboard')
+    );
+  }, [widgets]);
+
+  return {
+    widgets,
+    isLoading,
+    error,
+    refetch: fetchWidgets,
+    getWidgetByKey,
+    getWidgetsByCategory,
+    getWidgetsByDefaultPage,
+    getDefaultLayoutForPage,
+    getAvailableWidgetsForPage,
+  };
+}
+
+// Super Admin için widget CRUD işlemleri
+export function useWidgetAdmin() {
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Widget oluştur
+  const createWidget = async (data: WidgetFormData): Promise<boolean> => {
+    if (!user) return false;
+    setIsLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('widgets')
+        .insert({
+          widget_key: data.widget_key,
+          name: data.name,
+          description: data.description || null,
+          category: data.category,
+          type: data.type,
+          data_source: data.data_source,
+          size: data.size,
+          icon: data.icon || null,
+          default_page: data.default_page,
+          default_visible: data.default_visible,
+          available_filters: data.available_filters as unknown as any,
+          default_filters: data.default_filters as unknown as any,
+          min_height: data.min_height || null,
+          grid_cols: data.grid_cols,
+          is_active: data.is_active,
+          sort_order: data.sort_order,
+          created_by: user.id,
+        } as any);
+
+      if (error) throw error;
+      toast.success('Widget oluşturuldu');
+      return true;
+    } catch (err) {
+      console.error('Error creating widget:', err);
+      toast.error('Widget oluşturulamadı');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Widget güncelle
+  const updateWidget = async (id: string, data: Partial<WidgetFormData>): Promise<boolean> => {
+    if (!user) return false;
+    setIsLoading(true);
+
+    try {
+      const updateData: any = {
+        ...data,
+        updated_at: new Date().toISOString(),
+      };
+      
+      const { error } = await supabase
+        .from('widgets')
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) throw error;
+      toast.success('Widget güncellendi');
+      return true;
+    } catch (err) {
+      console.error('Error updating widget:', err);
+      toast.error('Widget güncellenemedi');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Widget sil (soft delete - is_active = false)
+  const deleteWidget = async (id: string): Promise<boolean> => {
+    if (!user) return false;
+    setIsLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('widgets')
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (error) throw error;
+      toast.success('Widget devre dışı bırakıldı');
+      return true;
+    } catch (err) {
+      console.error('Error deleting widget:', err);
+      toast.error('Widget silinemedi');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Widget kalıcı olarak sil
+  const permanentlyDeleteWidget = async (id: string): Promise<boolean> => {
+    if (!user) return false;
+    setIsLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('widgets')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      toast.success('Widget kalıcı olarak silindi');
+      return true;
+    } catch (err) {
+      console.error('Error permanently deleting widget:', err);
+      toast.error('Widget silinemedi');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Widget'ı aktif et
+  const activateWidget = async (id: string): Promise<boolean> => {
+    if (!user) return false;
+    setIsLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('widgets')
+        .update({ is_active: true, updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (error) throw error;
+      toast.success('Widget aktifleştirildi');
+      return true;
+    } catch (err) {
+      console.error('Error activating widget:', err);
+      toast.error('Widget aktifleştirilemedi');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return {
+    isLoading,
+    createWidget,
+    updateWidget,
+    deleteWidget,
+    permanentlyDeleteWidget,
+    activateWidget,
+  };
+}

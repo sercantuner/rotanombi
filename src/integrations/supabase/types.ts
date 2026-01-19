@@ -278,6 +278,75 @@ export type Database = {
         }
         Relationships: []
       }
+      widgets: {
+        Row: {
+          available_filters: Json | null
+          category: string
+          created_at: string
+          created_by: string | null
+          data_source: string
+          default_filters: Json | null
+          default_page: string
+          default_visible: boolean
+          description: string | null
+          grid_cols: number | null
+          icon: string | null
+          id: string
+          is_active: boolean
+          min_height: string | null
+          name: string
+          size: string
+          sort_order: number | null
+          type: string
+          updated_at: string
+          widget_key: string
+        }
+        Insert: {
+          available_filters?: Json | null
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          data_source?: string
+          default_filters?: Json | null
+          default_page?: string
+          default_visible?: boolean
+          description?: string | null
+          grid_cols?: number | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          min_height?: string | null
+          name: string
+          size?: string
+          sort_order?: number | null
+          type?: string
+          updated_at?: string
+          widget_key: string
+        }
+        Update: {
+          available_filters?: Json | null
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          data_source?: string
+          default_filters?: Json | null
+          default_page?: string
+          default_visible?: boolean
+          description?: string | null
+          grid_cols?: number | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          min_height?: string | null
+          name?: string
+          size?: string
+          sort_order?: number | null
+          type?: string
+          updated_at?: string
+          widget_key?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
