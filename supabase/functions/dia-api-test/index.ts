@@ -246,7 +246,8 @@ serve(async (req) => {
           session_id: sessionId,
           firma_kodu: firmaKodu,
           donem_kodu: donemKodu,
-          limit: Math.min(limit, 500), // Test için max 500 kayıt
+          // Limit sadece belirtilmişse gönder, yoksa DIA API kendi varsayılanını kullanır
+          ...(limit > 0 && { limit }),
           offset: 0,
         }
       };

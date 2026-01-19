@@ -73,6 +73,7 @@ export interface ChartConfig {
   showLegend?: boolean;
   showGrid?: boolean;
   stacked?: boolean;
+  displayLimit?: number; // Grafikte gösterilecek maksimum kayıt sayısı (varsayılan: 10)
 }
 
 export interface TableConfig {
