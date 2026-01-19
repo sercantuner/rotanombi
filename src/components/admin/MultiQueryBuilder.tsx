@@ -129,9 +129,9 @@ function QueryEditor({
   };
   
   return (
-    <Card className={cn(isPrimary && 'border-primary/50 bg-primary/5')}>
+    <Card className={cn('overflow-hidden', isPrimary && 'border-primary/50 bg-primary/5')}>
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-        <CardHeader className="pb-2">
+        <CardHeader className="py-2 px-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
@@ -178,7 +178,7 @@ function QueryEditor({
         </CardHeader>
         
         <CollapsibleContent>
-          <CardContent className="pt-2 space-y-4">
+          <CardContent className="pt-1 pb-3 px-3 space-y-3">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-xs">Modül</Label>
@@ -537,10 +537,10 @@ export function MultiQueryBuilder({ multiQuery, onChange }: MultiQueryBuilderPro
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Sorgular */}
-        <ScrollArea className="max-h-[500px]">
-          <div className="space-y-3">
+      <CardContent className="space-y-3 p-4">
+        {/* Sorgular - Kompakt scroll alanı */}
+        <ScrollArea className="max-h-[280px] pr-2">
+          <div className="space-y-2">
             {multiQuery.queries.map((query, index) => (
               <div key={query.id}>
                 <QueryEditor
@@ -554,8 +554,8 @@ export function MultiQueryBuilder({ multiQuery, onChange }: MultiQueryBuilderPro
                   canDelete={multiQuery.queries.length > 1}
                 />
                 {index < multiQuery.queries.length - 1 && (
-                  <div className="flex justify-center my-2">
-                    <ArrowDown className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex justify-center my-1">
+                    <ArrowDown className="h-3 w-3 text-muted-foreground" />
                   </div>
                 )}
               </div>
@@ -563,41 +563,42 @@ export function MultiQueryBuilder({ multiQuery, onChange }: MultiQueryBuilderPro
           </div>
         </ScrollArea>
         
-        {/* Birleştirmeler */}
+        {/* Birleştirmeler - Ayrı scroll alanı */}
         {multiQuery.queries.length >= 2 && (
           <>
-            <Separator />
-            <div className="space-y-3">
+            <Separator className="my-2" />
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium flex items-center gap-2">
-                  <Link2 className="h-4 w-4" />
+                <Label className="text-xs font-medium flex items-center gap-2">
+                  <Link2 className="h-3.5 w-3.5" />
                   Birleştirmeler
                 </Label>
-                <Button size="sm" variant="outline" onClick={addMerge}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Birleştirme Ekle
+                <Button size="sm" variant="outline" onClick={addMerge} className="h-7 text-xs px-2">
+                  <Plus className="h-3 w-3 mr-1" />
+                  Ekle
                 </Button>
               </div>
               
-              {multiQuery.merges.length > 0 ? (
-                <div className="space-y-2">
-                  {multiQuery.merges.map((merge, index) => (
-                    <MergeEditor
-                      key={index}
-                      merge={merge}
-                      queries={multiQuery.queries}
-                      onChange={(m) => updateMerge(index, m)}
-                      onDelete={() => deleteMerge(index)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-4 text-sm text-muted-foreground">
-                  <Link2 className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                  <p>Sorgular arasında bağlantı tanımlanmadı</p>
-                  <p className="text-xs">Birleştirme ekleyerek verileri ilişkilendirin</p>
-                </div>
-              )}
+              <ScrollArea className="max-h-[150px]">
+                {multiQuery.merges.length > 0 ? (
+                  <div className="space-y-1.5 pr-2">
+                    {multiQuery.merges.map((merge, index) => (
+                      <MergeEditor
+                        key={index}
+                        merge={merge}
+                        queries={multiQuery.queries}
+                        onChange={(m) => updateMerge(index, m)}
+                        onDelete={() => deleteMerge(index)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-3 text-xs text-muted-foreground">
+                    <Link2 className="h-6 w-6 mx-auto mb-1 opacity-30" />
+                    <p>Sorgular arasında bağlantı yok</p>
+                  </div>
+                )}
+              </ScrollArea>
             </div>
           </>
         )}

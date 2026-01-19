@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { UserSettingsProvider } from "@/contexts/UserSettingsContext";
+import { DiaDataCacheProvider } from "@/contexts/DiaDataCacheContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
@@ -24,6 +25,7 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <UserSettingsProvider>
+              <DiaDataCacheProvider>
               <Routes>
                 {/* Default redirect to dashboard */}
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -46,6 +48,7 @@ const App = () => (
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              </DiaDataCacheProvider>
             </UserSettingsProvider>
           </AuthProvider>
         </BrowserRouter>

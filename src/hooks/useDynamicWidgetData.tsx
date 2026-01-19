@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useDiaDataCache, generateCacheKey, SHARED_CACHE_KEYS } from '@/contexts/DiaDataCacheContext';
 import { WidgetBuilderConfig, AggregationType, CalculatedField, CalculationExpression, QueryMerge } from '@/lib/widgetBuilderTypes';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -193,6 +194,15 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
   const [rawData, setRawData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Cache context
+  const { 
+    getCachedData, 
+    setCachedData, 
+    sharedData, 
+    incrementCacheHit, 
+    incrementCacheMiss 
+  } = useDiaDataCache();
 
   const fetchData = useCallback(async () => {
     if (!config) {
@@ -249,36 +259,63 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
           fetchedData = applyMerge(fetchedData, rightData, merge);
         }
       } else {
-        // Tekli sorgu
-        const diaApiLimit = config.diaApi.parameters.limit;
-        const response = await fetch(`${SUPABASE_URL}/functions/v1/dia-api-test`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            module: config.diaApi.module,
-            method: config.diaApi.method,
-            // Limit: 0 veya undefined ise gönderme (limitsiz), pozitif ise gönder
-            ...(diaApiLimit && diaApiLimit > 0 && { limit: diaApiLimit }),
-            filters: config.diaApi.parameters.filters,
-            selectedColumns: Array.isArray(config.diaApi.parameters.selectedcolumns) 
-              ? config.diaApi.parameters.selectedcolumns 
-              : typeof config.diaApi.parameters.selectedcolumns === 'string'
-                ? config.diaApi.parameters.selectedcolumns.split(',').map((c: string) => c.trim())
-                : undefined,
-            sorts: config.diaApi.parameters.sorts,
-            orderby: config.diaApi.parameters.orderby,
-            returnAllData: true, // Tüm veriyi al
-          }),
-        });
+        // Tekli sorgu - Önce cache'e bak
+        const cacheKey = generateCacheKey(config.diaApi.module, config.diaApi.method, config.diaApi.parameters);
+        
+        // Özel durum: carikart_listele için sharedData'yı kontrol et
+        const isCariListele = config.diaApi.method === 'carikart_listele' || 
+                              config.diaApi.method === 'scf_carikart_listele';
+        
+        if (isCariListele && sharedData.cariListesi && sharedData.cariListesi.length > 0) {
+          console.log(`[Widget Cache] HIT - Shared cari listesi kullanılıyor: ${sharedData.cariListesi.length} kayıt`);
+          fetchedData = sharedData.cariListesi;
+          incrementCacheHit();
+        } else {
+          // Genel cache kontrolü
+          const cachedResult = getCachedData(cacheKey);
+          if (cachedResult && cachedResult.sampleData) {
+            console.log(`[Widget Cache] HIT - ${cacheKey}: ${cachedResult.sampleData.length} kayıt`);
+            fetchedData = cachedResult.sampleData;
+            incrementCacheHit();
+          } else {
+            // Cache miss - API çağrısı yap
+            console.log(`[Widget Cache] MISS - ${cacheKey} - Fetching...`);
+            incrementCacheMiss();
+            
+            const diaApiLimit = config.diaApi.parameters.limit;
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/dia-api-test`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify({
+                module: config.diaApi.module,
+                method: config.diaApi.method,
+                // Limit: 0 veya undefined ise gönderme (limitsiz), pozitif ise gönder
+                ...(diaApiLimit && diaApiLimit > 0 && { limit: diaApiLimit }),
+                filters: config.diaApi.parameters.filters,
+                selectedColumns: Array.isArray(config.diaApi.parameters.selectedcolumns) 
+                  ? config.diaApi.parameters.selectedcolumns 
+                  : typeof config.diaApi.parameters.selectedcolumns === 'string'
+                    ? config.diaApi.parameters.selectedcolumns.split(',').map((c: string) => c.trim())
+                    : undefined,
+                sorts: config.diaApi.parameters.sorts,
+                orderby: config.diaApi.parameters.orderby,
+                returnAllData: true, // Tüm veriyi al
+              }),
+            });
 
-        const result = await response.json();
-        if (!result.success) {
-          throw new Error(result.error || 'API hatası');
+            const result = await response.json();
+            if (!result.success) {
+              throw new Error(result.error || 'API hatası');
+            }
+            fetchedData = result.sampleData || [];
+            
+            // Sonucu cache'e kaydet
+            setCachedData(cacheKey, result, 5 * 60 * 1000);
+          }
         }
-        fetchedData = result.sampleData || [];
       }
 
       // Hesaplama alanlarını uygula
@@ -329,7 +366,7 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
     } finally {
       setIsLoading(false);
     }
-  }, [config]);
+  }, [config, getCachedData, setCachedData, sharedData, incrementCacheHit, incrementCacheMiss]);
 
   useEffect(() => {
     fetchData();
