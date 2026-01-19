@@ -1,6 +1,6 @@
 // CalculatedFieldBuilder - Görsel hesaplama alanı oluşturucu
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { CalculatedField, CalculationExpression, MathOperator, MATH_OPERATORS, MATH_FUNCTIONS, CALCULATION_TEMPLATES, FORMAT_OPTIONS } from '@/lib/widgetBuilderTypes';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
