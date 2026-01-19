@@ -88,6 +88,15 @@ export interface TableConfig {
   searchable?: boolean;
 }
 
+// Widget için kullanılabilir filtreler
+export interface WidgetFilterConfig {
+  field: string;         // DIA alan adı
+  label: string;         // UI etiketi
+  type: 'toggle' | 'multi-select' | 'dropdown' | 'range' | 'date-range';
+  options?: { value: any; label: string }[];
+  defaultValue?: any;
+}
+
 export interface WidgetBuilderConfig {
   diaApi: DiaApiConfig;
   visualization: {
@@ -96,7 +105,11 @@ export interface WidgetBuilderConfig {
     chart?: ChartConfig;
     table?: TableConfig;
   };
+  availableFilters?: WidgetFilterConfig[]; // Widget için tanımlı filtreler
   refreshInterval?: number; // dakika
+  // Raw mode için
+  rawMode?: boolean;
+  rawPayload?: string;
 }
 
 // Grafik tipleri listesi
@@ -127,27 +140,37 @@ export const AGGREGATION_TYPES: { id: AggregationType; name: string; description
   { id: 'last', name: 'Son', description: 'Son değer' },
 ];
 
-// DIA modülleri
+// DIA modülleri - genişletilmiş liste
 export const DIA_MODULES: { id: string; name: string; methods: string[] }[] = [
   { 
     id: 'scf', 
     name: 'Cari / Finans', 
-    methods: ['carikart_listele', 'carikart_bakiye_listele', 'cari_hareket_listele', 'cek_senet_listele'] 
+    methods: ['carikart_listele', 'carikart_bakiye_listele', 'cari_hareket_listele', 'cek_senet_listele', 'potansiyel_listele'] 
   },
   { 
     id: 'bcs', 
     name: 'Banka / Kasa', 
-    methods: ['banka_hesap_listele', 'kasa_listele', 'banka_hareket_listele'] 
+    methods: ['banka_hesap_listele', 'kasa_listele', 'banka_hareket_listele', 'kasa_hareket_listele'] 
   },
   { 
     id: 'fat', 
     name: 'Fatura', 
-    methods: ['fatura_listele', 'fatura_detay', 'irsaliye_listele'] 
+    methods: ['fatura_listele', 'fatura_detay', 'irsaliye_listele', 'siparis_listele'] 
   },
   { 
     id: 'stk', 
     name: 'Stok', 
-    methods: ['stok_listele', 'stok_hareket_listele', 'depo_listele'] 
+    methods: ['stok_listele', 'stok_hareket_listele', 'depo_listele', 'stok_bakiye_listele'] 
+  },
+  { 
+    id: 'gts', 
+    name: 'Görev / Aktivite', 
+    methods: ['gorev_listele', 'aktivite_listele', 'hatirlatma_listele'] 
+  },
+  { 
+    id: 'sis', 
+    name: 'Sistem', 
+    methods: ['kullanici_listele', 'parametre_listele'] 
   },
 ];
 
@@ -159,4 +182,13 @@ export const FORMAT_OPTIONS = [
   { id: 'count', name: 'Adet', example: '1.234' },
   { id: 'date', name: 'Tarih', example: '19.01.2026' },
   { id: 'text', name: 'Metin', example: 'Örnek metin' },
+];
+
+// Filtre tipleri
+export const FILTER_TYPES = [
+  { id: 'toggle', name: 'Toggle (Açık/Kapalı)', description: 'Evet/Hayır seçimi' },
+  { id: 'multi-select', name: 'Çoklu Seçim', description: 'Birden fazla değer seçimi' },
+  { id: 'dropdown', name: 'Dropdown', description: 'Tek değer seçimi' },
+  { id: 'range', name: 'Aralık', description: 'Sayısal aralık' },
+  { id: 'date-range', name: 'Tarih Aralığı', description: 'Başlangıç-bitiş tarihi' },
 ];

@@ -3,6 +3,16 @@ import { supabase } from '@/integrations/supabase/client';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
+export interface FieldStat {
+  type: string;
+  nullable: boolean;
+  distinctCount?: number;
+  sampleValues?: any[];
+  min?: number;
+  max?: number;
+  sum?: number;
+}
+
 export interface DiaApiTestRequest {
   module: string;
   method: string;
@@ -10,6 +20,9 @@ export interface DiaApiTestRequest {
   filters?: Record<string, any>;
   selectedColumns?: string[];
   orderby?: string;
+  // Raw mode için yeni alanlar
+  rawMode?: boolean;
+  rawPayload?: string;
 }
 
 export interface DiaApiTestResponse {
@@ -17,7 +30,9 @@ export interface DiaApiTestResponse {
   recordCount?: number;
   sampleFields?: string[];
   fieldTypes?: Record<string, string>;
+  fieldStats?: Record<string, FieldStat>;
   sampleData?: any[];
+  rawResponse?: any;
   error?: string;
 }
 

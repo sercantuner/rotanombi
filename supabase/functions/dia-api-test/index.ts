@@ -1,4 +1,5 @@
 // DIA API Test Edge Function - Widget Builder için API test aracı
+// Raw JSON mode ve gelişmiş alan analizi
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -16,6 +17,9 @@ interface TestApiRequest {
   filters?: Record<string, any>;
   selectedColumns?: string[];
   orderby?: string;
+  // Raw mode için yeni alanlar
+  rawMode?: boolean;
+  rawPayload?: string; // JSON string
 }
 
 interface TestApiResponse {
@@ -23,8 +27,20 @@ interface TestApiResponse {
   recordCount?: number;
   sampleFields?: string[];
   fieldTypes?: Record<string, string>;
+  fieldStats?: Record<string, FieldStat>; // Yeni: alan istatistikleri
   sampleData?: any[];
+  rawResponse?: any; // Raw mode için tam yanıt
   error?: string;
+}
+
+interface FieldStat {
+  type: string;
+  nullable: boolean;
+  distinctCount?: number;
+  sampleValues?: any[];
+  min?: number;
+  max?: number;
+  sum?: number;
 }
 
 // Field tipini belirle
@@ -44,10 +60,15 @@ function detectFieldType(value: any): string {
   return 'unknown';
 }
 
-// Tüm alanları ve tiplerini çıkar
-function extractFieldsAndTypes(data: any[]): { fields: string[]; fieldTypes: Record<string, string> } {
+// Tüm alanları, tiplerini ve istatistiklerini çıkar
+function extractFieldsAndTypes(data: any[]): { 
+  fields: string[]; 
+  fieldTypes: Record<string, string>;
+  fieldStats: Record<string, FieldStat>;
+} {
   const fieldSet = new Set<string>();
   const fieldTypes: Record<string, string> = {};
+  const fieldStats: Record<string, FieldStat> = {};
 
   for (const item of data) {
     if (typeof item !== 'object' || item === null) continue;
@@ -55,18 +76,70 @@ function extractFieldsAndTypes(data: any[]): { fields: string[]; fieldTypes: Rec
     for (const [key, value] of Object.entries(item)) {
       if (!fieldSet.has(key)) {
         fieldSet.add(key);
-        fieldTypes[key] = detectFieldType(value);
-      } else if (fieldTypes[key] === 'null' && value !== null) {
+        const type = detectFieldType(value);
+        fieldTypes[key] = type;
+        fieldStats[key] = {
+          type,
+          nullable: value === null || value === undefined,
+          distinctCount: 0,
+          sampleValues: [],
+        };
+        if (type === 'number' || type === 'number-string') {
+          const numVal = typeof value === 'number' ? value : parseFloat(value as string);
+          if (!isNaN(numVal)) {
+            fieldStats[key].min = numVal;
+            fieldStats[key].max = numVal;
+            fieldStats[key].sum = numVal;
+          }
+        }
+      } else {
+        // Nullable kontrolü güncelle
+        if (value === null || value === undefined) {
+          fieldStats[key].nullable = true;
+        }
         // Daha önce null olan alanın gerçek tipini güncelle
-        fieldTypes[key] = detectFieldType(value);
+        if (fieldTypes[key] === 'null' && value !== null) {
+          const newType = detectFieldType(value);
+          fieldTypes[key] = newType;
+          fieldStats[key].type = newType;
+        }
+        // Sayısal istatistikler
+        if (fieldTypes[key] === 'number' || fieldTypes[key] === 'number-string') {
+          const numVal = typeof value === 'number' ? value : parseFloat(value as string);
+          if (!isNaN(numVal)) {
+            fieldStats[key].min = Math.min(fieldStats[key].min ?? numVal, numVal);
+            fieldStats[key].max = Math.max(fieldStats[key].max ?? numVal, numVal);
+            fieldStats[key].sum = (fieldStats[key].sum ?? 0) + numVal;
+          }
+        }
       }
     }
   }
 
-  return {
-    fields: Array.from(fieldSet).sort(),
-    fieldTypes,
-  };
+  // Distinct değer sayısı ve örnekler
+  const fields = Array.from(fieldSet).sort();
+  for (const field of fields) {
+    const values = data.map(item => item[field]).filter(v => v !== null && v !== undefined);
+    const uniqueValues = [...new Set(values)];
+    fieldStats[field].distinctCount = uniqueValues.length;
+    fieldStats[field].sampleValues = uniqueValues.slice(0, 10); // İlk 10 benzersiz değer
+  }
+
+  return { fields, fieldTypes, fieldStats };
+}
+
+// Raw payload'daki placeholder'ları değiştir
+function replacePlaceholders(
+  payload: string, 
+  sessionId: string, 
+  firmaKodu: number, 
+  donemKodu: number
+): string {
+  return payload
+    .replace(/\{session_id\}/g, sessionId)
+    .replace(/"\{session_id\}"/g, `"${sessionId}"`)
+    .replace(/\{firma_kodu\}/g, String(firmaKodu))
+    .replace(/\{donem_kodu\}/g, String(donemKodu));
 }
 
 serve(async (req) => {
@@ -99,14 +172,16 @@ serve(async (req) => {
 
     // Request body'yi parse et
     const body: TestApiRequest = await req.json();
-    const { module, method, limit = 100, filters = {}, selectedColumns = [], orderby = '' } = body;
-
-    if (!module || !method) {
-      return new Response(
-        JSON.stringify({ success: false, error: "module ve method zorunludur" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const { 
+      module, 
+      method, 
+      limit = 100, 
+      filters = {}, 
+      selectedColumns = [], 
+      orderby = '',
+      rawMode = false,
+      rawPayload = ''
+    } = body;
 
     // DIA session al
     const diaResult = await getDiaSession(supabase, user.id);
@@ -119,36 +194,80 @@ serve(async (req) => {
     }
 
     const { sessionId, sunucuAdi, firmaKodu, donemKodu } = diaResult.session;
-    const diaUrl = `https://${sunucuAdi}.ws.dia.com.tr/api/v3/${module}/json`;
 
-    // DIA payload oluştur
-    const methodKey = `${module}_${method}`;
-    const payload: Record<string, any> = {
-      [methodKey]: {
-        session_id: sessionId,
-        firma_kodu: firmaKodu,
-        donem_kodu: donemKodu,
-        limit: Math.min(limit, 100), // Test için max 100 kayıt
-        offset: 0,
+    let diaUrl: string;
+    let payload: Record<string, any>;
+
+    // Raw mode veya normal mode
+    if (rawMode && rawPayload) {
+      // Raw mode - kullanıcının yazdığı JSON
+      console.log(`Raw mode DIA API test for user ${user.id}`);
+      
+      // Placeholder'ları değiştir
+      const processedPayload = replacePlaceholders(rawPayload, sessionId, firmaKodu, donemKodu);
+      
+      try {
+        payload = JSON.parse(processedPayload);
+      } catch (parseError) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Geçersiz JSON formatı" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
-    };
 
-    // Filtreleri ekle
-    if (Object.keys(filters).length > 0) {
-      payload[methodKey].filters = JSON.stringify(filters);
+      // Method key'den modülü belirle
+      const methodKey = Object.keys(payload)[0];
+      if (!methodKey) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Payload boş" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Modülü method key'den çıkar (örn: scf_carikart_listele -> scf)
+      const detectedModule = methodKey.split('_')[0];
+      diaUrl = `https://${sunucuAdi}.ws.dia.com.tr/api/v3/${detectedModule}/json`;
+
+    } else {
+      // Normal mode
+      if (!module || !method) {
+        return new Response(
+          JSON.stringify({ success: false, error: "module ve method zorunludur" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      diaUrl = `https://${sunucuAdi}.ws.dia.com.tr/api/v3/${module}/json`;
+
+      // DIA payload oluştur
+      const methodKey = `${module}_${method}`;
+      payload = {
+        [methodKey]: {
+          session_id: sessionId,
+          firma_kodu: firmaKodu,
+          donem_kodu: donemKodu,
+          limit: Math.min(limit, 500), // Test için max 500 kayıt
+          offset: 0,
+        }
+      };
+
+      // Filtreleri ekle
+      if (Object.keys(filters).length > 0) {
+        payload[methodKey].filters = JSON.stringify(filters);
+      }
+
+      // Seçili kolonları ekle
+      if (selectedColumns.length > 0) {
+        payload[methodKey].selectedcolumns = selectedColumns.join(',');
+      }
+
+      // Sıralama ekle
+      if (orderby) {
+        payload[methodKey].sorts = orderby;
+      }
+
+      console.log(`Testing DIA API: ${module}/${method} for user ${user.id}`);
     }
-
-    // Seçili kolonları ekle
-    if (selectedColumns.length > 0) {
-      payload[methodKey].selectedcolumns = selectedColumns.join(',');
-    }
-
-    // Sıralama ekle
-    if (orderby) {
-      payload[methodKey].sorts = orderby;
-    }
-
-    console.log(`Testing DIA API: ${module}/${method} for user ${user.id}`);
 
     // DIA API çağrısı
     const response = await fetch(diaUrl, {
@@ -166,7 +285,54 @@ serve(async (req) => {
 
     const result = await response.json();
 
-    // Hata kontrolü
+    // Raw mode ise tam yanıtı döndür
+    if (rawMode) {
+      // Hata kontrolü
+      if (result.code && result.code !== "200") {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: result.msg || `DIA hata kodu: ${result.code}`,
+            rawResponse: result
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Veriyi bul
+      let data: any[] = [];
+      if (result.result) {
+        if (Array.isArray(result.result)) {
+          data = result.result;
+        } else if (typeof result.result === 'object') {
+          const firstKey = Object.keys(result.result)[0];
+          if (firstKey && Array.isArray(result.result[firstKey])) {
+            data = result.result[firstKey];
+          }
+        }
+      } else if (result.msg && Array.isArray(result.msg)) {
+        data = result.msg;
+      }
+
+      const { fields, fieldTypes, fieldStats } = data.length > 0 
+        ? extractFieldsAndTypes(data) 
+        : { fields: [], fieldTypes: {}, fieldStats: {} };
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          recordCount: data.length,
+          sampleFields: fields,
+          fieldTypes,
+          fieldStats,
+          sampleData: data.slice(0, 10),
+          rawResponse: result
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Normal mode - mevcut mantık
     if (result.code && result.code !== "200") {
       return new Response(
         JSON.stringify({ 
@@ -177,15 +343,13 @@ serve(async (req) => {
       );
     }
 
-    // Veriyi bul - DIA yanıtı farklı yapılarda olabilir
+    // Veriyi bul
     let data: any[] = [];
     
     if (result.result) {
-      // result içinde array varsa
       if (Array.isArray(result.result)) {
         data = result.result;
       } else if (typeof result.result === 'object') {
-        // İç içe array olabilir
         const firstKey = Object.keys(result.result)[0];
         if (firstKey && Array.isArray(result.result[firstKey])) {
           data = result.result[firstKey];
@@ -202,6 +366,7 @@ serve(async (req) => {
           recordCount: 0,
           sampleFields: [],
           fieldTypes: {},
+          fieldStats: {},
           sampleData: [],
           error: 'Kayıt bulunamadı'
         }),
@@ -209,17 +374,18 @@ serve(async (req) => {
       );
     }
 
-    // Alanları ve tiplerini çıkar
-    const { fields, fieldTypes } = extractFieldsAndTypes(data);
+    // Alanları, tiplerini ve istatistiklerini çıkar
+    const { fields, fieldTypes, fieldStats } = extractFieldsAndTypes(data);
 
-    // Örnek veri (ilk 5 kayıt)
-    const sampleData = data.slice(0, 5);
+    // Örnek veri (ilk 10 kayıt)
+    const sampleData = data.slice(0, 10);
 
     const responseData: TestApiResponse = {
       success: true,
       recordCount: data.length,
       sampleFields: fields,
       fieldTypes,
+      fieldStats,
       sampleData,
     };
 

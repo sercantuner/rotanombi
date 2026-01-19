@@ -20,6 +20,7 @@ import { LokasyonDagilimi } from './LokasyonDagilimi';
 import { CariDonusumTrend } from './CariDonusumTrend';
 import { SatisElemaniPerformans } from './SatisElemaniPerformans';
 import { TopCustomers } from './TopCustomers';
+import { CariListesi } from '@/components/customers/CariListesi';
 
 // Icons for StatCards
 import { 
@@ -326,6 +327,15 @@ export function DynamicWidgetRenderer({
       case 'grafik_cari_donusum_trend':
         return (
           <CariDonusumTrend
+            cariler={cariler || []}
+            isLoading={isLoading}
+          />
+        );
+
+      // ========== CARİ LİSTE WIDGETS ==========
+      case 'liste_cari':
+        return (
+          <CariListesi
             cariler={cariler || []}
             isLoading={isLoading}
           />
