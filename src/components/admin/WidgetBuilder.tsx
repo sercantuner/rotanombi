@@ -1,6 +1,6 @@
 // Widget Builder - Gelişmiş widget oluşturma ve düzenleme aracı
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useWidgetAdmin } from '@/hooks/useWidgets';
 import { Widget, WidgetFormData, PAGE_CATEGORIES, WIDGET_SIZES } from '@/lib/widgetTypes';
 import {
@@ -15,11 +15,15 @@ import {
   WidgetFilterConfig,
   DiaApiFilter,
   DiaApiSort,
+  MultiQueryConfig,
+  CalculatedField,
 } from '@/lib/widgetBuilderTypes';
 import { testDiaApi, DiaApiTestResponse, FieldStat } from '@/lib/diaApiTest';
 import { FilterBuilder } from './FilterBuilder';
 import { SortBuilder } from './SortBuilder';
 import { ColumnSelector } from './ColumnSelector';
+import { MultiQueryBuilder } from './MultiQueryBuilder';
+import { CalculatedFieldBuilder } from './CalculatedFieldBuilder';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,7 +40,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Wand2, Code, BarChart3, Settings2, Play, Save, Plus, Trash2, 
   Hash, TrendingUp, Activity, PieChart, Circle, Table, List, Filter, LayoutGrid, Crosshair, Radar, CheckCircle, XCircle, AlertCircle, Edit,
-  FileJson, MousePointer, Target, Columns
+  FileJson, MousePointer, Target, Columns, Database, Calculator
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -129,6 +133,31 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   // Aktif hedef alan (alan eşleme için)
   const [activeTarget, setActiveTarget] = useState<'xAxis' | 'yAxis' | 'legend' | 'value' | 'tooltip' | null>(null);
   
+  // Çoklu sorgu ve hesaplama alanları
+  const [multiQuery, setMultiQuery] = useState<MultiQueryConfig | null>(null);
+  const [calculatedFields, setCalculatedFields] = useState<CalculatedField[]>([]);
+  
+  // Görselleştirme için kullanılabilir alanlar (seçilen kolonlar + hesaplama alanları)
+  const availableFieldsForVisualization = useMemo(() => {
+    const baseFields = selectedColumnsArray.length > 0 
+      ? selectedColumnsArray 
+      : testResult?.sampleFields || [];
+    
+    const calculatedFieldNames = calculatedFields.map(cf => cf.name);
+    return [...baseFields, ...calculatedFieldNames];
+  }, [selectedColumnsArray, testResult?.sampleFields, calculatedFields]);
+  
+  // Sayısal alanlar
+  const numericFieldsForVisualization = useMemo(() => {
+    const fieldTypes = testResult?.fieldTypes || {};
+    return availableFieldsForVisualization.filter(f => {
+      const type = fieldTypes[f];
+      // Hesaplanan alanlar her zaman sayısal
+      if (calculatedFields.some(cf => cf.name === f)) return true;
+      return type === 'number' || type === 'number-string';
+    });
+  }, [availableFieldsForVisualization, testResult?.fieldTypes, calculatedFields]);
+  
   // Düzenleme modunda widget verilerini yükle
   useEffect(() => {
     if (editWidget && open) {
@@ -196,6 +225,8 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
     setActiveTab('api');
     setApiMode('normal');
     setActiveTarget(null);
+    setMultiQuery(null);
+    setCalculatedFields([]);
   };
 
   const handleModuleChange = (module: string) => {
@@ -370,6 +401,8 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
           selectedcolumns: selectedColumnsArray.length > 0 ? selectedColumnsArray : undefined,
         },
       },
+      multiQuery: multiQuery || undefined,
+      calculatedFields: calculatedFields.length > 0 ? calculatedFields : undefined,
       visualization: {
         ...config.visualization,
         chart: config.visualization.chart ? {
@@ -454,21 +487,29 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="api" className="gap-2">
-              <Code className="h-4 w-4" />
-              API Yapılandırma
+          <TabsList className="grid w-full grid-cols-6">
+            <TabsTrigger value="api" className="gap-1 text-xs">
+              <Code className="h-3.5 w-3.5" />
+              API
             </TabsTrigger>
-            <TabsTrigger value="visualization" className="gap-2">
-              <BarChart3 className="h-4 w-4" />
-              Görselleştirme
+            <TabsTrigger value="merge" className="gap-1 text-xs">
+              <Database className="h-3.5 w-3.5" />
+              Birleştirme
             </TabsTrigger>
-            <TabsTrigger value="settings" className="gap-2">
-              <Settings2 className="h-4 w-4" />
-              Widget Ayarları
+            <TabsTrigger value="calculation" className="gap-1 text-xs">
+              <Calculator className="h-3.5 w-3.5" />
+              Hesaplama
             </TabsTrigger>
-            <TabsTrigger value="preview" className="gap-2">
-              <Play className="h-4 w-4" />
+            <TabsTrigger value="visualization" className="gap-1 text-xs">
+              <BarChart3 className="h-3.5 w-3.5" />
+              Görsel
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="gap-1 text-xs">
+              <Settings2 className="h-3.5 w-3.5" />
+              Ayarlar
+            </TabsTrigger>
+            <TabsTrigger value="preview" className="gap-1 text-xs">
+              <Play className="h-3.5 w-3.5" />
               Önizleme
             </TabsTrigger>
           </TabsList>
@@ -701,6 +742,36 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
               </Card>
             </TabsContent>
 
+            {/* VERİ BİRLEŞTİRME */}
+            <TabsContent value="merge" className="m-0 space-y-4">
+              <MultiQueryBuilder
+                multiQuery={multiQuery}
+                onChange={setMultiQuery}
+              />
+            </TabsContent>
+
+            {/* HESAPLAMA ALANLARI */}
+            <TabsContent value="calculation" className="m-0 space-y-4">
+              <CalculatedFieldBuilder
+                calculatedFields={calculatedFields}
+                onChange={setCalculatedFields}
+                availableFields={testResult?.sampleFields || selectedColumnsArray}
+                fieldTypes={testResult?.fieldTypes}
+                sampleData={testResult?.sampleData}
+              />
+              
+              {calculatedFields.length > 0 && (
+                <Card className="bg-green-500/5 border-green-500/30">
+                  <CardContent className="pt-4">
+                    <div className="flex items-center gap-2 text-sm text-green-600">
+                      <CheckCircle className="h-4 w-4" />
+                      <span>{calculatedFields.length} hesaplama alanı tanımlandı - Görselleştirme sekmesinde kullanılabilir</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+
             {/* GÖRSELLEŞTİRME */}
             <TabsContent value="visualization" className="m-0 space-y-4">
               <Card>
@@ -734,16 +805,49 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">KPI Ayarları</CardTitle>
+                    <CardDescription>
+                      Görselleştirmede kullanılacak alanları seçin
+                      {availableFieldsForVisualization.length === 0 && (
+                        <span className="text-amber-600 ml-2">(Önce API Testi yapın)</span>
+                      )}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Değer Alanı</Label>
-                        <Input
-                          placeholder="toplambakiye"
-                          value={config.visualization.kpi?.valueField || ''}
-                          onChange={(e) => handleKpiConfigChange('valueField', e.target.value)}
-                        />
+                        {availableFieldsForVisualization.length > 0 ? (
+                          <Select 
+                            value={config.visualization.kpi?.valueField || ''}
+                            onValueChange={(v) => handleKpiConfigChange('valueField', v)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Alan seçin..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {numericFieldsForVisualization.length > 0 ? (
+                                <>
+                                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Sayısal Alanlar</div>
+                                  {numericFieldsForVisualization.map(f => (
+                                    <SelectItem key={f} value={f}>
+                                      {calculatedFields.some(cf => cf.name === f) ? `📊 ${f} (hesaplanan)` : f}
+                                    </SelectItem>
+                                  ))}
+                                </>
+                              ) : (
+                                availableFieldsForVisualization.map(f => (
+                                  <SelectItem key={f} value={f}>{f}</SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input
+                            placeholder="toplambakiye"
+                            value={config.visualization.kpi?.valueField || ''}
+                            onChange={(e) => handleKpiConfigChange('valueField', e.target.value)}
+                          />
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label>Agregasyon</Label>
@@ -811,6 +915,11 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Grafik Ayarları</CardTitle>
+                    <CardDescription>
+                      {availableFieldsForVisualization.length === 0 
+                        ? 'Önce API Testi yaparak alanları yükleyin' 
+                        : `${availableFieldsForVisualization.length} alan kullanılabilir`}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {/* Bar, Line, Area için X ve Y ekseni */}
@@ -818,19 +927,58 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>X Ekseni Alanı</Label>
-                          <Input
-                            placeholder="sehir, tarih, ozelkod1..."
-                            value={xAxisField}
-                            onChange={(e) => setXAxisField(e.target.value)}
-                          />
+                          {availableFieldsForVisualization.length > 0 ? (
+                            <Select value={xAxisField} onValueChange={setXAxisField}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Alan seçin..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {availableFieldsForVisualization.map(f => (
+                                  <SelectItem key={f} value={f}>
+                                    {calculatedFields.some(cf => cf.name === f) ? `📊 ${f}` : f}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              placeholder="sehir, tarih, ozelkod1..."
+                              value={xAxisField}
+                              onChange={(e) => setXAxisField(e.target.value)}
+                            />
+                          )}
                         </div>
                         <div className="space-y-2">
-                          <Label>Y Ekseni Alanı</Label>
-                          <Input
-                            placeholder="toplambakiye, adet..."
-                            value={yAxisField}
-                            onChange={(e) => setYAxisField(e.target.value)}
-                          />
+                          <Label>Y Ekseni Alanı (Değer)</Label>
+                          {availableFieldsForVisualization.length > 0 ? (
+                            <Select value={yAxisField} onValueChange={setYAxisField}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Alan seçin..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {numericFieldsForVisualization.length > 0 ? (
+                                  <>
+                                    <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Sayısal Alanlar</div>
+                                    {numericFieldsForVisualization.map(f => (
+                                      <SelectItem key={f} value={f}>
+                                        {calculatedFields.some(cf => cf.name === f) ? `📊 ${f} (hesaplanan)` : f}
+                                      </SelectItem>
+                                    ))}
+                                  </>
+                                ) : (
+                                  availableFieldsForVisualization.map(f => (
+                                    <SelectItem key={f} value={f}>{f}</SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              placeholder="toplambakiye, adet..."
+                              value={yAxisField}
+                              onChange={(e) => setYAxisField(e.target.value)}
+                            />
+                          )}
                         </div>
                       </div>
                     )}
@@ -840,27 +988,61 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>Legend Alanı (Dilimler)</Label>
-                          <Input
-                            placeholder="sektor, kaynak, ozelkod1..."
-                            value={legendField}
-                            onChange={(e) => setLegendField(e.target.value)}
-                          />
+                          {availableFieldsForVisualization.length > 0 ? (
+                            <Select value={legendField} onValueChange={setLegendField}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Alan seçin..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {availableFieldsForVisualization.map(f => (
+                                  <SelectItem key={f} value={f}>{f}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              placeholder="sektor, kaynak, ozelkod1..."
+                              value={legendField}
+                              onChange={(e) => setLegendField(e.target.value)}
+                            />
+                          )}
                         </div>
                         <div className="space-y-2">
                           <Label>Değer Alanı</Label>
-                          <Input
-                            placeholder="toplambakiye, adet..."
-                            value={yAxisField}
-                            onChange={(e) => setYAxisField(e.target.value)}
-                          />
+                          {availableFieldsForVisualization.length > 0 ? (
+                            <Select value={yAxisField} onValueChange={setYAxisField}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Alan seçin..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {numericFieldsForVisualization.length > 0 ? (
+                                  numericFieldsForVisualization.map(f => (
+                                    <SelectItem key={f} value={f}>
+                                      {calculatedFields.some(cf => cf.name === f) ? `📊 ${f} (hesaplanan)` : f}
+                                    </SelectItem>
+                                  ))
+                                ) : (
+                                  availableFieldsForVisualization.map(f => (
+                                    <SelectItem key={f} value={f}>{f}</SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              placeholder="toplambakiye, adet..."
+                              value={yAxisField}
+                              onChange={(e) => setYAxisField(e.target.value)}
+                            />
+                          )}
                         </div>
                       </div>
                     )}
 
                     <div className="space-y-2">
-                      <Label>Tooltip Alanları (Virgülle ayırın)</Label>
+                      <Label>Tooltip Alanları</Label>
                       <Input
-                        placeholder="cariadi, telefon, email"
+                        placeholder="cariadi, telefon, email (virgülle ayırın)"
                         value={tooltipFields}
                         onChange={(e) => setTooltipFields(e.target.value)}
                       />
