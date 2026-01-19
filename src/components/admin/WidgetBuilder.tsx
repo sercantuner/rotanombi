@@ -28,6 +28,7 @@ import { ColumnSelector } from './ColumnSelector';
 import { MultiQueryBuilder } from './MultiQueryBuilder';
 import { CalculatedFieldBuilder } from './CalculatedFieldBuilder';
 import { WidgetPreviewRenderer } from './WidgetPreviewRenderer';
+import { WidgetTemplates, WidgetTemplate, WIDGET_TEMPLATES } from './WidgetTemplates';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,7 +45,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Wand2, Code, BarChart3, Settings2, Play, Save, Plus, Trash2, 
   Hash, TrendingUp, Activity, PieChart, Circle, Table, List, Filter, LayoutGrid, Crosshair, Radar, CheckCircle, XCircle, AlertCircle, Edit,
-  FileJson, MousePointer, Target, Columns, Database, Calculator
+  FileJson, MousePointer, Target, Columns, Database, Calculator, BookTemplate, Sparkles
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -98,11 +99,9 @@ const RAW_JSON_TEMPLATE = `{
 
 export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: WidgetBuilderProps) {
   const { createWidget, updateWidget, isLoading } = useWidgetAdmin();
-  const [activeTab, setActiveTab] = useState('api');
-  const [apiMode, setApiMode] = useState<'normal' | 'raw'>('normal');
-  
-  // Düzenleme modu
   const isEditMode = !!editWidget;
+  const [activeTab, setActiveTab] = useState(isEditMode ? 'api' : 'templates');
+  const [apiMode, setApiMode] = useState<'normal' | 'raw'>('normal');
   
   // Widget temel bilgileri
   const [widgetKey, setWidgetKey] = useState('');
@@ -141,6 +140,9 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   const [multiQuery, setMultiQuery] = useState<MultiQueryConfig | null>(null);
   const [calculatedFields, setCalculatedFields] = useState<CalculatedField[]>([]);
   
+  // Şablon seçimi
+  const [selectedTemplate, setSelectedTemplate] = useState<WidgetTemplate | null>(null);
+  
   // Görselleştirme için kullanılabilir alanlar (seçilen kolonlar + hesaplama alanları)
   const availableFieldsForVisualization = useMemo(() => {
     const baseFields = selectedColumnsArray.length > 0 
@@ -171,6 +173,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
       setWidgetIcon(editWidget.icon || 'BarChart3');
       setWidgetSize(editWidget.size);
       setDefaultPage(editWidget.default_page);
+      setActiveTab('api'); // Edit modunda API sekmesi ile başla
       
       // builder_config varsa yükle
       if (editWidget.builder_config) {
@@ -226,11 +229,68 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
     setTooltipFields('');
     setWidgetFilters([]);
     setTestResult(null);
-    setActiveTab('api');
+    setActiveTab('templates');
     setApiMode('normal');
     setActiveTarget(null);
     setMultiQuery(null);
     setCalculatedFields([]);
+    setSelectedTemplate(null);
+  };
+  
+  // Şablon uygulama
+  const handleApplyTemplate = (template: WidgetTemplate) => {
+    setSelectedTemplate(template);
+    
+    // Widget temel bilgilerini ayarla
+    setWidgetKey(template.suggestedKey);
+    setWidgetName(template.suggestedName);
+    setWidgetDescription(template.description);
+    setWidgetIcon(template.icon);
+    
+    // API config'i ayarla
+    if (template.config.diaApi) {
+      setConfig(prev => ({
+        ...prev,
+        diaApi: {
+          ...prev.diaApi,
+          module: template.config.diaApi!.module,
+          method: template.config.diaApi!.method,
+          parameters: template.config.diaApi!.parameters || { limit: 0 },
+        },
+        visualization: template.config.visualization || prev.visualization,
+      }));
+    }
+    
+    // Filtreleri ayarla
+    if (template.filters) {
+      setApiFilters(template.filters);
+    }
+    
+    // Sıralamaları ayarla
+    if (template.sorts) {
+      setApiSorts(template.sorts);
+    }
+    
+    // Seçili kolonları ayarla
+    if (template.selectedColumns) {
+      setSelectedColumnsArray(template.selectedColumns);
+    }
+    
+    // Chart ayarlarını ayarla
+    if (template.config.visualization?.chart) {
+      const chart = template.config.visualization.chart;
+      if (chart.xAxis?.field) setXAxisField(chart.xAxis.field);
+      if (chart.yAxis?.field) setYAxisField(chart.yAxis.field);
+      if (chart.legendField) setLegendField(chart.legendField);
+    }
+    
+    // Kategori ayarla
+    if (template.category === 'cari') setDefaultPage('cari');
+    else if (template.category === 'finans') setDefaultPage('finans');
+    else if (template.category === 'satis') setDefaultPage('satis');
+    else setDefaultPage('dashboard');
+    
+    toast.success(`"${template.name}" şablonu uygulandı!`);
   };
 
   const handleModuleChange = (module: string) => {
@@ -491,7 +551,13 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className={cn("grid w-full", isEditMode ? "grid-cols-6" : "grid-cols-7")}>
+            {!isEditMode && (
+              <TabsTrigger value="templates" className="gap-1 text-xs">
+                <Sparkles className="h-3.5 w-3.5" />
+                Şablonlar
+              </TabsTrigger>
+            )}
             <TabsTrigger value="api" className="gap-1 text-xs">
               <Code className="h-3.5 w-3.5" />
               API
@@ -519,6 +585,50 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
           </TabsList>
 
           <ScrollArea className="flex-1 mt-4 pr-4" style={{ maxHeight: 'calc(90vh - 200px)' }}>
+            {/* ŞABLONLAR */}
+            <TabsContent value="templates" className="m-0 space-y-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                    Hazır Widget Şablonları
+                  </CardTitle>
+                  <CardDescription>
+                    Hızlıca widget oluşturmak için hazır şablonlardan birini seçin
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <WidgetTemplates
+                    onSelectTemplate={handleApplyTemplate}
+                    selectedTemplateId={selectedTemplate?.id}
+                  />
+                  
+                  {selectedTemplate && (
+                    <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <CheckCircle className="h-5 w-5 text-primary" />
+                          <div>
+                            <p className="text-sm font-medium">"{selectedTemplate.name}" şablonu seçildi</p>
+                            <p className="text-xs text-muted-foreground">
+                              API ve görselleştirme ayarları otomatik yapılandırıldı
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => setActiveTab('api')}
+                        >
+                          Devam Et
+                          <TrendingUp className="h-4 w-4 ml-2" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             {/* API YAPILANDIRMA */}
             <TabsContent value="api" className="m-0 space-y-4">
               <Card>
