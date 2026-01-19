@@ -28,7 +28,12 @@ import {
   Users, 
   UserCheck,
   ShoppingCart,
-  Package
+  Package,
+  Wallet,
+  Clock,
+  CreditCard,
+  FileText,
+  Landmark
 } from 'lucide-react';
 
 interface DynamicWidgetRendererProps {
@@ -77,31 +82,36 @@ export function DynamicWidgetRenderer({
 
   const { genelRapor, finansRapor, satisRapor, cariler, yaslandirma, bankaHesaplari, toplamBankaBakiye } = data;
 
+  // Calculate derived values
+  const toplamAlacak = genelRapor?.toplamAlacak || 0;
+  const toplamBorc = genelRapor?.toplamBorc || 0;
+  const netBakiye = genelRapor?.netBakiye || (toplamAlacak - toplamBorc);
+  const gecikimisAlacak = genelRapor?.gecikimisAlacak || genelRapor?.vadesiGecmis || 0;
+  const gecikimisBorc = genelRapor?.gecikimisBorc || 0;
+
   // Render widget based on ID
   const renderWidget = (): React.ReactNode => {
     switch (widgetId) {
-      // KPI Cards
+      // ========== KPI WIDGETS ==========
       case 'kpi_toplam_alacak':
         return (
           <StatCard
             title="Toplam Alacak"
-            value={formatCurrency(finansRapor?.toplamAlacak || 0)}
-            icon={TrendingUp}
+            value={formatCurrency(toplamAlacak)}
+            icon={Wallet}
             trend="up"
-            trendValue="+5.2%"
-            variant="default"
+            variant="success"
           />
         );
       
-      case 'kpi_geciken_alacak':
+      case 'kpi_gecikmis_alacak':
         return (
           <StatCard
             title="Gecikmiş Alacak"
-            value={formatCurrency(finansRapor?.gecikmisToplam || 0)}
-            icon={AlertTriangle}
-            trend="down"
-            trendValue="-2.1%"
-            variant="destructive"
+            value={formatCurrency(gecikimisAlacak)}
+            icon={Clock}
+            trend="neutral"
+            variant="warning"
           />
         );
       
@@ -109,9 +119,21 @@ export function DynamicWidgetRenderer({
         return (
           <StatCard
             title="Toplam Borç"
-            value={formatCurrency(finansRapor?.toplamBorc || 0)}
-            icon={TrendingDown}
-            variant="warning"
+            value={formatCurrency(toplamBorc)}
+            icon={CreditCard}
+            trend="down"
+            variant="destructive"
+          />
+        );
+
+      case 'kpi_gecikmis_borc':
+        return (
+          <StatCard
+            title="Gecikmiş Borç"
+            value={formatCurrency(gecikimisBorc)}
+            icon={AlertTriangle}
+            trend="neutral"
+            variant="destructive"
           />
         );
       
@@ -119,9 +141,10 @@ export function DynamicWidgetRenderer({
         return (
           <StatCard
             title="Net Bakiye"
-            value={formatCurrency((finansRapor?.toplamAlacak || 0) - (finansRapor?.toplamBorc || 0))}
+            value={formatCurrency(netBakiye)}
             icon={Scale}
-            variant="default"
+            trend={netBakiye >= 0 ? "up" : "down"}
+            variant={netBakiye >= 0 ? "success" : "destructive"}
           />
         );
       
@@ -129,9 +152,10 @@ export function DynamicWidgetRenderer({
         return (
           <StatCard
             title="Müşteri Sayısı"
-            value={genelRapor?.musteriSayisi?.toString() || '0'}
+            value={(genelRapor?.musteriSayisi || 0).toLocaleString('tr-TR')}
             icon={Users}
-            variant="success"
+            trend="neutral"
+            variant="default"
           />
         );
       
@@ -145,14 +169,23 @@ export function DynamicWidgetRenderer({
           />
         );
 
-      case 'kpi_gunluk_satis':
+      case 'kpi_net_satis':
         return (
           <StatCard
-            title="Günlük Satış"
-            value={formatCurrency(satisRapor?.gunlukSatis || 0)}
+            title="Net Satış"
+            value={formatCurrency(satisRapor?.netSatis || 0)}
             icon={ShoppingCart}
             trend="up"
-            trendValue="+8.5%"
+            variant="success"
+          />
+        );
+
+      case 'kpi_brut_satis':
+        return (
+          <StatCard
+            title="Brüt Satış"
+            value={formatCurrency(satisRapor?.brutSatis || 0)}
+            icon={TrendingUp}
             variant="default"
           />
         );
@@ -167,20 +200,61 @@ export function DynamicWidgetRenderer({
           />
         );
 
-      // Summary widgets
-      case 'liste_gunluk_ozet':
+      case 'kpi_fatura_sayisi':
+        return (
+          <StatCard
+            title="Fatura Sayısı"
+            value={(satisRapor?.faturaSayisi || 0).toLocaleString('tr-TR')}
+            icon={FileText}
+            variant="default"
+          />
+        );
+
+      case 'kpi_banka_bakiyesi':
+        return (
+          <StatCard
+            title="Banka Bakiyesi"
+            value={formatCurrency(toplamBankaBakiye || finansRapor?.toplamBankaBakiyesi || 0)}
+            icon={Landmark}
+            variant="success"
+          />
+        );
+
+      // ========== SUMMARY WIDGETS ==========
+      case 'ozet_gunluk':
         return <GunlukOzet isLoading={isLoading} />;
-      
-      case 'liste_bugun_vadeler':
+
+      // ========== LIST WIDGETS ==========
+      case 'liste_bugun_vade':
         return <BugununVadeleri cariler={cariler || []} isLoading={isLoading} />;
       
       case 'liste_aranacak_musteriler':
         return <AranacakMusteriler cariler={cariler || []} isLoading={isLoading} />;
       
       case 'liste_kritik_stok':
-        return <KritikStokUyarilari />;
+        return <KritikStokUyarilari isLoading={isLoading} />;
 
-      // Chart widgets
+      case 'liste_en_borclu':
+        return <TopCustomers cariler={cariler || []} isLoading={isLoading} />;
+
+      case 'liste_banka_hesaplari':
+        return (
+          <BankaHesaplari 
+            bankaHesaplari={bankaHesaplari || []} 
+            toplamBakiye={toplamBankaBakiye || 0}
+            isLoading={isLoading}
+          />
+        );
+      
+      case 'liste_satis_elemani_performans':
+        return (
+          <SatisElemaniPerformans
+            satisElemanlari={genelRapor?.satisElemaniDagilimi || []}
+            isLoading={isLoading}
+          />
+        );
+
+      // ========== CHART WIDGETS ==========
       case 'grafik_vade_yaslandirma':
         return (
           <VadeYaslandirmasi
@@ -195,15 +269,6 @@ export function DynamicWidgetRenderer({
               gelecek90: 0,
               gelecek90Plus: 0,
             }}
-            isLoading={isLoading}
-          />
-        );
-      
-      case 'grafik_banka_hesaplari':
-        return (
-          <BankaHesaplari 
-            bankaHesaplari={bankaHesaplari || []} 
-            toplamBakiye={toplamBankaBakiye || 0}
             isLoading={isLoading}
           />
         );
@@ -240,25 +305,13 @@ export function DynamicWidgetRenderer({
           />
         );
       
-      case 'grafik_cari_donusum':
+      case 'grafik_cari_donusum_trend':
         return (
           <CariDonusumTrend
             cariler={cariler || []}
             isLoading={isLoading}
           />
         );
-      
-      case 'grafik_satis_elemani':
-        return (
-          <SatisElemaniPerformans
-            satisElemanlari={genelRapor?.satisElemanlari || []}
-            isLoading={isLoading}
-          />
-        );
-
-      // List widgets
-      case 'liste_top_musteriler':
-        return <TopCustomers cariler={cariler || []} isLoading={isLoading} />;
 
       default:
         console.warn(`No renderer for widget: ${widgetId}`);
@@ -269,6 +322,11 @@ export function DynamicWidgetRenderer({
         );
     }
   };
+
+  // KPI widgets don't need wrapper (rendered directly)
+  if (widget.type === 'kpi') {
+    return renderWidget();
+  }
 
   return (
     <WidgetWrapper 

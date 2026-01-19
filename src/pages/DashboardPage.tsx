@@ -1,33 +1,19 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/Header';
-import { StatCard } from '@/components/dashboard/StatCard';
-import { TopCustomers } from '@/components/dashboard/TopCustomers';
-import { BankaHesaplari } from '@/components/dashboard/BankaHesaplari';
-import { VadeYaslandirmasi } from '@/components/dashboard/VadeYaslandirmasi';
-import { SatisElemaniPerformans } from '@/components/dashboard/SatisElemaniPerformans';
 import { VadeDetayListesi } from '@/components/dashboard/VadeDetayListesi';
-import { KritikStokUyarilari } from '@/components/dashboard/KritikStokUyarilari';
-import { BugununVadeleri } from '@/components/dashboard/BugununVadeleri';
-import { AranacakMusteriler } from '@/components/dashboard/AranacakMusteriler';
-import { GunlukOzet } from '@/components/dashboard/GunlukOzet';
+import { DynamicWidgetRenderer } from '@/components/dashboard/DynamicWidgetRenderer';
 import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
+import { useUserSettings } from '@/contexts/UserSettingsContext';
 import { diaGetGenelRapor, diaGetFinansRapor, getDiaConnectionInfo, DiaConnectionInfo } from '@/lib/diaClient';
 import type { DiaGenelRapor, DiaFinansRapor, VadeYaslandirma, DiaCari } from '@/lib/diaClient';
+import { getDefaultLayoutForPage, WidgetLayout, WidgetSize } from '@/lib/widgetRegistry';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { 
-  Wallet, 
-  CreditCard, 
-  AlertTriangle,
-  Scale,
-  Plug,
-  RefreshCw,
-  Clock,
-  Users
-} from 'lucide-react';
+import { Plug, RefreshCw } from 'lucide-react';
 
 function DashboardContent() {
   const navigate = useNavigate();
+  const { getPageLayout } = useUserSettings();
   const [genelRapor, setGenelRapor] = useState<DiaGenelRapor | null>(null);
   const [finansRapor, setFinansRapor] = useState<DiaFinansRapor | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -111,43 +97,51 @@ function DashboardContent() {
     return genelRapor?.cariler || [];
   }, [genelRapor?.cariler]);
 
-  // Büyük rakamlar için akıllı kısaltma
-  const formatCurrency = (value: number) => {
-    const absValue = Math.abs(value);
-    if (absValue >= 1000000000) {
-      return `₺${(value / 1000000000).toFixed(2)}B`;
+  // Yaslandirma data
+  const yaslandirma: VadeYaslandirma = useMemo(() => {
+    return genelRapor?.yaslandirma || finansRapor?.yaslandirma || {
+      vade90Plus: 0,
+      vade90: 0,
+      vade60: 0,
+      vade30: 0,
+      guncel: 0,
+      gelecek30: 0,
+      gelecek60: 0,
+      gelecek90: 0,
+      gelecek90Plus: 0,
+    };
+  }, [genelRapor?.yaslandirma, finansRapor?.yaslandirma]);
+
+  // Widget data object for DynamicWidgetRenderer
+  const widgetData = useMemo(() => ({
+    genelRapor,
+    finansRapor,
+    cariler,
+    yaslandirma,
+    bankaHesaplari: finansRapor?.bankaHesaplari || [],
+    toplamBankaBakiye: finansRapor?.toplamBankaBakiyesi || 0,
+  }), [genelRapor, finansRapor, cariler, yaslandirma]);
+
+  // Get page layout
+  const pageLayout = getPageLayout('dashboard');
+  const defaultLayout = getDefaultLayoutForPage('dashboard');
+  const widgets = pageLayout.widgets.length > 0 ? pageLayout.widgets : defaultLayout.widgets;
+
+  // Group widgets by size for proper grid layout
+  const getGridClass = (size: WidgetSize | undefined): string => {
+    switch (size) {
+      case 'sm': return 'col-span-1';
+      case 'md': return 'col-span-1 lg:col-span-2';
+      case 'lg': return 'col-span-1 lg:col-span-3';
+      case 'xl': return 'col-span-1 lg:col-span-4';
+      case 'full': return 'col-span-full';
+      default: return 'col-span-1';
     }
-    if (absValue >= 1000000) {
-      return `₺${(value / 1000000).toFixed(2)}M`;
-    }
-    if (absValue >= 100000) {
-      return `₺${(value / 1000).toFixed(0)}K`;
-    }
-    return `₺${value.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  // KPI Değerleri
-  const toplamAlacak = genelRapor?.toplamAlacak || 0;
-  const toplamBorc = genelRapor?.toplamBorc || 0;
-  const netBakiye = genelRapor?.netBakiye || 0;
-  const vadesiGecmis = genelRapor?.vadesiGecmis || 0;
-  const toplamBanka = finansRapor?.toplamBankaBakiyesi || 0;
-  const musteriSayisi = genelRapor?.musteriSayisi || 0;
-  
-  const gecikimisAlacak = genelRapor?.gecikimisAlacak || vadesiGecmis;
-  const gecikimisBorc = genelRapor?.gecikimisBorc || 0;
-
-  const yaslandirma: VadeYaslandirma = genelRapor?.yaslandirma || finansRapor?.yaslandirma || {
-    vade90Plus: 0,
-    vade90: 0,
-    vade60: 0,
-    vade30: 0,
-    guncel: 0,
-    gelecek30: 0,
-    gelecek60: 0,
-    gelecek90: 0,
-    gelecek90Plus: 0,
-  };
+  // Separate KPI widgets from other widgets for special grid treatment
+  const kpiWidgets = widgets.filter(w => w.id.startsWith('kpi_') && w.visible !== false);
+  const otherWidgets = widgets.filter(w => !w.id.startsWith('kpi_') && w.visible !== false);
 
   return (
     <div className="flex-1 flex flex-col">
@@ -210,98 +204,44 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* KPI Stats Grid - 6 KPI */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-          <StatCard
-            title="Toplam Alacak"
-            value={formatCurrency(toplamAlacak)}
-            icon={Wallet}
-            trend="up"
-            variant="success"
-          />
-          <StatCard
-            title="Gecikmiş Alacak"
-            value={formatCurrency(gecikimisAlacak)}
-            icon={Clock}
-            trend="neutral"
-            variant="warning"
-          />
-          <StatCard
-            title="Toplam Borç"
-            value={formatCurrency(toplamBorc)}
-            icon={CreditCard}
-            trend="down"
-            variant="destructive"
-          />
-          <StatCard
-            title="Gecikmiş Borç"
-            value={formatCurrency(gecikimisBorc)}
-            icon={AlertTriangle}
-            trend="neutral"
-            variant="destructive"
-          />
-          <StatCard
-            title="Net Bakiye"
-            value={formatCurrency(netBakiye)}
-            icon={Scale}
-            trend={netBakiye >= 0 ? "up" : "down"}
-            variant={netBakiye >= 0 ? "success" : "destructive"}
-          />
-          <StatCard
-            title="Müşteri Sayısı"
-            value={musteriSayisi.toLocaleString('tr-TR')}
-            icon={Users}
-            trend="neutral"
-            variant="default"
-          />
+        {/* KPI Stats Grid - Special 6 column layout */}
+        {kpiWidgets.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+            {kpiWidgets
+              .sort((a, b) => a.order - b.order)
+              .map((widget) => (
+                <DynamicWidgetRenderer
+                  key={widget.id}
+                  widgetId={widget.id}
+                  currentPage="dashboard"
+                  data={widgetData}
+                  isLoading={isLoading}
+                />
+              ))}
+          </div>
+        )}
+
+        {/* Other Widgets - Dynamic Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
+          {otherWidgets
+            .sort((a, b) => a.order - b.order)
+            .map((widget) => (
+              <div key={widget.id} className={getGridClass(widget.size)}>
+                <DynamicWidgetRenderer
+                  widgetId={widget.id}
+                  currentPage="dashboard"
+                  data={widgetData}
+                  isLoading={isLoading}
+                />
+              </div>
+            ))}
         </div>
 
-        {/* Günlük Özet */}
-        <div className="mb-6">
-          <GunlukOzet isLoading={isLoading} />
-        </div>
-
-        {/* Kritik Uyarılar Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          <KritikStokUyarilari isLoading={isLoading} />
-          <BugununVadeleri cariler={cariler} isLoading={isLoading} />
-          <AranacakMusteriler cariler={cariler} isLoading={isLoading} />
-        </div>
-
-        {/* Nakit Akış Projeksiyonu */}
-        <div className="mb-6">
-          <VadeYaslandirmasi 
-            yaslandirma={yaslandirma} 
-            isLoading={isLoading} 
-          />
-        </div>
-
-        {/* Vade Detay Listesi - Shows when a bar is clicked */}
+        {/* Vade Detay Listesi - Shows when a bar is clicked (cross-filtering) */}
         <VadeDetayListesi 
           cariler={cariler} 
           yaslandirma={yaslandirma}
         />
-
-        {/* Top Customers + Banka Hesapları */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6 mt-6">
-          <TopCustomers 
-            cariler={cariler} 
-            isLoading={isLoading} 
-          />
-          <BankaHesaplari 
-            bankaHesaplari={finansRapor?.bankaHesaplari || []} 
-            toplamBakiye={toplamBanka}
-            isLoading={isLoading} 
-          />
-        </div>
-
-        {/* Satış Elemanı Performans */}
-        <div className="mb-6">
-          <SatisElemaniPerformans 
-            satisElemanlari={genelRapor?.satisElemaniDagilimi || []} 
-            isLoading={isLoading} 
-          />
-        </div>
       </main>
     </div>
   );
