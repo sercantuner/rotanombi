@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/Header';
 import { VadeDetayListesi } from '@/components/dashboard/VadeDetayListesi';
 import { DraggableWidgetGrid } from '@/components/dashboard/DraggableWidgetGrid';
+import { WidgetMarketplace } from '@/components/dashboard/WidgetMarketplace';
 import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
 import { diaGetGenelRapor, diaGetFinansRapor, getDiaConnectionInfo, DiaConnectionInfo } from '@/lib/diaClient';
@@ -13,7 +14,7 @@ import { Plug, RefreshCw } from 'lucide-react';
 
 function DashboardContent() {
   const navigate = useNavigate();
-  const { getPageLayout, updateWidgetOrder } = useUserSettings();
+  const { getPageLayout, updateWidgetOrder, refreshSettings } = useUserSettings();
   const [genelRapor, setGenelRapor] = useState<DiaGenelRapor | null>(null);
   const [finansRapor, setFinansRapor] = useState<DiaFinansRapor | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -192,6 +193,16 @@ function DashboardContent() {
             </span>
           </div>
         )}
+
+        {/* Widget Marketplace */}
+        <div className="mb-4 flex justify-end">
+          <WidgetMarketplace
+            currentPage="dashboard"
+            onWidgetAdded={async () => {
+              await refreshSettings();
+            }}
+          />
+        </div>
 
         {/* Draggable Widget Grid */}
         <DraggableWidgetGrid

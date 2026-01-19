@@ -17,6 +17,10 @@ import * as LucideIcons from 'lucide-react';
 
 interface WidgetMarketplaceProps {
   currentPage: WidgetCategory;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onWidgetAdded?: (widgetKey: string) => void;
+  hideTrigger?: boolean;
 }
 
 // Dinamik icon renderer
@@ -43,14 +47,24 @@ const categoryColors: Record<WidgetCategory, string> = {
   cari: 'bg-purple-500/10 text-purple-500',
 };
 
-export function WidgetMarketplace({ currentPage }: WidgetMarketplaceProps) {
+export function WidgetMarketplace({ 
+  currentPage, 
+  open: controlledOpen, 
+  onOpenChange: controlledOnOpenChange,
+  onWidgetAdded,
+  hideTrigger = false 
+}: WidgetMarketplaceProps) {
   const { widgets, isLoading } = useWidgets();
   const { getPageLayout, addWidgetToPage } = useUserSettings();
   
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [addingWidgetId, setAddingWidgetId] = useState<string | null>(null);
+
+  // Kontrollü veya kontrolsüz mod
+  const isOpen = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setIsOpen = controlledOnOpenChange || setInternalOpen;
 
   // Mevcut sayfadaki widget'ları al
   const currentLayout = getPageLayout(currentPage);
@@ -88,18 +102,23 @@ export function WidgetMarketplace({ currentPage }: WidgetMarketplaceProps) {
   const handleAddWidget = async (widgetKey: string) => {
     setAddingWidgetId(widgetKey);
     await addWidgetToPage(widgetKey, currentPage);
+    if (onWidgetAdded) {
+      await onWidgetAdded(widgetKey);
+    }
     setAddingWidgetId(null);
     setIsOpen(false);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
-          <Plus className="h-4 w-4" />
-          Widget Ekle
-        </Button>
-      </DialogTrigger>
+      {!hideTrigger && (
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-2">
+            <Plus className="h-4 w-4" />
+            Widget Ekle
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-3xl max-h-[85vh]">
         <DialogHeader>
           <DialogTitle>Widget Ekle</DialogTitle>
