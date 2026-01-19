@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/usePermissions';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -9,13 +10,16 @@ import {
   Settings, 
   LogOut,
   BarChart3,
-  User
+  User,
+  Shield,
+  Boxes
 } from 'lucide-react';
 
 interface NavItem {
   path: string;
   label: string;
   icon: React.ElementType;
+  adminOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -24,12 +28,18 @@ const navItems: NavItem[] = [
   { path: '/finans', label: 'Finans Raporu', icon: Wallet },
   { path: '/cari', label: 'Cari Hesaplar', icon: Users },
   { path: '/ayarlar', label: 'Ayarlar', icon: Settings },
+  { path: '/admin', label: 'Kullanıcı Yönetimi', icon: Shield, adminOnly: true },
+  { path: '/super-admin', label: 'Widget Yönetimi', icon: Boxes, adminOnly: true },
 ];
 
 export function Sidebar() {
   const { user, logout } = useAuth();
+  const { isAdmin } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Filter nav items based on admin status
+  const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
   const handleNavigation = (path: string) => {
     navigate(path);
@@ -57,7 +67,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
           

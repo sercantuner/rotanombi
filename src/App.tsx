@@ -13,6 +13,7 @@ import { FinancePage } from "@/pages/FinancePage";
 import { CustomersPage } from "@/pages/CustomersPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import AdminPage from "@/pages/AdminPage";
+import SuperAdminPage from "@/pages/SuperAdminPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
                 <Route path="/cari" element={<AppLayout><CustomersPage /></AppLayout>} />
                 <Route path="/ayarlar" element={<AppLayout><SettingsPage /></AppLayout>} />
                 <Route path="/admin" element={<AppLayout><AdminPage /></AppLayout>} />
+                <Route path="/super-admin" element={<AppLayout><SuperAdminPage /></AppLayout>} />
                 
                 {/* Alias for settings (English path) */}
                 <Route path="/settings" element={<Navigate to="/ayarlar" replace />} />
