@@ -13,9 +13,10 @@ interface HeaderProps {
   isRefreshing?: boolean;
   currentPage?: WidgetCategory;
   showWidgetPicker?: boolean;
+  actions?: React.ReactNode;
 }
 
-export function Header({ title, subtitle, onRefresh, isRefreshing, currentPage, showWidgetPicker = false }: HeaderProps) {
+export function Header({ title, subtitle, onRefresh, isRefreshing, currentPage, showWidgetPicker = false, actions }: HeaderProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [commandOpen, setCommandOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
@@ -35,6 +36,8 @@ export function Header({ title, subtitle, onRefresh, isRefreshing, currentPage, 
 
       {/* Right: Actions */}
       <div className="flex items-center gap-3">
+        {/* Custom Actions */}
+        {actions}
         {/* Search - Opens Command Palette */}
         <div className="relative hidden md:block">
           <button
