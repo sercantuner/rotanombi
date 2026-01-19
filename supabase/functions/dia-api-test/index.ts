@@ -269,21 +269,63 @@ serve(async (req) => {
       console.log(`Testing DIA API: ${module}/${method} for user ${user.id}`);
     }
 
-    // DIA API çağrısı
-    const response = await fetch(diaUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    // DIA API çağrısını retry mekanizmasıyla yap
+    const userId = user!.id;
+    
+    async function makeDiaRequest(currentPayload: Record<string, any>, currentUrl: string, retryCount = 0): Promise<any> {
+      const response = await fetch(currentUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(currentPayload),
+      });
 
-    if (!response.ok) {
-      return new Response(
-        JSON.stringify({ success: false, error: `DIA API hatası: ${response.status}` }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      if (!response.ok) {
+        throw new Error(`DIA API hatası: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      // INVALID_SESSION kontrolü - retry mekanizması
+      const isInvalidSession = 
+        (result.code && result.code !== "200" && 
+         (result.msg?.includes('INVALID_SESSION') || result.msg?.includes('SESSION'))) ||
+        (typeof result.msg === 'string' && result.msg.includes('INVALID_SESSION'));
+
+      if (isInvalidSession && retryCount === 0) {
+        console.log(`INVALID_SESSION detected for user ${userId}, clearing session and retrying...`);
+        
+        // Session'ı temizle
+        await supabase
+          .from("profiles")
+          .update({
+            dia_session_id: null,
+            dia_session_expires: null,
+          })
+          .eq("user_id", userId);
+
+        // Yeni session al
+        const newDiaResult = await getDiaSession(supabase, userId);
+        
+        if (!newDiaResult.success || !newDiaResult.session) {
+          throw new Error(newDiaResult.error || "DIA yeniden bağlantı başarısız");
+        }
+
+        // Payload'daki session_id'yi güncelle
+        const newSessionId = newDiaResult.session.sessionId;
+        const methodKey = Object.keys(currentPayload)[0];
+        
+        if (currentPayload[methodKey]?.session_id) {
+          currentPayload[methodKey].session_id = newSessionId;
+        }
+
+        console.log(`Retrying DIA API call with new session for user ${userId}`);
+        return makeDiaRequest(currentPayload, currentUrl, retryCount + 1);
+      }
+
+      return result;
     }
 
-    const result = await response.json();
+    const result = await makeDiaRequest(payload, diaUrl);
 
     // Raw mode ise tam yanıtı döndür
     if (rawMode) {
