@@ -11,8 +11,10 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Shield, Users, UserPlus, Settings, Trash2, Edit, Search, Crown, Eye, Pencil } from 'lucide-react';
+import { Shield, Users, UserPlus, Settings, Trash2, Edit, Search, Crown, Eye, Pencil, LayoutGrid } from 'lucide-react';
+import { WidgetPermissionsPanel } from '@/components/admin/WidgetPermissionsPanel';
 import type { Database } from '@/integrations/supabase/types';
 
 type AppRole = Database['public']['Enums']['app_role'];
@@ -260,92 +262,112 @@ export default function AdminPage() {
         </Card>
       </div>
 
-      {/* Users Table */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Kullanıcılar</CardTitle>
-              <CardDescription>Sistemdeki tüm kullanıcıları görüntüleyin ve yönetin</CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Kullanıcı ara..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 w-[250px]"
-                />
+      {/* Tabs for different sections */}
+      <Tabs defaultValue="users" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="users" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Kullanıcı Yönetimi
+          </TabsTrigger>
+          <TabsTrigger value="widgets" className="flex items-center gap-2">
+            <LayoutGrid className="h-4 w-4" />
+            Widget Yetkileri
+          </TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="users">
+          {/* Users Table */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Kullanıcılar</CardTitle>
+                  <CardDescription>Sistemdeki tüm kullanıcıları görüntüleyin ve yönetin</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Kullanıcı ara..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-9 w-[250px]"
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Kullanıcı</TableHead>
-                <TableHead>E-posta</TableHead>
-                <TableHead>Rol</TableHead>
-                <TableHead>Kayıt Tarihi</TableHead>
-                <TableHead className="text-right">İşlemler</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredUsers.map((userItem) => (
-                <TableRow key={userItem.id}>
-                  <TableCell className="font-medium">
-                    {userItem.display_name || 'İsimsiz Kullanıcı'}
-                  </TableCell>
-                  <TableCell>{userItem.email}</TableCell>
-                  <TableCell>
-                    <Select
-                      value={userItem.role}
-                      onValueChange={(value: AppRole) => updateUserRole(userItem.user_id, value)}
-                      disabled={userItem.user_id === user?.id}
-                    >
-                      <SelectTrigger className="w-[140px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">
-                          <div className="flex items-center gap-2">
-                            <Crown className="w-3 h-3" /> Admin
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="user">
-                          <div className="flex items-center gap-2">
-                            <Users className="w-3 h-3" /> Kullanıcı
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="viewer">
-                          <div className="flex items-center gap-2">
-                            <Eye className="w-3 h-3" /> İzleyici
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    {new Date(userItem.created_at).toLocaleDateString('tr-TR')}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openPermissionsDialog(userItem)}
-                    >
-                      <Settings className="w-4 h-4 mr-1" />
-                      İzinler
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Kullanıcı</TableHead>
+                    <TableHead>E-posta</TableHead>
+                    <TableHead>Rol</TableHead>
+                    <TableHead>Kayıt Tarihi</TableHead>
+                    <TableHead className="text-right">İşlemler</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredUsers.map((userItem) => (
+                    <TableRow key={userItem.id}>
+                      <TableCell className="font-medium">
+                        {userItem.display_name || 'İsimsiz Kullanıcı'}
+                      </TableCell>
+                      <TableCell>{userItem.email}</TableCell>
+                      <TableCell>
+                        <Select
+                          value={userItem.role}
+                          onValueChange={(value: AppRole) => updateUserRole(userItem.user_id, value)}
+                          disabled={userItem.user_id === user?.id}
+                        >
+                          <SelectTrigger className="w-[140px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="admin">
+                              <div className="flex items-center gap-2">
+                                <Crown className="w-3 h-3" /> Admin
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="user">
+                              <div className="flex items-center gap-2">
+                                <Users className="w-3 h-3" /> Kullanıcı
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="viewer">
+                              <div className="flex items-center gap-2">
+                                <Eye className="w-3 h-3" /> İzleyici
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        {new Date(userItem.created_at).toLocaleDateString('tr-TR')}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openPermissionsDialog(userItem)}
+                        >
+                          <Settings className="w-4 h-4 mr-1" />
+                          Modül İzinleri
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="widgets">
+          <WidgetPermissionsPanel />
+        </TabsContent>
+      </Tabs>
 
       {/* Permissions Dialog */}
       <Dialog open={isPermissionsOpen} onOpenChange={setIsPermissionsOpen}>
