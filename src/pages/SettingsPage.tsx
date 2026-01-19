@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUserSettings } from '@/contexts/UserSettingsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { diaTestConnection, getDiaConnectionInfo } from '@/lib/diaClient';
 import { toast } from 'sonner';
@@ -19,11 +20,13 @@ import {
   XCircle,
   Eye,
   EyeOff,
-  Plug
+  Plug,
+  FlaskConical
 } from 'lucide-react';
 
 export function SettingsPage() {
   const { user } = useAuth();
+  const { useMockData, setUseMockData } = useUserSettings();
   const [activeTab, setActiveTab] = useState('genel');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -59,6 +62,7 @@ export function SettingsPage() {
 
   const tabs = [
     { id: 'genel', label: 'Genel', icon: User },
+    { id: 'demo', label: 'Demo Modu', icon: FlaskConical },
     { id: 'dia', label: 'DIA Bağlantısı', icon: Plug },
     { id: 'sunucu', label: 'Bağlantı', icon: Server },
     { id: 'bildirimler', label: 'Bildirimler', icon: Bell },
@@ -325,6 +329,72 @@ export function SettingsPage() {
                     )}
                     Kaydet
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Demo Mode Settings */}
+            {activeTab === 'demo' && (
+              <div className="glass-card rounded-xl p-6 animate-slide-up">
+                <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
+                  <FlaskConical className="w-5 h-5 text-amber-500" />
+                  Demo Modu
+                </h3>
+
+                <div className="space-y-6">
+                  {/* Demo Mode Toggle */}
+                  <div className="p-4 rounded-lg bg-secondary/50">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">Demo Verileri Kullan</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Aktif olduğunda tüm raporlar gerçekçi demo verileri ile gösterilir.
+                          Sunum ve demo amaçlı kullanın.
+                        </p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer" 
+                          checked={useMockData}
+                          onChange={(e) => setUseMockData(e.target.checked)}
+                        />
+                        <div className="w-11 h-6 bg-secondary rounded-full peer peer-checked:bg-amber-500 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Current Status */}
+                  <div className={`p-4 rounded-lg ${useMockData ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-success/10 border border-success/30'}`}>
+                    <div className="flex items-center gap-3">
+                      {useMockData ? (
+                        <FlaskConical className="w-6 h-6 text-amber-500" />
+                      ) : (
+                        <CheckCircle2 className="w-6 h-6 text-success" />
+                      )}
+                      <div>
+                        <p className="font-medium">
+                          {useMockData ? 'Demo Modu Aktif' : 'Gerçek Veriler'}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {useMockData 
+                            ? 'Tüm dashboard ve raporlar demo verileri ile gösterilmektedir' 
+                            : 'Veriler DIA ERP sisteminden çekilmektedir'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Info Box */}
+                  <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                    <h4 className="font-medium text-primary mb-2">Demo Modu Hakkında</h4>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      <li>• Demo modunda 500+ gerçekçi cari hesap verisi gösterilir</li>
+                      <li>• Satış, finans ve cari raporları simüle edilir</li>
+                      <li>• Ayarlarınız ve kişiselleştirmeleriniz korunur</li>
+                      <li>• Demo modunu kapatarak gerçek verilere dönebilirsiniz</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             )}
