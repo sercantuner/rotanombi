@@ -1,25 +1,67 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/Header';
 import { VadeDetayListesi } from '@/components/dashboard/VadeDetayListesi';
-import { DraggableWidgetGrid } from '@/components/dashboard/DraggableWidgetGrid';
-import { WidgetMarketplace } from '@/components/dashboard/WidgetMarketplace';
+import { ContainerBasedDashboard } from '@/components/dashboard/ContainerBasedDashboard';
 import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { diaGetGenelRapor, diaGetFinansRapor, getDiaConnectionInfo, DiaConnectionInfo } from '@/lib/diaClient';
 import type { DiaGenelRapor, DiaFinansRapor, VadeYaslandirma, DiaCari } from '@/lib/diaClient';
-import { getDefaultLayoutForPage } from '@/lib/widgetRegistry';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Plug, RefreshCw } from 'lucide-react';
 
 function DashboardContent() {
   const navigate = useNavigate();
-  const { getPageLayout, updateWidgetOrder, refreshSettings } = useUserSettings();
+  const { user } = useAuth();
+  const { refreshSettings } = useUserSettings();
   const [genelRapor, setGenelRapor] = useState<DiaGenelRapor | null>(null);
   const [finansRapor, setFinansRapor] = useState<DiaFinansRapor | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [diaConnectionInfo, setDiaConnectionInfo] = useState<DiaConnectionInfo | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [dashboardPageId, setDashboardPageId] = useState<string | null>(null);
+
+  // Dashboard sayfası ID'sini al veya oluştur
+  useEffect(() => {
+    const getOrCreateDashboardPage = async () => {
+      if (!user) return;
+
+      // Önce mevcut dashboard sayfasını ara
+      const { data: existingPage } = await supabase
+        .from('user_pages')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('slug', 'main-dashboard')
+        .single();
+
+      if (existingPage) {
+        setDashboardPageId(existingPage.id);
+        return;
+      }
+
+      // Yoksa oluştur
+      const { data: newPage, error } = await supabase
+        .from('user_pages')
+        .insert({
+          user_id: user.id,
+          name: 'Ana Dashboard',
+          slug: 'main-dashboard',
+          icon: 'LayoutDashboard',
+          sort_order: 0,
+          is_active: true,
+        })
+        .select('id')
+        .single();
+
+      if (newPage) {
+        setDashboardPageId(newPage.id);
+      }
+    };
+
+    getOrCreateDashboardPage();
+  }, [user]);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -123,16 +165,6 @@ function DashboardContent() {
     toplamBankaBakiye: finansRapor?.toplamBankaBakiyesi || 0,
   }), [genelRapor, finansRapor, cariler, yaslandirma]);
 
-  // Get page layout
-  const pageLayout = getPageLayout('dashboard');
-  const defaultLayout = getDefaultLayoutForPage('dashboard');
-  const widgets = pageLayout.widgets.length > 0 ? pageLayout.widgets : defaultLayout.widgets;
-
-  // Handle widget reorder
-  const handleReorder = useCallback(async (newOrder: string[]) => {
-    await updateWidgetOrder('dashboard', newOrder);
-  }, [updateWidgetOrder]);
-
   return (
     <div className="flex-1 flex flex-col">
       <Header 
@@ -141,7 +173,7 @@ function DashboardContent() {
         onRefresh={fetchData}
         isRefreshing={isLoading}
         currentPage="dashboard"
-        showWidgetPicker={true}
+        showWidgetPicker={false}
       />
 
       <main className="flex-1 p-6 overflow-auto">
@@ -194,24 +226,18 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* Widget Marketplace */}
-        <div className="mb-4 flex justify-end">
-          <WidgetMarketplace
-            currentPage="dashboard"
-            onWidgetAdded={async () => {
-              await refreshSettings();
-            }}
+        {/* Container Based Dashboard */}
+        {dashboardPageId ? (
+          <ContainerBasedDashboard
+            pageId={dashboardPageId}
+            widgetData={widgetData}
+            isLoading={isLoading}
           />
-        </div>
-
-        {/* Draggable Widget Grid */}
-        <DraggableWidgetGrid
-          widgets={widgets}
-          currentPage="dashboard"
-          data={widgetData}
-          isLoading={isLoading}
-          onReorder={handleReorder}
-        />
+        ) : (
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        )}
 
         {/* Vade Detay Listesi - Shows when a bar is clicked (cross-filtering) */}
         <div className="mt-6">
