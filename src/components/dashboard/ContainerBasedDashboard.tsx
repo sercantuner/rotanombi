@@ -84,12 +84,30 @@ function SortableContainer({
 
 export function ContainerBasedDashboard({ pageId, widgetData = {}, isLoading = false }: ContainerBasedDashboardProps) {
   const { user } = useAuth();
-  const { containers, addContainer, deleteContainer, reorderContainers, refreshContainers } = usePageContainers(pageId);
+  const { containers, addContainer, deleteContainer, reorderContainers, refreshContainers, isLoading: containersLoading } = usePageContainers(pageId);
   const [isDragMode, setIsDragMode] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [localContainers, setLocalContainers] = useState<PageContainer[]>([]);
   const [containerPickerOpen, setContainerPickerOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [defaultContainersCreated, setDefaultContainersCreated] = useState(false);
+
+  // Varsayılan container'ları oluştur
+  useEffect(() => {
+    const createDefaultContainers = async () => {
+      if (containersLoading || defaultContainersCreated) return;
+      if (containers.length === 0 && pageId) {
+        // 5'li KPI satırı oluştur
+        await addContainer('kpi_row_5', 'KPI Özeti');
+        // 2'li grafik alanı oluştur
+        await addContainer('chart_half', 'Grafik Alanı');
+        refreshContainers();
+        setDefaultContainersCreated(true);
+      }
+    };
+
+    createDefaultContainers();
+  }, [containers.length, containersLoading, pageId, defaultContainersCreated]);
 
   useEffect(() => {
     if (!isDragMode) {
@@ -151,28 +169,12 @@ export function ContainerBasedDashboard({ pageId, widgetData = {}, isLoading = f
 
   const activeContainer = activeId ? localContainers.find(c => c.id === activeId) : null;
 
-  // Eğer hiç container yoksa boş durum göster
-  if (containers.length === 0 && !isDragMode) {
+  // Yükleniyor durumu
+  if (containersLoading) {
     return (
-      <Card className="border-dashed">
-        <CardContent className="py-12 text-center">
-          <LayoutGrid className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium mb-2">Dashboard Boş</h3>
-          <p className="text-muted-foreground mb-4">
-            Dashboard'unuzu oluşturmak için container ekleyin
-          </p>
-          <Button onClick={() => setContainerPickerOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Container Ekle
-          </Button>
-          
-          <ContainerPicker
-            open={containerPickerOpen}
-            onOpenChange={setContainerPickerOpen}
-            onSelectContainer={handleAddContainer}
-          />
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
     );
   }
 

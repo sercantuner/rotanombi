@@ -173,7 +173,6 @@ export function usePageContainers(pageId: string | null) {
 
       const newContainer = data as unknown as PageContainer;
       setContainers(prev => [...prev, newContainer]);
-      toast.success('Konteyner eklendi');
       return newContainer;
     } catch (error) {
       console.error('Error adding container:', error);
