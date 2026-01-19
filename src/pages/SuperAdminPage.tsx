@@ -60,6 +60,7 @@ export default function SuperAdminPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [editingWidget, setEditingWidget] = useState<Widget | null>(null);
+  const [builderEditWidget, setBuilderEditWidget] = useState<Widget | null>(null);
   const [formData, setFormData] = useState<WidgetFormData>(getEmptyFormData());
 
   // Erişim kontrolü
@@ -285,10 +286,24 @@ export default function SuperAdminPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => openForm(widget)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          {widget.builder_config ? (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => {
+                                setBuilderEditWidget(widget);
+                                setIsBuilderOpen(true);
+                              }}
+                              title="Widget Builder ile Düzenle"
+                            >
+                              <Wand2 className="h-4 w-4 text-primary" />
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" size="icon" onClick={() => openForm(widget)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
@@ -544,8 +559,12 @@ export default function SuperAdminPage() {
       {/* Widget Builder */}
       <WidgetBuilder
         open={isBuilderOpen}
-        onOpenChange={setIsBuilderOpen}
+        onOpenChange={(open) => {
+          setIsBuilderOpen(open);
+          if (!open) setBuilderEditWidget(null);
+        }}
         onSave={() => refetch()}
+        editWidget={builderEditWidget}
       />
     </div>
   );
