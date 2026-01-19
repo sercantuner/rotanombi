@@ -1,6 +1,6 @@
 // MultiQueryBuilder - Çoklu sorgu ve birleştirme yapılandırma
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { 
   DiaApiQuery, 
   QueryMerge, 
