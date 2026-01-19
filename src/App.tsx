@@ -12,6 +12,7 @@ import { SalesPage } from "@/pages/SalesPage";
 import { FinancePage } from "@/pages/FinancePage";
 import { CustomersPage } from "@/pages/CustomersPage";
 import { SettingsPage } from "@/pages/SettingsPage";
+import AdminPage from "@/pages/AdminPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => (
                 <Route path="/finans" element={<AppLayout><FinancePage /></AppLayout>} />
                 <Route path="/cari" element={<AppLayout><CustomersPage /></AppLayout>} />
                 <Route path="/ayarlar" element={<AppLayout><SettingsPage /></AppLayout>} />
+                <Route path="/admin" element={<AppLayout><AdminPage /></AppLayout>} />
                 
                 {/* Alias for settings (English path) */}
                 <Route path="/settings" element={<Navigate to="/ayarlar" replace />} />

@@ -3,7 +3,7 @@ import { Building2, AlertTriangle, Users } from 'lucide-react';
 import type { DiaCari } from '@/lib/diaClient';
 import { useDashboardFilters } from '@/contexts/DashboardFilterContext';
 
-interface Props {
+export interface TopCustomersProps {
   cariler: DiaCari[];
   isLoading?: boolean;
 }
@@ -20,7 +20,7 @@ function getRiskLabel(skor: number): string {
   return 'düşük';
 }
 
-export function TopCustomers({ cariler, isLoading }: Props) {
+export function TopCustomers({ cariler, isLoading }: TopCustomersProps) {
   const { filters } = useDashboardFilters();
 
   const formatCurrency = (value: number) => {
