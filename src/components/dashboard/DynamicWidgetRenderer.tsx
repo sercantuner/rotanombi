@@ -2,8 +2,10 @@
 import React from 'react';
 import { WidgetWrapper } from './WidgetWrapper';
 import { BuilderWidgetRenderer } from './BuilderWidgetRenderer';
+import { FilterableStatCard } from './FilterableStatCard';
 import { getWidgetById, WidgetCategory, WidgetFilter } from '@/lib/widgetRegistry';
 import { Widget } from '@/lib/widgetTypes';
+import { KpiFilter } from './KpiFilterModal';
 
 // Widget Components
 import { StatCard } from './StatCard';
@@ -56,6 +58,10 @@ interface DynamicWidgetRendererProps {
   isLoading?: boolean;
   // Veritabanından gelen widget bilgisi (builder_config için)
   dbWidget?: Widget;
+  // KPI filtreleme için
+  containerWidgetId?: string;
+  widgetFilters?: KpiFilter;
+  onFiltersChange?: (filters: KpiFilter) => void;
 }
 
 // Format large numbers
@@ -78,6 +84,9 @@ export function DynamicWidgetRenderer({
   className = '',
   isLoading = false,
   dbWidget,
+  containerWidgetId,
+  widgetFilters,
+  onFiltersChange,
 }: DynamicWidgetRendererProps) {
   const widget = getWidgetById(widgetId);
   
@@ -114,128 +123,188 @@ export function DynamicWidgetRenderer({
       // ========== KPI WIDGETS ==========
       case 'kpi_toplam_alacak':
         return (
-          <StatCard
+          <FilterableStatCard
             title="Toplam Alacak"
             value={formatCurrency(toplamAlacak)}
             icon={Wallet}
             trend="up"
             variant="success"
+            widgetId={dbWidget?.id || widgetId}
+            widgetKey={widgetId}
+            containerWidgetId={containerWidgetId}
+            currentFilters={widgetFilters}
+            onFiltersChange={onFiltersChange}
           />
         );
       
       case 'kpi_gecikmis_alacak':
         return (
-          <StatCard
+          <FilterableStatCard
             title="Gecikmiş Alacak"
             value={formatCurrency(gecikimisAlacak)}
             icon={Clock}
             trend="neutral"
             variant="warning"
+            widgetId={dbWidget?.id || widgetId}
+            widgetKey={widgetId}
+            containerWidgetId={containerWidgetId}
+            currentFilters={widgetFilters}
+            onFiltersChange={onFiltersChange}
           />
         );
       
       case 'kpi_toplam_borc':
         return (
-          <StatCard
+          <FilterableStatCard
             title="Toplam Borç"
             value={formatCurrency(toplamBorc)}
             icon={CreditCard}
             trend="down"
             variant="destructive"
+            widgetId={dbWidget?.id || widgetId}
+            widgetKey={widgetId}
+            containerWidgetId={containerWidgetId}
+            currentFilters={widgetFilters}
+            onFiltersChange={onFiltersChange}
           />
         );
 
       case 'kpi_gecikmis_borc':
         return (
-          <StatCard
+          <FilterableStatCard
             title="Gecikmiş Borç"
             value={formatCurrency(gecikimisBorc)}
             icon={AlertTriangle}
             trend="neutral"
             variant="destructive"
+            widgetId={dbWidget?.id || widgetId}
+            widgetKey={widgetId}
+            containerWidgetId={containerWidgetId}
+            currentFilters={widgetFilters}
+            onFiltersChange={onFiltersChange}
           />
         );
       
       case 'kpi_net_bakiye':
         return (
-          <StatCard
+          <FilterableStatCard
             title="Net Bakiye"
             value={formatCurrency(netBakiye)}
             icon={Scale}
             trend={netBakiye >= 0 ? "up" : "down"}
             variant={netBakiye >= 0 ? "success" : "destructive"}
+            widgetId={dbWidget?.id || widgetId}
+            widgetKey={widgetId}
+            containerWidgetId={containerWidgetId}
+            currentFilters={widgetFilters}
+            onFiltersChange={onFiltersChange}
           />
         );
       
       case 'kpi_musteri_sayisi':
         return (
-          <StatCard
+          <FilterableStatCard
             title="Müşteri Sayısı"
             value={(genelRapor?.musteriSayisi || 0).toLocaleString('tr-TR')}
             icon={Users}
             trend="neutral"
             variant="default"
+            widgetId={dbWidget?.id || widgetId}
+            widgetKey={widgetId}
+            containerWidgetId={containerWidgetId}
+            currentFilters={widgetFilters}
+            onFiltersChange={onFiltersChange}
           />
         );
       
       case 'kpi_aktif_cari':
         return (
-          <StatCard
+          <FilterableStatCard
             title="Aktif Cari"
             value={genelRapor?.aktifCariSayisi?.toString() || '0'}
             icon={UserCheck}
             variant="success"
+            widgetId={dbWidget?.id || widgetId}
+            widgetKey={widgetId}
+            containerWidgetId={containerWidgetId}
+            currentFilters={widgetFilters}
+            onFiltersChange={onFiltersChange}
           />
         );
 
       case 'kpi_net_satis':
         return (
-          <StatCard
+          <FilterableStatCard
             title="Net Satış"
             value={formatCurrency(satisRapor?.netSatis || 0)}
             icon={ShoppingCart}
             trend="up"
             variant="success"
+            widgetId={dbWidget?.id || widgetId}
+            widgetKey={widgetId}
+            containerWidgetId={containerWidgetId}
+            currentFilters={widgetFilters}
+            onFiltersChange={onFiltersChange}
           />
         );
 
       case 'kpi_brut_satis':
         return (
-          <StatCard
+          <FilterableStatCard
             title="Brüt Satış"
             value={formatCurrency(satisRapor?.brutSatis || 0)}
             icon={TrendingUp}
             variant="default"
+            widgetId={dbWidget?.id || widgetId}
+            widgetKey={widgetId}
+            containerWidgetId={containerWidgetId}
+            currentFilters={widgetFilters}
+            onFiltersChange={onFiltersChange}
           />
         );
 
       case 'kpi_iade_tutari':
         return (
-          <StatCard
+          <FilterableStatCard
             title="İade Tutarı"
             value={formatCurrency(satisRapor?.iadeTutari || 0)}
             icon={Package}
             variant="destructive"
+            widgetId={dbWidget?.id || widgetId}
+            widgetKey={widgetId}
+            containerWidgetId={containerWidgetId}
+            currentFilters={widgetFilters}
+            onFiltersChange={onFiltersChange}
           />
         );
 
       case 'kpi_fatura_sayisi':
         return (
-          <StatCard
+          <FilterableStatCard
             title="Fatura Sayısı"
             value={(satisRapor?.faturaSayisi || 0).toLocaleString('tr-TR')}
             icon={FileText}
             variant="default"
+            widgetId={dbWidget?.id || widgetId}
+            widgetKey={widgetId}
+            containerWidgetId={containerWidgetId}
+            currentFilters={widgetFilters}
+            onFiltersChange={onFiltersChange}
           />
         );
 
       case 'kpi_banka_bakiyesi':
         return (
-          <StatCard
+          <FilterableStatCard
             title="Banka Bakiyesi"
             value={formatCurrency(toplamBankaBakiye || finansRapor?.toplamBankaBakiyesi || 0)}
             icon={Landmark}
             variant="success"
+            widgetId={dbWidget?.id || widgetId}
+            widgetKey={widgetId}
+            containerWidgetId={containerWidgetId}
+            currentFilters={widgetFilters}
+            onFiltersChange={onFiltersChange}
           />
         );
 
