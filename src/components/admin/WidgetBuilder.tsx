@@ -10,9 +10,11 @@ import {
   AGGREGATION_TYPES,
   DIA_MODULES,
   FORMAT_OPTIONS,
+  FILTER_TYPES,
   WidgetBuilderConfig,
+  WidgetFilterConfig,
 } from '@/lib/widgetBuilderTypes';
-import { testDiaApi, DiaApiTestResponse } from '@/lib/diaApiTest';
+import { testDiaApi, DiaApiTestResponse, FieldStat } from '@/lib/diaApiTest';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,9 +27,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Wand2, Code, BarChart3, Settings2, Play, Save, Plus, Trash2, 
-  Hash, TrendingUp, Activity, PieChart, Circle, Table, List, Filter, LayoutGrid, Crosshair, Radar, CheckCircle, XCircle, AlertCircle, Edit
+  Hash, TrendingUp, Activity, PieChart, Circle, Table, List, Filter, LayoutGrid, Crosshair, Radar, CheckCircle, XCircle, AlertCircle, Edit,
+  FileJson, MousePointer, Target, Columns
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -66,9 +70,23 @@ const getEmptyConfig = (): WidgetBuilderConfig => ({
   },
 });
 
+const RAW_JSON_TEMPLATE = `{
+  "scf_carikart_listele": {
+    "session_id": "{session_id}",
+    "firma_kodu": {firma_kodu},
+    "donem_kodu": {donem_kodu},
+    "filters": "",
+    "sorts": "",
+    "params": "",
+    "limit": 100,
+    "offset": 0
+  }
+}`;
+
 export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: WidgetBuilderProps) {
   const { createWidget, updateWidget, isLoading } = useWidgetAdmin();
   const [activeTab, setActiveTab] = useState('api');
+  const [apiMode, setApiMode] = useState<'normal' | 'raw'>('normal');
   
   // Düzenleme modu
   const isEditMode = !!editWidget;
@@ -87,6 +105,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   // API parametreleri için ayrı state'ler
   const [customFilters, setCustomFilters] = useState('');
   const [selectedColumns, setSelectedColumns] = useState('');
+  const [rawPayload, setRawPayload] = useState(RAW_JSON_TEMPLATE);
   
   // Chart axis/series config
   const [xAxisField, setXAxisField] = useState('');
@@ -94,10 +113,15 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   const [legendField, setLegendField] = useState('');
   const [tooltipFields, setTooltipFields] = useState('');
   
+  // Widget filtreleri
+  const [widgetFilters, setWidgetFilters] = useState<WidgetFilterConfig[]>([]);
+  
   // Test sonucu
-  const [testResult, setTestResult] = useState<any>(null);
+  const [testResult, setTestResult] = useState<DiaApiTestResponse | null>(null);
   const [isTesting, setIsTesting] = useState(false);
-
+  
+  // Aktif hedef alan (alan eşleme için)
+  const [activeTarget, setActiveTarget] = useState<'xAxis' | 'yAxis' | 'legend' | 'value' | 'tooltip' | null>(null);
   // Düzenleme modunda widget verilerini yükle
   useEffect(() => {
     if (editWidget && open) {
@@ -145,12 +169,16 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
     setConfig(getEmptyConfig());
     setCustomFilters('');
     setSelectedColumns('');
+    setRawPayload(RAW_JSON_TEMPLATE);
     setXAxisField('');
     setYAxisField('');
     setLegendField('');
     setTooltipFields('');
+    setWidgetFilters([]);
     setTestResult(null);
     setActiveTab('api');
+    setApiMode('normal');
+    setActiveTarget(null);
   };
 
   const handleModuleChange = (module: string) => {
@@ -230,33 +258,43 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
     setTestResult(null);
     
     try {
-      // Filtre JSON'ını parse et
-      let filters = {};
-      if (customFilters.trim()) {
-        try {
-          filters = JSON.parse(customFilters);
-        } catch (e) {
-          toast.error('Geçersiz filtre JSON formatı');
-          setIsTesting(false);
-          return;
+      let result: DiaApiTestResponse;
+      
+      if (apiMode === 'raw') {
+        // Raw mode - tam JSON payload
+        result = await testDiaApi({
+          module: 'scf',
+          method: 'carikart_listele',
+          rawMode: true,
+          rawPayload: rawPayload,
+        });
+      } else {
+        // Normal mode
+        let filters = {};
+        if (customFilters.trim()) {
+          try {
+            filters = JSON.parse(customFilters);
+          } catch (e) {
+            toast.error('Geçersiz filtre JSON formatı');
+            setIsTesting(false);
+            return;
+          }
         }
+
+        const columns = selectedColumns
+          .split(',')
+          .map(c => c.trim())
+          .filter(c => c.length > 0);
+
+        result = await testDiaApi({
+          module: config.diaApi.module,
+          method: config.diaApi.method,
+          limit: config.diaApi.parameters.limit || 100,
+          filters,
+          selectedColumns: columns.length > 0 ? columns : undefined,
+          orderby: config.diaApi.parameters.orderby,
+        });
       }
-
-      // Seçili kolonları parse et
-      const columns = selectedColumns
-        .split(',')
-        .map(c => c.trim())
-        .filter(c => c.length > 0);
-
-      // Gerçek DIA API testi
-      const result = await testDiaApi({
-        module: config.diaApi.module,
-        method: config.diaApi.method,
-        limit: config.diaApi.parameters.limit || 100,
-        filters,
-        selectedColumns: columns.length > 0 ? columns : undefined,
-        orderby: config.diaApi.parameters.orderby,
-      });
 
       setTestResult(result);
 
@@ -265,7 +303,6 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
         
         // Alanları otomatik olarak value field seçeneklerine ekle
         if (result.sampleFields && result.sampleFields.length > 0) {
-          // İlk sayısal alanı varsayılan olarak seç
           const numericField = result.sampleFields.find(f => 
             result.fieldTypes?.[f] === 'number' || result.fieldTypes?.[f] === 'number-string'
           );
@@ -282,6 +319,35 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
       setTestResult({ success: false, error: errorMessage });
     } finally {
       setIsTesting(false);
+    }
+  };
+  
+  // Alan tıklama ile hedef alana atama
+  const handleFieldClick = (fieldName: string) => {
+    if (activeTarget) {
+      switch (activeTarget) {
+        case 'xAxis':
+          setXAxisField(fieldName);
+          break;
+        case 'yAxis':
+        case 'value':
+          setYAxisField(fieldName);
+          if (config.visualization.type === 'kpi') {
+            handleKpiConfigChange('valueField', fieldName);
+          }
+          break;
+        case 'legend':
+          setLegendField(fieldName);
+          break;
+        case 'tooltip':
+          setTooltipFields(prev => prev ? `${prev}, ${fieldName}` : fieldName);
+          break;
+      }
+      toast.success(`"${fieldName}" → ${activeTarget} alanına atandı`);
+      setActiveTarget(null);
+    } else {
+      navigator.clipboard.writeText(fieldName);
+      toast.success(`"${fieldName}" kopyalandı`);
     }
   };
 
@@ -418,47 +484,90 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
             {/* API YAPILANDIRMA */}
             <TabsContent value="api" className="m-0 space-y-4">
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">DIA Web Servis Ayarları</CardTitle>
-                  <CardDescription>
-                    Hangi DIA modülünden hangi veriyi çekeceğinizi tanımlayın
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Modül</Label>
-                      <Select value={config.diaApi.module} onValueChange={handleModuleChange}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {DIA_MODULES.map(mod => (
-                            <SelectItem key={mod.id} value={mod.id}>
-                              {mod.name} ({mod.id})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base">DIA Web Servis Ayarları</CardTitle>
+                      <CardDescription>
+                        {apiMode === 'raw' ? 'Tam JSON payload ile API çağrısı' : 'Modül/metod seçerek veri çekin'}
+                      </CardDescription>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Metod</Label>
-                      <Select value={config.diaApi.method} onValueChange={handleMethodChange}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {currentModule?.methods.map(method => (
-                            <SelectItem key={method} value={method}>
-                              {method}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
+                      <Button
+                        size="sm"
+                        variant={apiMode === 'normal' ? 'default' : 'ghost'}
+                        className="h-7 px-3"
+                        onClick={() => setApiMode('normal')}
+                      >
+                        <Settings2 className="h-3.5 w-3.5 mr-1" />
+                        Normal
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={apiMode === 'raw' ? 'default' : 'ghost'}
+                        className="h-7 px-3"
+                        onClick={() => setApiMode('raw')}
+                      >
+                        <FileJson className="h-3.5 w-3.5 mr-1" />
+                        Raw JSON
+                      </Button>
                     </div>
                   </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {apiMode === 'raw' ? (
+                    /* RAW JSON MODE */
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>JSON Payload</Label>
+                        <Textarea
+                          value={rawPayload}
+                          onChange={(e) => setRawPayload(e.target.value)}
+                          className="font-mono text-sm min-h-[200px]"
+                          placeholder={RAW_JSON_TEMPLATE}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          <code>{'{session_id}'}</code>, <code>{'{firma_kodu}'}</code>, <code>{'{donem_kodu}'}</code> otomatik değiştirilir
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    /* NORMAL MODE */
+                    <>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Modül</Label>
+                          <Select value={config.diaApi.module} onValueChange={handleModuleChange}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {DIA_MODULES.map(mod => (
+                                <SelectItem key={mod.id} value={mod.id}>
+                                  {mod.name} ({mod.id})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Metod</Label>
+                          <Select value={config.diaApi.method} onValueChange={handleMethodChange}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {currentModule?.methods.map(method => (
+                                <SelectItem key={method} value={method}>
+                                  {method}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
 
-                  <Separator />
+                      <Separator />
 
                   <div className="space-y-2">
                     <Label>Selected Columns (Virgülle ayırın)</Label>
