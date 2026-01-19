@@ -1,8 +1,8 @@
-// Widget Builder - Gelişmiş widget oluşturma aracı
+// Widget Builder - Gelişmiş widget oluşturma ve düzenleme aracı
 
 import { useState, useEffect } from 'react';
 import { useWidgetAdmin } from '@/hooks/useWidgets';
-import { WidgetFormData, PAGE_CATEGORIES, WIDGET_SIZES } from '@/lib/widgetTypes';
+import { Widget, WidgetFormData, PAGE_CATEGORIES, WIDGET_SIZES } from '@/lib/widgetTypes';
 import {
   ChartType,
   AggregationType,
@@ -27,7 +27,7 @@ import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { 
   Wand2, Code, BarChart3, Settings2, Play, Save, Plus, Trash2, 
-  Hash, TrendingUp, Activity, PieChart, Circle, Table, List, Filter, LayoutGrid, Crosshair, Radar, CheckCircle, XCircle, AlertCircle
+  Hash, TrendingUp, Activity, PieChart, Circle, Table, List, Filter, LayoutGrid, Crosshair, Radar, CheckCircle, XCircle, AlertCircle, Edit
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -37,6 +37,8 @@ interface WidgetBuilderProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave?: () => void;
+  // Düzenleme modu için
+  editWidget?: Widget | null;
 }
 
 // Dinamik icon renderer
@@ -64,9 +66,12 @@ const getEmptyConfig = (): WidgetBuilderConfig => ({
   },
 });
 
-export function WidgetBuilder({ open, onOpenChange, onSave }: WidgetBuilderProps) {
-  const { createWidget, isLoading } = useWidgetAdmin();
+export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: WidgetBuilderProps) {
+  const { createWidget, updateWidget, isLoading } = useWidgetAdmin();
   const [activeTab, setActiveTab] = useState('api');
+  
+  // Düzenleme modu
+  const isEditMode = !!editWidget;
   
   // Widget temel bilgileri
   const [widgetKey, setWidgetKey] = useState('');
@@ -92,6 +97,61 @@ export function WidgetBuilder({ open, onOpenChange, onSave }: WidgetBuilderProps
   // Test sonucu
   const [testResult, setTestResult] = useState<any>(null);
   const [isTesting, setIsTesting] = useState(false);
+
+  // Düzenleme modunda widget verilerini yükle
+  useEffect(() => {
+    if (editWidget && open) {
+      setWidgetKey(editWidget.widget_key);
+      setWidgetName(editWidget.name);
+      setWidgetDescription(editWidget.description || '');
+      setWidgetIcon(editWidget.icon || 'BarChart3');
+      setWidgetSize(editWidget.size);
+      setDefaultPage(editWidget.default_page);
+      
+      // builder_config varsa yükle
+      if (editWidget.builder_config) {
+        const bc = editWidget.builder_config;
+        setConfig(bc);
+        
+        // API parametrelerini ayarla
+        if (bc.diaApi.parameters.filters) {
+          setCustomFilters(JSON.stringify(bc.diaApi.parameters.filters, null, 2));
+        }
+        if (bc.diaApi.parameters.selectedcolumns) {
+          setSelectedColumns(bc.diaApi.parameters.selectedcolumns);
+        }
+        
+        // Chart ayarlarını yükle
+        if (bc.visualization.chart) {
+          setXAxisField(bc.visualization.chart.xAxis?.field || '');
+          setYAxisField(bc.visualization.chart.yAxis?.field || bc.visualization.chart.valueField || '');
+          setLegendField(bc.visualization.chart.legendField || '');
+          setTooltipFields(bc.visualization.chart.tooltipFields?.join(', ') || '');
+        }
+      }
+    } else if (!open) {
+      // Modal kapandığında formu temizle
+      resetForm();
+    }
+  }, [editWidget, open]);
+
+  const resetForm = () => {
+    setWidgetKey('');
+    setWidgetName('');
+    setWidgetDescription('');
+    setWidgetIcon('BarChart3');
+    setWidgetSize('md');
+    setDefaultPage('dashboard');
+    setConfig(getEmptyConfig());
+    setCustomFilters('');
+    setSelectedColumns('');
+    setXAxisField('');
+    setYAxisField('');
+    setLegendField('');
+    setTooltipFields('');
+    setTestResult(null);
+    setActiveTab('api');
+  };
 
   const handleModuleChange = (module: string) => {
     setConfig(prev => ({
@@ -232,12 +292,22 @@ export function WidgetBuilder({ open, onOpenChange, onSave }: WidgetBuilderProps
     }
 
     // builder_config'i oluştur
+    let parsedFilters = undefined;
+    if (customFilters.trim()) {
+      try {
+        parsedFilters = JSON.parse(customFilters);
+      } catch (e) {
+        toast.error('Geçersiz filtre JSON formatı');
+        return;
+      }
+    }
+
     const builderConfig: WidgetBuilderConfig = {
       diaApi: {
         ...config.diaApi,
         parameters: {
           ...config.diaApi.parameters,
-          filters: customFilters.trim() ? JSON.parse(customFilters) : undefined,
+          filters: parsedFilters,
           selectedcolumns: selectedColumns.trim() || undefined,
         },
       },
@@ -272,27 +342,30 @@ export function WidgetBuilder({ open, onOpenChange, onSave }: WidgetBuilderProps
       min_height: '',
       grid_cols: null,
       is_active: true,
-      sort_order: 100,
-      builder_config: builderConfig, // Builder yapılandırmasını kaydet
+      sort_order: editWidget?.sort_order || 100,
+      builder_config: builderConfig,
     };
 
-    const success = await createWidget(formData);
+    let success = false;
+    
+    if (isEditMode && editWidget) {
+      // Güncelleme modu
+      success = await updateWidget(editWidget.id, formData);
+      if (success) {
+        toast.success('Widget güncellendi!');
+      }
+    } else {
+      // Oluşturma modu
+      success = await createWidget(formData);
+      if (success) {
+        toast.success('Widget oluşturuldu!');
+      }
+    }
+
     if (success) {
-      toast.success('Widget oluşturuldu ve kaydedildi!');
       onSave?.();
       onOpenChange(false);
-      // Reset form
-      setWidgetKey('');
-      setWidgetName('');
-      setWidgetDescription('');
-      setConfig(getEmptyConfig());
-      setTestResult(null);
-      setCustomFilters('');
-      setSelectedColumns('');
-      setXAxisField('');
-      setYAxisField('');
-      setLegendField('');
-      setTooltipFields('');
+      resetForm();
     }
   };
 
@@ -303,11 +376,21 @@ export function WidgetBuilder({ open, onOpenChange, onSave }: WidgetBuilderProps
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Wand2 className="h-5 w-5 text-primary" />
-            Widget Builder
+            {isEditMode ? (
+              <Edit className="h-5 w-5 text-primary" />
+            ) : (
+              <Wand2 className="h-5 w-5 text-primary" />
+            )}
+            {isEditMode ? 'Widget Düzenle' : 'Widget Builder'}
+            {isEditMode && (
+              <Badge variant="secondary" className="ml-2">{editWidget?.name}</Badge>
+            )}
           </DialogTitle>
           <DialogDescription>
-            DIA web servisinden veri çekecek ve görselleştirecek özel widget oluşturun
+            {isEditMode 
+              ? 'Mevcut widget yapılandırmasını düzenleyin ve güncelleyin'
+              : 'DIA web servisinden veri çekecek ve görselleştirecek özel widget oluşturun'
+            }
           </DialogDescription>
         </DialogHeader>
 
@@ -852,7 +935,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave }: WidgetBuilderProps
           </Button>
           <Button onClick={handleSave} disabled={isLoading || !widgetKey || !widgetName}>
             <Save className="h-4 w-4 mr-2" />
-            Widget Oluştur
+            {isEditMode ? 'Güncelle' : 'Widget Oluştur'}
           </Button>
         </DialogFooter>
       </DialogContent>
