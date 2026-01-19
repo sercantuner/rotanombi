@@ -1,7 +1,9 @@
 // Dynamic Widget Renderer - Widget ID'ye göre dinamik render
 import React from 'react';
 import { WidgetWrapper } from './WidgetWrapper';
+import { BuilderWidgetRenderer } from './BuilderWidgetRenderer';
 import { getWidgetById, WidgetCategory, WidgetFilter } from '@/lib/widgetRegistry';
+import { Widget } from '@/lib/widgetTypes';
 
 // Widget Components
 import { StatCard } from './StatCard';
@@ -51,6 +53,8 @@ interface DynamicWidgetRendererProps {
   filters?: WidgetFilter;
   className?: string;
   isLoading?: boolean;
+  // Veritabanından gelen widget bilgisi (builder_config için)
+  dbWidget?: Widget;
 }
 
 // Format large numbers
@@ -72,8 +76,22 @@ export function DynamicWidgetRenderer({
   filters,
   className = '',
   isLoading = false,
+  dbWidget,
 }: DynamicWidgetRendererProps) {
   const widget = getWidgetById(widgetId);
+  
+  // Eğer dbWidget var ve builder_config içeriyorsa, BuilderWidgetRenderer kullan
+  if (dbWidget?.builder_config) {
+    return (
+      <BuilderWidgetRenderer
+        widgetId={dbWidget.id}
+        widgetName={dbWidget.name}
+        widgetIcon={dbWidget.icon || undefined}
+        builderConfig={dbWidget.builder_config}
+        className={className}
+      />
+    );
+  }
   
   if (!widget) {
     console.warn(`Widget not found: ${widgetId}`);

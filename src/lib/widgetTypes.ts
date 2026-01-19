@@ -1,5 +1,7 @@
 // Widget Types - Veritabanı tabanlı widget sistemi için tip tanımları
 
+import { WidgetBuilderConfig } from './widgetBuilderTypes';
+
 export type WidgetCategory = 'dashboard' | 'satis' | 'finans' | 'cari';
 export type WidgetType = 'kpi' | 'chart' | 'table' | 'list' | 'summary';
 export type WidgetSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
@@ -36,6 +38,7 @@ export interface Widget {
   created_at: string;
   updated_at: string;
   created_by: string | null;
+  builder_config: WidgetBuilderConfig | null; // Widget Builder yapılandırması
 }
 
 // Kullanıcı layout'unda widget yerleşimi
@@ -68,6 +71,7 @@ export interface WidgetFormData {
   grid_cols: number | null;
   is_active: boolean;
   sort_order: number;
+  builder_config?: WidgetBuilderConfig | null; // Widget Builder yapılandırması
 }
 
 // Sayfa kategorileri
