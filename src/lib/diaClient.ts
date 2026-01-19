@@ -122,9 +122,29 @@ export interface DiaCari {
   cariyedonusmetarihi: string | null;
   borctoplam: number;
   alacaktoplam: number;
+  durum: string; // 'A' (Aktif), 'P' (Pasif)
   // FIFO ve Risk alanları
   fifo: FifoSonuc;
   riskAnalizi: RiskAnalizi;
+}
+
+export interface MarkaDagilimi {
+  marka: string;
+  toplamMiktar: number;
+  satisTutar: number;
+  iadeTutar: number;
+  netTutar: number;
+  iadeOrani: number;
+}
+
+export interface SatisElemaniPerformans {
+  eleman: string;
+  brutSatis: number;
+  iadeToplamı: number;
+  netSatis: number;
+  iadeOrani: number;
+  faturaSayisi: number;
+  ortSepet: number;
 }
 
 export interface DiaSatisRapor {
@@ -136,6 +156,14 @@ export interface DiaSatisRapor {
   urunBazli: { stokKodu: string; stokAdi: string; toplamMiktar: number; toplamTutar: number }[];
   cariBazli: { cariKodu: string; cariAdi: string; toplamTutar: number; faturaAdedi: number }[];
   sonGuncelleme: string;
+  // Yeni alanlar
+  brutSatis: number;
+  iadeToplamı: number;
+  netSatis: number;
+  iadeOrani: number;
+  ortSepet: number;
+  markaBazli: MarkaDagilimi[];
+  satisElemaniPerformans: SatisElemaniPerformans[];
 }
 
 export interface DiaSatisSatiri {

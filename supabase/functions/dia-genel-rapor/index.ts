@@ -78,6 +78,7 @@ interface CariHesap {
   cariyedonusmetarihi: string | null;
   borctoplam: number;
   alacaktoplam: number;
+  durum: string; // 'A' (Aktif), 'P' (Pasif)
   // FIFO ve Risk alanları (yeni)
   fifo: FifoSonuc;
   riskAnalizi: RiskAnalizi;
@@ -630,6 +631,7 @@ serve(async (req) => {
       const potansiyel = cariInfo.potansiyel === true || cariInfo.potansiyel === "True";
       const potansiyeleklemetarihi = cariInfo.potansiyeleklemetarihi || null;
       const cariyedonusmetarihi = cariInfo.cariyedonusmetarihi || null;
+      const durum = cariInfo.durum || "A"; // Default: Aktif
       
       // Özelkod dağılımı
       if (ozelkod2) {
@@ -671,6 +673,7 @@ serve(async (req) => {
         cariyedonusmetarihi,
         borctoplam,
         alacaktoplam,
+        durum,
         // Yeni FIFO ve Risk alanları
         fifo,
         riskAnalizi,

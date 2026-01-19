@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/Header';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { TopCustomers } from '@/components/dashboard/TopCustomers';
@@ -15,7 +15,7 @@ import { DetailedFiltersPanel } from '@/components/dashboard/DetailedFiltersPane
 import { VadeDetayListesi } from '@/components/dashboard/VadeDetayListesi';
 import { DashboardFilterProvider, useDashboardFilters } from '@/contexts/DashboardFilterContext';
 import { diaGetGenelRapor, diaGetFinansRapor, getDiaConnectionInfo, DiaConnectionInfo } from '@/lib/diaClient';
-import type { DiaGenelRapor, DiaFinansRapor, VadeYaslandirma } from '@/lib/diaClient';
+import type { DiaGenelRapor, DiaFinansRapor, VadeYaslandirma, DiaCari } from '@/lib/diaClient';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { 
@@ -25,14 +25,12 @@ import {
   Scale,
   Plug,
   RefreshCw,
-  Building,
-  TrendingDown,
   Clock
 } from 'lucide-react';
 
 function DashboardContent() {
   const navigate = useNavigate();
-  const { setFilterOptions } = useDashboardFilters();
+  const { filters, setFilterOptions } = useDashboardFilters();
   const [genelRapor, setGenelRapor] = useState<DiaGenelRapor | null>(null);
   const [finansRapor, setFinansRapor] = useState<DiaFinansRapor | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,27 +44,21 @@ function DashboardContent() {
       const diaInfo = await getDiaConnectionInfo();
       setDiaConnectionInfo(diaInfo);
 
-      // Eğer DIA bilgileri kayıtlı ise (credentials varsa), rapor çekmeyi dene
-      // Backend auto-login mekanizması session expired ise yeniden login yapacak
       if (diaInfo?.hasCredentials) {
         const timestamp = Date.now();
         console.log(`Fetching DIA data at ${timestamp}, session valid: ${diaInfo.sessionValid}`);
         
         let dataFetched = false;
 
-        // SIRALALI ÇAĞRI: Paralel çağrı yapınca auto-login race condition oluşuyor
-        // (disconnect_same_user: true olduğu için iki login aynı anda olursa biri diğerini iptal eder)
-        
-        // Önce genel rapor çek (bu auto-login'i tetikler)
         const genelResult = await diaGetGenelRapor();
 
         if (genelResult.success && genelResult.data) {
           setGenelRapor(genelResult.data);
           dataFetched = true;
           
-          // Update filter options from data
           const cariler = genelResult.data.cariler || [];
           setFilterOptions({
+            cariKartTipleri: [...new Set(cariler.map(c => c.carikarttipi).filter(Boolean))],
             ozelkodlar1: [...new Set(cariler.map(c => c.ozelkod1kod).filter(Boolean))],
             ozelkodlar2: [...new Set(cariler.map(c => c.ozelkod2kod).filter(Boolean))],
             ozelkodlar3: [...new Set(cariler.map(c => c.ozelkod3kod).filter(Boolean))],
@@ -79,7 +71,6 @@ function DashboardContent() {
                                   genelResult.error?.toLowerCase().includes('invalid');
           
           if (isSessionError) {
-            // Session hatası - retry with delay (auto-login'in tamamlanması için bekle)
             console.log('Session error detected, retrying after delay...');
             await new Promise(resolve => setTimeout(resolve, 1000));
             
@@ -90,6 +81,7 @@ function DashboardContent() {
               
               const cariler = retryResult.data.cariler || [];
               setFilterOptions({
+                cariKartTipleri: [...new Set(cariler.map(c => c.carikarttipi).filter(Boolean))],
                 ozelkodlar1: [...new Set(cariler.map(c => c.ozelkod1kod).filter(Boolean))],
                 ozelkodlar2: [...new Set(cariler.map(c => c.ozelkod2kod).filter(Boolean))],
                 ozelkodlar3: [...new Set(cariler.map(c => c.ozelkod3kod).filter(Boolean))],
@@ -104,7 +96,6 @@ function DashboardContent() {
           }
         }
 
-        // Sonra finans rapor çek (session artık geçerli olmalı)
         const finansResult = await diaGetFinansRapor();
         
         if (finansResult.success && finansResult.data) {
@@ -112,7 +103,6 @@ function DashboardContent() {
           dataFetched = true;
         } else {
           console.error('Finans rapor error:', finansResult.error);
-          // Finans hatası için session error kontrolü yapma, genel rapor zaten denerdi
           if (!finansResult.error?.toLowerCase().includes('session')) {
             toast.error(`Finans rapor hatası: ${finansResult.error}`);
           }
@@ -121,7 +111,6 @@ function DashboardContent() {
         if (dataFetched) {
           setLastUpdate(new Date());
           toast.success('DIA verileri güncellendi');
-          // Connection info'yu güncelle (backend auto-login yapmış olabilir)
           const updatedInfo = await getDiaConnectionInfo();
           setDiaConnectionInfo(updatedInfo);
         }
@@ -140,7 +129,45 @@ function DashboardContent() {
     fetchData();
   }, [fetchData]);
 
-  // Büyük rakamlar için akıllı kısaltma (999.000.000 TL'ye kadar)
+  // Merkezi filtreleme - tüm filtreler uygulanmış cari listesi
+  const filteredCariler = useMemo<DiaCari[]>(() => {
+    const cariler = genelRapor?.cariler || [];
+    
+    return cariler.filter(cari => {
+      // Görünüm modu (potansiyel/cari/hepsi)
+      if (filters.gorunumModu === 'potansiyel' && !cari.potansiyel) return false;
+      if (filters.gorunumModu === 'cari' && cari.potansiyel) return false;
+      
+      // Durum (aktif/pasif/hepsi) - DIA'daki 'durum' alanına göre
+      if (filters.durum === 'aktif' && cari.durum === 'P') return false;
+      if (filters.durum === 'pasif' && cari.durum !== 'P') return false;
+      
+      // Cari kart tipi (AL/AS/ST)
+      if (filters.cariKartTipi.length > 0 && !filters.cariKartTipi.includes(cari.carikarttipi)) return false;
+      
+      // Özel kodlar
+      if (filters.ozelkod1.length > 0 && !filters.ozelkod1.includes(cari.ozelkod1kod)) return false;
+      if (filters.ozelkod2.length > 0 && !filters.ozelkod2.includes(cari.ozelkod2kod)) return false;
+      if (filters.ozelkod3.length > 0 && !filters.ozelkod3.includes(cari.ozelkod3kod)) return false;
+      
+      // Şehir
+      if (filters.sehir.length > 0 && !filters.sehir.includes(cari.sehir)) return false;
+      
+      // Satış temsilcisi
+      if (filters.satisTemsilcisi.length > 0 && !filters.satisTemsilcisi.includes(cari.satiselemani)) return false;
+      
+      // Arama
+      if (filters.searchTerm) {
+        const search = filters.searchTerm.toLowerCase();
+        if (!cari.cariAdi?.toLowerCase().includes(search) && 
+            !cari.cariKodu?.toLowerCase().includes(search)) return false;
+      }
+      
+      return true;
+    });
+  }, [genelRapor?.cariler, filters]);
+
+  // Büyük rakamlar için akıllı kısaltma
   const formatCurrency = (value: number) => {
     const absValue = Math.abs(value);
     if (absValue >= 1000000000) {
@@ -162,7 +189,6 @@ function DashboardContent() {
   const vadesiGecmis = genelRapor?.vadesiGecmis || 0;
   const toplamBanka = finansRapor?.toplamBankaBakiyesi || 0;
   
-  // Gecikmiş alacak ve borç - backend'den geliyor
   const gecikimisAlacak = genelRapor?.gecikimisAlacak || vadesiGecmis;
   const gecikimisBorc = genelRapor?.gecikimisBorc || 0;
 
@@ -237,8 +263,11 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* Quick Filters - Müşteri sayısı: scf_carikart_listele'den gelen musteriSayisi */}
-        <DashboardFilters totalCustomers={genelRapor?.musteriSayisi || 0} />
+        {/* Quick Filters */}
+        <DashboardFilters 
+          totalCustomers={genelRapor?.toplamCariSayisi || 0} 
+          filteredCount={filteredCariler.length}
+        />
 
         {/* Detailed Filters Panel */}
         <DetailedFiltersPanel cariler={genelRapor?.cariler || []} />
@@ -292,22 +321,22 @@ function DashboardContent() {
 
         {/* Vade Detay Listesi - Shows when a bar is clicked */}
         <VadeDetayListesi 
-          cariler={genelRapor?.cariler || []} 
+          cariler={filteredCariler} 
           yaslandirma={yaslandirma}
         />
 
         {/* Donut Charts Row - Özel Kod, Sektör, Kaynak */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6 mt-6">
           <OzelKodDonutChart 
-            cariler={genelRapor?.cariler || []} 
+            cariler={filteredCariler} 
             isLoading={isLoading} 
           />
           <SektorDagilimi 
-            cariler={genelRapor?.cariler || []} 
+            cariler={filteredCariler} 
             isLoading={isLoading} 
           />
           <KaynakDagilimi 
-            cariler={genelRapor?.cariler || []} 
+            cariler={filteredCariler} 
             isLoading={isLoading} 
           />
         </div>
@@ -315,11 +344,11 @@ function DashboardContent() {
         {/* Lokasyon + Cari Dönüşüm Trend */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
           <LokasyonDagilimi 
-            cariler={genelRapor?.cariler || []} 
+            cariler={filteredCariler} 
             isLoading={isLoading} 
           />
           <CariDonusumTrend 
-            cariler={genelRapor?.cariler || []} 
+            cariler={filteredCariler} 
             isLoading={isLoading} 
           />
         </div>
@@ -327,7 +356,7 @@ function DashboardContent() {
         {/* Top Customers + Banka Hesapları */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
           <TopCustomers 
-            cariler={genelRapor?.cariler || []} 
+            cariler={filteredCariler} 
             isLoading={isLoading} 
           />
           <BankaHesaplari 
