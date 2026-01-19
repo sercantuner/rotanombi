@@ -12,6 +12,7 @@ import { Plus, Edit2, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -150,90 +151,92 @@ export function DynamicPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col">
-      <Header 
-        title={page.name}
-        subtitle="Özel sayfa"
-        onRefresh={loadWidgetData}
-        isRefreshing={isDataLoading}
-        currentPage="dashboard"
-        actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowDeleteConfirm(true)}
-              className="text-destructive hover:text-destructive"
-            >
-              <Trash2 className="h-4 w-4 mr-1" />
-              Sayfayı Sil
-            </Button>
-          </div>
-        }
-      />
+    <DashboardFilterProvider>
+      <div className="flex-1 flex flex-col">
+        <Header 
+          title={page.name}
+          subtitle="Özel sayfa"
+          onRefresh={loadWidgetData}
+          isRefreshing={isDataLoading}
+          currentPage="dashboard"
+          actions={
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="text-destructive hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Sayfayı Sil
+              </Button>
+            </div>
+          }
+        />
 
-      <main className="flex-1 p-6 overflow-auto">
-        {/* Containers */}
-        {containers.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 border-2 border-dashed rounded-xl">
-            <Plus className="h-12 w-12 text-muted-foreground/50 mb-4" />
-            <h3 className="text-lg font-medium mb-2">Bu sayfa henüz boş</h3>
-            <p className="text-sm text-muted-foreground mb-6">
-              Rapor konteynerleri ekleyerek başlayın
-            </p>
-            <Button onClick={() => setShowContainerPicker(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Konteyner Ekle
-            </Button>
-          </div>
-        ) : (
-          <>
-            {containers.map((container) => (
-              <ContainerRenderer
-                key={container.id}
-                container={container}
-                onDelete={() => deleteContainer(container.id)}
-                widgetData={widgetData}
-                isLoading={isDataLoading}
-              />
-            ))}
+        <main className="flex-1 p-6 overflow-auto">
+          {/* Containers */}
+          {containers.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 border-2 border-dashed rounded-xl">
+              <Plus className="h-12 w-12 text-muted-foreground/50 mb-4" />
+              <h3 className="text-lg font-medium mb-2">Bu sayfa henüz boş</h3>
+              <p className="text-sm text-muted-foreground mb-6">
+                Rapor konteynerleri ekleyerek başlayın
+              </p>
+              <Button onClick={() => setShowContainerPicker(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Konteyner Ekle
+              </Button>
+            </div>
+          ) : (
+            <>
+              {containers.map((container) => (
+                <ContainerRenderer
+                  key={container.id}
+                  container={container}
+                  onDelete={() => deleteContainer(container.id)}
+                  widgetData={widgetData}
+                  isLoading={isDataLoading}
+                />
+              ))}
 
-            {/* Add Container Button */}
-            <button
-              onClick={() => setShowContainerPicker(true)}
-              className="w-full py-8 border-2 border-dashed rounded-xl text-muted-foreground hover:text-primary hover:border-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-2"
-            >
-              <Plus className="h-5 w-5" />
-              <span className="font-medium">Konteyner Ekle</span>
-            </button>
-          </>
-        )}
-      </main>
+              {/* Add Container Button */}
+              <button
+                onClick={() => setShowContainerPicker(true)}
+                className="w-full py-8 border-2 border-dashed rounded-xl text-muted-foreground hover:text-primary hover:border-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-2"
+              >
+                <Plus className="h-5 w-5" />
+                <span className="font-medium">Konteyner Ekle</span>
+              </button>
+            </>
+          )}
+        </main>
 
-      {/* Container Picker Modal */}
-      <ContainerPicker
-        open={showContainerPicker}
-        onOpenChange={setShowContainerPicker}
-        onSelectContainer={handleAddContainer}
-      />
+        {/* Container Picker Modal */}
+        <ContainerPicker
+          open={showContainerPicker}
+          onOpenChange={setShowContainerPicker}
+          onSelectContainer={handleAddContainer}
+        />
 
-      {/* Delete Confirmation */}
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Sayfayı Sil</AlertDialogTitle>
-            <AlertDialogDescription>
-              "{page.name}" sayfasını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>İptal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeletePage} className="bg-destructive text-destructive-foreground">
-              Sil
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+        {/* Delete Confirmation */}
+        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Sayfayı Sil</AlertDialogTitle>
+              <AlertDialogDescription>
+                "{page.name}" sayfasını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>İptal</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeletePage} className="bg-destructive text-destructive-foreground">
+                Sil
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </DashboardFilterProvider>
   );
 }
