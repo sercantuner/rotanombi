@@ -140,12 +140,12 @@ export const AGGREGATION_TYPES: { id: AggregationType; name: string; description
   { id: 'last', name: 'Son', description: 'Son değer' },
 ];
 
-// DIA modülleri - genişletilmiş liste
+// DIA modülleri - doğru API metodları
 export const DIA_MODULES: { id: string; name: string; methods: string[] }[] = [
   { 
     id: 'scf', 
     name: 'Cari / Finans', 
-    methods: ['carikart_listele', 'carikart_bakiye_listele', 'cari_hareket_listele', 'cek_senet_listele', 'potansiyel_listele'] 
+    methods: ['carikart_listele', 'carikart_vade_bakiye_listele', 'cari_hareket_listele', 'cek_senet_listele'] 
   },
   { 
     id: 'bcs', 
@@ -160,7 +160,7 @@ export const DIA_MODULES: { id: string; name: string; methods: string[] }[] = [
   { 
     id: 'stk', 
     name: 'Stok', 
-    methods: ['stok_listele', 'stok_hareket_listele', 'depo_listele', 'stok_bakiye_listele'] 
+    methods: ['stok_listele', 'stok_hareket_listele', 'depo_listele'] 
   },
   { 
     id: 'gts', 
