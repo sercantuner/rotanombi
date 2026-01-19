@@ -79,9 +79,9 @@ interface CariHesap {
   borctoplam: number;
   alacaktoplam: number;
   durum: string; // 'A' (Aktif), 'P' (Pasif)
-  // FIFO ve Risk alanları (yeni)
-  fifo: FifoSonuc;
-  riskAnalizi: RiskAnalizi;
+  // FIFO ve Risk alanları (yeni) - nullable çünkü vadeli bakiyesi olmayan cariler için hesaplanmaz
+  fifo: FifoSonuc | null;
+  riskAnalizi: RiskAnalizi | null;
 }
 
 interface OzelkodDagilimi {
@@ -551,6 +551,7 @@ serve(async (req) => {
     );
 
     let cariMap = new Map<string, any>();
+    let cariListe: any[] = []; // Tüm cariler için dizi - dışarıda tanımla
     let toplamCariSayisi = 0;
     let musteriSayisi = 0;
     
@@ -558,7 +559,6 @@ serve(async (req) => {
       const cariData = cariApiResult.data;
       console.log("DIA Cari Response:", JSON.stringify(cariData).substring(0, 1000));
       
-      let cariListe: any[] = [];
       if (Array.isArray(cariData.result)) {
         cariListe = cariData.result;
       } else if (Array.isArray(cariData.msg)) {
@@ -605,9 +605,19 @@ serve(async (req) => {
     const ozelkodMap = new Map<string, { toplam: number; adet: number }>();
     const satisElemaniMap = new Map<string, { toplam: number; adet: number }>();
 
-    const cariler: CariHesap[] = vadeBakiyeList.map((vade: any, index: number) => {
-      const cariKey = vade._key_scf_carikart || vade._key;
-      const cariInfo = cariMap.get(cariKey) || {};
+    // vadeBakiyeList'i key'e göre Map'e dönüştür (hızlı lookup için)
+    const vadeBakiyeMap = new Map<string, any>();
+    for (const vade of vadeBakiyeList) {
+      const key = vade._key_scf_carikart || vade._key;
+      if (key) vadeBakiyeMap.set(key, vade);
+    }
+
+    console.log(`DEBUG: cariListe count: ${cariListe.length}, vadeBakiyeMap size: ${vadeBakiyeMap.size}`);
+
+    // TÜM carileri (cariListe) döngüye al - vadeBakiyeList yerine cariListe kullan
+    const cariler: CariHesap[] = cariListe.map((cariInfo: any, index: number) => {
+      const cariKey = cariInfo._key;
+      const vade = vadeBakiyeMap.get(cariKey) || {}; // Vadeli bakiyesi yoksa boş obje
       
       const borctoplam = parseFloat(cariInfo.borctoplam) || parseFloat(vade.borctoplam) || 0;
       const alacaktoplam = parseFloat(cariInfo.alacaktoplam) || parseFloat(vade.alacaktoplam) || 0;
@@ -616,35 +626,42 @@ serve(async (req) => {
       
       // DEBUG: İlk 3 cari için detaylı log
       if (index < 3) {
-        console.log(`DEBUG Cari ${index + 1}: ${vade.cariunvan || cariInfo.unvan}`);
+        console.log(`DEBUG Cari ${index + 1}: ${cariInfo.unvan || vade.cariunvan}`);
         console.log(`  - toplambakiye: ${toplambakiye}, vadesigecentutar: ${vadesigecentutar}`);
         console.log(`  - __borchareketler count: ${Array.isArray(vade.__borchareketler) ? vade.__borchareketler.length : 0}`);
+        console.log(`  - potansiyel: ${cariInfo.potansiyel}, durum: ${cariInfo.durum}`);
       }
       
-      // FIFO hesaplama (ham hareket verilerinden)
+      // FIFO hesaplama (vadeli bakiyesi olanlar için)
       const borcHareketler = Array.isArray(vade.__borchareketler) ? vade.__borchareketler : [];
-      const fifo = hesaplaFIFO(borcHareketler);
+      const fifo: FifoSonuc = borcHareketler.length > 0 
+        ? hesaplaFIFO(borcHareketler) 
+        : { acikFaturalar: [], toplamAcikBakiye: 0, gercekGecikmisBakiye: 0, odemeHavuzu: 0 };
       
-      // Hibrit Risk Analizi
-      const riskAnalizi = hesaplaRiskAnalizi(borcHareketler, toplambakiye, fifo);
+      // Hibrit Risk Analizi (vadeli bakiyesi olanlar için)
+      const riskAnalizi = borcHareketler.length > 0 
+        ? hesaplaRiskAnalizi(borcHareketler, toplambakiye, fifo) 
+        : null;
       
-      // Yaşlandırma (FIFO bazlı)
-      const yaslandirma = hesaplaYaslandirma(borcHareketler, fifo.acikFaturalar);
+      // Yaşlandırma (FIFO bazlı, vadeli bakiyesi olanlar için)
+      const yaslandirma = borcHareketler.length > 0 
+        ? hesaplaYaslandirma(borcHareketler, fifo.acikFaturalar)
+        : { vade90Plus: 0, vade90: 0, vade60: 0, vade30: 0, guncel: 0, gelecek30: 0, gelecek60: 0, gelecek90: 0, gelecek90Plus: 0 };
       
-      // FIFO özete ekle
-      toplamAcikFatura += fifo.acikFaturalar.length;
-      toplamAcikBakiye += fifo.toplamAcikBakiye;
-      gercekGecikmisBakiye += fifo.gercekGecikmisBakiye;
+      // FIFO özete ekle (sadece vadeli bakiyesi olanlar için)
+      if (borcHareketler.length > 0) {
+        toplamAcikFatura += fifo.acikFaturalar.length;
+        toplamAcikBakiye += fifo.toplamAcikBakiye;
+        gercekGecikmisBakiye += fifo.gercekGecikmisBakiye;
+      }
       
-      // Alacak/Borç hesaplama - vadesigecentutar kullan, toplambakiye ile sınırla
+      // Alacak/Borç hesaplama - sadece bakiyesi sıfır olmayanlar için
       if (toplambakiye > 0) {
         toplamAlacak += toplambakiye;
-        // Gecikmiş alacak: vadesigecentutar kullan, ama toplambakiye'yi aşamaz
         const gecikmisTutar = Math.min(vadesigecentutar, toplambakiye);
         gecikimisAlacak += gecikmisTutar;
       } else if (toplambakiye < 0) {
         toplamBorc += Math.abs(toplambakiye);
-        // Gecikmiş borç: vadesigecentutar kullan, ama toplambakiye'yi (mutlak) aşamaz
         const gecikmisTutar = Math.min(vadesigecentutar, Math.abs(toplambakiye));
         gecikimisBorc += gecikmisTutar;
       }
@@ -692,8 +709,8 @@ serve(async (req) => {
 
       return {
         _key: cariKey,
-        cariKodu: vade.carikartkodu || cariInfo.carikartkodu || "",
-        cariAdi: vade.cariunvan || cariInfo.unvan || "",
+        cariKodu: cariInfo.carikartkodu || vade.carikartkodu || "",
+        cariAdi: cariInfo.unvan || vade.cariunvan || "",
         bakiye: toplambakiye,
         toplambakiye,
         vadesigecentutar,
@@ -704,7 +721,7 @@ serve(async (req) => {
         sehir: cariInfo.sehir || "",
         telefon: cariInfo.telefon1 || cariInfo.ceptel || vade.caritelefon1 || vade.cariceptel || "",
         eposta: cariInfo.eposta || "",
-        riskSkoru: riskAnalizi.riskSkoru,
+        riskSkoru: riskAnalizi?.riskSkoru || 0,
         yaslandirma,
         sektorler,
         kaynak,
@@ -715,7 +732,6 @@ serve(async (req) => {
         borctoplam,
         alacaktoplam,
         durum,
-        // Yeni FIFO ve Risk alanları
         fifo,
         riskAnalizi,
       };
