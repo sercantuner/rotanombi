@@ -439,7 +439,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto flex flex-col">
+      <DialogContent className="max-w-5xl h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isEditMode ? (
@@ -480,7 +480,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
             </TabsTrigger>
           </TabsList>
 
-          <ScrollArea className="flex-1 mt-4">
+          <ScrollArea className="flex-1 mt-4 pr-4" style={{ maxHeight: 'calc(90vh - 200px)' }}>
             {/* API YAPILANDIRMA */}
             <TabsContent value="api" className="m-0 space-y-4">
               <Card>
