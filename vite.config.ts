@@ -21,7 +21,7 @@ export default defineConfig(({ mode }) => ({
     dedupe: ["react", "react-dom", "react/jsx-runtime"],
   },
   optimizeDeps: {
-    include: ["react", "react-dom"],
-    force: true,
+    // Avoid forcing re-optimization on every start; it can lead to transient React duplication issues
+    include: ["react", "react-dom", "react/jsx-runtime", "@radix-ui/react-tooltip"],
   },
 }));
