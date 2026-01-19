@@ -3,12 +3,14 @@ import { Header } from '@/components/layout/Header';
 import { VadeDetayListesi } from '@/components/dashboard/VadeDetayListesi';
 import { ContainerBasedDashboard } from '@/components/dashboard/ContainerBasedDashboard';
 import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
+import { useDiaDataCache } from '@/contexts/DiaDataCacheContext';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { diaGetGenelRapor, diaGetFinansRapor, getDiaConnectionInfo, DiaConnectionInfo } from '@/lib/diaClient';
 import type { DiaGenelRapor, DiaFinansRapor, VadeYaslandirma, DiaCari } from '@/lib/diaClient';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DiaQueryStats } from '@/components/dashboard/DiaQueryStats';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Plug, RefreshCw, Clock, Timer } from 'lucide-react';
@@ -16,6 +18,7 @@ import { Plug, RefreshCw, Clock, Timer } from 'lucide-react';
 function DashboardContent() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { setSharedData, invalidateCache } = useDiaDataCache();
   const { refreshSettings } = useUserSettings();
   const [genelRapor, setGenelRapor] = useState<DiaGenelRapor | null>(null);
   const [finansRapor, setFinansRapor] = useState<DiaFinansRapor | null>(null);
@@ -87,6 +90,12 @@ function DashboardContent() {
         if (genelResult.success && genelResult.data) {
           setGenelRapor(genelResult.data);
           dataFetched = true;
+          
+          // Cache'e cari listesini ekle - Widget'lar tekrar API çağrısı yapmasın
+          if (genelResult.data.cariler && genelResult.data.cariler.length > 0) {
+            setSharedData('cariListesi', genelResult.data.cariler);
+            console.log(`[DIA Cache] Shared cari listesi: ${genelResult.data.cariler.length} kayıt`);
+          }
         } else {
           console.error('Genel rapor error:', genelResult.error);
           const isSessionError = genelResult.error?.toLowerCase().includes('session') || 
@@ -263,6 +272,8 @@ function DashboardContent() {
               <span className="px-2 py-0.5 rounded-full bg-success/20 text-success text-xs font-medium">
                 DIA Bağlı
               </span>
+              {/* Sorgu istatistikleri */}
+              <DiaQueryStats />
             </div>
             
             {/* Otomatik Yenileme Kontrolleri */}
