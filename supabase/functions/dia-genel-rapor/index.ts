@@ -412,63 +412,103 @@ serve(async (req) => {
       );
     }
 
-    // Get valid DIA session (auto-renews if expired)
-    const diaResult = await getDiaSession(supabase, user.id);
-    
-    if (!diaResult.success || !diaResult.session) {
+    // Helper function to make DIA API request with auto-retry on session expiry
+    async function makeDiaRequest(
+      supabase: any,
+      userId: string,
+      requestBuilder: (sessionId: string, firmaKodu: number) => { url: string; payload: any },
+      retryCount = 0
+    ): Promise<{ success: boolean; data?: any; error?: string; session?: any }> {
+      // Get valid DIA session (auto-renews if expired)
+      const diaResult = await getDiaSession(supabase, userId);
+      
+      if (!diaResult.success || !diaResult.session) {
+        return { success: false, error: diaResult.error || "DIA bağlantısı kurulamadı" };
+      }
+
+      const { sessionId, sunucuAdi, firmaKodu } = diaResult.session;
+      const { url, payload } = requestBuilder(sessionId, firmaKodu);
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        return { success: false, error: `DIA API hatası: ${response.status}` };
+      }
+
+      const data = await response.json();
+      
+      // Check for INVALID_SESSION and retry once
+      if ((data.code === "401" || data.msg === "INVALID_SESSION") && retryCount < 1) {
+        console.log("DIA session invalid, clearing and retrying...");
+        // Clear the cached session to force re-login
+        await supabase
+          .from("profiles")
+          .update({ dia_session_id: null, dia_session_expires: null })
+          .eq("user_id", userId);
+        
+        // Retry the request
+        return makeDiaRequest(supabase, userId, requestBuilder, retryCount + 1);
+      }
+
+      if (data.code && data.code !== "200") {
+        const errorMsg = data.msg || "DIA veri çekme hatası";
+        return { success: false, error: errorMsg };
+      }
+
+      return { success: true, data, session: diaResult.session };
+    }
+
+    // Get initial session for URL building
+    const initialSession = await getDiaSession(supabase, user.id);
+    if (!initialSession.success || !initialSession.session) {
       return new Response(
-        JSON.stringify({ success: false, error: diaResult.error || "DIA bağlantısı kurulamadı" }),
+        JSON.stringify({ success: false, error: initialSession.error || "DIA bağlantısı kurulamadı" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const { sessionId, sunucuAdi, firmaKodu } = diaResult.session;
+    const { sunucuAdi } = initialSession.session;
     const diaUrl = `https://${sunucuAdi}.ws.dia.com.tr/api/v3/scf/json`;
 
     // 1. Fetch vade bakiye listesi with __borchareketler for FIFO aging (NO LIMIT)
-    // FİLTRE KALDIRILDI: Tüm carileri getir (aktif, pasif, potansiyel)
-    const vadeBakiyePayload = {
-      scf_carikart_vade_bakiye_listele: {
-        session_id: sessionId,
-        firma_kodu: firmaKodu,
-        filters: "",
-        sorts: "",
-        limit: 50000,
-        offset: 0,
-        params: {
-          irsaliyeleriDahilEt: "True",
-          tarihreferans: getToday(),
-          detaygoster: "True"
-        }
-      }
-    };
-
     console.log(`Fetching genel rapor for user ${user.id}`);
-    console.log("Vade bakiye payload:", JSON.stringify(vadeBakiyePayload));
 
-    const vadeBakiyeResponse = await fetch(diaUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(vadeBakiyePayload),
-    });
+    const vadeBakiyeApiResult = await makeDiaRequest(
+      supabase,
+      user.id,
+      (sessionId, fKodu) => ({
+        url: diaUrl,
+        payload: {
+          scf_carikart_vade_bakiye_listele: {
+            session_id: sessionId,
+            firma_kodu: fKodu,
+            filters: "",
+            sorts: "",
+            limit: 50000,
+            offset: 0,
+            params: {
+              irsaliyeleriDahilEt: "True",
+              tarihreferans: getToday(),
+              detaygoster: "True"
+            }
+          }
+        }
+      })
+    );
 
-    if (!vadeBakiyeResponse.ok) {
+    if (!vadeBakiyeApiResult.success) {
       return new Response(
-        JSON.stringify({ success: false, error: `DIA API hatası: ${vadeBakiyeResponse.status}` }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const vadeBakiyeData = await vadeBakiyeResponse.json();
-    console.log("DIA Vade Bakiye Response:", JSON.stringify(vadeBakiyeData).substring(0, 2000));
-    
-    if (vadeBakiyeData.code && vadeBakiyeData.code !== "200") {
-      const errorMsg = vadeBakiyeData.msg || "DIA veri çekme hatası";
-      return new Response(
-        JSON.stringify({ success: false, error: errorMsg }),
+        JSON.stringify({ success: false, error: vadeBakiyeApiResult.error }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const vadeBakiyeData = vadeBakiyeApiResult.data;
+    console.log("DIA Vade Bakiye Response:", JSON.stringify(vadeBakiyeData).substring(0, 2000));
 
     let vadeBakiyeList: any[] = [];
     if (Array.isArray(vadeBakiyeData.result)) {
@@ -482,39 +522,40 @@ serve(async (req) => {
     console.log(`Found ${vadeBakiyeList.length} vade bakiye records`);
 
     // 2. Fetch cari kart listesi for additional info (NO LIMIT)
-    const cariListePayload = {
-      scf_carikart_listele: {
-        session_id: sessionId,
-        firma_kodu: firmaKodu,
-        filters: "",
-        sorts: [{ field: "carikartkodu", sorttype: "DESC" }],
-        limit: 50000,
-        offset: 0,
-        params: {
-          irsaliyeleriDahilEt: "False",
-          selectedcolumns: [
-            "_key", "potansiyeleklemetarihi", "durum", "unvan", "carikartkodu",
-            "carikarttipi", "potansiyel", "yurtdisi", "subeadi", "ozelkod1kod",
-            "ozelkod2kod", "ozelkod3kod", "sehir", "bolge", "ulke", "ilce",
-            "borctoplam", "alacaktoplam", "eposta", "kaynak", "telefon1",
-            "ceptel", "telefon2", "sektorler", "satiselemani", "cariyedonusmetarihi"
-          ]
+    const cariApiResult = await makeDiaRequest(
+      supabase,
+      user.id,
+      (sessionId, fKodu) => ({
+        url: diaUrl,
+        payload: {
+          scf_carikart_listele: {
+            session_id: sessionId,
+            firma_kodu: fKodu,
+            filters: "",
+            sorts: [{ field: "carikartkodu", sorttype: "DESC" }],
+            limit: 50000,
+            offset: 0,
+            params: {
+              irsaliyeleriDahilEt: "False",
+              selectedcolumns: [
+                "_key", "potansiyeleklemetarihi", "durum", "unvan", "carikartkodu",
+                "carikarttipi", "potansiyel", "yurtdisi", "subeadi", "ozelkod1kod",
+                "ozelkod2kod", "ozelkod3kod", "sehir", "bolge", "ulke", "ilce",
+                "borctoplam", "alacaktoplam", "eposta", "kaynak", "telefon1",
+                "ceptel", "telefon2", "sektorler", "satiselemani", "cariyedonusmetarihi"
+              ]
+            }
+          }
         }
-      }
-    };
-
-    const cariResponse = await fetch(diaUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cariListePayload),
-    });
+      })
+    );
 
     let cariMap = new Map<string, any>();
     let toplamCariSayisi = 0;
     let musteriSayisi = 0;
     
-    if (cariResponse.ok) {
-      const cariData = await cariResponse.json();
+    if (cariApiResult.success && cariApiResult.data) {
+      const cariData = cariApiResult.data;
       console.log("DIA Cari Response:", JSON.stringify(cariData).substring(0, 1000));
       
       let cariListe: any[] = [];
