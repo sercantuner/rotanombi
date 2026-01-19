@@ -441,6 +441,7 @@ export type Database = {
       widgets: {
         Row: {
           available_filters: Json | null
+          builder_config: Json | null
           category: string
           created_at: string
           created_by: string | null
@@ -463,6 +464,7 @@ export type Database = {
         }
         Insert: {
           available_filters?: Json | null
+          builder_config?: Json | null
           category?: string
           created_at?: string
           created_by?: string | null
@@ -485,6 +487,7 @@ export type Database = {
         }
         Update: {
           available_filters?: Json | null
+          builder_config?: Json | null
           category?: string
           created_at?: string
           created_by?: string | null

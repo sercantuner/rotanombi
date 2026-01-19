@@ -49,6 +49,7 @@ export function useWidgets() {
         created_at: w.created_at,
         updated_at: w.updated_at,
         created_by: w.created_by,
+        builder_config: w.builder_config || null,
       }));
 
       setWidgets(mappedWidgets);
@@ -144,6 +145,7 @@ export function useWidgetAdmin() {
           is_active: data.is_active,
           sort_order: data.sort_order,
           created_by: user.id,
+          builder_config: data.builder_config ? data.builder_config as unknown as any : null,
         } as any);
 
       if (error) throw error;

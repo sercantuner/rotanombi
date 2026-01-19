@@ -231,6 +231,28 @@ export function WidgetBuilder({ open, onOpenChange, onSave }: WidgetBuilderProps
       return;
     }
 
+    // builder_config'i oluştur
+    const builderConfig: WidgetBuilderConfig = {
+      diaApi: {
+        ...config.diaApi,
+        parameters: {
+          ...config.diaApi.parameters,
+          filters: customFilters.trim() ? JSON.parse(customFilters) : undefined,
+          selectedcolumns: selectedColumns.trim() || undefined,
+        },
+      },
+      visualization: {
+        ...config.visualization,
+        chart: config.visualization.chart ? {
+          ...config.visualization.chart,
+          xAxis: xAxisField ? { field: xAxisField } : undefined,
+          yAxis: yAxisField ? { field: yAxisField } : undefined,
+          legendField: legendField || undefined,
+          tooltipFields: tooltipFields.split(',').map(f => f.trim()).filter(f => f) || undefined,
+        } : undefined,
+      },
+    };
+
     const formData: WidgetFormData = {
       widget_key: widgetKey,
       name: widgetName,
@@ -251,10 +273,12 @@ export function WidgetBuilder({ open, onOpenChange, onSave }: WidgetBuilderProps
       grid_cols: null,
       is_active: true,
       sort_order: 100,
+      builder_config: builderConfig, // Builder yapılandırmasını kaydet
     };
 
     const success = await createWidget(formData);
     if (success) {
+      toast.success('Widget oluşturuldu ve kaydedildi!');
       onSave?.();
       onOpenChange(false);
       // Reset form
@@ -263,6 +287,12 @@ export function WidgetBuilder({ open, onOpenChange, onSave }: WidgetBuilderProps
       setWidgetDescription('');
       setConfig(getEmptyConfig());
       setTestResult(null);
+      setCustomFilters('');
+      setSelectedColumns('');
+      setXAxisField('');
+      setYAxisField('');
+      setLegendField('');
+      setTooltipFields('');
     }
   };
 

@@ -39,7 +39,7 @@ export function ContainerRenderer({
   const template = CONTAINER_TEMPLATES.find(t => t.id === container.container_type);
   if (!template) return null;
 
-  // Widget detaylarını yükle
+  // Widget detaylarını yükle (builder_config dahil)
   useEffect(() => {
     const loadWidgetDetails = async () => {
       if (containerWidgets.length === 0) {
@@ -56,7 +56,29 @@ export function ContainerRenderer({
       if (data) {
         const details: Record<string, Widget> = {};
         data.forEach((w: any) => {
-          details[w.id] = w as Widget;
+          details[w.id] = {
+            id: w.id,
+            widget_key: w.widget_key,
+            name: w.name,
+            description: w.description,
+            category: w.category,
+            type: w.type,
+            data_source: w.data_source,
+            size: w.size,
+            icon: w.icon,
+            default_page: w.default_page,
+            default_visible: w.default_visible,
+            available_filters: w.available_filters || [],
+            default_filters: w.default_filters || {},
+            min_height: w.min_height,
+            grid_cols: w.grid_cols,
+            is_active: w.is_active,
+            sort_order: w.sort_order,
+            created_at: w.created_at,
+            updated_at: w.updated_at,
+            created_by: w.created_by,
+            builder_config: w.builder_config || null, // builder_config dahil et
+          };
         });
         setWidgetDetails(details);
       }
@@ -129,6 +151,7 @@ export function ContainerRenderer({
               data={widgetData}
               isLoading={isLoading}
               currentPage="dashboard"
+              dbWidget={widgetDetail} // builder_config için widget bilgisini ilet
             />
             {!isDragMode && (
               <Button
