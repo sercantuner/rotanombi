@@ -54,7 +54,8 @@ function groupDataForChart(
   data: any[], 
   groupField: string, 
   valueField: string, 
-  aggregation: AggregationType = 'sum'
+  aggregation: AggregationType = 'sum',
+  displayLimit: number = 10 // Grafikte gösterilecek kayıt sayısı
 ): { name: string; value: number }[] {
   if (!data || data.length === 0) return [];
 
@@ -72,7 +73,7 @@ function groupDataForChart(
       value: calculateAggregation(items, valueField, aggregation),
     }))
     .sort((a, b) => b.value - a.value)
-    .slice(0, 10); // İlk 10 kayıt
+    .slice(0, displayLimit); // Görsel limit (sadece grafikte gösterim için)
 }
 
 export function useDynamicWidgetData(config: WidgetBuilderConfig | null): DynamicWidgetDataResult {
@@ -107,7 +108,8 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
         body: JSON.stringify({
           module: config.diaApi.module,
           method: config.diaApi.method,
-          limit: config.diaApi.parameters.limit || 1000,
+          // Limit sadece config'de belirtilmişse gönder, yoksa API tüm veriyi döndürür
+          ...(config.diaApi.parameters.limit && { limit: config.diaApi.parameters.limit }),
           filters: config.diaApi.parameters.filters,
           selectedColumns: config.diaApi.parameters.selectedcolumns?.split(',').map(c => c.trim()),
           orderby: config.diaApi.parameters.orderby,
@@ -169,12 +171,14 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
         const chartConfig = config.visualization.chart;
         const xField = chartConfig.xAxis?.field || '';
         const yField = chartConfig.yAxis?.field || chartConfig.valueField || '';
+        const displayLimit = chartConfig.displayLimit || 10;
         
         const chartData = groupDataForChart(
           fetchedData, 
           xField, 
           yField, 
-          chartConfig.yAxis?.aggregation || 'sum'
+          chartConfig.yAxis?.aggregation || 'sum',
+          displayLimit
         );
         
         setData({
@@ -189,12 +193,14 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
         const chartConfig = config.visualization.chart;
         const legendField = chartConfig.legendField || '';
         const valueField = chartConfig.valueField || chartConfig.yAxis?.field || '';
+        const displayLimit = chartConfig.displayLimit || 10;
         
         const pieData = groupDataForChart(
           fetchedData, 
           legendField, 
           valueField, 
-          'sum'
+          'sum',
+          displayLimit
         );
         
         setData({
