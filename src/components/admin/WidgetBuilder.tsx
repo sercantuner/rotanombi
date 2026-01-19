@@ -627,7 +627,9 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                         }))}
                       />
                     </div>
-                  </div>
+                      </div>
+                    </>
+                  )}
 
                   <Button onClick={handleTestApi} disabled={isTesting} className="w-full">
                     <Play className="h-4 w-4 mr-2" />
@@ -667,7 +669,6 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                                       variant="outline" 
                                       className={cn('text-xs cursor-pointer hover:opacity-80', typeColor)}
                                       onClick={() => {
-                                        // Alan adını panoya kopyala
                                         navigator.clipboard.writeText(field);
                                         toast.success(`"${field}" kopyalandı`);
                                       }}
