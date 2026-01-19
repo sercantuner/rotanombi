@@ -19,11 +19,15 @@ import {
   CalculatedField,
 } from '@/lib/widgetBuilderTypes';
 import { testDiaApi, DiaApiTestResponse, FieldStat } from '@/lib/diaApiTest';
+import { CompactFilterBuilder } from './CompactFilterBuilder';
+import { CompactSortBuilder } from './CompactSortBuilder';
+import { CompactColumnSelector } from './CompactColumnSelector';
 import { FilterBuilder } from './FilterBuilder';
 import { SortBuilder } from './SortBuilder';
 import { ColumnSelector } from './ColumnSelector';
 import { MultiQueryBuilder } from './MultiQueryBuilder';
 import { CalculatedFieldBuilder } from './CalculatedFieldBuilder';
+import { WidgetPreviewRenderer } from './WidgetPreviewRenderer';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -603,28 +607,28 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
 
                       <Separator />
 
-                  {/* No-Code Column Selector */}
-                  <ColumnSelector
-                    availableFields={testResult?.sampleFields || []}
-                    selectedColumns={selectedColumnsArray}
-                    onChange={setSelectedColumnsArray}
-                    fieldTypes={testResult?.fieldTypes}
-                  />
+                  {/* Kompakt No-Code Bileşenler */}
+                  <div className="space-y-2">
+                    <CompactColumnSelector
+                      availableFields={testResult?.sampleFields || []}
+                      selectedColumns={selectedColumnsArray}
+                      onChange={setSelectedColumnsArray}
+                      fieldTypes={testResult?.fieldTypes}
+                    />
 
-                  {/* No-Code Filter Builder */}
-                  <FilterBuilder
-                    filters={apiFilters}
-                    onChange={setApiFilters}
-                    availableFields={testResult?.sampleFields || []}
-                    fieldTypes={testResult?.fieldTypes}
-                  />
+                    <CompactFilterBuilder
+                      filters={apiFilters}
+                      onChange={setApiFilters}
+                      availableFields={testResult?.sampleFields || []}
+                      fieldTypes={testResult?.fieldTypes}
+                    />
 
-                  {/* No-Code Sort Builder */}
-                  <SortBuilder
-                    sorts={apiSorts}
-                    onChange={setApiSorts}
-                    availableFields={testResult?.sampleFields || []}
-                  />
+                    <CompactSortBuilder
+                      sorts={apiSorts}
+                      onChange={setApiSorts}
+                      availableFields={testResult?.sampleFields || []}
+                    />
+                  </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -1166,47 +1170,61 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
               </Card>
             </TabsContent>
 
-            {/* ÖNİZLEME */}
+            {/* ÖNİZLEME - Gerçek zamanlı */}
             <TabsContent value="preview" className="m-0 space-y-4">
+              {/* Gerçek zamanlı widget önizleme */}
+              <WidgetPreviewRenderer
+                config={config}
+                testResult={testResult}
+                widgetName={widgetName}
+                widgetIcon={widgetIcon}
+                xAxisField={xAxisField}
+                yAxisField={yAxisField}
+                legendField={legendField}
+                calculatedFields={calculatedFields}
+              />
+
+              {/* Config özeti */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Widget Önizleme</CardTitle>
-                  <CardDescription>
-                    Widget'ın nasıl görüneceğinin tahmini gösterimi
-                  </CardDescription>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm">Yapılandırma Özeti</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="border rounded-lg p-6 bg-muted/20 min-h-[200px] flex items-center justify-center">
-                    {config.visualization.type === 'kpi' ? (
-                      <div className="text-center">
-                        <DynamicIcon iconName={widgetIcon} className="h-8 w-8 mx-auto mb-2 text-primary" />
-                        <p className="text-3xl font-bold">
-                          {config.visualization.kpi?.prefix || '₺'}1.234.567
-                        </p>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {widgetName || 'Widget Adı'}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="text-center text-muted-foreground">
-                        <DynamicIcon iconName={CHART_TYPES.find(c => c.id === config.visualization.type)?.icon || 'BarChart3'} className="h-16 w-16 mx-auto mb-4" />
-                        <p className="font-medium">{widgetName || 'Widget Adı'}</p>
-                        <p className="text-sm">
-                          {CHART_TYPES.find(c => c.id === config.visualization.type)?.name} görünümü
-                        </p>
+                <CardContent className="pt-0">
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                      <span className="text-muted-foreground">API:</span>
+                      <code className="text-[10px]">{config.diaApi.module}/{config.diaApi.method}</code>
+                    </div>
+                    <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                      <span className="text-muted-foreground">Tip:</span>
+                      <Badge variant="outline" className="text-[10px]">{config.visualization.type}</Badge>
+                    </div>
+                    <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                      <span className="text-muted-foreground">Boyut:</span>
+                      <Badge variant="secondary" className="text-[10px]">{widgetSize}</Badge>
+                    </div>
+                    <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                      <span className="text-muted-foreground">Sayfa:</span>
+                      <Badge variant="secondary" className="text-[10px]">{defaultPage}</Badge>
+                    </div>
+                    {apiFilters.length > 0 && (
+                      <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                        <span className="text-muted-foreground">Filtreler:</span>
+                        <Badge variant="outline" className="text-[10px]">{apiFilters.length} filtre</Badge>
                       </div>
                     )}
-                  </div>
-
-                  {/* Config özeti */}
-                  <div className="mt-4 p-4 rounded-lg bg-muted/50 space-y-2">
-                    <p className="text-sm font-medium">Yapılandırma Özeti:</p>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div>API: <code>{config.diaApi.module}/{config.diaApi.method}</code></div>
-                      <div>Tip: <Badge variant="outline">{config.visualization.type}</Badge></div>
-                      <div>Boyut: <Badge variant="secondary">{widgetSize}</Badge></div>
-                      <div>Sayfa: <Badge variant="secondary">{defaultPage}</Badge></div>
-                    </div>
+                    {selectedColumnsArray.length > 0 && (
+                      <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                        <span className="text-muted-foreground">Kolonlar:</span>
+                        <Badge variant="outline" className="text-[10px]">{selectedColumnsArray.length} seçili</Badge>
+                      </div>
+                    )}
+                    {calculatedFields.length > 0 && (
+                      <div className="flex items-center justify-between p-2 bg-muted/50 rounded col-span-2">
+                        <span className="text-muted-foreground">Hesaplamalar:</span>
+                        <Badge variant="outline" className="text-[10px] bg-green-500/10">{calculatedFields.length} hesaplama</Badge>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
