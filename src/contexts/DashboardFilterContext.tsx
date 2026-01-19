@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, ReactNode } fr
 
 export interface DashboardFilters {
   cariTipi: string[];
+  cariKartTipi: string[]; // AL, AS, ST
   ozelkod1: string[];
   ozelkod2: string[];
   ozelkod3: string[];
@@ -15,6 +16,7 @@ export interface DashboardFilters {
 
 interface FilterOptions {
   cariTipleri: string[];
+  cariKartTipleri: string[];
   ozelkodlar1: string[];
   ozelkodlar2: string[];
   ozelkodlar3: string[];
@@ -26,7 +28,7 @@ interface DashboardFilterContextType {
   filters: DashboardFilters;
   filterOptions: FilterOptions;
   setFilter: <K extends keyof DashboardFilters>(key: K, value: DashboardFilters[K]) => void;
-  toggleArrayFilter: (key: 'cariTipi' | 'ozelkod1' | 'ozelkod2' | 'ozelkod3' | 'sehir' | 'satisTemsilcisi', value: string) => void;
+  toggleArrayFilter: (key: 'cariTipi' | 'cariKartTipi' | 'ozelkod1' | 'ozelkod2' | 'ozelkod3' | 'sehir' | 'satisTemsilcisi', value: string) => void;
   clearFilters: () => void;
   clearFilter: (key: keyof DashboardFilters) => void;
   setFilterOptions: (options: Partial<FilterOptions>) => void;
@@ -35,19 +37,21 @@ interface DashboardFilterContextType {
 
 const defaultFilters: DashboardFilters = {
   cariTipi: [],
+  cariKartTipi: [],
   ozelkod1: [],
   ozelkod2: [],
   ozelkod3: [],
   sehir: [],
   satisTemsilcisi: [],
   vadeDilimi: null,
-  durum: 'aktif',
+  durum: 'hepsi',
   gorunumModu: 'hepsi',
   searchTerm: '',
 };
 
 const defaultFilterOptions: FilterOptions = {
   cariTipleri: [],
+  cariKartTipleri: ['AL', 'AS', 'ST'],
   ozelkodlar1: [],
   ozelkodlar2: [],
   ozelkodlar3: [],
@@ -66,7 +70,7 @@ export function DashboardFilterProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggleArrayFilter = useCallback((
-    key: 'cariTipi' | 'ozelkod1' | 'ozelkod2' | 'ozelkod3' | 'sehir' | 'satisTemsilcisi',
+    key: 'cariTipi' | 'cariKartTipi' | 'ozelkod1' | 'ozelkod2' | 'ozelkod3' | 'sehir' | 'satisTemsilcisi',
     value: string
   ) => {
     setFilters(prev => {
@@ -93,13 +97,14 @@ export function DashboardFilterProvider({ children }: { children: ReactNode }) {
   // Calculate active filter count
   const activeFilterCount = 
     filters.cariTipi.length +
+    filters.cariKartTipi.length +
     filters.ozelkod1.length +
     filters.ozelkod2.length +
     filters.ozelkod3.length +
     filters.sehir.length +
     filters.satisTemsilcisi.length +
     (filters.vadeDilimi ? 1 : 0) +
-    (filters.durum !== 'aktif' ? 1 : 0) +
+    (filters.durum !== 'hepsi' ? 1 : 0) +
     (filters.gorunumModu !== 'hepsi' ? 1 : 0) +
     (filters.searchTerm ? 1 : 0);
 
