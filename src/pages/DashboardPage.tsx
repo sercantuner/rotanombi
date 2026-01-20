@@ -263,7 +263,7 @@ function DashboardContent() {
 
       <main className="flex-1 p-6 overflow-auto">
         {/* DIA Connection Status */}
-        {!diaConnectionInfo?.connected && (
+        {!diaConnectionInfo?.connected && !dataSourcesLoading && loadedSources.length === 0 && (
           <div className="mb-6 p-4 rounded-xl bg-warning/10 border border-warning/30 flex items-center justify-between animate-fade-in">
             <div className="flex items-center gap-3">
               <Plug className="w-5 h-5 text-warning" />
@@ -301,92 +301,100 @@ function DashboardContent() {
           </div>
         )}
 
-        {diaConnectionInfo?.connected && lastUpdate && (
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <RefreshCw className="w-4 h-4" />
-              <span>Son güncelleme: {lastUpdate.toLocaleTimeString('tr-TR')}</span>
-              <span className="px-2 py-0.5 rounded-full bg-success/20 text-success text-xs font-medium">
-                DIA Bağlı
+        {/* Dashboard Status Bar - Her zaman göster */}
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            {diaConnectionInfo?.connected ? (
+              <>
+                <span className="px-2 py-0.5 rounded-full bg-success/20 text-success text-xs font-medium">
+                  DIA Bağlı
+                </span>
+              </>
+            ) : loadedSources.length > 0 ? (
+              <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-xs font-medium">
+                Cache'den
               </span>
-              {/* Veri kaynakları durumu */}
-              {loadedSources.length > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-xs font-medium flex items-center gap-1">
-                  <Database className="w-3 h-3" />
-                  {loadedSources.length} kaynak
-                </span>
-              )}
-              {dataSourcesLoading && (
-                <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium animate-pulse">
-                  Yükleniyor...
-                </span>
-              )}
-              {/* Sorgu istatistikleri */}
-              <DiaQueryStats />
-            </div>
+            ) : null}
             
-            {/* Kontroller */}
-            <div className="flex items-center gap-3">
-              {/* Widget Düzenleme Modu Butonu */}
-              <Button
-                variant={isWidgetEditMode ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setIsWidgetEditMode(!isWidgetEditMode)}
-                className="h-8"
-              >
-                {isWidgetEditMode ? (
-                  <>
-                    <Check className="h-4 w-4 mr-2" />
-                    Düzenlemeyi Bitir
-                  </>
-                ) : (
-                  <>
-                    <Edit className="h-4 w-4 mr-2" />
-                    Widget Düzenle
-                  </>
-                )}
-              </Button>
-              
-              {autoRefreshEnabled && nextRefreshIn !== null && (
-                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {nextRefreshIn}s
-                </span>
+            {/* Veri kaynakları durumu */}
+            {loadedSources.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium flex items-center gap-1">
+                <Database className="w-3 h-3" />
+                {loadedSources.length} kaynak
+              </span>
+            )}
+            
+            {dataSourcesLoading && (
+              <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium animate-pulse">
+                Yükleniyor...
+              </span>
+            )}
+            
+            {/* Sorgu istatistikleri - Her zaman göster */}
+            <DiaQueryStats />
+          </div>
+          
+          {/* Kontroller */}
+          <div className="flex items-center gap-3">
+            {/* Widget Düzenleme Modu Butonu */}
+            <Button
+              variant={isWidgetEditMode ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setIsWidgetEditMode(!isWidgetEditMode)}
+              className="h-8"
+            >
+              {isWidgetEditMode ? (
+                <>
+                  <Check className="h-4 w-4 mr-2" />
+                  Düzenlemeyi Bitir
+                </>
+              ) : (
+                <>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Widget Düzenle
+                </>
               )}
+            </Button>
+            
+            {autoRefreshEnabled && nextRefreshIn !== null && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {nextRefreshIn}s
+              </span>
+            )}
+            
+            <div className="flex items-center gap-2 text-sm">
+              <Select
+                value={refreshInterval.toString()}
+                onValueChange={(v) => setRefreshInterval(parseInt(v))}
+                disabled={!autoRefreshEnabled}
+              >
+                <SelectTrigger className="w-24 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="30">30 sn</SelectItem>
+                  <SelectItem value="60">1 dk</SelectItem>
+                  <SelectItem value="120">2 dk</SelectItem>
+                  <SelectItem value="300">5 dk</SelectItem>
+                  <SelectItem value="600">10 dk</SelectItem>
+                </SelectContent>
+              </Select>
               
-              <div className="flex items-center gap-2 text-sm">
-                <Select
-                  value={refreshInterval.toString()}
-                  onValueChange={(v) => setRefreshInterval(parseInt(v))}
-                  disabled={!autoRefreshEnabled}
-                >
-                  <SelectTrigger className="w-24 h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="30">30 sn</SelectItem>
-                    <SelectItem value="60">1 dk</SelectItem>
-                    <SelectItem value="120">2 dk</SelectItem>
-                    <SelectItem value="300">5 dk</SelectItem>
-                    <SelectItem value="600">10 dk</SelectItem>
-                  </SelectContent>
-                </Select>
-                
-                <button
-                  onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    autoRefreshEnabled 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  }`}
-                >
-                  <Timer className="h-3 w-3" />
-                  {autoRefreshEnabled ? 'Otomatik Aktif' : 'Otomatik Yenile'}
-                </button>
-              </div>
+              <button
+                onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  autoRefreshEnabled 
+                    ? 'bg-primary text-primary-foreground' 
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                <Timer className="h-3 w-3" />
+                {autoRefreshEnabled ? 'Otomatik Aktif' : 'Otomatik Yenile'}
+              </button>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Container Based Dashboard */}
         {dashboardPageId ? (
