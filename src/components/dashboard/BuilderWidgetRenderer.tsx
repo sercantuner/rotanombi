@@ -162,11 +162,8 @@ export function BuilderWidgetRenderer({
   const showTrendLine = chartSettings.showTrendLine || false;
   const showAverageLine = chartSettings.showAverageLine || false;
   
-  // Aktif renk paleti - eski "colors" array desteği (geriye uyumluluk)
-  const legacyColors = (builderConfig as any).visualization?.chart?.colors as string[] | undefined;
-  const activeColors = legacyColors && legacyColors.length > 0 
-    ? legacyColors 
-    : (COLOR_PALETTES[colorPalette as PaletteKey] || COLOR_PALETTES.default);
+  // Aktif renk paleti - her widget kendi chartSettings.colorPalette değerini kullanır
+  const activeColors = COLOR_PALETTES[colorPalette as PaletteKey] || COLOR_PALETTES.default;
   
   // X ve Y ekseni alanlarını belirle - fieldWells öncelikli
   const xAxisField = fieldWells?.xAxis?.field || vizChart?.xAxis?.field || '';
