@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useDiaDataCache, generateCacheKey, SHARED_CACHE_KEYS } from '@/contexts/DiaDataCacheContext';
 import { useDataSources } from './useDataSources';
 import { WidgetBuilderConfig, AggregationType, CalculatedField, CalculationExpression, QueryMerge, DatePeriod, DiaApiFilter, PostFetchFilter, FilterOperator } from '@/lib/widgetBuilderTypes';
+import { queuedDiaFetch, handleRateLimitError } from '@/lib/diaRequestQueue';
 import { 
   startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, 
   startOfQuarter, endOfQuarter, startOfYear, endOfYear, 
@@ -428,23 +429,27 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
             }
           }
           
-          // Cache'de yoksa API çağrısı yap
-          const response = await fetch(`${SUPABASE_URL}/functions/v1/dia-api-test`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session.access_token}`,
+          // Cache'de yoksa API çağrısı yap (kuyruklu)
+          const response = await queuedDiaFetch(
+            `${SUPABASE_URL}/functions/v1/dia-api-test`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify({
+                module: query.module,
+                method: query.method,
+                ...(query.parameters.limit && query.parameters.limit > 0 && { limit: query.parameters.limit }),
+                filters: query.parameters.filters,
+                selectedColumns: query.parameters.selectedcolumns,
+                sorts: query.parameters.sorts,
+                returnAllData: true,
+              }),
             },
-            body: JSON.stringify({
-              module: query.module,
-              method: query.method,
-              ...(query.parameters.limit && query.parameters.limit > 0 && { limit: query.parameters.limit }),
-              filters: query.parameters.filters,
-              selectedColumns: query.parameters.selectedcolumns,
-              sorts: query.parameters.sorts,
-              returnAllData: true,
-            }),
-          });
+            1 // priority
+          );
           const result = await response.json();
           if (result.success) {
             queryResults[query.id] = result.sampleData || [];
@@ -480,22 +485,26 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
             console.log(`[Widget] Cache MISS - DataSource ${config.dataSourceId} - Fetching...`);
             incrementCacheMiss();
             
-            const response = await fetch(`${SUPABASE_URL}/functions/v1/dia-api-test`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session.access_token}`,
+            const response = await queuedDiaFetch(
+              `${SUPABASE_URL}/functions/v1/dia-api-test`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({
+                  module: config.diaApi.module,
+                  method: config.diaApi.method,
+                  ...(config.diaApi.parameters.limit && config.diaApi.parameters.limit > 0 && { limit: config.diaApi.parameters.limit }),
+                  filters: config.diaApi.parameters.filters,
+                  selectedColumns: config.diaApi.parameters.selectedcolumns,
+                  sorts: config.diaApi.parameters.sorts,
+                  returnAllData: true,
+                }),
               },
-              body: JSON.stringify({
-                module: config.diaApi.module,
-                method: config.diaApi.method,
-                ...(config.diaApi.parameters.limit && config.diaApi.parameters.limit > 0 && { limit: config.diaApi.parameters.limit }),
-                filters: config.diaApi.parameters.filters,
-                selectedColumns: config.diaApi.parameters.selectedcolumns,
-                sorts: config.diaApi.parameters.sorts,
-                returnAllData: true,
-              }),
-            });
+              1 // priority
+            );
 
             const result = await response.json();
             if (!result.success) {
@@ -529,27 +538,31 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
             
             const diaApiLimit = config.diaApi.parameters.limit;
             
-            const response = await fetch(`${SUPABASE_URL}/functions/v1/dia-api-test`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session.access_token}`,
+            const response = await queuedDiaFetch(
+              `${SUPABASE_URL}/functions/v1/dia-api-test`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({
+                  module: config.diaApi.module,
+                  method: config.diaApi.method,
+                  ...(diaApiLimit && diaApiLimit > 0 && { limit: diaApiLimit }),
+                  filters: config.diaApi.parameters.filters,
+                  selectedColumns: Array.isArray(config.diaApi.parameters.selectedcolumns) 
+                    ? config.diaApi.parameters.selectedcolumns 
+                    : typeof config.diaApi.parameters.selectedcolumns === 'string'
+                      ? config.diaApi.parameters.selectedcolumns.split(',').map((c: string) => c.trim())
+                      : undefined,
+                  sorts: config.diaApi.parameters.sorts,
+                  orderby: config.diaApi.parameters.orderby,
+                  returnAllData: true,
+                }),
               },
-              body: JSON.stringify({
-                module: config.diaApi.module,
-                method: config.diaApi.method,
-                ...(diaApiLimit && diaApiLimit > 0 && { limit: diaApiLimit }),
-                filters: config.diaApi.parameters.filters,
-                selectedColumns: Array.isArray(config.diaApi.parameters.selectedcolumns) 
-                  ? config.diaApi.parameters.selectedcolumns 
-                  : typeof config.diaApi.parameters.selectedcolumns === 'string'
-                    ? config.diaApi.parameters.selectedcolumns.split(',').map((c: string) => c.trim())
-                    : undefined,
-                sorts: config.diaApi.parameters.sorts,
-                orderby: config.diaApi.parameters.orderby,
-                returnAllData: true,
-              }),
-            });
+              0 // priority (lower for generic cache requests)
+            );
 
             const result = await response.json();
             if (!result.success) {
