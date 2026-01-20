@@ -277,7 +277,7 @@ export interface TableConfig {
   columns: {
     field: string;
     header: string;
-    format?: 'currency' | 'number' | 'date' | 'text' | 'badge';
+    format?: 'currency' | 'number' | 'date' | 'text' | 'badge' | 'percentage';
     width?: string;
     sortable?: boolean;
   }[];
@@ -340,6 +340,12 @@ export interface WidgetBuilderConfig {
   
   // Post-fetch veri filtreleme (çekilen veri üzerinde)
   postFetchFilters?: PostFetchFilter[];
+  
+  // Tablo kolon yapılandırması
+  tableColumns?: TableConfig['columns'];
+  
+  // Pivot rapor yapılandırması (üst seviye)
+  pivot?: PivotConfig;
   
   visualization: {
     type: ChartType;
