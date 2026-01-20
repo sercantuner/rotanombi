@@ -21,7 +21,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Code, Database, Eye, Save, Play, Copy, Check, 
   LayoutGrid, AlertCircle, FileJson, Wand2, X,
-  RefreshCw, Loader2, Download, Sparkles, Send
+  RefreshCw, Loader2, Download, Sparkles, Send, MessageSquare
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -97,44 +97,37 @@ const DynamicIcon = ({ iconName, className }: { iconName: string; className?: st
   return <Icon className={className} />;
 };
 
-// Varsayılan kod şablonu
+// Varsayılan kod şablonu - React.createElement ile
 const getDefaultCodeTemplate = () => `// Widget bileşeni - data prop'u ile veri alır
 // props: { data: any[] } - Veri kaynağından gelen veriler
 
 function Widget({ data }) {
   // Yükleme durumu
   if (!data || data.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-48 text-muted-foreground">
-        Veri bulunamadı
-      </div>
+    return React.createElement('div', 
+      { className: 'flex items-center justify-center h-48 text-muted-foreground' },
+      'Veri bulunamadı'
     );
   }
 
   // Örnek hesaplama
-  const toplamBakiye = data.reduce((acc, item) => {
-    const bakiye = parseFloat(item.toplambakiye) || 0;
+  var toplamBakiye = data.reduce(function(acc, item) {
+    var bakiye = parseFloat(item.toplambakiye) || 0;
     return acc + bakiye;
   }, 0);
 
-  const formatCurrency = (value) => {
-    if (Math.abs(value) >= 1_000_000) {
-      return \`₺\${(value / 1_000_000).toFixed(1)}M\`;
-    } else if (Math.abs(value) >= 1_000) {
-      return \`₺\${(value / 1_000).toFixed(0)}K\`;
+  var formatCurrency = function(value) {
+    if (Math.abs(value) >= 1000000) {
+      return '₺' + (value / 1000000).toFixed(1) + 'M';
+    } else if (Math.abs(value) >= 1000) {
+      return '₺' + (value / 1000).toFixed(0) + 'K';
     }
-    return \`₺\${value.toLocaleString('tr-TR')}\`;
+    return '₺' + value.toLocaleString('tr-TR');
   };
 
-  return (
-    <div className="p-4">
-      <div className="text-2xl font-bold text-primary">
-        {formatCurrency(toplamBakiye)}
-      </div>
-      <div className="text-sm text-muted-foreground mt-1">
-        {data.length} kayıt
-      </div>
-    </div>
+  return React.createElement('div', { className: 'p-4' },
+    React.createElement('div', { className: 'text-2xl font-bold text-primary' }, formatCurrency(toplamBakiye)),
+    React.createElement('div', { className: 'text-sm text-muted-foreground mt-1' }, data.length + ' kayıt')
   );
 }
 
@@ -142,34 +135,35 @@ function Widget({ data }) {
 return Widget;
 `;
 
-// Vade yaşlandırma şablonu
+// Vade yaşlandırma şablonu - React.createElement ile
 const getAgingChartTemplate = () => `// Vade Yaşlandırma Grafiği
 // props: { data: any[] } - Cari vade bakiye verileri
 
 function VadeYaslandirmaWidget({ data }) {
-  const [periyot, setPeriyot] = React.useState('gunluk');
+  var periyotState = React.useState('gunluk');
+  var periyot = periyotState[0];
+  var setPeriyot = periyotState[1];
 
   if (!data || data.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        Veri bulunamadı
-      </div>
+    return React.createElement('div', 
+      { className: 'flex items-center justify-center h-64 text-muted-foreground' },
+      'Veri bulunamadı'
     );
   }
 
   // Verileri hesapla
-  const yaslandirma = React.useMemo(() => {
-    let vade90Plus = 0, vade90 = 0, vade60 = 0, vade30 = 0, guncel = 0;
-    let gelecek30 = 0, gelecek60 = 0, gelecek90 = 0, gelecek90Plus = 0;
+  var yaslandirma = React.useMemo(function() {
+    var vade90Plus = 0, vade90 = 0, vade60 = 0, vade30 = 0, guncel = 0;
+    var gelecek30 = 0, gelecek60 = 0, gelecek90 = 0, gelecek90Plus = 0;
     
-    const today = new Date();
+    var today = new Date();
     
-    data.forEach(item => {
-      const bakiye = parseFloat(item.toplambakiye) || 0;
-      if (bakiye <= 0) return; // Sadece alacakları hesapla
+    data.forEach(function(item) {
+      var bakiye = parseFloat(item.toplambakiye) || 0;
+      if (bakiye <= 0) return;
       
-      const vadeTarihi = item.vadetarihi ? new Date(item.vadetarihi) : today;
-      const gunFarki = Math.floor((today - vadeTarihi) / (1000 * 60 * 60 * 24));
+      var vadeTarihi = item.vadetarihi ? new Date(item.vadetarihi) : today;
+      var gunFarki = Math.floor((today - vadeTarihi) / (1000 * 60 * 60 * 24));
       
       if (gunFarki > 90) vade90Plus += bakiye;
       else if (gunFarki > 60) vade90 += bakiye;
@@ -182,17 +176,17 @@ function VadeYaslandirmaWidget({ data }) {
       else gelecek90Plus += bakiye;
     });
     
-    return { vade90Plus, vade90, vade60, vade30, guncel, gelecek30, gelecek60, gelecek90, gelecek90Plus };
+    return { vade90Plus: vade90Plus, vade90: vade90, vade60: vade60, vade30: vade30, guncel: guncel, gelecek30: gelecek30, gelecek60: gelecek60, gelecek90: gelecek90, gelecek90Plus: gelecek90Plus };
   }, [data]);
 
-  const formatCurrency = (value) => {
-    if (value >= 1_000_000) return \`₺\${(value / 1_000_000).toFixed(1)}M\`;
-    if (value >= 1_000) return \`₺\${(value / 1_000).toFixed(0)}K\`;
-    return \`₺\${value.toLocaleString('tr-TR')}\`;
+  var formatCurrency = function(value) {
+    if (value >= 1000000) return '₺' + (value / 1000000).toFixed(1) + 'M';
+    if (value >= 1000) return '₺' + (value / 1000).toFixed(0) + 'K';
+    return '₺' + value.toLocaleString('tr-TR');
   };
 
   // Chart verisi oluştur
-  const chartData = [
+  var chartData = [
     { name: '90+ Gün', value: yaslandirma.vade90Plus, type: 'gecmis', color: 'hsl(var(--destructive))' },
     { name: '61-90', value: yaslandirma.vade90, type: 'gecmis', color: 'hsl(0 65% 50%)' },
     { name: '31-60', value: yaslandirma.vade60, type: 'gecmis', color: 'hsl(25 95% 53%)' },
@@ -201,83 +195,85 @@ function VadeYaslandirmaWidget({ data }) {
     { name: '-30', value: yaslandirma.gelecek30, type: 'gelecek', color: 'hsl(142 76% 46%)' },
     { name: '-60', value: yaslandirma.gelecek60, type: 'gelecek', color: 'hsl(142 72% 40%)' },
     { name: '-90', value: yaslandirma.gelecek90, type: 'gelecek', color: 'hsl(142 68% 34%)' },
-    { name: '-90+', value: yaslandirma.gelecek90Plus, type: 'gelecek', color: 'hsl(142 65% 28%)' },
+    { name: '-90+', value: yaslandirma.gelecek90Plus, type: 'gelecek', color: 'hsl(142 65% 28%)' }
   ];
 
-  const toplam = chartData.reduce((acc, item) => acc + item.value, 0);
-  const gecmisToplam = chartData.filter(d => d.type === 'gecmis').reduce((acc, d) => acc + d.value, 0);
-  const gelecekToplam = chartData.filter(d => d.type === 'gelecek').reduce((acc, d) => acc + d.value, 0);
+  var toplam = chartData.reduce(function(acc, item) { return acc + item.value; }, 0);
+  var gecmisToplam = chartData.filter(function(d) { return d.type === 'gecmis'; }).reduce(function(acc, d) { return acc + d.value; }, 0);
+  var gelecekToplam = chartData.filter(function(d) { return d.type === 'gelecek'; }).reduce(function(acc, d) { return acc + d.value; }, 0);
+  var maxValue = Math.max.apply(null, chartData.map(function(d) { return d.value; }));
 
-  const maxValue = Math.max(...chartData.map(d => d.value));
-
-  return (
-    <div className="space-y-4">
-      {/* Periyot seçici */}
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          Toplam: <span className="font-semibold text-foreground">{formatCurrency(toplam)}</span>
-        </div>
-        <div className="flex items-center bg-secondary/50 rounded-lg p-1">
-          {['gunluk', 'haftalik', 'aylik'].map(p => (
-            <button
-              key={p}
-              onClick={() => setPeriyot(p)}
-              className={\`px-3 py-1.5 text-xs font-medium rounded-md transition-colors \${
-                periyot === p ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-              }\`}
-            >
-              {p === 'gunluk' ? 'Günlük' : p === 'haftalik' ? 'Haftalık' : 'Aylık'}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Legend */}
-      <div className="flex items-center justify-center gap-6 text-xs">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-sm bg-destructive" />
-          <span className="text-muted-foreground">Vadesi Geçmiş: <span className="font-semibold text-foreground">{formatCurrency(gecmisToplam)}</span></span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-sm bg-primary" />
-          <span className="text-muted-foreground">Güncel: <span className="font-semibold text-foreground">{formatCurrency(yaslandirma.guncel)}</span></span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'hsl(142 76% 46%)' }} />
-          <span className="text-muted-foreground">Gelecek: <span className="font-semibold text-foreground">{formatCurrency(gelecekToplam)}</span></span>
-        </div>
-      </div>
-
-      {/* Bar chart (CSS tabanlı) */}
-      <div className="h-48 flex items-end justify-center gap-1">
-        {chartData.map((item, idx) => (
-          <div key={idx} className="flex flex-col items-center gap-1 flex-1">
-            <div 
-              className="w-full rounded-t transition-all hover:opacity-80 cursor-pointer relative group"
-              style={{ 
-                height: maxValue > 0 ? \`\${(item.value / maxValue) * 100}%\` : '0%',
-                backgroundColor: item.color,
-                minHeight: item.value > 0 ? '4px' : '0'
-              }}
-            >
-              <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-card border border-border rounded px-2 py-1 text-xs whitespace-nowrap z-10">
-                {formatCurrency(item.value)}
-              </div>
-            </div>
-            <span className="text-[10px] text-muted-foreground whitespace-nowrap">{item.name}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Uyarı */}
-      {yaslandirma.vade90Plus > 0 && (
-        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-3">
-          <span className="text-sm text-destructive">
-            <span className="font-semibold">{formatCurrency(yaslandirma.vade90Plus)}</span> tutarında 90 günü aşmış alacak var
-          </span>
-        </div>
-      )}
-    </div>
+  return React.createElement('div', { className: 'space-y-4' },
+    // Periyot seçici ve toplam
+    React.createElement('div', { className: 'flex items-center justify-between' },
+      React.createElement('div', { className: 'text-sm text-muted-foreground' },
+        'Toplam: ',
+        React.createElement('span', { className: 'font-semibold text-foreground' }, formatCurrency(toplam))
+      ),
+      React.createElement('div', { className: 'flex items-center bg-secondary/50 rounded-lg p-1' },
+        ['gunluk', 'haftalik', 'aylik'].map(function(p) {
+          return React.createElement('button', {
+            key: p,
+            onClick: function() { setPeriyot(p); },
+            className: 'px-3 py-1.5 text-xs font-medium rounded-md transition-colors ' + 
+              (periyot === p ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')
+          }, p === 'gunluk' ? 'Günlük' : p === 'haftalik' ? 'Haftalık' : 'Aylık');
+        })
+      )
+    ),
+    // Legend
+    React.createElement('div', { className: 'flex items-center justify-center gap-6 text-xs' },
+      React.createElement('div', { className: 'flex items-center gap-2' },
+        React.createElement('div', { className: 'w-3 h-3 rounded-sm bg-destructive' }),
+        React.createElement('span', { className: 'text-muted-foreground' }, 
+          'Vadesi Geçmiş: ',
+          React.createElement('span', { className: 'font-semibold text-foreground' }, formatCurrency(gecmisToplam))
+        )
+      ),
+      React.createElement('div', { className: 'flex items-center gap-2' },
+        React.createElement('div', { className: 'w-3 h-3 rounded-sm bg-primary' }),
+        React.createElement('span', { className: 'text-muted-foreground' }, 
+          'Güncel: ',
+          React.createElement('span', { className: 'font-semibold text-foreground' }, formatCurrency(yaslandirma.guncel))
+        )
+      ),
+      React.createElement('div', { className: 'flex items-center gap-2' },
+        React.createElement('div', { className: 'w-3 h-3 rounded-sm', style: { backgroundColor: 'hsl(142 76% 46%)' } }),
+        React.createElement('span', { className: 'text-muted-foreground' }, 
+          'Gelecek: ',
+          React.createElement('span', { className: 'font-semibold text-foreground' }, formatCurrency(gelecekToplam))
+        )
+      )
+    ),
+    // Bar chart (CSS tabanlı)
+    React.createElement('div', { className: 'h-48 flex items-end justify-center gap-1' },
+      chartData.map(function(item, idx) {
+        return React.createElement('div', { key: idx, className: 'flex flex-col items-center gap-1 flex-1' },
+          React.createElement('div', {
+            className: 'w-full rounded-t transition-all hover:opacity-80 cursor-pointer relative group',
+            style: { 
+              height: maxValue > 0 ? ((item.value / maxValue) * 100) + '%' : '0%',
+              backgroundColor: item.color,
+              minHeight: item.value > 0 ? '4px' : '0'
+            }
+          },
+            React.createElement('div', { 
+              className: 'absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-card border border-border rounded px-2 py-1 text-xs whitespace-nowrap z-10'
+            }, formatCurrency(item.value))
+          ),
+          React.createElement('span', { className: 'text-[10px] text-muted-foreground whitespace-nowrap' }, item.name)
+        );
+      })
+    ),
+    // Uyarı
+    yaslandirma.vade90Plus > 0 ? React.createElement('div', { 
+      className: 'p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-3'
+    },
+      React.createElement('span', { className: 'text-sm text-destructive' },
+        React.createElement('span', { className: 'font-semibold' }, formatCurrency(yaslandirma.vade90Plus)),
+        ' tutarında 90 günü aşmış alacak var'
+      )
+    ) : null
   );
 }
 
@@ -289,6 +285,12 @@ const CODE_TEMPLATES = [
   { id: 'basic', name: 'Temel Şablon', code: getDefaultCodeTemplate() },
   { id: 'aging', name: 'Vade Yaşlandırma', code: getAgingChartTemplate() },
 ];
+
+// Chat mesaj tipi
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave }: CustomCodeWidgetBuilderProps) {
   const { createWidget, isLoading: isSaving } = useWidgetAdmin();
@@ -316,6 +318,11 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave }: CustomCo
   // AI kod üretimi
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
+  
+  // AI Chat
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
   
   // Kopyalama durumu
   const [copied, setCopied] = useState(false);
@@ -448,20 +455,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave }: CustomCo
         });
       }
 
-      const systemPrompt = `Sen bir React widget geliştirme uzmanısın. Kullanıcının isteğine göre React bileşeni kodu yazacaksın.
-
-Kurallar:
-1. Sadece JavaScript/JSX kodu yaz, TypeScript kullanma
-2. "function Widget({ data })" formatında tek bir bileşen yaz
-3. React hook'ları React.useState, React.useMemo şeklinde kullan (import etme)
-4. Tailwind CSS sınıflarını kullan
-5. Lucide ikonları kullanabilirsin (LucideIcons. ile erişilebilir)
-6. En sonda "return Widget;" ile bileşeni döndür
-7. Veri yoksa "Veri bulunamadı" göster
-8. Para birimi için ₺ kullan ve formatla (K, M)
-9. Renklerde hsl(var(--primary)), hsl(var(--destructive)) gibi CSS değişkenleri kullan
-
-Veri yapısı:
+      const systemPrompt = `Veri yapısı:
 - Alanlar: ${sampleFields.join(', ')}
 - Tipleri: ${JSON.stringify(fieldTypes)}
 - Örnek kayıt: ${JSON.stringify(sampleData[0], null, 2)}
@@ -472,6 +466,7 @@ Kullanıcı isteği: ${aiPrompt}`;
         body: {
           prompt: systemPrompt,
           sampleData: sampleData.slice(0, 3),
+          mode: 'generate'
         },
       });
 
@@ -480,6 +475,10 @@ Kullanıcı isteği: ${aiPrompt}`;
       const generatedCode = response.data?.code || response.data?.content;
       if (generatedCode) {
         setCustomCode(generatedCode);
+        setChatHistory([
+          { role: 'user', content: aiPrompt },
+          { role: 'assistant', content: 'Kod üretildi! Aşağıdaki chat alanından değişiklik isteyebilirsiniz.' }
+        ]);
         setActiveTab('code');
         toast.success('Kod üretildi! Kod editöründe görüntüleyebilirsiniz.');
       } else {
@@ -491,6 +490,66 @@ Kullanıcı isteği: ${aiPrompt}`;
     } finally {
       setIsGeneratingCode(false);
     }
+  };
+
+  // Chat ile kod iyileştir
+  const sendChatMessage = async () => {
+    if (!chatInput.trim()) return;
+    if (!customCode.trim()) {
+      toast.error('Önce bir kod oluşturun');
+      return;
+    }
+
+    const userMessage = chatInput.trim();
+    setChatInput('');
+    setIsChatLoading(true);
+
+    // Kullanıcı mesajını ekle
+    const updatedHistory: ChatMessage[] = [
+      ...chatHistory,
+      { role: 'user', content: userMessage }
+    ];
+    setChatHistory(updatedHistory);
+
+    try {
+      const prompt = `Mevcut widget kodu:\n\`\`\`javascript\n${customCode}\n\`\`\`\n\nKullanıcı isteği: ${userMessage}\n\nÖNEMLİ: JSX KULLANMA! Sadece React.createElement kullan. Güncellenmiş kodun tamamını döndür.`;
+
+      const response = await supabase.functions.invoke('ai-code-generator', {
+        body: {
+          prompt,
+          chatHistory: updatedHistory,
+          mode: 'refine'
+        },
+      });
+
+      if (response.error) throw response.error;
+      
+      const updatedCode = response.data?.code;
+      if (updatedCode) {
+        setCustomCode(updatedCode);
+        setChatHistory([
+          ...updatedHistory,
+          { role: 'assistant', content: '✅ Kod güncellendi!' }
+        ]);
+        toast.success('Kod güncellendi');
+      } else {
+        throw new Error('Kod güncellenemedi');
+      }
+    } catch (err: any) {
+      console.error('Chat hatası:', err);
+      setChatHistory([
+        ...updatedHistory,
+        { role: 'assistant', content: '❌ Hata: ' + (err.message || 'İşlem başarısız') }
+      ]);
+      toast.error(err.message || 'İşlem başarısız');
+    } finally {
+      setIsChatLoading(false);
+    }
+  };
+
+  // Hızlı eylem
+  const applyQuickAction = (action: string) => {
+    setChatInput(action);
   };
 
   // Widget kaydet
@@ -888,18 +947,113 @@ Kullanıcı isteği: ${aiPrompt}`;
                       {copied ? 'Kopyalandı' : 'Kopyala'}
                     </Button>
                   </div>
+                  
+                  {/* Kod editörü */}
                   <Textarea
                     value={customCode}
                     onChange={(e) => setCustomCode(e.target.value)}
-                    className="flex-1 font-mono text-xs resize-none"
+                    className="flex-1 font-mono text-xs resize-none min-h-[200px]"
                     placeholder="Widget kodunuzu buraya yazın..."
                   />
+                  
                   {codeError && (
                     <div className="mt-2 p-2 rounded bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-center gap-2">
                       <AlertCircle className="h-4 w-4" />
                       {codeError}
                     </div>
                   )}
+
+                  {/* AI Chat Alanı */}
+                  <div className="border-t mt-4 pt-4">
+                    <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-primary" />
+                      AI ile Kodu Geliştir
+                    </h4>
+                    
+                    {/* Chat geçmişi */}
+                    {chatHistory.length > 0 && (
+                      <ScrollArea className="h-24 border rounded-lg p-2 mb-2 bg-muted/30">
+                        <div className="space-y-2">
+                          {chatHistory.map((msg, i) => (
+                            <div 
+                              key={i} 
+                              className={cn(
+                                "text-xs p-2 rounded",
+                                msg.role === 'user' 
+                                  ? 'bg-primary/10 text-primary ml-4' 
+                                  : 'bg-secondary text-secondary-foreground mr-4'
+                              )}
+                            >
+                              {msg.content}
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    )}
+                    
+                    {/* Input alanı */}
+                    <div className="flex gap-2">
+                      <Input 
+                        value={chatInput} 
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            sendChatMessage();
+                          }
+                        }}
+                        placeholder="Renkleri değiştir, grafiği düzenle..."
+                        disabled={isChatLoading}
+                      />
+                      <Button 
+                        size="sm" 
+                        onClick={sendChatMessage}
+                        disabled={isChatLoading || !chatInput.trim()}
+                      >
+                        {isChatLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+
+                    {/* Hızlı eylem butonları */}
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="text-xs h-7"
+                        onClick={() => applyQuickAction('Renkleri daha canlı ve profesyonel yap')}
+                      >
+                        🎨 Renkler
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="text-xs h-7"
+                        onClick={() => applyQuickAction('Tooltipleri ve metinleri Türkçeleştir')}
+                      >
+                        🌍 Türkçeleştir
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="text-xs h-7"
+                        onClick={() => applyQuickAction('Hover animasyonları ekle')}
+                      >
+                        ✨ Animasyon
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="text-xs h-7"
+                        onClick={() => applyQuickAction('Dark mode uyumlu yap')}
+                      >
+                        🌙 Dark Mode
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </TabsContent>
 
