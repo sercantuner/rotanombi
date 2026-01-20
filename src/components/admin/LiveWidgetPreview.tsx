@@ -10,9 +10,13 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { 
   Play, RefreshCw, Eye, AlertCircle, CheckCircle2, Hash, 
-  BarChart3, TrendingUp, PieChart, Activity, Table, List, Loader2 
+  BarChart3, TrendingUp, PieChart, Activity, Table, List, Loader2,
+  Palette, ChevronDown, Edit2
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { 
@@ -25,18 +29,75 @@ import { toast } from 'sonner';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
-// Renk paleti
-const COLORS = [
-  'hsl(var(--primary))',
-  'hsl(var(--chart-2))',
-  'hsl(var(--chart-3))',
-  'hsl(var(--chart-4))',
-  'hsl(var(--chart-5))',
-  'hsl(210, 70%, 50%)',
-  'hsl(280, 60%, 55%)',
-  'hsl(160, 60%, 45%)',
-  'hsl(35, 80%, 50%)',
-  'hsl(340, 70%, 55%)',
+// Renk paletleri
+const COLOR_PALETTES = {
+  default: {
+    name: 'Varsayılan',
+    colors: [
+      'hsl(var(--primary))',
+      'hsl(var(--chart-2))',
+      'hsl(var(--chart-3))',
+      'hsl(var(--chart-4))',
+      'hsl(var(--chart-5))',
+      'hsl(210, 70%, 50%)',
+      'hsl(280, 60%, 55%)',
+      'hsl(160, 60%, 45%)',
+      'hsl(35, 80%, 50%)',
+      'hsl(340, 70%, 55%)',
+    ]
+  },
+  pastel: {
+    name: 'Pastel',
+    colors: [
+      '#a8d5ba', '#f5b7b1', '#aed6f1', '#f9e79f', '#d7bde2',
+      '#f8c8dc', '#c1e1c1', '#b5e7a0', '#ffd1b3', '#c7ceea'
+    ]
+  },
+  vivid: {
+    name: 'Canlı',
+    colors: [
+      '#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6',
+      '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b'
+    ]
+  },
+  business: {
+    name: 'Profesyonel',
+    colors: [
+      '#1a5276', '#148f77', '#b9770e', '#6c3483', '#943126',
+      '#2e4053', '#1e8449', '#7d3c98', '#a04000', '#145a32'
+    ]
+  },
+  mono: {
+    name: 'Monokrom',
+    colors: [
+      '#2c3e50', '#34495e', '#7f8c8d', '#95a5a6', '#bdc3c7',
+      '#566573', '#839192', '#aab7b8', '#d5d8dc', '#515a5a'
+    ]
+  },
+  ocean: {
+    name: 'Okyanus',
+    colors: [
+      '#0077b6', '#00b4d8', '#48cae4', '#90e0ef', '#ade8f4',
+      '#023e8a', '#0096c7', '#caf0f8', '#005f73', '#94d2bd'
+    ]
+  },
+  sunset: {
+    name: 'Gün Batımı',
+    colors: [
+      '#ff6b6b', '#feca57', '#ff9ff3', '#54a0ff', '#5f27cd',
+      '#ee5a24', '#f8c291', '#6d214f', '#b33939', '#c44569'
+    ]
+  }
+};
+
+type PaletteKey = keyof typeof COLOR_PALETTES;
+
+// İkon listesi
+const ICON_OPTIONS = [
+  'Hash', 'BarChart3', 'TrendingUp', 'Activity', 'PieChart', 'DollarSign',
+  'Wallet', 'CreditCard', 'Users', 'Package', 'ShoppingCart', 'Clock',
+  'Calendar', 'FileText', 'Building', 'Target', 'Award', 'Star',
+  'Zap', 'Scale', 'Percent', 'ArrowUpRight', 'ArrowDownRight', 'Gauge'
 ];
 
 interface LiveWidgetPreviewProps {
@@ -51,6 +112,9 @@ interface LiveWidgetPreviewProps {
   tableColumns: TableColumn[];
   pivotConfig: PivotConfig;
   dataSourceId: string | null;
+  onNameChange?: (name: string) => void;
+  onIconChange?: (icon: string) => void;
+  onColorsChange?: (colors: string[]) => void;
 }
 
 // Dinamik icon renderer
@@ -84,6 +148,14 @@ function formatValue(value: number, format?: string, prefix?: string, suffix?: s
     default:
       return `${prefix || ''}${value.toLocaleString('tr-TR')}${suffix || ''}`;
   }
+}
+
+// Kolon başlığı formatlama (snake_case → Title Case)
+function formatColumnHeader(field: string): string {
+  return field
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, l => l.toUpperCase());
 }
 
 // Agregasyon hesaplama
@@ -261,6 +333,9 @@ export function LiveWidgetPreview({
   tableColumns,
   pivotConfig,
   dataSourceId,
+  onNameChange,
+  onIconChange,
+  onColorsChange,
 }: LiveWidgetPreviewProps) {
   const [rawData, setRawData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -270,6 +345,21 @@ export function LiveWidgetPreview({
   
   // Anlık görsel tip değiştirme
   const [previewVizType, setPreviewVizType] = useState<string>(config.visualization.type);
+  
+  // Önizleme düzenleme state'leri
+  const [editableName, setEditableName] = useState(widgetName);
+  const [editableIcon, setEditableIcon] = useState(widgetIcon);
+  const [selectedPalette, setSelectedPalette] = useState<PaletteKey>('default');
+  const [customColors, setCustomColors] = useState<string[]>(COLOR_PALETTES.default.colors);
+  
+  // Tablo satır limiti
+  const [tableRowLimit, setTableRowLimit] = useState(20);
+  
+  // Props değişince state'leri güncelle
+  useEffect(() => {
+    setEditableName(widgetName);
+    setEditableIcon(widgetIcon);
+  }, [widgetName, widgetIcon]);
   
   // Config değişince preview tipini güncelle
   useEffect(() => {
@@ -327,6 +417,16 @@ export function LiveWidgetPreview({
     }
   }, [config, dataSourceId]);
 
+  // Aktif renk paleti
+  const activeColors = useMemo(() => {
+    return COLOR_PALETTES[selectedPalette]?.colors || customColors;
+  }, [selectedPalette, customColors]);
+
+  // Palet değiştiğinde parent'a bildir
+  useEffect(() => {
+    onColorsChange?.(activeColors);
+  }, [activeColors, onColorsChange]);
+
   // İşlenmiş veri (filtreler + hesaplamalar uygulanmış)
   const processedData = useMemo(() => {
     if (!rawData || rawData.length === 0) return [];
@@ -378,12 +478,17 @@ export function LiveWidgetPreview({
       return groupDataForChart(processedData, groupField, valueField || 'toplambakiye', aggregation);
     })();
     
-    // Table data
+    // Table data - TÜM kolonları göster
+    const allColumns = Object.keys(processedData[0] || {});
     const tableData = {
-      rows: processedData.slice(0, 10),
+      rows: processedData.slice(0, tableRowLimit),
+      totalRows: processedData.length,
       columns: tableColumns.length > 0 
         ? tableColumns 
-        : Object.keys(processedData[0] || {}).slice(0, 6).map(f => ({ field: f, header: f })),
+        : allColumns.map(f => ({ 
+            field: f, 
+            header: formatColumnHeader(f)
+          })),
     };
     
     return {
@@ -393,7 +498,7 @@ export function LiveWidgetPreview({
       showLegend: config.visualization.chart?.showLegend !== false,
       showGrid: config.visualization.chart?.showGrid !== false,
     };
-  }, [processedData, config, xAxisField, yAxisField, legendField, tableColumns]);
+  }, [processedData, config, xAxisField, yAxisField, legendField, tableColumns, tableRowLimit]);
 
   // Kullanılabilir görsel tipler
   const availableVizTypes = [
@@ -405,6 +510,18 @@ export function LiveWidgetPreview({
     { id: 'donut', label: 'Simit', icon: PieChart },
     { id: 'table', label: 'Tablo', icon: Table },
   ];
+
+  // İsim değişikliği handler
+  const handleNameChange = (name: string) => {
+    setEditableName(name);
+    onNameChange?.(name);
+  };
+
+  // İkon değişikliği handler
+  const handleIconChange = (icon: string) => {
+    setEditableIcon(icon);
+    onIconChange?.(icon);
+  };
 
   return (
     <Card className="border-2 border-primary/20">
@@ -459,6 +576,84 @@ export function LiveWidgetPreview({
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Widget İsim ve İkon Düzenleme Alanı */}
+            <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+              {/* İkon Seçici */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9 w-9 p-0">
+                    <DynamicIcon iconName={editableIcon || 'BarChart3'} className="h-5 w-5" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-2" align="start">
+                  <Label className="text-xs text-muted-foreground mb-2 block">İkon Seç</Label>
+                  <div className="grid grid-cols-6 gap-1">
+                    {ICON_OPTIONS.map(icon => (
+                      <Button
+                        key={icon}
+                        variant={editableIcon === icon ? 'default' : 'ghost'}
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleIconChange(icon)}
+                        title={icon}
+                      >
+                        <DynamicIcon iconName={icon} className="h-4 w-4" />
+                      </Button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              {/* İsim Input */}
+              <div className="flex-1">
+                <Input
+                  value={editableName}
+                  onChange={(e) => handleNameChange(e.target.value)}
+                  placeholder="Widget Adı"
+                  className="h-9 text-sm font-medium"
+                />
+              </div>
+
+              {/* Renk Paleti Seçici */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9 gap-2">
+                    <Palette className="h-4 w-4" />
+                    <span className="text-xs hidden sm:inline">{COLOR_PALETTES[selectedPalette].name}</span>
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-3" align="end">
+                  <Label className="text-xs text-muted-foreground mb-3 block">Renk Paleti</Label>
+                  <div className="space-y-2">
+                    {(Object.keys(COLOR_PALETTES) as PaletteKey[]).map((paletteKey) => {
+                      const palette = COLOR_PALETTES[paletteKey];
+                      return (
+                        <Button
+                          key={paletteKey}
+                          variant={selectedPalette === paletteKey ? 'default' : 'ghost'}
+                          size="sm"
+                          className="w-full justify-start gap-3 h-9"
+                          onClick={() => setSelectedPalette(paletteKey)}
+                        >
+                          <div className="flex gap-0.5">
+                            {palette.colors.slice(0, 6).map((color, idx) => (
+                              <div
+                                key={idx}
+                                className="w-3 h-3 rounded-sm"
+                                style={{ backgroundColor: color }}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-xs">{palette.name}</span>
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+
             {/* İstatistikler */}
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="text-xs">
@@ -503,7 +698,7 @@ export function LiveWidgetPreview({
               {/* KPI */}
               {previewVizType === 'kpi' && visualizationData && (
                 <div className="text-center py-4">
-                  <DynamicIcon iconName={widgetIcon || 'Hash'} className="h-12 w-12 mx-auto mb-4 text-primary" />
+                  <DynamicIcon iconName={editableIcon || 'Hash'} className="h-12 w-12 mx-auto mb-4 text-primary" />
                   <p className="text-5xl font-bold">
                     {formatValue(
                       visualizationData.kpiData.value || 0,
@@ -513,7 +708,7 @@ export function LiveWidgetPreview({
                     )}
                   </p>
                   <p className="text-sm text-muted-foreground mt-3">
-                    {widgetName || 'KPI Widget'}
+                    {editableName || 'KPI Widget'}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     {processedData.length} kayıt üzerinden hesaplandı
@@ -526,7 +721,7 @@ export function LiveWidgetPreview({
                 <div>
                   <p className="text-sm font-medium mb-3 flex items-center gap-2">
                     <BarChart3 className="h-4 w-4" />
-                    {widgetName || 'Çubuk Grafik'}
+                    {editableName || 'Çubuk Grafik'}
                   </p>
                   <ResponsiveContainer width="100%" height={240}>
                     <BarChart data={visualizationData.chartData}>
@@ -542,7 +737,11 @@ export function LiveWidgetPreview({
                         }}
                         formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
                       />
-                      <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                        {visualizationData.chartData.map((_: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={activeColors[index % activeColors.length]} />
+                        ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -553,7 +752,7 @@ export function LiveWidgetPreview({
                 <div>
                   <p className="text-sm font-medium mb-3 flex items-center gap-2">
                     <TrendingUp className="h-4 w-4" />
-                    {widgetName || 'Çizgi Grafik'}
+                    {editableName || 'Çizgi Grafik'}
                   </p>
                   <ResponsiveContainer width="100%" height={240}>
                     <LineChart data={visualizationData.chartData}>
@@ -569,7 +768,7 @@ export function LiveWidgetPreview({
                         }}
                         formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
                       />
-                      <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4 }} />
+                      <Line type="monotone" dataKey="value" stroke={activeColors[0]} strokeWidth={2} dot={{ r: 4, fill: activeColors[0] }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -580,7 +779,7 @@ export function LiveWidgetPreview({
                 <div>
                   <p className="text-sm font-medium mb-3 flex items-center gap-2">
                     <Activity className="h-4 w-4" />
-                    {widgetName || 'Alan Grafik'}
+                    {editableName || 'Alan Grafik'}
                   </p>
                   <ResponsiveContainer width="100%" height={240}>
                     <AreaChart data={visualizationData.chartData}>
@@ -596,7 +795,7 @@ export function LiveWidgetPreview({
                         }}
                         formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
                       />
-                      <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary) / 0.3)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="value" stroke={activeColors[0]} fill={`${activeColors[0]}40`} strokeWidth={2} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -607,7 +806,7 @@ export function LiveWidgetPreview({
                 <div className="flex flex-col items-center">
                   <p className="text-sm font-medium mb-4 flex items-center gap-2 self-start">
                     <PieChart className="h-4 w-4" />
-                    {widgetName || 'Pasta Grafik'}
+                    {editableName || 'Pasta Grafik'}
                   </p>
                   <div className="w-full max-w-[280px] mx-auto">
                     <ResponsiveContainer width="100%" height={200}>
@@ -622,7 +821,7 @@ export function LiveWidgetPreview({
                           paddingAngle={1}
                         >
                           {visualizationData.chartData.map((_: any, index: number) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            <Cell key={`cell-${index}`} fill={activeColors[index % activeColors.length]} />
                           ))}
                         </Pie>
                         <Tooltip 
@@ -645,7 +844,7 @@ export function LiveWidgetPreview({
                         <div key={index} className="flex items-center gap-2 text-xs">
                           <div 
                             className="w-2.5 h-2.5 rounded-sm flex-shrink-0" 
-                            style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                            style={{ backgroundColor: activeColors[index % activeColors.length] }}
                           />
                           <span className="truncate flex-1" title={item.name}>
                             {String(item.name).slice(0, 15)}
@@ -663,7 +862,7 @@ export function LiveWidgetPreview({
                 <div className="flex flex-col items-center">
                   <p className="text-sm font-medium mb-4 flex items-center gap-2 self-start">
                     <PieChart className="h-4 w-4" />
-                    {widgetName || 'Simit Grafik'}
+                    {editableName || 'Simit Grafik'}
                   </p>
                   <div className="w-full max-w-[280px] mx-auto relative">
                     <ResponsiveContainer width="100%" height={200}>
@@ -679,7 +878,7 @@ export function LiveWidgetPreview({
                           paddingAngle={2}
                         >
                           {visualizationData.chartData.map((_: any, index: number) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            <Cell key={`cell-${index}`} fill={activeColors[index % activeColors.length]} />
                           ))}
                         </Pie>
                         <Tooltip 
@@ -707,7 +906,7 @@ export function LiveWidgetPreview({
                         <div key={index} className="flex items-center gap-2 text-xs">
                           <div 
                             className="w-2.5 h-2.5 rounded-sm flex-shrink-0" 
-                            style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                            style={{ backgroundColor: activeColors[index % activeColors.length] }}
                           />
                           <span className="truncate flex-1" title={item.name}>
                             {String(item.name).slice(0, 15)}
@@ -720,20 +919,41 @@ export function LiveWidgetPreview({
                 </div>
               )}
 
-              {/* Table */}
+              {/* Table - Geliştirilmiş */}
               {previewVizType === 'table' && visualizationData?.tableData && (
-                <div>
-                  <p className="text-sm font-medium mb-3 flex items-center gap-2">
-                    <Table className="h-4 w-4" />
-                    {widgetName || 'Tablo'}
-                  </p>
-                  <ScrollArea className="h-[220px]">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium flex items-center gap-2">
+                      <Table className="h-4 w-4" />
+                      {editableName || 'Tablo'}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Göster:</span>
+                      <div className="flex gap-1">
+                        {[10, 20, 50].map(limit => (
+                          <Button
+                            key={limit}
+                            variant={tableRowLimit === limit ? 'default' : 'ghost'}
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            onClick={() => setTableRowLimit(limit)}
+                          >
+                            {limit}
+                          </Button>
+                        ))}
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {visualizationData.tableData.totalRows} toplam
+                      </Badge>
+                    </div>
+                  </div>
+                  <ScrollArea className="h-[260px] border rounded-lg">
                     <table className="w-full text-xs">
-                      <thead className="sticky top-0 bg-muted">
+                      <thead className="sticky top-0 bg-muted z-10">
                         <tr>
-                          {visualizationData.tableData.columns.slice(0, 5).map((col: any) => (
-                            <th key={col.field} className="text-left py-2 px-2 font-medium">
-                              {col.header || col.field}
+                          {visualizationData.tableData.columns.map((col: any) => (
+                            <th key={col.field} className="text-left py-2 px-3 font-medium border-b whitespace-nowrap">
+                              {col.header || formatColumnHeader(col.field)}
                             </th>
                           ))}
                         </tr>
@@ -741,11 +961,18 @@ export function LiveWidgetPreview({
                       <tbody>
                         {visualizationData.tableData.rows.map((row: any, idx: number) => (
                           <tr key={idx} className="border-b last:border-0 hover:bg-muted/50">
-                            {visualizationData.tableData.columns.slice(0, 5).map((col: any) => (
-                              <td key={col.field} className="py-2 px-2 truncate max-w-[150px]">
-                                {String(row[col.field] ?? '-').slice(0, 30)}
-                              </td>
-                            ))}
+                            {visualizationData.tableData.columns.map((col: any) => {
+                              const value = row[col.field];
+                              // Sayı formatlaması
+                              const displayValue = typeof value === 'number' 
+                                ? value.toLocaleString('tr-TR')
+                                : String(value ?? '-');
+                              return (
+                                <td key={col.field} className="py-2 px-3 truncate max-w-[200px]" title={displayValue}>
+                                  {displayValue.slice(0, 50)}
+                                </td>
+                              );
+                            })}
                           </tr>
                         ))}
                       </tbody>
@@ -757,8 +984,8 @@ export function LiveWidgetPreview({
               {/* Fallback - veri var ama chart data yok */}
               {!visualizationData?.chartData?.length && !['kpi', 'table'].includes(previewVizType) && rawData.length > 0 && (
                 <div className="text-center py-8 text-muted-foreground">
-                  <DynamicIcon iconName={widgetIcon || 'BarChart3'} className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">{widgetName || 'Widget'}</p>
+                  <DynamicIcon iconName={editableIcon || 'BarChart3'} className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">{editableName || 'Widget'}</p>
                   <p className="text-xs mt-1">Gruplama alanı (X Ekseni) seçerek grafik oluşturun</p>
                 </div>
               )}
