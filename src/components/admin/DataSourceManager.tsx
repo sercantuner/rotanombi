@@ -156,6 +156,8 @@ export function DataSourceManager() {
         limit: formData.limit_count || 0,
         // Dönem ayarlarını ekle
         periodConfig: periodConfig.enabled ? periodConfig : undefined,
+        // Filtre önerileri için tüm veriyi çek
+        returnAllSampleData: true,
       });
       
       setTestResult(result);
@@ -557,6 +559,7 @@ export function DataSourceManager() {
                     onChange={setApiFilters}
                     availableFields={testResult?.sampleFields || []}
                     fieldTypes={testResult?.fieldTypes}
+                    sampleData={testResult?.sampleData}
                   />
                   
                   <CompactSortBuilder

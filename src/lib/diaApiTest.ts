@@ -24,6 +24,7 @@ export interface DiaApiTestRequest {
   // Raw mode için yeni alanlar
   rawMode?: boolean;
   rawPayload?: string;
+  returnAllSampleData?: boolean; // Filtre önerileri için tüm veriyi döndür
   // Dönem loop için
   periodConfig?: {
     enabled: boolean;
