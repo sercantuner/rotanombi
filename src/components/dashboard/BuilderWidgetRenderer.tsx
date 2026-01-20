@@ -1,7 +1,7 @@
 // BuilderWidgetRenderer - Widget Builder ile oluşturulan widget'ları render eder (Drill-down destekli)
 
 import React, { useState } from 'react';
-import { WidgetBuilderConfig } from '@/lib/widgetBuilderTypes';
+import { WidgetBuilderConfig, AggregationType } from '@/lib/widgetBuilderTypes';
 import { useDynamicWidgetData } from '@/hooks/useDynamicWidgetData';
 import { DrillDownModal } from './DrillDownModal';
 import { StatCard } from './StatCard';
@@ -15,6 +15,27 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { cn } from '@/lib/utils';
+
+// Agregasyon hesaplamaları (pivot için)
+function calculateAggregation(data: any[], field: string, aggregation: AggregationType): number {
+  if (!data || data.length === 0) return 0;
+  const values = data.map(item => {
+    const val = item[field];
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') return parseFloat(val.replace(/[^\d.-]/g, '')) || 0;
+    return 0;
+  }).filter(v => !isNaN(v));
+
+  switch (aggregation) {
+    case 'sum': return values.reduce((acc, val) => acc + val, 0);
+    case 'avg': return values.length > 0 ? values.reduce((acc, val) => acc + val, 0) / values.length : 0;
+    case 'count': return data.length;
+    case 'count_distinct': return new Set(data.map(item => item[field])).size;
+    case 'min': return Math.min(...values);
+    case 'max': return Math.max(...values);
+    default: return values.reduce((acc, val) => acc + val, 0);
+  }
+}
 
 // Renk paleti
 const COLORS = [
@@ -420,6 +441,127 @@ export function BuilderWidgetRenderer({
                     ))}
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Pivot Table
+  if (vizType === 'pivot' && rawData.length > 0) {
+    const pivotConfig = builderConfig.visualization.pivot;
+    const rowField = pivotConfig?.rowFields?.[0] || '';
+    const columnField = pivotConfig?.columnField || '';
+    const valueField = pivotConfig?.valueField || '';
+    const aggregation = pivotConfig?.aggregation || 'sum';
+
+    // Pivot veri hesaplama
+    const rowValues = [...new Set(rawData.map(item => String(item[rowField] || 'Belirsiz')))];
+    const columnValues = columnField 
+      ? [...new Set(rawData.map(item => String(item[columnField] || 'Belirsiz')))]
+      : [];
+
+    // Pivot tablo verisi oluştur
+    const pivotData = rowValues.map(rowVal => {
+      const rowItems = rawData.filter(item => String(item[rowField] || 'Belirsiz') === rowVal);
+      const row: any = { _rowLabel: rowVal };
+      
+      if (columnField && columnValues.length > 0) {
+        columnValues.forEach(colVal => {
+          const cellItems = rowItems.filter(item => String(item[columnField] || 'Belirsiz') === colVal);
+          row[colVal] = calculateAggregation(cellItems, valueField, aggregation);
+        });
+        row._rowTotal = calculateAggregation(rowItems, valueField, aggregation);
+      } else {
+        row._value = calculateAggregation(rowItems, valueField, aggregation);
+      }
+      
+      return row;
+    });
+
+    // Sütun toplamları
+    const columnTotals: any = { _rowLabel: 'Toplam' };
+    if (columnField && columnValues.length > 0) {
+      columnValues.forEach(colVal => {
+        const colItems = rawData.filter(item => String(item[columnField] || 'Belirsiz') === colVal);
+        columnTotals[colVal] = calculateAggregation(colItems, valueField, aggregation);
+      });
+      columnTotals._rowTotal = calculateAggregation(rawData, valueField, aggregation);
+    } else {
+      columnTotals._value = calculateAggregation(rawData, valueField, aggregation);
+    }
+
+    const formatPivotValue = (val: number) => {
+      if (Math.abs(val) >= 1_000_000) return `${(val / 1_000_000).toFixed(1)}M`;
+      if (Math.abs(val) >= 1_000) return `${(val / 1_000).toFixed(0)}K`;
+      return val.toLocaleString('tr-TR');
+    };
+
+    return (
+      <Card className={className}>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <DynamicIcon iconName={widgetIcon || 'Grid3x3'} className="h-4 w-4" />
+            {widgetName}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-muted/50">
+                  <th className="text-left py-2 px-3 font-medium border-b">{rowField}</th>
+                  {columnField && columnValues.length > 0 ? (
+                    <>
+                      {columnValues.map(col => (
+                        <th key={col} className="text-right py-2 px-3 font-medium border-b">{col}</th>
+                      ))}
+                      {pivotConfig?.showRowTotals !== false && (
+                        <th className="text-right py-2 px-3 font-medium border-b bg-primary/10">Toplam</th>
+                      )}
+                    </>
+                  ) : (
+                    <th className="text-right py-2 px-3 font-medium border-b">{valueField}</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {pivotData.map((row, idx) => (
+                  <tr key={idx} className="border-b last:border-0 hover:bg-muted/30">
+                    <td className="py-2 px-3 font-medium">{row._rowLabel}</td>
+                    {columnField && columnValues.length > 0 ? (
+                      <>
+                        {columnValues.map(col => (
+                          <td key={col} className="py-2 px-3 text-right">{formatPivotValue(row[col] || 0)}</td>
+                        ))}
+                        {pivotConfig?.showRowTotals !== false && (
+                          <td className="py-2 px-3 text-right font-medium bg-primary/5">{formatPivotValue(row._rowTotal || 0)}</td>
+                        )}
+                      </>
+                    ) : (
+                      <td className="py-2 px-3 text-right">{formatPivotValue(row._value || 0)}</td>
+                    )}
+                  </tr>
+                ))}
+                {pivotConfig?.showColumnTotals !== false && (
+                  <tr className="bg-muted/50 font-medium">
+                    <td className="py-2 px-3">Toplam</td>
+                    {columnField && columnValues.length > 0 ? (
+                      <>
+                        {columnValues.map(col => (
+                          <td key={col} className="py-2 px-3 text-right">{formatPivotValue(columnTotals[col] || 0)}</td>
+                        ))}
+                        {pivotConfig?.showRowTotals !== false && (
+                          <td className="py-2 px-3 text-right bg-primary/10">{formatPivotValue(columnTotals._rowTotal || 0)}</td>
+                        )}
+                      </>
+                    ) : (
+                      <td className="py-2 px-3 text-right">{formatPivotValue(columnTotals._value || 0)}</td>
+                    )}
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

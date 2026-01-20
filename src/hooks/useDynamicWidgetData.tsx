@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useDiaDataCache, generateCacheKey, SHARED_CACHE_KEYS } from '@/contexts/DiaDataCacheContext';
 import { useDataSources } from './useDataSources';
-import { WidgetBuilderConfig, AggregationType, CalculatedField, CalculationExpression, QueryMerge, DatePeriod, DiaApiFilter } from '@/lib/widgetBuilderTypes';
+import { WidgetBuilderConfig, AggregationType, CalculatedField, CalculationExpression, QueryMerge, DatePeriod, DiaApiFilter, PostFetchFilter, FilterOperator } from '@/lib/widgetBuilderTypes';
 import { 
   startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, 
   startOfQuarter, endOfQuarter, startOfYear, endOfYear, 
@@ -270,6 +270,95 @@ function applyCalculatedFields(data: any[], calculatedFields: CalculatedField[])
   });
 }
 
+// ============= POST-FETCH FİLTRELEME =============
+
+function applyPostFetchFilters(data: any[], filters: PostFetchFilter[]): any[] {
+  if (!filters || filters.length === 0) return data;
+
+  return data.filter(row => {
+    let result = true;
+    let currentLogical: 'AND' | 'OR' = 'AND';
+
+    for (let i = 0; i < filters.length; i++) {
+      const filter = filters[i];
+      const fieldValue = row[filter.field];
+      let matches = false;
+
+      const strValue = String(fieldValue ?? '').toLowerCase();
+      const filterValue = filter.value.toLowerCase();
+      const numValue = parseFloat(String(fieldValue).replace(/[^\d.-]/g, '')) || 0;
+      const filterNumValue = parseFloat(filter.value) || 0;
+      const filterNumValue2 = parseFloat(filter.value2 || '') || 0;
+
+      switch (filter.operator) {
+        case '=':
+          matches = strValue === filterValue;
+          break;
+        case '!=':
+          matches = strValue !== filterValue;
+          break;
+        case '>':
+          matches = numValue > filterNumValue;
+          break;
+        case '<':
+          matches = numValue < filterNumValue;
+          break;
+        case '>=':
+          matches = numValue >= filterNumValue;
+          break;
+        case '<=':
+          matches = numValue <= filterNumValue;
+          break;
+        case 'IN':
+          const inValues = filter.value.split(',').map(v => v.trim().toLowerCase());
+          matches = inValues.includes(strValue);
+          break;
+        case 'NOT IN':
+          const notInValues = filter.value.split(',').map(v => v.trim().toLowerCase());
+          matches = !notInValues.includes(strValue);
+          break;
+        case 'contains':
+          matches = strValue.includes(filterValue);
+          break;
+        case 'not_contains':
+          matches = !strValue.includes(filterValue);
+          break;
+        case 'starts_with':
+          matches = strValue.startsWith(filterValue);
+          break;
+        case 'ends_with':
+          matches = strValue.endsWith(filterValue);
+          break;
+        case 'is_null':
+          matches = fieldValue === null || fieldValue === undefined || fieldValue === '';
+          break;
+        case 'is_not_null':
+          matches = fieldValue !== null && fieldValue !== undefined && fieldValue !== '';
+          break;
+        case 'between':
+          matches = numValue >= filterNumValue && numValue <= filterNumValue2;
+          break;
+        default:
+          matches = true;
+      }
+
+      if (i === 0) {
+        result = matches;
+      } else {
+        if (currentLogical === 'AND') {
+          result = result && matches;
+        } else {
+          result = result || matches;
+        }
+      }
+
+      currentLogical = filter.logicalOperator;
+    }
+
+    return result;
+  });
+}
+
 export function useDynamicWidgetData(config: WidgetBuilderConfig | null): DynamicWidgetDataResult {
   const [data, setData] = useState<any>(null);
   const [rawData, setRawData] = useState<any[]>([]);
@@ -412,6 +501,13 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
       // Hesaplama alanlarını uygula
       if (config.calculatedFields && config.calculatedFields.length > 0) {
         fetchedData = applyCalculatedFields(fetchedData, config.calculatedFields);
+      }
+
+      // Post-fetch filtreleri uygula
+      if (config.postFetchFilters && config.postFetchFilters.length > 0) {
+        console.log(`[Post-Fetch] Applying ${config.postFetchFilters.length} filters...`);
+        fetchedData = applyPostFetchFilters(fetchedData, config.postFetchFilters);
+        console.log(`[Post-Fetch] Filtered to ${fetchedData.length} records`);
       }
 
       const recordCount = fetchedData.length;

@@ -10,6 +10,63 @@ export function useUserPages() {
   const { user } = useAuth();
   const [pages, setPages] = useState<UserPage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Varsayılan widget'ları kullanıcıya ekle
+  const initializeDefaultWidgets = useCallback(async (userId: string, mainPageId: string) => {
+    try {
+      // Varsayılan widget'ları çek
+      const { data: defaultWidgets, error: widgetsError } = await supabase
+        .from('widgets')
+        .select('*')
+        .eq('is_default', true)
+        .eq('is_active', true)
+        .order('default_sort_order', { ascending: true });
+
+      if (widgetsError || !defaultWidgets?.length) {
+        console.log('[DefaultWidgets] No default widgets found');
+        return;
+      }
+
+      console.log(`[DefaultWidgets] Found ${defaultWidgets.length} default widgets`);
+
+      // KPI row konteyner oluştur
+      const { data: container, error: containerError } = await supabase
+        .from('page_containers')
+        .insert({
+          page_id: mainPageId,
+          container_type: 'kpi_row_5',
+          title: 'Genel Bakış',
+          sort_order: 0,
+        })
+        .select()
+        .single();
+
+      if (containerError || !container) {
+        console.error('Error creating default container:', containerError);
+        return;
+      }
+
+      // Widget'ları konteynere ekle
+      const widgetInserts = defaultWidgets.slice(0, 5).map((widget, idx) => ({
+        container_id: container.id,
+        widget_id: widget.id,
+        slot_index: idx,
+      }));
+
+      const { error: cwError } = await supabase
+        .from('container_widgets')
+        .insert(widgetInserts);
+
+      if (cwError) {
+        console.error('Error inserting default widgets:', cwError);
+      } else {
+        console.log(`[DefaultWidgets] Added ${widgetInserts.length} widgets to container`);
+      }
+    } catch (error) {
+      console.error('Error initializing default widgets:', error);
+    }
+  }, []);
 
   // Sayfaları yükle
   const loadPages = useCallback(async () => {
@@ -27,13 +84,42 @@ export function useUserPages() {
         .order('sort_order', { ascending: true });
 
       if (error) throw error;
-      setPages((data as unknown as UserPage[]) || []);
+      
+      const userPages = (data as unknown as UserPage[]) || [];
+      
+      // Eğer kullanıcının hiç sayfası yoksa, main-dashboard oluştur ve varsayılan widget'ları ekle
+      if (userPages.length === 0 && !isInitialized) {
+        console.log('[UserPages] No pages found, creating main-dashboard with defaults...');
+        
+        const { data: newPage, error: createError } = await supabase
+          .from('user_pages')
+          .insert({
+            user_id: user.id,
+            name: 'Ana Dashboard',
+            slug: 'main-dashboard',
+            icon: 'LayoutDashboard',
+            sort_order: 0,
+          })
+          .select()
+          .single();
+
+        if (!createError && newPage) {
+          setPages([newPage as unknown as UserPage]);
+          setIsInitialized(true);
+          
+          // Varsayılan widget'ları ekle
+          await initializeDefaultWidgets(user.id, newPage.id);
+        }
+      } else {
+        setPages(userPages);
+        setIsInitialized(true);
+      }
     } catch (error) {
       console.error('Error loading pages:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, isInitialized, initializeDefaultWidgets]);
 
   useEffect(() => {
     loadPages();
