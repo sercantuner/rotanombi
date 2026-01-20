@@ -13,6 +13,7 @@ export type ChartType =
   | 'treemap'
   | 'table'
   | 'list'
+  | 'pivot'         // Pivot rapor
   // Özel grafik tipleri
   | 'cashflow'      // Nakit akış projeksiyonu (vade yaşlandırma)
   | 'aging'         // Yaşlandırma grafiği
@@ -30,12 +31,34 @@ export type AggregationType =
   | 'last';
 
 // DIA API Filtre Yapısı
-export type FilterOperator = '<' | '>' | '<=' | '>=' | '=' | '!' | '!=' | 'IN' | 'NOT IN' | 'contains';
+export type FilterOperator = '<' | '>' | '<=' | '>=' | '=' | '!' | '!=' | 'IN' | 'NOT IN' | 'contains' | 'starts_with' | 'ends_with' | 'is_null' | 'is_not_null' | 'between';
 
 export interface DiaApiFilter {
   field: string;
   operator?: FilterOperator;
   value: string;
+  value2?: string; // between için ikinci değer
+}
+
+// Post-fetch filtre yapısı (çekilen veri üzerinde filtreleme)
+export interface PostFetchFilter {
+  id: string;
+  field: string;
+  operator: FilterOperator;
+  value: string;
+  value2?: string;
+  logicalOperator: 'AND' | 'OR';
+}
+
+// Pivot rapor yapılandırması
+export interface PivotConfig {
+  rowFields: string[];
+  columnField: string;
+  valueField: string;
+  aggregation: AggregationType;
+  showRowTotals?: boolean;
+  showColumnTotals?: boolean;
+  showGrandTotal?: boolean;
 }
 
 // DIA API Sıralama Yapısı
@@ -46,18 +69,23 @@ export interface DiaApiSort {
   sorttype: SortType;
 }
 
-// Operatör seçenekleri
-export const FILTER_OPERATORS: { id: FilterOperator; name: string; example: string }[] = [
-  { id: '=', name: 'Eşittir', example: 'carikarttipi = "AL"' },
-  { id: '!=', name: 'Eşit Değil', example: 'carikartkodu != "001"' },
-  { id: '>', name: 'Büyük', example: 'toplambakiye > 1000' },
-  { id: '<', name: 'Küçük', example: 'toplambakiye < 1000' },
-  { id: '>=', name: 'Büyük Eşit', example: 'toplambakiye >= 1000' },
-  { id: '<=', name: 'Küçük Eşit', example: 'toplambakiye <= 1000' },
-  { id: 'IN', name: 'İçinde (Çoklu)', example: 'carikartkodu IN "001,002,003"' },
-  { id: 'NOT IN', name: 'İçinde Değil', example: 'sehir NOT IN "İstanbul,Ankara"' },
-  { id: '!', name: 'İçermiyor', example: 'unvan ! "ANONİM"' },
-  { id: 'contains', name: 'İçeriyor', example: 'unvan "ANONİM" (operatör olmadan)' },
+// Operatör seçenekleri - Tüm operatörler
+export const FILTER_OPERATORS: { id: FilterOperator; name: string; example: string; requiresValue?: boolean; requiresSecondValue?: boolean }[] = [
+  { id: '=', name: 'Eşittir', example: 'carikarttipi = "AL"', requiresValue: true },
+  { id: '!=', name: 'Eşit Değil', example: 'carikartkodu != "001"', requiresValue: true },
+  { id: '>', name: 'Büyük', example: 'toplambakiye > 1000', requiresValue: true },
+  { id: '<', name: 'Küçük', example: 'toplambakiye < 1000', requiresValue: true },
+  { id: '>=', name: 'Büyük Eşit', example: 'toplambakiye >= 1000', requiresValue: true },
+  { id: '<=', name: 'Küçük Eşit', example: 'toplambakiye <= 1000', requiresValue: true },
+  { id: 'IN', name: 'İçinde (Çoklu)', example: 'carikartkodu IN "001,002,003"', requiresValue: true },
+  { id: 'NOT IN', name: 'İçinde Değil', example: 'sehir NOT IN "İstanbul,Ankara"', requiresValue: true },
+  { id: '!', name: 'İçermiyor', example: 'unvan ! "ANONİM"', requiresValue: true },
+  { id: 'contains', name: 'İçeriyor', example: 'unvan contains "Ltd"', requiresValue: true },
+  { id: 'starts_with', name: 'İle Başlar', example: 'kod starts_with "TR"', requiresValue: true },
+  { id: 'ends_with', name: 'İle Biter', example: 'ad ends_with "AŞ"', requiresValue: true },
+  { id: 'is_null', name: 'Boş', example: 'alan is_null', requiresValue: false },
+  { id: 'is_not_null', name: 'Dolu', example: 'alan is_not_null', requiresValue: false },
+  { id: 'between', name: 'Arasında', example: 'tutar 100-500', requiresValue: true, requiresSecondValue: true },
 ];
 
 // Sıralama seçenekleri
@@ -310,11 +338,15 @@ export interface WidgetBuilderConfig {
   // Tarih filtreleme (yeni)
   dateFilter?: DateFilterConfig;
   
+  // Post-fetch veri filtreleme (çekilen veri üzerinde)
+  postFetchFilters?: PostFetchFilter[];
+  
   visualization: {
     type: ChartType;
     kpi?: KpiConfig;
     chart?: ChartConfig;
     table?: TableConfig;
+    pivot?: PivotConfig;  // Pivot rapor yapılandırması
     specialChart?: SpecialChartConfig; // Özel grafik yapılandırması
   };
   
@@ -323,6 +355,9 @@ export interface WidgetBuilderConfig {
   // Raw mode için
   rawMode?: boolean;
   rawPayload?: string;
+  // Varsayılan widget
+  isDefault?: boolean;
+  defaultSortOrder?: number;
 }
 
 // Grafik tipleri listesi
@@ -339,6 +374,7 @@ export const CHART_TYPES: { id: ChartType; name: string; icon: string; descripti
   { id: 'treemap', name: 'Treemap', icon: 'LayoutGrid', description: 'Hiyerarşik dağılım' },
   { id: 'table', name: 'Tablo', icon: 'Table', description: 'Detaylı veri listesi' },
   { id: 'list', name: 'Liste', icon: 'List', description: 'Basit liste görünümü' },
+  { id: 'pivot', name: 'Pivot Rapor', icon: 'Grid3x3', description: 'Satır/sütun bazlı özet rapor' },
   // Özel grafik tipleri
   { id: 'cashflow', name: 'Nakit Akış', icon: 'Calendar', description: 'Nakit akış projeksiyonu ve vade yaşlandırma' },
   { id: 'aging', name: 'Yaşlandırma', icon: 'Clock', description: 'Vade bazlı yaşlandırma grafiği' },
