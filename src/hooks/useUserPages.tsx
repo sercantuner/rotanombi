@@ -1,6 +1,6 @@
 // User Pages Hook - Kullanıcı sayfaları yönetimi
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserPage, PageContainer, ContainerWidget, ContainerType } from '@/lib/pageTypes';
@@ -10,7 +10,7 @@ export function useUserPages() {
   const { user } = useAuth();
   const [pages, setPages] = useState<UserPage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const initRef = useRef(false);
 
   // Varsayılan widget'ları kullanıcıya ekle
   const initializeDefaultWidgets = useCallback(async (userId: string, mainPageId: string) => {
@@ -69,13 +69,66 @@ export function useUserPages() {
   }, []);
 
   // Sayfaları yükle
-  const loadPages = useCallback(async () => {
-    if (!user) {
-      setPages([]);
-      setIsLoading(false);
-      return;
-    }
+  useEffect(() => {
+    const loadPages = async () => {
+      if (!user) {
+        setPages([]);
+        setIsLoading(false);
+        return;
+      }
 
+      try {
+        const { data, error } = await supabase
+          .from('user_pages')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('sort_order', { ascending: true });
+
+        if (error) throw error;
+        
+        const userPages = (data as unknown as UserPage[]) || [];
+        
+        // Eğer kullanıcının hiç sayfası yoksa, main-dashboard oluştur
+        if (userPages.length === 0 && !initRef.current) {
+          initRef.current = true;
+          console.log('[UserPages] No pages found, creating main-dashboard with defaults...');
+          
+          const { data: newPage, error: createError } = await supabase
+            .from('user_pages')
+            .insert({
+              user_id: user.id,
+              name: 'Ana Dashboard',
+              slug: 'main-dashboard',
+              icon: 'LayoutDashboard',
+              sort_order: 0,
+            })
+            .select()
+            .single();
+
+          if (!createError && newPage) {
+            setPages([newPage as unknown as UserPage]);
+            
+            // Varsayılan widget'ları ekle
+            await initializeDefaultWidgets(user.id, newPage.id);
+          }
+        } else {
+          setPages(userPages);
+        }
+      } catch (error) {
+        console.error('Error loading pages:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadPages();
+  }, [user, initializeDefaultWidgets]);
+
+  // Sayfaları yeniden yükle
+  const refreshPages = useCallback(async () => {
+    if (!user) return;
+    
+    setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from('user_pages')
@@ -84,46 +137,13 @@ export function useUserPages() {
         .order('sort_order', { ascending: true });
 
       if (error) throw error;
-      
-      const userPages = (data as unknown as UserPage[]) || [];
-      
-      // Eğer kullanıcının hiç sayfası yoksa, main-dashboard oluştur ve varsayılan widget'ları ekle
-      if (userPages.length === 0 && !isInitialized) {
-        console.log('[UserPages] No pages found, creating main-dashboard with defaults...');
-        
-        const { data: newPage, error: createError } = await supabase
-          .from('user_pages')
-          .insert({
-            user_id: user.id,
-            name: 'Ana Dashboard',
-            slug: 'main-dashboard',
-            icon: 'LayoutDashboard',
-            sort_order: 0,
-          })
-          .select()
-          .single();
-
-        if (!createError && newPage) {
-          setPages([newPage as unknown as UserPage]);
-          setIsInitialized(true);
-          
-          // Varsayılan widget'ları ekle
-          await initializeDefaultWidgets(user.id, newPage.id);
-        }
-      } else {
-        setPages(userPages);
-        setIsInitialized(true);
-      }
+      setPages((data as unknown as UserPage[]) || []);
     } catch (error) {
-      console.error('Error loading pages:', error);
+      console.error('Error refreshing pages:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [user, isInitialized, initializeDefaultWidgets]);
-
-  useEffect(() => {
-    loadPages();
-  }, [loadPages]);
+  }, [user]);
 
   // Sayfa oluştur
   const createPage = async (name: string, icon: string = 'LayoutDashboard') => {
@@ -203,7 +223,7 @@ export function useUserPages() {
     createPage,
     updatePage,
     deletePage,
-    refreshPages: loadPages,
+    refreshPages,
   };
 }
 
