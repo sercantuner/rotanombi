@@ -120,14 +120,17 @@ export function DonutChart({
           </Pie>
           <Tooltip 
             content={<CustomTooltip />} 
-            wrapperStyle={{ zIndex: 1000 }}
+            wrapperStyle={{ zIndex: 100 }}
           />
         </PieChart>
       </ResponsiveContainer>
       
-      {/* Center Label */}
+      {/* Center Label - düşük z-index ile tooltip çakışmasını önle */}
       {(centerLabel || centerValue) && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <div 
+          className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
+          style={{ zIndex: 10 }}
+        >
           {centerValue && (
             <p className="text-lg font-bold text-foreground">{centerValue}</p>
           )}
