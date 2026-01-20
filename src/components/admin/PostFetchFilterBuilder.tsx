@@ -9,41 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Filter, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PostFetchFilter, FilterOperator, FILTER_OPERATORS } from '@/lib/widgetBuilderTypes';
 
-// Genişletilmiş filtre operatörleri
-export type PostFetchOperator = 
-  | '=' | '!=' | '>' | '<' | '>=' | '<=' 
-  | 'IN' | 'NOT IN' 
-  | 'contains' | 'not_contains' | 'starts_with' | 'ends_with'
-  | 'is_null' | 'is_not_null'
-  | 'between';
-
-export const POST_FETCH_OPERATORS: { id: PostFetchOperator; name: string; example: string; requiresValue: boolean; requiresSecondValue: boolean }[] = [
-  { id: '=', name: 'Eşittir', example: 'alan = "değer"', requiresValue: true, requiresSecondValue: false },
-  { id: '!=', name: 'Eşit Değil', example: 'alan != "değer"', requiresValue: true, requiresSecondValue: false },
-  { id: '>', name: 'Büyük', example: 'tutar > 1000', requiresValue: true, requiresSecondValue: false },
-  { id: '<', name: 'Küçük', example: 'tutar < 1000', requiresValue: true, requiresSecondValue: false },
-  { id: '>=', name: 'Büyük Eşit', example: 'tutar >= 1000', requiresValue: true, requiresSecondValue: false },
-  { id: '<=', name: 'Küçük Eşit', example: 'tutar <= 1000', requiresValue: true, requiresSecondValue: false },
-  { id: 'IN', name: 'İçinde (Çoklu)', example: 'kod IN "A,B,C"', requiresValue: true, requiresSecondValue: false },
-  { id: 'NOT IN', name: 'İçinde Değil', example: 'kod NOT IN "X,Y"', requiresValue: true, requiresSecondValue: false },
-  { id: 'contains', name: 'İçeriyor', example: 'ad contains "Ltd"', requiresValue: true, requiresSecondValue: false },
-  { id: 'not_contains', name: 'İçermiyor', example: 'ad not_contains "Test"', requiresValue: true, requiresSecondValue: false },
-  { id: 'starts_with', name: 'İle Başlar', example: 'kod starts_with "TR"', requiresValue: true, requiresSecondValue: false },
-  { id: 'ends_with', name: 'İle Biter', example: 'ad ends_with "AŞ"', requiresValue: true, requiresSecondValue: false },
-  { id: 'is_null', name: 'Boş', example: 'alan is_null', requiresValue: false, requiresSecondValue: false },
-  { id: 'is_not_null', name: 'Dolu', example: 'alan is_not_null', requiresValue: false, requiresSecondValue: false },
-  { id: 'between', name: 'Arasında', example: 'tutar between "100,500"', requiresValue: true, requiresSecondValue: true },
-];
-
-export interface PostFetchFilter {
-  id: string;
-  field: string;
-  operator: PostFetchOperator;
-  value: string;
-  value2?: string; // between için ikinci değer
-  logicalOperator: 'AND' | 'OR';
-}
+// Re-export for convenience
+export type { PostFetchFilter };
 
 interface PostFetchFilterBuilderProps {
   filters: PostFetchFilter[];
@@ -52,6 +21,15 @@ interface PostFetchFilterBuilderProps {
 }
 
 const generateId = () => `filter_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+// Operatör için value gerekliliği
+const getOperatorConfig = (op: FilterOperator) => {
+  const config = FILTER_OPERATORS.find(o => o.id === op);
+  return {
+    requiresValue: config?.requiresValue !== false,
+    requiresSecondValue: config?.requiresSecondValue === true,
+  };
+};
 
 export function PostFetchFilterBuilder({ filters, onChange, availableFields }: PostFetchFilterBuilderProps) {
   const addFilter = () => {
@@ -72,8 +50,8 @@ export function PostFetchFilterBuilder({ filters, onChange, availableFields }: P
     onChange(filters.filter(f => f.id !== id));
   };
 
-  const getOperatorConfig = (op: PostFetchOperator) => {
-    return POST_FETCH_OPERATORS.find(o => o.id === op) || POST_FETCH_OPERATORS[0];
+  const getOpConfig = (op: FilterOperator) => {
+    return getOperatorConfig(op);
   };
 
   return (
@@ -98,7 +76,7 @@ export function PostFetchFilterBuilder({ filters, onChange, availableFields }: P
         )}
 
         {filters.map((filter, index) => {
-          const opConfig = getOperatorConfig(filter.operator);
+          const opConfig = getOpConfig(filter.operator);
           
           return (
             <div key={filter.id} className="space-y-2">
@@ -146,13 +124,13 @@ export function PostFetchFilterBuilder({ filters, onChange, availableFields }: P
                   <Label className="text-xs text-muted-foreground">Operatör</Label>
                   <Select
                     value={filter.operator}
-                    onValueChange={(v: PostFetchOperator) => updateFilter(filter.id, { operator: v, value2: '' })}
+                    onValueChange={(v: FilterOperator) => updateFilter(filter.id, { operator: v, value2: '' })}
                   >
                     <SelectTrigger className="h-9">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {POST_FETCH_OPERATORS.map(op => (
+                      {FILTER_OPERATORS.map(op => (
                         <SelectItem key={op.id} value={op.id}>
                           <span className="font-medium">{op.name}</span>
                         </SelectItem>
