@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, Loader2, UserPlus } from 'lucide-react';
 import rotanombiLogo from '@/assets/rotanombi-logo.png';
+import rotaLogoDark from '@/assets/rota-logo-dark.svg';
 
 export function LoginPage() {
   const { login, register, isLoading, isAuthenticated } = useAuth();
@@ -183,9 +184,23 @@ export function LoginPage() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          © 2024 Rota Yazılım • RotanomBI v3.0
-        </p>
+        <div className="flex flex-col items-center gap-3 mt-8">
+          <a 
+            href="https://www.rotayazilim.net" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="opacity-60 hover:opacity-100 transition-opacity"
+          >
+            <img 
+              src={rotaLogoDark} 
+              alt="Rota Yazılım" 
+              className="h-6 w-auto"
+            />
+          </a>
+          <p className="text-center text-xs text-muted-foreground">
+            © 2024 Rota Yazılım • RotanomBI v3.0
+          </p>
+        </div>
       </div>
     </div>
   );
