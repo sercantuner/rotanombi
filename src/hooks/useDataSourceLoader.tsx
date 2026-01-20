@@ -1,6 +1,6 @@
 // useDataSourceLoader - Sayfa seviyesinde veri kaynaklarını merkezi olarak yükler
-// Tüm widget'ların kullandığı veri kaynaklarını tespit edip SIRAYLA (kontör tasarrufu) çeker
-// Stale-while-revalidate desteği ile eski veriyi gösterirken arka planda günceller
+// GLOBAL CACHE: Bir veri kaynağı bir kez sorgulandıktan sonra tüm sayfalarda kullanılır
+// LAZY LOADING: Sayfa geçişlerinde sadece eksik sorgular tamamlanır
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -37,7 +37,7 @@ interface WidgetWithDataSource {
 }
 
 export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResult {
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [loadedSources, setLoadedSources] = useState<string[]>([]);
   const [totalSources, setTotalSources] = useState(0);
@@ -45,16 +45,21 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
   const [error, setError] = useState<string | null>(null);
   const [sourceDataMap, setSourceDataMap] = useState<Map<string, any[]>>(new Map());
   const loadingRef = useRef(false);
-  const initialLoadDoneRef = useRef(false);
+  const pageInitializedRef = useRef<string | null>(null);
   
   const { dataSources, getDataSourceById } = useDataSources();
   const { 
     getCachedData,
+    getDataSourceData,
     getDataSourceDataWithStale,
     setCachedData, 
     setDataSourceData,
     setDataSourceLoading,
     setPageDataReady,
+    // GLOBAL registry - tüm sayfalar arası paylaşılan
+    isDataSourceFetched,
+    markDataSourceFetched,
+    clearFetchedRegistry,
     incrementCacheHit, 
     incrementCacheMiss 
   } = useDiaDataCache();
@@ -109,33 +114,38 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     }
   }, [pageId]);
 
-  // Tek bir veri kaynağını yükle (SIRAYLA - queue kullanarak)
+  // Tek bir veri kaynağını yükle - SADECE henüz sorgulanmamış olanları
   const loadDataSource = useCallback(async (
     dataSource: DataSource, 
     accessToken: string,
     forceRefresh: boolean = false
   ): Promise<any[] | null> => {
-    const cacheKey = `datasource_${dataSource.id}`;
+    // 1. Zaten global registry'de varsa (başka sayfada sorgulandı) - cache'den al
+    if (!forceRefresh && isDataSourceFetched(dataSource.id)) {
+      const cachedData = getDataSourceData(dataSource.id);
+      if (cachedData) {
+        console.log(`[DataSourceLoader] GLOBAL HIT: ${dataSource.name} (${cachedData.length} kayıt) - başka sayfada zaten yüklendi`);
+        incrementCacheHit();
+        return cachedData;
+      }
+    }
     
-    // Stale-while-revalidate kontrolü
+    // 2. Cache kontrolü (stale-while-revalidate)
     const { data: cachedData, isStale } = getDataSourceDataWithStale(dataSource.id);
     
     if (cachedData && !forceRefresh) {
       console.log(`[DataSourceLoader] Cache HIT: ${dataSource.name} (${cachedData.length} kayıt)${isStale ? ' [STALE]' : ''}`);
       incrementCacheHit();
-
-      // NOT: Kontör tasarrufu için otomatik arka-plan revalidate KAPALI.
-      // Veri "stale" olsa bile burada DIA çağrısı tetiklemiyoruz.
-      // Yenileme yalnızca forceRefresh=true (manuel) ile yapılır.
-
+      // Stale olsa bile API çağrısı yapmıyoruz - kontör tasarrufu
       return cachedData;
     }
 
-    console.log(`[DataSourceLoader] Cache MISS: ${dataSource.name} - Fetching...`);
+    // 3. API'den çek ve global registry'e işaretle
+    console.log(`[DataSourceLoader] FETCHING: ${dataSource.name} - İlk kez sorgulanıyor`);
     incrementCacheMiss();
 
     return loadDataSourceFromApi(dataSource, accessToken);
-  }, [getDataSourceDataWithStale, incrementCacheHit, incrementCacheMiss, setDataSourceData]);
+  }, [getDataSourceData, getDataSourceDataWithStale, isDataSourceFetched, incrementCacheHit, incrementCacheMiss]);
 
   // API'den veri çek (helper)
   const loadDataSourceFromApi = async (
@@ -175,10 +185,13 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       }
 
       const data = result.sampleData || [];
-      console.log(`[DataSourceLoader] Loaded: ${dataSource.name} (${data.length} kayıt)`);
+      console.log(`[DataSourceLoader] LOADED: ${dataSource.name} (${data.length} kayıt)`);
       
       // Cache'e kaydet - 10 dakika TTL
       setDataSourceData(dataSource.id, data, DEFAULT_TTL);
+      
+      // GLOBAL registry'e ekle - bu oturumda bir daha sorgulanmasın
+      markDataSourceFetched(dataSource.id);
       
       return data;
     } catch (err) {
@@ -189,7 +202,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     }
   };
 
-  // Tüm veri kaynaklarını SIRAYLA yükle
+  // Sayfa için veri kaynaklarını yükle - SADECE EKSİK OLANLARI
   const loadAllDataSources = useCallback(async (forceRefresh: boolean = false) => {
     if (!pageId || loadingRef.current) return;
     
@@ -198,13 +211,19 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     setError(null);
     setLoadProgress(0);
 
+    // Manuel yenileme ise global registry'i temizle
+    if (forceRefresh) {
+      console.log('[DataSourceLoader] Force refresh - clearing global registry');
+      clearFetchedRegistry();
+    }
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
         throw new Error('Oturum bulunamadı');
       }
 
-      // Kullanılan veri kaynaklarını bul
+      // Sayfadaki widget'ların kullandığı veri kaynaklarını bul
       const usedSourceIds = await findUsedDataSources();
       
       if (usedSourceIds.length === 0) {
@@ -216,19 +235,52 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
         setIsInitialLoad(false);
         setPageDataReady(true);
         loadingRef.current = false;
-        initialLoadDoneRef.current = true;
+        pageInitializedRef.current = pageId;
         return;
       }
 
-      console.log(`[DataSourceLoader] Found ${usedSourceIds.length} data sources to load SEQUENTIALLY`);
-      setTotalSources(usedSourceIds.length);
+      // Zaten sorgulanmış olanları ve eksik olanları ayır
+      const alreadyFetched = usedSourceIds.filter(id => isDataSourceFetched(id) && getDataSourceData(id));
+      const needToFetch = forceRefresh 
+        ? usedSourceIds 
+        : usedSourceIds.filter(id => !isDataSourceFetched(id) || !getDataSourceData(id));
 
+      console.log(`[DataSourceLoader] Page needs ${usedSourceIds.length} sources:`);
+      console.log(`  - Already fetched (from other pages): ${alreadyFetched.length}`);
+      console.log(`  - Need to fetch: ${needToFetch.length}`);
+
+      setTotalSources(needToFetch.length || 1); // En az 1 göster progress için
+
+      // Zaten sorgulanmış olanları hemen yükle
       const newDataMap = new Map<string, any[]>();
       const successfulIds: string[] = [];
       
+      for (const sourceId of alreadyFetched) {
+        const data = getDataSourceData(sourceId);
+        if (data) {
+          newDataMap.set(sourceId, data);
+          successfulIds.push(sourceId);
+          incrementCacheHit();
+        }
+      }
+
+      // Eğer sorgulanacak kaynak yoksa hemen bitir
+      if (needToFetch.length === 0) {
+        console.log('[DataSourceLoader] All sources already cached from previous pages!');
+        setSourceDataMap(newDataMap);
+        setLoadedSources(successfulIds);
+        setLoadProgress(100);
+        setIsLoading(false);
+        setIsInitialLoad(false);
+        setPageDataReady(true);
+        loadingRef.current = false;
+        pageInitializedRef.current = pageId;
+        return;
+      }
+
       // SIRAYLA yükle (kontör tasarrufu - paralel değil)
-      for (let i = 0; i < usedSourceIds.length; i++) {
-        const sourceId = usedSourceIds[i];
+      for (let i = 0; i < needToFetch.length; i++) {
+        const sourceId = needToFetch[i];
         const dataSource = getDataSourceById(sourceId);
         
         if (!dataSource) {
@@ -244,22 +296,22 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
         }
         
         // Progress güncelle
-        const progress = Math.round(((i + 1) / usedSourceIds.length) * 100);
+        const progress = Math.round(((i + 1) / needToFetch.length) * 100);
         setLoadProgress(progress);
         setLoadedSources([...successfulIds]);
       }
 
       setSourceDataMap(newDataMap);
       
-      console.log(`[DataSourceLoader] Successfully loaded ${successfulIds.length}/${usedSourceIds.length} data sources`);
+      console.log(`[DataSourceLoader] Page ready: ${successfulIds.length} sources loaded`);
       
       // Sayfa hazır
       setPageDataReady(true);
-      initialLoadDoneRef.current = true;
+      pageInitializedRef.current = pageId;
     } catch (err) {
       console.error('[DataSourceLoader] Error:', err);
       setError(err instanceof Error ? err.message : 'Veri kaynakları yüklenemedi');
-      if (!initialLoadDoneRef.current) {
+      if (!pageInitializedRef.current) {
         toast.error('Veri kaynakları yüklenirken hata oluştu');
       }
     } finally {
@@ -267,33 +319,34 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       setIsInitialLoad(false);
       loadingRef.current = false;
     }
-  }, [pageId, findUsedDataSources, getDataSourceById, loadDataSource, setPageDataReady]);
+  }, [pageId, findUsedDataSources, getDataSourceById, loadDataSource, setPageDataReady, 
+      isDataSourceFetched, getDataSourceData, clearFetchedRegistry, incrementCacheHit]);
 
-  // Veri kaynağı verisini al
+  // Veri kaynağı verisini al (önce local, sonra global cache)
   const getSourceData = useCallback((dataSourceId: string): any[] | null => {
     // Önce local map'e bak
     const localData = sourceDataMap.get(dataSourceId);
     if (localData) return localData;
     
-    // Cache'e bak
-    const cacheKey = `datasource_${dataSourceId}`;
-    const cachedData = getCachedData(cacheKey);
-    if (cachedData && Array.isArray(cachedData)) {
-      return cachedData;
-    }
+    // Global cache'e bak
+    const globalData = getDataSourceData(dataSourceId);
+    if (globalData) return globalData;
     
     return null;
-  }, [sourceDataMap, getCachedData]);
+  }, [sourceDataMap, getDataSourceData]);
 
-  // Sayfa yüklendiğinde veri kaynaklarını yükle
+  // Sayfa değiştiğinde veri kaynaklarını kontrol et ve eksikleri yükle
   useEffect(() => {
-    if (pageId && dataSources.length > 0 && !initialLoadDoneRef.current) {
+    // Sayfa değiştiğinde veya ilk yüklemede
+    if (pageId && dataSources.length > 0 && pageInitializedRef.current !== pageId) {
+      console.log(`[DataSourceLoader] Page changed to ${pageId} - checking for missing sources`);
       loadAllDataSources();
     }
-  }, [pageId, dataSources.length]);
+  }, [pageId, dataSources.length, loadAllDataSources]);
 
-  // Manuel refresh (force)
+  // Manuel refresh (force) - TÜM verileri yeniden çeker
   const refresh = useCallback(async () => {
+    console.log('[DataSourceLoader] Manual refresh triggered');
     await loadAllDataSources(true);
   }, [loadAllDataSources]);
 

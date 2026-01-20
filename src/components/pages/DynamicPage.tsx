@@ -1,4 +1,5 @@
 // Dinamik Sayfa Bileşeni - Kullanıcı tarafından oluşturulan sayfaları render eder
+// GLOBAL CACHE: Veri kaynakları tüm sayfalar arası paylaşılır
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -6,9 +7,11 @@ import { Header } from '@/components/layout/Header';
 import { ContainerPicker } from './ContainerPicker';
 import { ContainerRenderer } from './ContainerRenderer';
 import { usePageContainers } from '@/hooks/useUserPages';
+import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
+import { DashboardLoadingScreen } from '@/components/dashboard/DashboardLoadingScreen';
 import { UserPage, ContainerType } from '@/lib/pageTypes';
 import { Button } from '@/components/ui/button';
-import { Plus, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -24,8 +27,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-// Widget verisi için import
-import { diaGetGenelRapor, diaGetFinansRapor } from '@/lib/diaClient';
+// Widget verisi için import - ARTIK KULLANILMIYOR, global cache kullanıyoruz
 
 export function DynamicPage() {
   const { pageSlug } = useParams<{ pageSlug: string }>();
@@ -36,8 +38,16 @@ export function DynamicPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [showContainerPicker, setShowContainerPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [widgetData, setWidgetData] = useState<any>({});
-  const [isDataLoading, setIsDataLoading] = useState(false);
+
+  // GLOBAL veri kaynağı loader - sayfa geçişlerinde sadece eksik sorguları tamamlar
+  const { 
+    isLoading: dataSourcesLoading,
+    isInitialLoad: dataSourcesInitialLoad,
+    loadedSources,
+    totalSources,
+    loadProgress,
+    refresh: refreshDataSources,
+  } = useDataSourceLoader(page?.id || null);
 
   const { containers, addContainer, deleteContainer, reorderContainers, refreshContainers } = 
     usePageContainers(page?.id || null);
@@ -71,43 +81,6 @@ export function DynamicPage() {
 
     loadPage();
   }, [pageSlug, user, navigate]);
-
-  // Widget verilerini yükle
-  const loadWidgetData = useCallback(async () => {
-    setIsDataLoading(true);
-    try {
-      const [genelResult, finansResult] = await Promise.all([
-        diaGetGenelRapor(),
-        diaGetFinansRapor()
-      ]);
-
-      const data: any = {};
-      
-      if (genelResult.success && genelResult.data) {
-        data.genelRapor = genelResult.data;
-        data.cariler = genelResult.data.cariler || [];
-        data.yaslandirma = genelResult.data.yaslandirma;
-      }
-      
-      if (finansResult.success && finansResult.data) {
-        data.finansRapor = finansResult.data;
-        data.bankaHesaplari = finansResult.data.bankaHesaplari || [];
-        data.toplamBankaBakiye = finansResult.data.toplamBankaBakiyesi || 0;
-      }
-
-      setWidgetData(data);
-    } catch (error) {
-      console.error('Error loading widget data:', error);
-    } finally {
-      setIsDataLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (page) {
-      loadWidgetData();
-    }
-  }, [page, loadWidgetData]);
 
   // Konteyner ekle
   const handleAddContainer = async (containerType: ContainerType) => {
@@ -150,14 +123,26 @@ export function DynamicPage() {
     );
   }
 
+  // İlk yüklemede loading screen göster
+  const showLoadingScreen = dataSourcesInitialLoad && totalSources > 0;
+
   return (
     <DashboardFilterProvider>
       <div className="flex-1 flex flex-col">
+        {/* Loading Screen */}
+        {showLoadingScreen && (
+          <DashboardLoadingScreen
+            progress={loadProgress}
+            loadedSources={loadedSources.length}
+            totalSources={totalSources}
+          />
+        )}
+        
         <Header 
           title={page.name}
           subtitle="Özel sayfa"
-          onRefresh={loadWidgetData}
-          isRefreshing={isDataLoading}
+          onRefresh={refreshDataSources}
+          isRefreshing={dataSourcesLoading}
           currentPage="dashboard"
           actions={
             <div className="flex items-center gap-2">
@@ -191,12 +176,12 @@ export function DynamicPage() {
           ) : (
             <>
               {containers.map((container) => (
-                <ContainerRenderer
+              <ContainerRenderer
                   key={container.id}
                   container={container}
                   onDelete={() => deleteContainer(container.id)}
-                  widgetData={widgetData}
-                  isLoading={isDataLoading}
+                  widgetData={{}}
+                  isLoading={dataSourcesLoading}
                 />
               ))}
 
