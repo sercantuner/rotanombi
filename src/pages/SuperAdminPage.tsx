@@ -301,7 +301,7 @@ export default function SuperAdminPage() {
               ))}
             </div>
           ) : (
-            <ScrollArea className="h-[500px]">
+            <ScrollArea className="h-[500px] relative">
               <Table>
                 <TableHeader>
                   <TableRow>

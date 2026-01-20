@@ -51,21 +51,29 @@ export function DonutChart({
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const item = payload[0].payload;
+      const percentage = ((item.value / total) * 100).toFixed(1);
+      
       return (
-        <div className="bg-card border border-border rounded-lg shadow-lg p-3">
-          <p className="font-semibold text-sm">{item.name}</p>
+        <div className="bg-card border border-border rounded-lg shadow-lg p-3 z-50">
+          {/* Kategori adı - belirgin */}
+          <p className="font-bold text-sm text-foreground mb-1">{item.name}</p>
+          
+          {/* Değer */}
           <p className="text-lg font-bold text-primary">
             {item.value} Cari
           </p>
+          
+          {/* Yüzde - belirgin */}
+          <p className="text-md font-semibold" style={{ color: item.color || 'hsl(var(--accent))' }}>
+            %{percentage}
+          </p>
+          
           {/* Tutar bilgisi varsa göster */}
           {item.tutar !== undefined && item.tutar > 0 && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground mt-1">
               Toplam: {formatCurrency(item.tutar)}
             </p>
           )}
-          <p className="text-xs text-muted-foreground">
-            {((item.value / total) * 100).toFixed(1)}%
-          </p>
         </div>
       );
     }

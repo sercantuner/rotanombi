@@ -11,11 +11,10 @@ import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
 import { supabase } from '@/integrations/supabase/client';
 import { diaGetGenelRapor, diaGetFinansRapor, getDiaConnectionInfo, DiaConnectionInfo } from '@/lib/diaClient';
 import type { DiaGenelRapor, DiaFinansRapor, VadeYaslandirma, DiaCari } from '@/lib/diaClient';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DiaQueryStats } from '@/components/dashboard/DiaQueryStats';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Plug, RefreshCw, Clock, Timer, Edit, Check, Database } from 'lucide-react';
+import { Plug, RefreshCw, Edit, Check, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 function DashboardContent() {
@@ -29,11 +28,6 @@ function DashboardContent() {
   const [diaConnectionInfo, setDiaConnectionInfo] = useState<DiaConnectionInfo | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [dashboardPageId, setDashboardPageId] = useState<string | null>(null);
-  
-  // Otomatik yenileme ayarları
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
-  const [refreshInterval, setRefreshInterval] = useState(60); // saniye cinsinden
-  const [nextRefreshIn, setNextRefreshIn] = useState<number | null>(null);
   
   // Widget düzenleme modu
   const [isWidgetEditMode, setIsWidgetEditMode] = useState(false);
@@ -176,38 +170,7 @@ function DashboardContent() {
   //   fetchData();
   // }, [fetchData]);
 
-  // Otomatik yenileme zamanlayıcısı
-  useEffect(() => {
-    if (!autoRefreshEnabled) {
-      setNextRefreshIn(null);
-      return;
-    }
-
-    // Geri sayım başlat
-    setNextRefreshIn(refreshInterval);
-    
-    const countdownInterval = setInterval(() => {
-      setNextRefreshIn(prev => {
-        if (prev === null || prev <= 1) {
-          return refreshInterval;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    // Yenileme zamanlayıcısı
-     // NOT: Kontör tasarrufu için otomatik yenileme (DIA çağrısı) devre dışı.
-     // const refreshTimer = setInterval(() => {
-     //   if (!isLoading) {
-     //     fetchData();
-     //   }
-     // }, refreshInterval * 1000);
-
-    return () => {
-      clearInterval(countdownInterval);
-      // clearInterval(refreshTimer);
-    };
-  }, [autoRefreshEnabled, refreshInterval, fetchData, isLoading]);
+  // Otomatik yenileme kaldırıldı - kontör tasarrufu için
 
   // Cariler listesi
   const cariler = useMemo<DiaCari[]>(() => {
@@ -355,44 +318,6 @@ function DashboardContent() {
                 </>
               )}
             </Button>
-            
-            {autoRefreshEnabled && nextRefreshIn !== null && (
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {nextRefreshIn}s
-              </span>
-            )}
-            
-            <div className="flex items-center gap-2 text-sm">
-              <Select
-                value={refreshInterval.toString()}
-                onValueChange={(v) => setRefreshInterval(parseInt(v))}
-                disabled={!autoRefreshEnabled}
-              >
-                <SelectTrigger className="w-24 h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="30">30 sn</SelectItem>
-                  <SelectItem value="60">1 dk</SelectItem>
-                  <SelectItem value="120">2 dk</SelectItem>
-                  <SelectItem value="300">5 dk</SelectItem>
-                  <SelectItem value="600">10 dk</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              <button
-                onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  autoRefreshEnabled 
-                    ? 'bg-primary text-primary-foreground' 
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                <Timer className="h-3 w-3" />
-                {autoRefreshEnabled ? 'Otomatik Aktif' : 'Otomatik Yenile'}
-              </button>
-            </div>
           </div>
         </div>
 

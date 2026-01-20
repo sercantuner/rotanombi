@@ -109,7 +109,7 @@ export function FilterableStatCard({
 
   return (
     <>
-      <div className="stat-card animate-slide-up group relative">
+      <div className="stat-card animate-slide-up group relative h-full flex flex-col overflow-hidden">
         {/* Control Buttons - Sadece düzenleme modunda görünür */}
         <div className={cn(
           'absolute top-2 right-2 flex items-center gap-1 z-10 transition-opacity',
@@ -153,23 +153,27 @@ export function FilterableStatCard({
           )}
         </div>
 
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between flex-1 min-w-0">
           <div className="flex-1 min-w-0 pr-2">
-            <p className="metric-label mb-1">{title}</p>
+            <p className="metric-label mb-1 truncate">{title}</p>
             <p className={cn(
-              'metric-value',
+              'metric-value truncate',
               variantStyles[variant],
               fontSizeClasses[kpiSettings.fontSize]
             )}>
               {value}
             </p>
             {subtitle && kpiSettings.showSubtitle && (
-              <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+              <p className="text-xs text-muted-foreground mt-1 truncate">{subtitle}</p>
             )}
           </div>
+          {/* İkon - küçük ekranlarda gizlenir */}
           {kpiSettings.showIcon && (
-            <div className={`p-3 rounded-lg bg-secondary ${variantStyles[variant]} flex-shrink-0`}>
-              <Icon className="w-6 h-6" />
+            <div className={cn(
+              "p-2 md:p-3 rounded-lg bg-secondary flex-shrink-0 hidden sm:flex items-center justify-center",
+              variantStyles[variant]
+            )}>
+              <Icon className="w-5 h-5 md:w-6 md:h-6" />
             </div>
           )}
         </div>
