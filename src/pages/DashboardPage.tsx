@@ -11,11 +11,9 @@ import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
 import { supabase } from '@/integrations/supabase/client';
 import { diaGetGenelRapor, diaGetFinansRapor, getDiaConnectionInfo, DiaConnectionInfo } from '@/lib/diaClient';
 import type { DiaGenelRapor, DiaFinansRapor, VadeYaslandirma, DiaCari } from '@/lib/diaClient';
-import { DiaQueryStats } from '@/components/dashboard/DiaQueryStats';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Plug, RefreshCw, Edit, Check, Database } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Plug, RefreshCw, Database } from 'lucide-react';
 
 function DashboardContent() {
   const navigate = useNavigate();
@@ -264,61 +262,31 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* Dashboard Status Bar - Her zaman göster */}
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            {diaConnectionInfo?.connected ? (
-              <>
-                <span className="px-2 py-0.5 rounded-full bg-success/20 text-success text-xs font-medium">
-                  DIA Bağlı
-                </span>
-              </>
-            ) : loadedSources.length > 0 ? (
-              <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-xs font-medium">
-                Cache'den
-              </span>
-            ) : null}
-            
-            {/* Veri kaynakları durumu */}
-            {loadedSources.length > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium flex items-center gap-1">
-                <Database className="w-3 h-3" />
-                {loadedSources.length} kaynak
-              </span>
-            )}
-            
-            {dataSourcesLoading && (
-              <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium animate-pulse">
-                Yükleniyor...
-              </span>
-            )}
-            
-            {/* Sorgu istatistikleri - Her zaman göster */}
-            <DiaQueryStats />
-          </div>
+        {/* Dashboard Status Bar - Minimal */}
+        <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
+          {diaConnectionInfo?.connected ? (
+            <span className="px-2 py-0.5 rounded-full bg-success/20 text-success text-xs font-medium">
+              DIA Bağlı
+            </span>
+          ) : loadedSources.length > 0 ? (
+            <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-xs font-medium">
+              Cache'den
+            </span>
+          ) : null}
           
-          {/* Kontroller */}
-          <div className="flex items-center gap-3">
-            {/* Widget Düzenleme Modu Butonu */}
-            <Button
-              variant={isWidgetEditMode ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setIsWidgetEditMode(!isWidgetEditMode)}
-              className="h-8"
-            >
-              {isWidgetEditMode ? (
-                <>
-                  <Check className="h-4 w-4 mr-2" />
-                  Düzenlemeyi Bitir
-                </>
-              ) : (
-                <>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Widget Düzenle
-                </>
-              )}
-            </Button>
-          </div>
+          {/* Veri kaynakları durumu */}
+          {loadedSources.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium flex items-center gap-1">
+              <Database className="w-3 h-3" />
+              {loadedSources.length} kaynak
+            </span>
+          )}
+          
+          {dataSourcesLoading && (
+            <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium animate-pulse">
+              Yükleniyor...
+            </span>
+          )}
         </div>
 
         {/* Container Based Dashboard */}

@@ -407,6 +407,8 @@ export interface WidgetBuilderConfig {
   // Varsayılan widget
   isDefault?: boolean;
   defaultSortOrder?: number;
+  // Drill-down yapılandırması
+  drillDown?: DrillDownConfig;
 }
 
 // Grafik tipleri listesi
@@ -565,6 +567,29 @@ export const getDefaultPeriodConfig = (): PeriodConfig => ({
   fetchHistorical: false,
   historicalCount: 12,
   mergeStrategy: 'union',
+});
+
+// ============= DRILL-DOWN YAPILANDIRMASI =============
+
+// Drill-down yapılandırması (grafik/KPI tıklandığında açılan popup ayarları)
+export interface DrillDownConfig {
+  enabled: boolean;                  // Drill-down aktif mi?
+  displayColumns?: string[];         // Popup'ta gösterilecek kolonlar
+  sortBy?: string;                   // Sıralama alanı
+  sortDirection?: 'asc' | 'desc';    // Sıralama yönü
+  maxRows?: number;                  // Maksimum satır sayısı (varsayılan: 100)
+  searchEnabled?: boolean;           // Arama aktif mi?
+  exportEnabled?: boolean;           // CSV export aktif mi?
+  primaryField?: string;             // Ana görüntüleme alanı
+  valueField?: string;               // Değer alanı
+}
+
+export const getDefaultDrillDownConfig = (): DrillDownConfig => ({
+  enabled: true,
+  searchEnabled: true,
+  exportEnabled: true,
+  maxRows: 100,
+  sortDirection: 'desc',
 });
 
 // ============= MERKEZİ VERİ KAYNAĞI =============
