@@ -21,6 +21,7 @@ interface TestApiRequest {
   rawMode?: boolean;
   rawPayload?: string; // JSON string
   returnAllData?: boolean; // Tüm veriyi döndür (widget renderer için)
+  returnAllSampleData?: boolean; // Filtre önerileri için tüm veriyi döndür (sampleData olarak)
   // Dönem loop için
   periodConfig?: {
     enabled: boolean;
@@ -193,6 +194,7 @@ serve(async (req) => {
       rawMode = false,
       rawPayload = '',
       returnAllData = false, // Tüm veriyi döndür (widget renderer için)
+      returnAllSampleData = false, // Filtre önerileri için tüm veriyi sampleData olarak döndür
       periodConfig, // Dönem loop yapılandırması
     } = body;
 
@@ -516,8 +518,8 @@ serve(async (req) => {
     // Alanları, tiplerini ve istatistiklerini çıkar
     const { fields, fieldTypes, fieldStats } = extractFieldsAndTypes(data);
 
-    // returnAllData: true ise tüm veriyi, değilse sadece 10 örnek döndür
-    const sampleData = returnAllData ? data : data.slice(0, 10);
+    // returnAllData veya returnAllSampleData: true ise tüm veriyi, değilse sadece 10 örnek döndür
+    const sampleData = (returnAllData || returnAllSampleData) ? data : data.slice(0, 10);
 
     const responseData: TestApiResponse = {
       success: true,
