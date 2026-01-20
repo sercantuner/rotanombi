@@ -287,10 +287,8 @@ export function ContainerRenderer({
               </Button>
             </div>
           )}
-          <div className={cn('grid gap-4 items-stretch', template.gridClass)}>
-            {renderSlots().map((slot, idx) => (
-              <div key={idx} className="h-full">{slot}</div>
-            ))}
+          <div className={cn('grid gap-4 items-stretch [&>*]:h-full', template.gridClass)}>
+            {renderSlots()}
           </div>
         </CardContent>
       </Card>

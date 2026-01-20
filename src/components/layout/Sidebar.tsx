@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useUserPages } from '@/hooks/useUserPages';
+import { useDiaDataCache } from '@/contexts/DiaDataCacheContext';
 import { CreatePageModal } from '@/components/pages/CreatePageModal';
 import { DiaQueryStats } from '@/components/dashboard/DiaQueryStats';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -15,6 +16,7 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Edit,
   Check,
   Plug
@@ -24,6 +26,7 @@ import * as LucideIcons from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 interface NavItem {
   path: string;
@@ -38,7 +41,6 @@ interface SidebarProps {
   // Dashboard kontrolleri için
   isWidgetEditMode?: boolean;
   onWidgetEditModeToggle?: () => void;
-  isDiaConnected?: boolean;
 }
 
 // Sabit menü öğeleri (rapor sayfaları kaldırıldı)
@@ -52,15 +54,16 @@ export function Sidebar({
   collapsed = false, 
   onToggle,
   isWidgetEditMode = false,
-  onWidgetEditModeToggle,
-  isDiaConnected = false
+  onWidgetEditModeToggle
 }: SidebarProps) {
   const { user, logout } = useAuth();
   const { isAdmin } = usePermissions();
   const { pages, createPage } = useUserPages();
+  const { isDiaConnected } = useDiaDataCache();
   const location = useLocation();
   const navigate = useNavigate();
   const [showCreatePage, setShowCreatePage] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(true);
 
   // Admin filtresi
   const visibleStaticItems = staticNavItems.filter(item => !item.adminOnly || isAdmin);
@@ -223,83 +226,104 @@ export function Sidebar({
 
         {/* Kontroller - Dashboard sayfasındayken göster */}
         {(location.pathname === '/dashboard' || location.pathname.startsWith('/page/')) && (
-          <div className={cn("border-t border-border", collapsed ? "p-2" : "p-4")}>
-            {!collapsed && (
-              <p className="text-xs text-muted-foreground uppercase tracking-wide px-4 mb-2">
-                Kontroller
-              </p>
-            )}
-            
-            {/* DIA Bağlantı Durumu */}
-            {collapsed ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
+          <Collapsible open={controlsOpen} onOpenChange={setControlsOpen}>
+            <div className={cn("border-t border-border", collapsed ? "p-2" : "p-4")}>
+              {!collapsed ? (
+                <CollapsibleTrigger className="w-full flex items-center justify-between px-4 mb-2 cursor-pointer hover:bg-muted/50 rounded-lg py-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                    Kontroller
+                  </p>
+                  <ChevronDown className={cn("h-3 w-3 text-muted-foreground transition-transform", controlsOpen && "rotate-180")} />
+                </CollapsibleTrigger>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setControlsOpen(!controlsOpen)}
+                      className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-muted/50 mb-2"
+                    >
+                      <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", controlsOpen && "rotate-180")} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    {controlsOpen ? 'Kontrolleri Gizle' : 'Kontrolleri Göster'}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              
+              <CollapsibleContent>
+                {/* DIA Bağlantı Durumu */}
+                {collapsed ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className={cn(
+                        "flex items-center justify-center p-2 rounded-lg mb-2",
+                        isDiaConnected ? "bg-success/10" : "bg-muted"
+                      )}>
+                        <Plug className={cn("w-4 h-4", isDiaConnected ? "text-success" : "text-muted-foreground")} />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      {isDiaConnected ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
                   <div className={cn(
-                    "flex items-center justify-center p-2 rounded-lg mb-2",
+                    "flex items-center gap-2 px-4 py-2 rounded-lg mb-2",
                     isDiaConnected ? "bg-success/10" : "bg-muted"
                   )}>
                     <Plug className={cn("w-4 h-4", isDiaConnected ? "text-success" : "text-muted-foreground")} />
+                    <span className={cn("text-xs font-medium", isDiaConnected ? "text-success" : "text-muted-foreground")}>
+                      {isDiaConnected ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
+                    </span>
                   </div>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  {isDiaConnected ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <div className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg mb-2",
-                isDiaConnected ? "bg-success/10" : "bg-muted"
-              )}>
-                <Plug className={cn("w-4 h-4", isDiaConnected ? "text-success" : "text-muted-foreground")} />
-                <span className={cn("text-xs font-medium", isDiaConnected ? "text-success" : "text-muted-foreground")}>
-                  {isDiaConnected ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
-                </span>
-              </div>
-            )}
-            
-            {/* Widget Düzenle Butonu */}
-            {onWidgetEditModeToggle && (
-              collapsed ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
+                )}
+                
+                {/* Widget Düzenle Butonu */}
+                {onWidgetEditModeToggle && (
+                  collapsed ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant={isWidgetEditMode ? 'default' : 'outline'}
+                          size="icon"
+                          className="w-full mb-2"
+                          onClick={onWidgetEditModeToggle}
+                        >
+                          {isWidgetEditMode ? <Check className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        {isWidgetEditMode ? 'Düzenlemeyi Bitir' : 'Widget Düzenle'}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
                     <Button
                       variant={isWidgetEditMode ? 'default' : 'outline'}
-                      size="icon"
+                      size="sm"
                       className="w-full mb-2"
                       onClick={onWidgetEditModeToggle}
                     >
-                      {isWidgetEditMode ? <Check className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
+                      {isWidgetEditMode ? (
+                        <>
+                          <Check className="w-4 h-4 mr-2" />
+                          Düzenlemeyi Bitir
+                        </>
+                      ) : (
+                        <>
+                          <Edit className="w-4 h-4 mr-2" />
+                          Widget Düzenle
+                        </>
+                      )}
                     </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {isWidgetEditMode ? 'Düzenlemeyi Bitir' : 'Widget Düzenle'}
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <Button
-                  variant={isWidgetEditMode ? 'default' : 'outline'}
-                  size="sm"
-                  className="w-full mb-2"
-                  onClick={onWidgetEditModeToggle}
-                >
-                  {isWidgetEditMode ? (
-                    <>
-                      <Check className="w-4 h-4 mr-2" />
-                      Düzenlemeyi Bitir
-                    </>
-                  ) : (
-                    <>
-                      <Edit className="w-4 h-4 mr-2" />
-                      Widget Düzenle
-                    </>
-                  )}
-                </Button>
-              )
-            )}
-            
-            {/* Sorgu İstatistikleri */}
-            {!collapsed && <DiaQueryStats />}
-          </div>
+                  )
+                )}
+                
+                {/* Sorgu İstatistikleri */}
+                {!collapsed && <DiaQueryStats />}
+              </CollapsibleContent>
+            </div>
+          </Collapsible>
         )}
 
         {/* User Info & Logout */}

@@ -18,7 +18,7 @@ import { Plug, RefreshCw, Database } from 'lucide-react';
 function DashboardContent() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { setSharedData, invalidateCache } = useDiaDataCache();
+  const { setSharedData, invalidateCache, setDiaConnected } = useDiaDataCache();
   const { refreshSettings } = useUserSettings();
   const [genelRapor, setGenelRapor] = useState<DiaGenelRapor | null>(null);
   const [finansRapor, setFinansRapor] = useState<DiaFinansRapor | null>(null);
@@ -45,12 +45,14 @@ function DashboardContent() {
     const initializeDashboard = async () => {
       if (!user) return;
 
-      // DIA bağlantı durumunu kontrol et
+      // DIA bağlantı durumunu kontrol et ve global context'e yaz
       try {
         const diaInfo = await getDiaConnectionInfo();
         setDiaConnectionInfo(diaInfo);
+        setDiaConnected(diaInfo?.connected ?? false);
       } catch (error) {
         console.error('DIA connection check failed:', error);
+        setDiaConnected(false);
       }
 
       // Önce mevcut dashboard sayfasını ara
@@ -94,6 +96,7 @@ function DashboardContent() {
     try {
       const diaInfo = await getDiaConnectionInfo();
       setDiaConnectionInfo(diaInfo);
+      setDiaConnected(diaInfo?.connected ?? false);
 
       if (diaInfo?.hasCredentials) {
         const timestamp = Date.now();
