@@ -375,14 +375,15 @@ export function BuilderWidgetRenderer({
     );
   }
 
-  // Pie/Donut Chart (drill-down destekli)
+  // Pie/Donut Chart (drill-down destekli) - Önizleme ile uyumlu
   if (['pie', 'donut'].includes(vizType) && data?.chartData) {
     const isDonut = vizType === 'donut';
     const legendField = builderConfig.visualization.chart?.legendField || '';
+    const chartDataTotal = data.chartData.reduce((sum: number, d: any) => sum + d.value, 0);
     
     return (
       <>
-        <Card className={className}>
+        <Card className={cn(className, 'overflow-visible')}>
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <DynamicIcon iconName={widgetIcon || 'PieChart'} className="h-4 w-4" />
@@ -390,36 +391,75 @@ export function BuilderWidgetRenderer({
               <MousePointerClick className="h-3 w-3 text-muted-foreground ml-auto" />
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <RechartsPieChart>
-                <Pie
-                  data={data.chartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={isDonut ? 50 : 0}
-                  outerRadius={80}
-                  dataKey="value"
-                  nameKey="name"
-                  label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                  labelLine={false}
-                  className="cursor-pointer"
-                  onClick={(entry) => entry && handleDrillDown(entry.name, legendField)}
-                >
-                  {data.chartData.map((entry: any, index: number) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--card))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
-                />
-                {data.showLegend && <Legend />}
-              </RechartsPieChart>
-            </ResponsiveContainer>
+          <CardContent className="flex flex-col items-center py-4">
+            {/* Grafik alanı */}
+            <div className="w-full max-w-[280px] mx-auto relative">
+              <ResponsiveContainer width="100%" height={200}>
+                <RechartsPieChart>
+                  <Pie
+                    data={data.chartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={isDonut ? 50 : 0}
+                    outerRadius={85}
+                    dataKey="value"
+                    nameKey="name"
+                    paddingAngle={isDonut ? 2 : 1}
+                    className="cursor-pointer"
+                    onClick={(entry) => entry && handleDrillDown(entry.name, legendField)}
+                  >
+                    {data.chartData.map((entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                      fontSize: '11px',
+                      zIndex: 50,
+                    }}
+                    formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
+                  />
+                </RechartsPieChart>
+              </ResponsiveContainer>
+              {/* Donut merkez metin */}
+              {isDonut && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-2xl font-bold">{data.chartData.length}</span>
+                  <span className="text-xs text-muted-foreground">Kategori</span>
+                </div>
+              )}
+            </div>
+            
+            {/* Özel Legend - 2 sütunlu grid */}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-3 w-full max-w-[380px]">
+              {data.chartData.slice(0, 8).map((item: any, index: number) => {
+                const percent = chartDataTotal > 0 ? ((item.value / chartDataTotal) * 100).toFixed(1) : '0';
+                return (
+                  <div 
+                    key={index} 
+                    className="flex items-center gap-2 text-xs cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
+                    onClick={() => handleDrillDown(item.name, legendField)}
+                  >
+                    <div 
+                      className="w-2.5 h-2.5 rounded-sm flex-shrink-0" 
+                      style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                    />
+                    <span className="truncate flex-1" title={item.name}>
+                      {String(item.name).slice(0, 15)}
+                    </span>
+                    <span className="text-muted-foreground">{percent}%</span>
+                  </div>
+                );
+              })}
+              {data.chartData.length > 8 && (
+                <span className="text-xs text-muted-foreground col-span-2 text-center mt-1">
+                  +{data.chartData.length - 8} daha...
+                </span>
+              )}
+            </div>
           </CardContent>
         </Card>
         <DrillDownModal
