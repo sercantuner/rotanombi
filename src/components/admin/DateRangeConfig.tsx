@@ -100,9 +100,9 @@ export function DateRangeConfig({
                     </SelectItem>
                   ))
                 ) : (
-                  <SelectItem value="" disabled>
+                  <div className="px-2 py-4 text-sm text-muted-foreground text-center">
                     API testi yaparak alanları görüntüleyin
-                  </SelectItem>
+                  </div>
                 )}
               </SelectContent>
             </Select>

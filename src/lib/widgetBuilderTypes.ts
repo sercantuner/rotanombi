@@ -457,6 +457,27 @@ export interface DateFilterConfig {
   customEndDate?: string;       // Özel aralık için bitiş
 }
 
+// ============= DÖNEM YAPILANDIRMASI =============
+
+// Dönem yapılandırması (DIA ERP için mali dönemler)
+export interface PeriodConfig {
+  enabled: boolean;              // Dönem bağımlı mı?
+  periodField: string;           // DIA'daki dönem alanı (genelde "donem" veya "donemkodu")
+  currentPeriod?: number;        // Mevcut dönem (otomatik alınabilir)
+  fetchHistorical: boolean;      // Eski dönemleri de çek
+  historicalCount: number;       // Kaç dönem geriye git (örn: 12 = son 12 dönem)
+  mergeStrategy: 'union' | 'separate'; // Verileri birleştir mi yoksa ayrı tut mu
+}
+
+export const getDefaultPeriodConfig = (): PeriodConfig => ({
+  enabled: false,
+  periodField: 'donem',
+  currentPeriod: undefined,
+  fetchHistorical: false,
+  historicalCount: 12,
+  mergeStrategy: 'union',
+});
+
 // ============= MERKEZİ VERİ KAYNAĞI =============
 
 // Veri kaynağı referansı
