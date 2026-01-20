@@ -262,32 +262,14 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* Dashboard Status Bar - Minimal */}
-        <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
-          {diaConnectionInfo?.connected ? (
-            <span className="px-2 py-0.5 rounded-full bg-success/20 text-success text-xs font-medium">
-              DIA Bağlı
-            </span>
-          ) : loadedSources.length > 0 ? (
-            <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-xs font-medium">
-              Cache'den
-            </span>
-          ) : null}
-          
-          {/* Veri kaynakları durumu */}
-          {loadedSources.length > 0 && (
-            <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium flex items-center gap-1">
-              <Database className="w-3 h-3" />
-              {loadedSources.length} kaynak
-            </span>
-          )}
-          
-          {dataSourcesLoading && (
+        {/* Dashboard Status Bar - Sadece yükleniyor göster */}
+        {dataSourcesLoading && (
+          <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
             <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium animate-pulse">
               Yükleniyor...
             </span>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Container Based Dashboard */}
         {dashboardPageId ? (
