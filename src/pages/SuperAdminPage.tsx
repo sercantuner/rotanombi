@@ -17,9 +17,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Edit, Trash2, Eye, EyeOff, RefreshCw, LayoutGrid, Search, Shield, AlertTriangle, Wand2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, RefreshCw, LayoutGrid, Search, Shield, AlertTriangle, Wand2, Database } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WidgetBuilder } from '@/components/admin/WidgetBuilder';
+import { DataSourceManager } from '@/components/admin/DataSourceManager';
 import * as LucideIcons from 'lucide-react';
 
 // Dinamik icon renderer
@@ -162,30 +163,43 @@ export default function SuperAdminPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Shield className="h-6 w-6 text-primary" />
-            Widget Yönetimi
-          </h1>
-          <p className="text-muted-foreground">Widget'ları oluşturun, düzenleyin ve yönetin</p>
+      <Tabs defaultValue="widgets" className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <Shield className="h-6 w-6 text-primary" />
+              Sistem Yönetimi
+            </h1>
+            <p className="text-muted-foreground">Widget'ları ve veri kaynaklarını yönetin</p>
+          </div>
+          <TabsList>
+            <TabsTrigger value="widgets" className="gap-2">
+              <LayoutGrid className="h-4 w-4" />
+              Widget Yönetimi
+            </TabsTrigger>
+            <TabsTrigger value="datasources" className="gap-2">
+              <Database className="h-4 w-4" />
+              Veri Kaynakları
+            </TabsTrigger>
+          </TabsList>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => refetch()}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Yenile
-          </Button>
-          <Button variant="secondary" onClick={() => setIsBuilderOpen(true)}>
-            <Wand2 className="h-4 w-4 mr-2" />
-            Widget Builder
-          </Button>
-          <Button onClick={() => openForm()}>
-            <Plus className="h-4 w-4 mr-2" />
-            Yeni Widget
-          </Button>
-        </div>
-      </div>
+
+        <TabsContent value="widgets" className="space-y-6 mt-0">
+          {/* Header */}
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="outline" onClick={() => refetch()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Yenile
+            </Button>
+            <Button variant="secondary" onClick={() => setIsBuilderOpen(true)}>
+              <Wand2 className="h-4 w-4 mr-2" />
+              Widget Builder
+            </Button>
+            <Button onClick={() => openForm()}>
+              <Plus className="h-4 w-4 mr-2" />
+              Yeni Widget
+            </Button>
+          </div>
 
       {/* Filters */}
       <Card>
@@ -566,6 +580,12 @@ export default function SuperAdminPage() {
         onSave={() => refetch()}
         editWidget={builderEditWidget}
       />
+        </TabsContent>
+
+        <TabsContent value="datasources" className="mt-0">
+          <DataSourceManager />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
