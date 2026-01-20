@@ -28,6 +28,7 @@ import { DataSourceSelector } from './DataSourceSelector';
 import { MultiQueryBuilder } from './MultiQueryBuilder';
 import { CalculatedFieldBuilder } from './CalculatedFieldBuilder';
 import { WidgetPreviewRenderer } from './WidgetPreviewRenderer';
+import { LiveWidgetPreview } from './LiveWidgetPreview';
 import { WidgetTemplates, WidgetTemplate, WIDGET_TEMPLATES } from './WidgetTemplates';
 import { PostFetchFilterBuilder } from './PostFetchFilterBuilder';
 import { TableColumnBuilder, TableColumn } from './TableColumnBuilder';
@@ -46,7 +47,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { 
   Wand2, BarChart3, Settings2, Save, 
   Hash, TrendingUp, Activity, PieChart, Circle, Table, List, LayoutGrid, CheckCircle, Edit,
-  Database, Calculator, Sparkles, Calendar, Zap, Info, Filter
+  Database, Calculator, Sparkles, Calendar, Zap, Info, Filter, Eye
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -522,7 +523,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className={cn("grid w-full", isEditMode ? "grid-cols-7" : "grid-cols-8")}>
+          <TabsList className={cn("grid w-full", isEditMode ? "grid-cols-8" : "grid-cols-9")}>
             {!isEditMode && (
               <TabsTrigger value="templates" className="gap-1 text-xs">
                 <Sparkles className="h-3.5 w-3.5" />
@@ -552,6 +553,10 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
             <TabsTrigger value="visualization" className="gap-1 text-xs">
               <BarChart3 className="h-3.5 w-3.5" />
               Görsel
+            </TabsTrigger>
+            <TabsTrigger value="preview" className="gap-1 text-xs">
+              <Eye className="h-3.5 w-3.5" />
+              Önizleme
             </TabsTrigger>
             <TabsTrigger value="settings" className="gap-1 text-xs">
               <Settings2 className="h-3.5 w-3.5" />
@@ -896,6 +901,23 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* CANLI ÖNİZLEME */}
+            <TabsContent value="preview" className="m-0 space-y-4">
+              <LiveWidgetPreview
+                config={config}
+                widgetName={widgetName}
+                widgetIcon={widgetIcon}
+                xAxisField={xAxisField}
+                yAxisField={yAxisField}
+                legendField={legendField}
+                calculatedFields={calculatedFields}
+                postFetchFilters={postFetchFilters}
+                tableColumns={tableColumns}
+                pivotConfig={pivotConfig}
+                dataSourceId={selectedDataSourceId}
+              />
             </TabsContent>
 
             {/* AYARLAR */}
