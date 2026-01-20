@@ -365,6 +365,31 @@ export interface WidgetBuilderConfig {
   // Pivot rapor yapılandırması (üst seviye)
   pivot?: PivotConfig;
   
+  // Field Wells yapılandırması (Power BI tarzı)
+  fieldWells?: {
+    xAxis?: { field: string; label?: string; format?: string; aggregation?: AggregationType };
+    yAxis?: { field: string; label?: string; format?: string; aggregation?: AggregationType; color?: string }[];
+    legend?: { field: string; label?: string };
+    value?: { field: string; label?: string; format?: string; aggregation?: AggregationType };
+    category?: { field: string; label?: string };
+    tooltip?: { field: string; label?: string }[];
+  };
+  
+  // Chart ayarları (renk paleti, legend, grid vb.)
+  chartSettings?: {
+    colorPalette?: string;
+    showLegend?: boolean;
+    legendPosition?: 'top' | 'bottom' | 'left' | 'right' | 'hidden';
+    showGrid?: boolean;
+    stacked?: boolean;
+    displayLimit?: number;
+    showTrendLine?: boolean;
+    showAverageLine?: boolean;
+    showMinMaxMarkers?: boolean;
+    trendLineColor?: string;
+    averageLineColor?: string;
+  };
+  
   visualization: {
     type: ChartType;
     kpi?: KpiConfig;

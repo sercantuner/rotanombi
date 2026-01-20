@@ -149,19 +149,28 @@ export function BuilderWidgetRenderer({
   const [drillDownTitle, setDrillDownTitle] = useState('');
   const [drillDownData, setDrillDownData] = useState<any[]>([]);
 
-  // Chart ayarlarını al
-  const chartSettings = builderConfig.visualization?.chart;
-  const colorPalette = (chartSettings as any)?.colorPalette || 'default';
-  const showGrid = (chartSettings as any)?.showGrid !== false;
-  const legendPosition = (chartSettings as any)?.legendPosition || 'bottom';
-  const displayLimit = (chartSettings as any)?.maxRecords || 10;
+  // Chart ayarlarını al - önce chartSettings, yoksa visualization.chart
+  const chartSettings = builderConfig.chartSettings || {};
+  const vizChart = builderConfig.visualization?.chart;
+  const fieldWells = builderConfig.fieldWells;
+  
+  // Renk paleti ve görsel ayarlar
+  const colorPalette = chartSettings.colorPalette || 'default';
+  const showGrid = chartSettings.showGrid !== false;
+  const legendPosition = chartSettings.legendPosition || 'bottom';
+  const displayLimit = chartSettings.displayLimit || 10;
+  const showTrendLine = chartSettings.showTrendLine || false;
+  const showAverageLine = chartSettings.showAverageLine || false;
   
   // Aktif renk paleti
   const activeColors = COLOR_PALETTES[colorPalette as PaletteKey] || COLOR_PALETTES.default;
   
+  // X ve Y ekseni alanlarını belirle - fieldWells öncelikli
+  const xAxisField = fieldWells?.xAxis?.field || vizChart?.xAxis?.field || '';
+  const yAxisField = fieldWells?.yAxis?.[0]?.field || vizChart?.yAxis?.field || vizChart?.valueField || '';
+  const yAxisAggregation = fieldWells?.yAxis?.[0]?.aggregation || vizChart?.yAxis?.aggregation || 'sum';
+  
   // X ekseni tarih mi kontrol et
-  const xAxisField = chartSettings?.xAxis?.field || '';
-  const yAxisField = chartSettings?.yAxis?.field || chartSettings?.valueField || '';
   const isXAxisDate = useMemo(() => {
     return xAxisField && rawData.length > 0 && isDateField(xAxisField, rawData);
   }, [xAxisField, rawData]);
@@ -195,7 +204,7 @@ export function BuilderWidgetRenderer({
     if (!filteredData || filteredData.length === 0) return [];
     if (!xAxisField || !yAxisField) return data?.chartData || [];
     
-    const aggregation = chartSettings?.yAxis?.aggregation || 'sum';
+    const aggregation = yAxisAggregation;
     const groupingType = isXAxisDate ? detectDateGroupingType(filteredData, xAxisField) : undefined;
     
     return groupDataForChartWithDates(
@@ -442,7 +451,7 @@ export function BuilderWidgetRenderer({
                   }}
                   formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
                 />
-                {legendPosition !== 'none' && <Legend verticalAlign={legendPosition === 'top' ? 'top' : 'bottom'} />}
+                {legendPosition !== 'hidden' && <Legend verticalAlign={legendPosition === 'top' ? 'top' : 'bottom'} />}
                 <Bar 
                   dataKey="value" 
                   name="Değer"
@@ -501,7 +510,7 @@ export function BuilderWidgetRenderer({
                   }}
                   formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
                 />
-                {legendPosition !== 'none' && <Legend verticalAlign={legendPosition === 'top' ? 'top' : 'bottom'} />}
+                {legendPosition !== 'hidden' && <Legend verticalAlign={legendPosition === 'top' ? 'top' : 'bottom'} />}
                 <Line 
                   type="monotone" 
                   dataKey="value"
@@ -559,7 +568,7 @@ export function BuilderWidgetRenderer({
                   }}
                   formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
                 />
-                {legendPosition !== 'none' && <Legend verticalAlign={legendPosition === 'top' ? 'top' : 'bottom'} />}
+                {legendPosition !== 'hidden' && <Legend verticalAlign={legendPosition === 'top' ? 'top' : 'bottom'} />}
                 <Area 
                   type="monotone" 
                   dataKey="value"
@@ -591,7 +600,7 @@ export function BuilderWidgetRenderer({
   // Pie/Donut Chart (drill-down destekli) - Önizleme ile uyumlu
   if (['pie', 'donut'].includes(vizType) && data?.chartData) {
     const isDonut = vizType === 'donut';
-    const legendField = builderConfig.visualization.chart?.legendField || '';
+    const legendField = fieldWells?.category?.field || builderConfig.visualization.chart?.legendField || '';
     const chartDataTotal = data.chartData.reduce((sum: number, d: any) => sum + d.value, 0);
     
     return (
