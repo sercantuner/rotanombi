@@ -1,11 +1,14 @@
 // Custom Code Widget Builder - Hardcoded React kodu ile widget oluşturma
 // Veri kaynağı seçimi, JSON görüntüleme/indirme, AI kod üretimi, kod editörü ve önizleme
+// Multi-Query (kaynak birleştirme) desteği
 
 import React, { useState, useEffect, useMemo, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import { useDataSources, DataSource as DataSourceType } from '@/hooks/useDataSources';
 import { useWidgetAdmin } from '@/hooks/useWidgets';
 import { WidgetFormData, PAGE_CATEGORIES, WIDGET_SIZES } from '@/lib/widgetTypes';
+import { MultiQueryConfig } from '@/lib/widgetBuilderTypes';
 import { DataSourceSelector } from './DataSourceSelector';
+import { MultiQueryBuilder } from './MultiQueryBuilder';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,13 +18,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Code, Database, Eye, Save, Play, Copy, Check, 
   LayoutGrid, AlertCircle, FileJson, Wand2, X,
-  RefreshCw, Loader2, Download, Sparkles, Send, MessageSquare
+  RefreshCw, Loader2, Download, Sparkles, Send, MessageSquare, 
+  Link2, Layers
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -318,9 +323,14 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   const [widgetSize, setWidgetSize] = useState<'sm' | 'md' | 'lg' | 'xl' | 'full'>('lg');
   const [defaultPage, setDefaultPage] = useState<'dashboard' | 'satis' | 'finans' | 'cari'>('dashboard');
   
-  // Veri kaynağı
+  // Veri kaynağı (tek kaynak modu)
   const [selectedDataSourceId, setSelectedDataSourceId] = useState<string | null>(null);
   const selectedDataSource = selectedDataSourceId ? getDataSourceById(selectedDataSourceId) : null;
+  
+  // Multi-query modu (kaynak birleştirme)
+  const [isMultiQueryMode, setIsMultiQueryMode] = useState(false);
+  const [multiQuery, setMultiQuery] = useState<MultiQueryConfig | null>(null);
+  const [mergedQueryData, setMergedQueryData] = useState<Record<string, any[]>>({});
   
   // JSON veri ve kod
   const [sampleData, setSampleData] = useState<any[]>([]);
@@ -358,7 +368,15 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       if (config?.customCode) {
         setCustomCode(config.customCode);
       }
-      if (config?.dataSourceId) {
+      
+      // Multi-query modu kontrolü
+      if (config?.multiQuery) {
+        setIsMultiQueryMode(true);
+        setMultiQuery(config.multiQuery);
+        // Multi-query için veri yükle
+        loadMultiQueryData(config.multiQuery);
+      } else if (config?.dataSourceId) {
+        setIsMultiQueryMode(false);
         setSelectedDataSourceId(config.dataSourceId);
         // Veri kaynağından veri çek
         const ds = getDataSourceById(config.dataSourceId);
@@ -380,10 +398,46 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       setDefaultPage('dashboard');
       setCustomCode(getDefaultCodeTemplate());
       setSelectedDataSourceId(null);
+      setIsMultiQueryMode(false);
+      setMultiQuery(null);
+      setMergedQueryData({});
       setSampleData([]);
       setChatHistory([]);
     }
   }, [editingWidget, open]);
+
+  // Multi-query verilerini yükle
+  const loadMultiQueryData = async (config: MultiQueryConfig) => {
+    if (!config?.queries?.length) return;
+    
+    setIsLoadingData(true);
+    const dataMap: Record<string, any[]> = {};
+    
+    try {
+      for (const query of config.queries) {
+        if (query.dataSourceId) {
+          const ds = getDataSourceById(query.dataSourceId);
+          if (ds?.last_sample_data) {
+            dataMap[query.id] = ds.last_sample_data as any[];
+          }
+        }
+      }
+      
+      setMergedQueryData(dataMap);
+      
+      // İlk sorgunun verisini sampleData olarak kullan (önizleme için)
+      const primaryQuery = config.queries.find(q => q.id === config.primaryQueryId) || config.queries[0];
+      if (primaryQuery && dataMap[primaryQuery.id]) {
+        setSampleData(dataMap[primaryQuery.id]);
+      }
+      
+      toast.success(`${Object.keys(dataMap).length} kaynak verisi yüklendi`);
+    } catch (err: any) {
+      toast.error('Veri yükleme hatası: ' + err.message);
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
 
   // Veri kaynağı seçildiğinde veri çek
   const handleDataSourceSelect = async (dataSource: DataSourceType | null) => {
@@ -673,27 +727,44 @@ Kullanıcı isteği: ${aiPrompt}`;
       return;
     }
 
-    if (!selectedDataSourceId) {
-      toast.error('Bir veri kaynağı seçmelisiniz');
-      return;
+    // Multi-query modunda kontrol
+    if (isMultiQueryMode) {
+      if (!multiQuery || multiQuery.queries.length === 0) {
+        toast.error('En az bir sorgu tanımlamalısınız');
+        return;
+      }
+    } else {
+      if (!selectedDataSourceId) {
+        toast.error('Bir veri kaynağı seçmelisiniz');
+        return;
+      }
     }
 
     const moduleValue = (selectedDataSource?.module || 'scf') as 'bcs' | 'fat' | 'gts' | 'scf' | 'sis' | 'stk';
     
-    const builderConfig = {
-      dataSourceId: selectedDataSourceId,
-      dataSourceSlug: selectedDataSource?.slug,
-      diaApi: {
-        module: moduleValue,
-        method: selectedDataSource?.method || 'carikart_listele',
-        parameters: {},
-      },
+    // Builder config - multi-query veya tek kaynak moduna göre
+    const builderConfig: Record<string, any> = {
       customCode: customCode,
       visualization: {
         type: 'custom' as const,
         isCustomCode: true,
       },
     };
+    
+    if (isMultiQueryMode && multiQuery) {
+      // Multi-query modu
+      builderConfig.multiQuery = multiQuery;
+      builderConfig.isMultiQuery = true;
+    } else {
+      // Tek kaynak modu
+      builderConfig.dataSourceId = selectedDataSourceId;
+      builderConfig.dataSourceSlug = selectedDataSource?.slug;
+      builderConfig.diaApi = {
+        module: moduleValue,
+        method: selectedDataSource?.method || 'carikart_listele',
+        parameters: {},
+      };
+    }
 
     const formData: WidgetFormData = {
       widget_key: widgetKey,
@@ -713,7 +784,7 @@ Kullanıcı isteği: ${aiPrompt}`;
       is_active: true,
       is_default: false,
       sort_order: 100,
-      builder_config: builderConfig,
+      builder_config: builderConfig as any, // Custom widget için esnek config
     };
 
     // Düzenleme veya yeni oluşturma
@@ -874,35 +945,78 @@ Kullanıcı isteği: ${aiPrompt}`;
 
                 <Separator />
 
-                {/* Veri Kaynağı */}
+                {/* Veri Kaynağı Modu */}
                 <div className="space-y-3">
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <Database className="h-4 w-4" />
-                    Veri Kaynağı
-                  </h3>
-                  
-                  <DataSourceSelector
-                    selectedId={selectedDataSourceId}
-                    onSelect={handleDataSourceSelect}
-                  />
-
-                  {selectedDataSource && (
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <Database className="h-4 w-4" />
+                      Veri Kaynağı
+                    </h3>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-xs">
-                        {selectedDataSource.module}.{selectedDataSource.method}
-                      </Badge>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => fetchDataFromSource(selectedDataSource)}
-                        disabled={isLoadingData}
-                      >
-                        {isLoadingData ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-3 w-3" />
-                        )}
-                      </Button>
+                      <Label htmlFor="multi-query-mode" className="text-xs text-muted-foreground">
+                        Çoklu
+                      </Label>
+                      <Switch
+                        id="multi-query-mode"
+                        checked={isMultiQueryMode}
+                        onCheckedChange={(checked) => {
+                          setIsMultiQueryMode(checked);
+                          if (checked) {
+                            setActiveTab('multiquery');
+                          } else {
+                            setMultiQuery(null);
+                            setMergedQueryData({});
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Tek kaynak modu */}
+                  {!isMultiQueryMode && (
+                    <>
+                      <DataSourceSelector
+                        selectedId={selectedDataSourceId}
+                        onSelect={handleDataSourceSelect}
+                      />
+
+                      {selectedDataSource && (
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            {selectedDataSource.module}.{selectedDataSource.method}
+                          </Badge>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => fetchDataFromSource(selectedDataSource)}
+                            disabled={isLoadingData}
+                          >
+                            {isLoadingData ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Çoklu kaynak modu */}
+                  {isMultiQueryMode && (
+                    <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 space-y-2">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Layers className="h-4 w-4 text-primary" />
+                        <span className="font-medium">Kaynak Birleştirme Aktif</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Sağdaki "Kaynak Birleştir" sekmesinden sorguları yapılandırın.
+                      </p>
+                      {multiQuery?.queries?.length && (
+                        <Badge variant="secondary" className="text-xs">
+                          {multiQuery.queries.length} sorgu tanımlı
+                        </Badge>
+                      )}
                     </div>
                   )}
                 </div>
@@ -943,6 +1057,12 @@ Kullanıcı isteği: ${aiPrompt}`;
                   <FileJson className="h-4 w-4" />
                   JSON Veri
                 </TabsTrigger>
+                {isMultiQueryMode && (
+                  <TabsTrigger value="multiquery" className="gap-2">
+                    <Link2 className="h-4 w-4" />
+                    Kaynak Birleştir
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="ai" className="gap-2">
                   <Sparkles className="h-4 w-4" />
                   AI Kod Üret
@@ -1007,6 +1127,24 @@ Kullanıcı isteği: ${aiPrompt}`;
                   )}
                 </div>
               </TabsContent>
+
+              {/* Multi-Query Kaynak Birleştirme Sekmesi */}
+              {isMultiQueryMode && (
+                <TabsContent value="multiquery" className="flex-1 p-4 m-0 overflow-auto">
+                  <div className="h-full">
+                    <MultiQueryBuilder
+                      multiQuery={multiQuery}
+                      onChange={(config) => {
+                        setMultiQuery(config);
+                        // Config değiştiğinde veriyi yükle
+                        if (config) {
+                          loadMultiQueryData(config);
+                        }
+                      }}
+                    />
+                  </div>
+                </TabsContent>
+              )}
 
               {/* AI Kod Üretimi Sekmesi */}
               <TabsContent value="ai" className="flex-1 p-4 m-0">
@@ -1275,7 +1413,10 @@ Kullanıcı isteği: ${aiPrompt}`;
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             İptal
           </Button>
-          <Button onClick={handleSave} disabled={isSaving || !selectedDataSourceId}>
+          <Button 
+            onClick={handleSave} 
+            disabled={isSaving || (!isMultiQueryMode && !selectedDataSourceId) || (isMultiQueryMode && (!multiQuery || multiQuery.queries.length === 0))}
+          >
             {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
             {editingWidget ? 'Widget Güncelle' : 'Widget Oluştur'}
           </Button>
