@@ -152,12 +152,17 @@ export function DataSourceManager() {
         sorts: apiSorts.length > 0 ? apiSorts : undefined,
         selectedColumns: selectedColumns.length > 0 ? selectedColumns : undefined,
         limit: formData.limit_count || 0,
+        // Dönem ayarlarını ekle
+        periodConfig: periodConfig.enabled ? periodConfig : undefined,
       });
       
       setTestResult(result);
       
       if (result.success) {
-        toast.success(`API testi başarılı! ${result.recordCount} kayıt bulundu.`);
+        const periodInfo = periodConfig.enabled && periodConfig.fetchHistorical 
+          ? ` (${periodConfig.historicalCount} dönem tarandı)` 
+          : '';
+        toast.success(`API testi başarılı! ${result.recordCount} kayıt bulundu${periodInfo}.`);
       } else {
         toast.error(`API hatası: ${result.error}`);
       }
@@ -178,6 +183,9 @@ export function DataSourceManager() {
     setTestingSourceId(sourceId);
     
     try {
+      // Source'un period_config'ini al (eğer varsa)
+      const sourcePeriodConfig = source.period_config as typeof periodConfig | undefined;
+      
       const result = await testDiaApi({
         module: source.module,
         method: source.method,
@@ -185,6 +193,8 @@ export function DataSourceManager() {
         sorts: (source.sorts as DiaApiSort[]) || undefined,
         selectedColumns: source.selected_columns || undefined,
         limit: source.limit_count || 0,
+        // Dönem ayarlarını ekle
+        periodConfig: sourcePeriodConfig?.enabled ? sourcePeriodConfig : undefined,
       });
       
       if (result.success) {
@@ -197,7 +207,11 @@ export function DataSourceManager() {
         // Hızlı test sonucunu göster
         setQuickTestResult({ sourceId, recordCount: result.recordCount || 0 });
         setTimeout(() => setQuickTestResult(null), 5000);
-        toast.success(`${source.name}: ${result.recordCount} kayıt`);
+        
+        const periodInfo = sourcePeriodConfig?.enabled && sourcePeriodConfig?.fetchHistorical 
+          ? ` (${sourcePeriodConfig.historicalCount} dönem)` 
+          : '';
+        toast.success(`${source.name}: ${result.recordCount} kayıt${periodInfo}`);
       } else {
         toast.error(`${source.name}: ${result.error}`);
       }

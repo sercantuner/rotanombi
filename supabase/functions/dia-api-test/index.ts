@@ -21,6 +21,15 @@ interface TestApiRequest {
   rawMode?: boolean;
   rawPayload?: string; // JSON string
   returnAllData?: boolean; // Tüm veriyi döndür (widget renderer için)
+  // Dönem loop için
+  periodConfig?: {
+    enabled: boolean;
+    periodField: string;       // "_level2" veya "donem_kodu"
+    currentPeriod?: number;    // Mevcut dönem (otomatik profile'dan alınır)
+    fetchHistorical: boolean;  // Eski dönemleri de çek
+    historicalCount: number;   // Kaç dönem geriye git
+    mergeStrategy: 'union' | 'separate';
+  };
 }
 
 interface TestApiResponse {
@@ -184,6 +193,7 @@ serve(async (req) => {
       rawMode = false,
       rawPayload = '',
       returnAllData = false, // Tüm veriyi döndür (widget renderer için)
+      periodConfig, // Dönem loop yapılandırması
     } = body;
 
     // DIA session al
@@ -329,6 +339,89 @@ serve(async (req) => {
       return result;
     }
 
+    // ============= DÖNEM LOOP MEKANİZMASI =============
+    // periodConfig varsa ve fetchHistorical açıksa, birden fazla dönem sorgula
+    let allData: any[] = [];
+    let fetchedPeriods: number[] = [];
+    
+    if (!rawMode && periodConfig?.enabled && periodConfig?.fetchHistorical && periodConfig?.historicalCount > 0) {
+      const currentPeriod = periodConfig.currentPeriod || donemKodu;
+      const startPeriod = Math.max(1, currentPeriod - periodConfig.historicalCount + 1);
+      
+      console.log(`[Period Loop] Fetching periods ${startPeriod} to ${currentPeriod} (${periodConfig.historicalCount} periods)`);
+      
+      for (let period = startPeriod; period <= currentPeriod; period++) {
+        // Payload'ın kopyasını oluştur ve donem_kodu'yu güncelle
+        const periodPayload = JSON.parse(JSON.stringify(payload));
+        const methodKey = Object.keys(periodPayload)[0];
+        periodPayload[methodKey].donem_kodu = period;
+        
+        console.log(`[Period Loop] Fetching period ${period}...`);
+        
+        try {
+          const periodResult = await makeDiaRequest(periodPayload, diaUrl);
+          
+          // Hata kontrolü
+          if (periodResult.code && periodResult.code !== "200") {
+            console.log(`[Period Loop] Period ${period} error: ${periodResult.msg}`);
+            continue; // Bu dönem için hata varsa sonraki döneme geç
+          }
+          
+          // Veriyi çıkar
+          let periodData: any[] = [];
+          if (periodResult.result) {
+            if (Array.isArray(periodResult.result)) {
+              periodData = periodResult.result;
+            } else if (typeof periodResult.result === 'object') {
+              const firstKey = Object.keys(periodResult.result)[0];
+              if (firstKey && Array.isArray(periodResult.result[firstKey])) {
+                periodData = periodResult.result[firstKey];
+              }
+            }
+          } else if (periodResult.msg && Array.isArray(periodResult.msg)) {
+            periodData = periodResult.msg;
+          }
+          
+          // Her kayda dönem bilgisini ekle
+          const taggedData = periodData.map((item: any) => ({
+            ...item,
+            _fetched_period: period,
+          }));
+          
+          allData = [...allData, ...taggedData];
+          fetchedPeriods.push(period);
+          console.log(`[Period Loop] Period ${period}: ${periodData.length} records`);
+        } catch (periodError) {
+          console.log(`[Period Loop] Period ${period} fetch error:`, periodError);
+          continue;
+        }
+      }
+      
+      console.log(`[Period Loop] Total: ${allData.length} records from ${fetchedPeriods.length} periods`);
+      
+      // Dönem loop sonuçlarını döndür
+      const { fields, fieldTypes, fieldStats } = allData.length > 0 
+        ? extractFieldsAndTypes(allData) 
+        : { fields: [], fieldTypes: {}, fieldStats: {} };
+      
+      const sampleData = returnAllData ? allData : allData.slice(0, 10);
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          recordCount: allData.length,
+          sampleFields: fields,
+          fieldTypes,
+          fieldStats,
+          sampleData,
+          fullDataAvailable: returnAllData,
+          fetchedPeriods,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // Normal tek dönem sorgusu
     const result = await makeDiaRequest(payload, diaUrl);
 
     // Raw mode ise tam yanıtı döndür
