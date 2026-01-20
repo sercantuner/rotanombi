@@ -77,6 +77,7 @@ export default function SuperAdminPage() {
   const [isCustomCodeBuilderOpen, setIsCustomCodeBuilderOpen] = useState(false);
   const [editingWidget, setEditingWidget] = useState<Widget | null>(null);
   const [builderEditWidget, setBuilderEditWidget] = useState<Widget | null>(null);
+  const [editingCustomCodeWidget, setEditingCustomCodeWidget] = useState<Widget | null>(null);
   const [formData, setFormData] = useState<WidgetFormData>(getEmptyFormData());
   
   // Kategori form state
@@ -340,10 +341,21 @@ export default function SuperAdminPage() {
                             variant="ghost" 
                             size="icon" 
                             onClick={() => {
-                              setBuilderEditWidget(widget);
-                              setIsBuilderOpen(true);
+                              // Hardcode widget mi kontrol et
+                              const config = widget.builder_config as any;
+                              const isHardcodeWidget = config?.visualization?.isCustomCode === true || 
+                                                       config?.visualization?.type === 'custom' ||
+                                                       config?.customCode !== undefined;
+                              
+                              if (isHardcodeWidget) {
+                                setEditingCustomCodeWidget(widget);
+                                setIsCustomCodeBuilderOpen(true);
+                              } else {
+                                setBuilderEditWidget(widget);
+                                setIsBuilderOpen(true);
+                              }
                             }}
-                            title="Widget Builder ile Düzenle"
+                            title="Widget Düzenle"
                           >
                             <Wand2 className="h-4 w-4 text-primary" />
                           </Button>
@@ -837,8 +849,12 @@ export default function SuperAdminPage() {
       {/* Custom Code Widget Builder */}
       <CustomCodeWidgetBuilder
         open={isCustomCodeBuilderOpen}
-        onOpenChange={setIsCustomCodeBuilderOpen}
+        onOpenChange={(open) => {
+          setIsCustomCodeBuilderOpen(open);
+          if (!open) setEditingCustomCodeWidget(null);
+        }}
         onSave={() => refetch()}
+        editingWidget={editingCustomCodeWidget}
       />
     </div>
   );
