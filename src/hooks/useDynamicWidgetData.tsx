@@ -383,12 +383,14 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Cache context - Artık veri kaynağı bazlı cache kullanıyoruz
+  // Cache context - Artık veri kaynağı bazlı cache kullanıyoruz (Cache-First strateji)
   const { 
     getCachedData, 
     setCachedData, 
     getDataSourceData,
+    getDataSourceDataWithStale,
     setDataSourceData,
+    isDataSourceLoading,
     sharedData, 
     incrementCacheHit, 
     incrementCacheMiss 
@@ -471,58 +473,32 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
           fetchedData = applyMerge(fetchedData, rightData, merge);
         }
       } else {
-        // Tekli sorgu - ÖNCE CACHE'E BAK (Merkezi Mimari)
+        // Tekli sorgu - CACHE-FIRST STRATEJİ (Merkezi Mimari)
+        // Widget'lar asla kendi API çağrısı yapmaz - her zaman cache'den okur
         
         // 1. Veri kaynağı ID'si varsa, onun cache'ine bak
         if (config.dataSourceId) {
-          const cachedSourceData = getDataSourceData(config.dataSourceId);
+          // Stale-while-revalidate destekli cache kontrolü
+          const { data: cachedSourceData, isStale } = getDataSourceDataWithStale(config.dataSourceId);
+          
           if (cachedSourceData) {
-            console.log(`[Widget] Cache HIT - DataSource ${config.dataSourceId}: ${cachedSourceData.length} kayıt`);
+            console.log(`[Widget] Cache HIT - DataSource ${config.dataSourceId}: ${cachedSourceData.length} kayıt${isStale ? ' [STALE]' : ''}`);
             fetchedData = cachedSourceData;
             incrementCacheHit();
+            // Stale olsa bile API çağrısı yapmıyoruz - DataSourceLoader arka planda güncelleyecek
+          } else if (isDataSourceLoading(config.dataSourceId)) {
+            // Veri kaynağı şu anda yükleniyor - bekle
+            console.log(`[Widget] DataSource ${config.dataSourceId} loading, waiting...`);
+            setIsLoading(true);
+            return; // fetchData tekrar çağrılacak
           } else {
-            // Cache'de yok - API çağrısı yap ve cache'e kaydet
-            console.log(`[Widget] Cache MISS - DataSource ${config.dataSourceId} - Fetching...`);
-            incrementCacheMiss();
-            
-            const response = await queuedDiaFetch(
-              `${SUPABASE_URL}/functions/v1/dia-api-test`,
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${session.access_token}`,
-                },
-                body: JSON.stringify({
-                  module: config.diaApi.module,
-                  method: config.diaApi.method,
-                  ...(config.diaApi.parameters.limit && config.diaApi.parameters.limit > 0 && { limit: config.diaApi.parameters.limit }),
-                  filters: config.diaApi.parameters.filters,
-                  selectedColumns: config.diaApi.parameters.selectedcolumns,
-                  sorts: config.diaApi.parameters.sorts,
-                  returnAllData: true,
-                }),
-              },
-              1 // priority
-            );
-
-            const result = await response.json();
-            if (!result.success) {
-              // DIA API hataları için özel mesajlar
-              const errorMsg = result.error || 'API hatası';
-              console.warn(`[Widget] DataSource ${config.dataSourceId} hatası:`, errorMsg);
-              
-              // Boş veri ile devam et, ancak hatayı kaydet
-              fetchedData = [];
-              setError(getDiaErrorMessage(errorMsg));
-            } else {
-              fetchedData = result.sampleData || [];
-              // Veri kaynağı cache'ine kaydet
-              setDataSourceData(config.dataSourceId, fetchedData, 5 * 60 * 1000);
-            }
+            // Cache'de yok ve yüklenmiyor - uyarı ver ama API çağrısı YAPMA
+            console.warn(`[Widget] DataSource ${config.dataSourceId} not in cache - widget will show empty`);
+            fetchedData = [];
+            // Hata mesajı gösterme - DataSourceLoader yükleyecek
           }
         } else {
-          // 2. Veri kaynağı ID yok - Eski genel cache mantığı
+          // 2. Veri kaynağı ID yok - Eski genel cache mantığı (geriye uyumluluk)
           const cacheKey = generateCacheKey(config.diaApi.module, config.diaApi.method, config.diaApi.parameters);
           
           // Genel cache kontrolü

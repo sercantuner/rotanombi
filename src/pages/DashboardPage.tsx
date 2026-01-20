@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/Header';
 import { VadeDetayListesi } from '@/components/dashboard/VadeDetayListesi';
 import { ContainerBasedDashboard } from '@/components/dashboard/ContainerBasedDashboard';
+import { DashboardLoadingScreen } from '@/components/dashboard/DashboardLoadingScreen';
 import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
 import { useDiaDataCache } from '@/contexts/DiaDataCacheContext';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
@@ -39,8 +40,11 @@ function DashboardContent() {
 
   // Merkezi veri kaynağı loader - Sayfadaki tüm widget'ların veri kaynaklarını yükler
   const { 
-    isLoading: dataSourcesLoading, 
-    loadedSources, 
+    isLoading: dataSourcesLoading,
+    isInitialLoad: dataSourcesInitialLoad,
+    loadedSources,
+    totalSources,
+    loadProgress,
     refresh: refreshDataSources,
     getSourceData 
   } = useDataSourceLoader(dashboardPageId);
@@ -225,8 +229,19 @@ function DashboardContent() {
     toplamBankaBakiye: finansRapor?.toplamBankaBakiyesi || 0,
   }), [genelRapor, finansRapor, cariler, yaslandirma]);
 
+  // İlk yüklemede loading screen göster
+  const showLoadingScreen = dataSourcesInitialLoad && totalSources > 0;
+
   return (
     <div className="flex-1 flex flex-col">
+      {/* Loading Screen - İlk yükleme sırasında göster */}
+      {showLoadingScreen && (
+        <DashboardLoadingScreen
+          progress={loadProgress}
+          loadedSources={loadedSources.length}
+          totalSources={totalSources}
+        />
+      )}
       <Header 
         title="Dashboard" 
         subtitle="Günlük özet ve kritik bilgiler"

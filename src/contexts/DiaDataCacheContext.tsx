@@ -1,12 +1,14 @@
 // DiaDataCacheContext - DIA API sonuçlarını önbelleğe alma
 // Aynı verinin birden fazla kez çekilmesini önler, kontör tasarrufu sağlar
+// Stale-While-Revalidate stratejisi ile eski veriyi gösterirken arka planda günceller
 
-import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode, useRef } from 'react';
 
 interface CacheEntry {
   data: any;
   timestamp: number;
   ttl: number; // Time to live (ms)
+  isStale?: boolean; // Stale-while-revalidate için
 }
 
 interface CacheStats {
@@ -18,14 +20,22 @@ interface CacheStats {
 interface DiaDataCacheContextType {
   // Cache işlemleri
   getCachedData: (cacheKey: string) => any | null;
+  getCachedDataWithStale: (cacheKey: string) => { data: any | null; isStale: boolean };
   setCachedData: (cacheKey: string, data: any, ttl?: number) => void;
   invalidateCache: (pattern?: string) => void;
   
-  // Veri kaynağı bazlı cache (YENİ)
+  // Veri kaynağı bazlı cache
   getDataSourceData: (dataSourceId: string) => any[] | null;
+  getDataSourceDataWithStale: (dataSourceId: string) => { data: any[] | null; isStale: boolean };
   setDataSourceData: (dataSourceId: string, data: any[], ttl?: number) => void;
+  isDataSourceLoading: (dataSourceId: string) => boolean;
+  setDataSourceLoading: (dataSourceId: string, loading: boolean) => void;
   
-  // Hazır veri havuzları (Dashboard'dan gelen) - LEGACY, kaldırılacak
+  // Sayfa seviyesi yükleme durumu
+  isPageDataReady: boolean;
+  setPageDataReady: (ready: boolean) => void;
+  
+  // Hazır veri havuzları (Dashboard'dan gelen) - LEGACY
   sharedData: {
     cariListesi: any[] | null;
     vadeBakiye: any[] | null;
@@ -34,14 +44,18 @@ interface DiaDataCacheContextType {
   
   // İstatistikler
   stats: CacheStats;
+  resetStats: () => void;
   incrementCacheHit: () => void;
   incrementCacheMiss: () => void;
 }
 
 const DiaDataCacheContext = createContext<DiaDataCacheContextType | null>(null);
 
-// Varsayılan TTL: 5 dakika
-const DEFAULT_TTL = 5 * 60 * 1000;
+// Varsayılan TTL: 10 dakika (agresif caching)
+const DEFAULT_TTL = 10 * 60 * 1000;
+
+// Stale süresi: TTL'nin %80'i (8 dakika) - Bu süre sonra veri "stale" kabul edilir
+const STALE_RATIO = 0.8;
 
 // Cache key oluşturma
 export function generateCacheKey(module: string, method: string, params?: any): string {
@@ -66,6 +80,8 @@ interface DiaDataCacheProviderProps {
 
 export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
   const [cache, setCache] = useState<Map<string, CacheEntry>>(new Map());
+  const [loadingDataSources, setLoadingDataSources] = useState<Set<string>>(new Set());
+  const [isPageDataReady, setPageDataReady] = useState(false);
   const [sharedData, setSharedDataState] = useState<{
     cariListesi: any[] | null;
     vadeBakiye: any[] | null;
@@ -79,14 +95,38 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
     cacheMisses: 0,
   });
 
-  // Cache'den veri al
+  // Cache'den veri al (stale check ile)
+  const getCachedDataWithStale = useCallback((cacheKey: string): { data: any | null; isStale: boolean } => {
+    const entry = cache.get(cacheKey);
+    if (!entry) return { data: null, isStale: false };
+    
+    const age = Date.now() - entry.timestamp;
+    const staleTreshold = entry.ttl * STALE_RATIO;
+    
+    // TTL tamamen dolmuşsa veriyi silme - stale-while-revalidate ile kullan
+    if (age > entry.ttl) {
+      // Veri tamamen expired ama yine de dönüyoruz (stale)
+      return { data: entry.data, isStale: true };
+    }
+    
+    // Stale threshold aşıldıysa stale olarak işaretle
+    if (age > staleTreshold) {
+      return { data: entry.data, isStale: true };
+    }
+    
+    return { data: entry.data, isStale: false };
+  }, [cache]);
+
+  // Cache'den veri al (eski API uyumluluğu)
   const getCachedData = useCallback((cacheKey: string): any | null => {
+    const { data, isStale } = getCachedDataWithStale(cacheKey);
+    // Tamamen expired değilse döndür (stale-while-revalidate)
     const entry = cache.get(cacheKey);
     if (!entry) return null;
     
-    // TTL kontrolü
-    if (Date.now() - entry.timestamp > entry.ttl) {
-      // Süresi dolmuş, temizle
+    const age = Date.now() - entry.timestamp;
+    // TTL'nin 2 katı geçtiyse artık kullanma
+    if (age > entry.ttl * 2) {
       setCache(prev => {
         const next = new Map(prev);
         next.delete(cacheKey);
@@ -95,8 +135,8 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
       return null;
     }
     
-    return entry.data;
-  }, [cache]);
+    return data;
+  }, [cache, getCachedDataWithStale]);
 
   // Cache'e veri ekle
   const setCachedData = useCallback((cacheKey: string, data: any, ttl: number = DEFAULT_TTL) => {
@@ -106,6 +146,7 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
         data,
         timestamp: Date.now(),
         ttl,
+        isStale: false,
       });
       return next;
     });
@@ -145,22 +186,56 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
       success: true, 
       sampleData: data,
       recordCount: data.length,
-    }, 10 * 60 * 1000); // 10 dakika TTL
+    }, DEFAULT_TTL);
   }, [setCachedData]);
 
-  // Veri kaynağı bazlı cache metodları (YENİ)
+  // Veri kaynağı bazlı cache metodları
   const getDataSourceData = useCallback((dataSourceId: string): any[] | null => {
     const cacheKey = `datasource_${dataSourceId}`;
     const cached = getCachedData(cacheKey);
     return cached && Array.isArray(cached) ? cached : null;
   }, [getCachedData]);
 
-  const setDataSourceData = useCallback((dataSourceId: string, data: any[], ttl: number = 5 * 60 * 1000) => {
+  const getDataSourceDataWithStale = useCallback((dataSourceId: string): { data: any[] | null; isStale: boolean } => {
+    const cacheKey = `datasource_${dataSourceId}`;
+    const { data, isStale } = getCachedDataWithStale(cacheKey);
+    return { 
+      data: data && Array.isArray(data) ? data : null, 
+      isStale 
+    };
+  }, [getCachedDataWithStale]);
+
+  const setDataSourceData = useCallback((dataSourceId: string, data: any[], ttl: number = DEFAULT_TTL) => {
     const cacheKey = `datasource_${dataSourceId}`;
     setCachedData(cacheKey, data, ttl);
   }, [setCachedData]);
 
+  // DataSource loading state
+  const isDataSourceLoading = useCallback((dataSourceId: string): boolean => {
+    return loadingDataSources.has(dataSourceId);
+  }, [loadingDataSources]);
+
+  const setDataSourceLoading = useCallback((dataSourceId: string, loading: boolean) => {
+    setLoadingDataSources(prev => {
+      const next = new Set(prev);
+      if (loading) {
+        next.add(dataSourceId);
+      } else {
+        next.delete(dataSourceId);
+      }
+      return next;
+    });
+  }, []);
+
   // İstatistik güncellemeleri
+  const resetStats = useCallback(() => {
+    setStats({
+      totalQueries: 0,
+      cacheHits: 0,
+      cacheMisses: 0,
+    });
+  }, []);
+
   const incrementCacheHit = useCallback(() => {
     setStats(prev => ({
       ...prev,
@@ -179,16 +254,29 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
 
   const value = useMemo(() => ({
     getCachedData,
+    getCachedDataWithStale,
     setCachedData,
     invalidateCache,
     getDataSourceData,
+    getDataSourceDataWithStale,
     setDataSourceData,
+    isDataSourceLoading,
+    setDataSourceLoading,
+    isPageDataReady,
+    setPageDataReady,
     sharedData,
     setSharedData,
     stats,
+    resetStats,
     incrementCacheHit,
     incrementCacheMiss,
-  }), [getCachedData, setCachedData, invalidateCache, getDataSourceData, setDataSourceData, sharedData, setSharedData, stats, incrementCacheHit, incrementCacheMiss]);
+  }), [
+    getCachedData, getCachedDataWithStale, setCachedData, invalidateCache, 
+    getDataSourceData, getDataSourceDataWithStale, setDataSourceData, 
+    isDataSourceLoading, setDataSourceLoading,
+    isPageDataReady, setPageDataReady,
+    sharedData, setSharedData, stats, resetStats, incrementCacheHit, incrementCacheMiss
+  ]);
 
   return (
     <DiaDataCacheContext.Provider value={value}>
@@ -203,13 +291,20 @@ export function useDiaDataCache(): DiaDataCacheContextType {
     // Context olmadan çalışabilmesi için fallback
     return {
       getCachedData: () => null,
+      getCachedDataWithStale: () => ({ data: null, isStale: false }),
       setCachedData: () => {},
       invalidateCache: () => {},
       getDataSourceData: () => null,
+      getDataSourceDataWithStale: () => ({ data: null, isStale: false }),
       setDataSourceData: () => {},
+      isDataSourceLoading: () => false,
+      setDataSourceLoading: () => {},
+      isPageDataReady: false,
+      setPageDataReady: () => {},
       sharedData: { cariListesi: null, vadeBakiye: null },
       setSharedData: () => {},
       stats: { totalQueries: 0, cacheHits: 0, cacheMisses: 0 },
+      resetStats: () => {},
       incrementCacheHit: () => {},
       incrementCacheMiss: () => {},
     };
