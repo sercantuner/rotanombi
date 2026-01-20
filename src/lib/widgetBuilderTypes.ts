@@ -31,7 +31,7 @@ export type AggregationType =
   | 'last';
 
 // DIA API Filtre Yapısı
-export type FilterOperator = '<' | '>' | '<=' | '>=' | '=' | '!' | '!=' | 'IN' | 'NOT IN' | 'contains' | 'starts_with' | 'ends_with' | 'is_null' | 'is_not_null' | 'between';
+export type FilterOperator = '<' | '>' | '<=' | '>=' | '=' | '!' | '!=' | 'IN' | 'NOT IN' | 'contains' | 'not_contains' | 'starts_with' | 'ends_with' | 'is_null' | 'is_not_null' | 'between';
 
 export interface DiaApiFilter {
   field: string;
@@ -79,7 +79,7 @@ export const FILTER_OPERATORS: { id: FilterOperator; name: string; example: stri
   { id: '<=', name: 'Küçük Eşit', example: 'toplambakiye <= 1000', requiresValue: true },
   { id: 'IN', name: 'İçinde (Çoklu)', example: 'carikartkodu IN "001,002,003"', requiresValue: true },
   { id: 'NOT IN', name: 'İçinde Değil', example: 'sehir NOT IN "İstanbul,Ankara"', requiresValue: true },
-  { id: '!', name: 'İçermiyor', example: 'unvan ! "ANONİM"', requiresValue: true },
+  { id: 'not_contains', name: 'İçermiyor', example: 'ad not_contains "Test"', requiresValue: true },
   { id: 'contains', name: 'İçeriyor', example: 'unvan contains "Ltd"', requiresValue: true },
   { id: 'starts_with', name: 'İle Başlar', example: 'kod starts_with "TR"', requiresValue: true },
   { id: 'ends_with', name: 'İle Biter', example: 'ad ends_with "AŞ"', requiresValue: true },

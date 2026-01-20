@@ -6,17 +6,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { LayoutGrid, Info } from 'lucide-react';
-import { AggregationType, AGGREGATION_TYPES } from '@/lib/widgetBuilderTypes';
+import { AggregationType, AGGREGATION_TYPES, PivotConfig } from '@/lib/widgetBuilderTypes';
 
-export interface PivotConfig {
-  rowFields: string[];
-  columnField: string;
-  valueField: string;
-  aggregation: AggregationType;
-  showRowTotals: boolean;
-  showColumnTotals: boolean;
-  showGrandTotal: boolean;
-}
+// Re-export for convenience
+export type { PivotConfig };
 
 interface PivotConfigBuilderProps {
   config: PivotConfig;
@@ -25,7 +18,16 @@ interface PivotConfigBuilderProps {
   numericFields: string[];
 }
 
+// Varsayılan değerlerle birleştirilmiş config
+const getConfigWithDefaults = (config: PivotConfig): Required<Pick<PivotConfig, 'showRowTotals' | 'showColumnTotals' | 'showGrandTotal'>> & PivotConfig => ({
+  ...config,
+  showRowTotals: config.showRowTotals ?? true,
+  showColumnTotals: config.showColumnTotals ?? true,
+  showGrandTotal: config.showGrandTotal ?? true,
+});
+
 export function PivotConfigBuilder({ config, onChange, availableFields, numericFields }: PivotConfigBuilderProps) {
+  const safeConfig = getConfigWithDefaults(config);
   const updateConfig = (updates: Partial<PivotConfig>) => {
     onChange({ ...config, ...updates });
   };
@@ -136,21 +138,21 @@ export function PivotConfigBuilder({ config, onChange, availableFields, numericF
               <div className="flex items-center justify-between p-2 bg-muted/30 rounded">
                 <Label className="text-sm">Satır Toplamları</Label>
                 <Switch
-                  checked={config.showRowTotals}
+                  checked={safeConfig.showRowTotals}
                   onCheckedChange={(v) => updateConfig({ showRowTotals: v })}
                 />
               </div>
               <div className="flex items-center justify-between p-2 bg-muted/30 rounded">
                 <Label className="text-sm">Sütun Toplamları</Label>
                 <Switch
-                  checked={config.showColumnTotals}
+                  checked={safeConfig.showColumnTotals}
                   onCheckedChange={(v) => updateConfig({ showColumnTotals: v })}
                 />
               </div>
               <div className="flex items-center justify-between p-2 bg-muted/30 rounded">
                 <Label className="text-sm">Genel Toplam</Label>
                 <Switch
-                  checked={config.showGrandTotal}
+                  checked={safeConfig.showGrandTotal}
                   onCheckedChange={(v) => updateConfig({ showGrandTotal: v })}
                 />
               </div>
