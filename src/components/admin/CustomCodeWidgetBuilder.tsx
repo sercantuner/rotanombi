@@ -1,7 +1,7 @@
 // Custom Code Widget Builder - Hardcoded React kodu ile widget oluşturma
 // Veri kaynağı seçimi, JSON görüntüleme/indirme, AI kod üretimi, kod editörü ve önizleme
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import { useDataSources, DataSource as DataSourceType } from '@/hooks/useDataSources';
 import { useWidgetAdmin } from '@/hooks/useWidgets';
 import { WidgetFormData, PAGE_CATEGORIES, WIDGET_SIZES } from '@/lib/widgetTypes';
@@ -17,6 +17,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Code, Database, Eye, Save, Play, Copy, Check, 
   LayoutGrid, AlertCircle, FileJson, Wand2, X,
@@ -27,6 +28,49 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+} from 'recharts';
+
+// Recharts bileşenlerini scope'a ekle
+const RechartsScope = {
+  BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+};
+
+// Error Boundary bileşeni
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  fallback: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Widget render error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
 
 // Ikon listesi
 const AVAILABLE_ICONS = [
@@ -473,7 +517,7 @@ Kullanıcı isteği: ${aiPrompt}`;
       },
       customCode: customCode,
       visualization: {
-        type: 'bar' as const, // Custom widget için placeholder tip
+        type: 'custom' as const,
         isCustomCode: true,
       },
     };
@@ -507,20 +551,41 @@ Kullanıcı isteği: ${aiPrompt}`;
     }
   };
 
-  // Önizleme bileşeni
-  const PreviewComponent = useMemo(() => {
-    if (!customCode.trim()) return null;
+  // Dinamik kod çalıştırma ile önizleme bileşeni
+  const PreviewResult = useMemo(() => {
+    if (!customCode.trim() || sampleData.length === 0) {
+      return { component: null, error: null };
+    }
     
     try {
-      // Basit kod değerlendirme (güvenlik için sınırlı)
-      // NOT: Gerçek üretimde daha güvenli bir çözüm kullanılmalı
-      setCodeError(null);
-      return null; // Şimdilik statik önizleme göster
+      // Kodu çalıştırılabilir fonksiyona dönüştür
+      const fn = new Function(
+        'React',
+        'data',
+        'LucideIcons',
+        'Recharts',
+        customCode
+      );
+      
+      const WidgetComponent = fn(React, sampleData, LucideIcons, RechartsScope);
+      
+      if (typeof WidgetComponent !== 'function') {
+        return { 
+          component: null, 
+          error: 'Widget fonksiyonu bulunamadı. Kodunuzda "return Widget;" veya "return VadeYaslandirmaWidget;" olmalı.' 
+        };
+      }
+      
+      return { component: WidgetComponent, error: null };
     } catch (err: any) {
-      setCodeError(err.message);
-      return null;
+      return { component: null, error: err.message };
     }
-  }, [customCode]);
+  }, [customCode, sampleData]);
+
+  // Error state'i güncelle
+  useEffect(() => {
+    setCodeError(PreviewResult.error);
+  }, [PreviewResult.error]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -851,13 +916,40 @@ Kullanıcı isteği: ${aiPrompt}`;
                     )}
                   </CardHeader>
                   <CardContent>
-                    <div className="border-2 border-dashed rounded-lg p-4 min-h-[300px] flex items-center justify-center text-muted-foreground">
-                      <div className="text-center">
-                        <Eye className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">Önizleme, widget kaydedildikten sonra Dashboard'da görünecek</p>
-                        <p className="text-xs mt-1">Kod şablonu: {CODE_TEMPLATES.find(t => customCode.includes(t.code.slice(0, 50)))?.name || 'Özel'}</p>
+                    {sampleData.length === 0 ? (
+                      <div className="border-2 border-dashed rounded-lg p-4 min-h-[300px] flex items-center justify-center text-muted-foreground">
+                        <div className="text-center">
+                          <Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">Önce veri kaynağı seçin</p>
+                        </div>
                       </div>
-                    </div>
+                    ) : codeError ? (
+                      <Alert variant="destructive" className="min-h-[300px]">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          <pre className="text-xs whitespace-pre-wrap mt-2">{codeError}</pre>
+                        </AlertDescription>
+                      </Alert>
+                    ) : PreviewResult.component ? (
+                      <div className="min-h-[300px] border rounded-lg p-4">
+                        <ErrorBoundary fallback={
+                          <div className="text-destructive text-sm flex items-center gap-2">
+                            <AlertCircle className="h-4 w-4" />
+                            Widget render hatası
+                          </div>
+                        }>
+                          <PreviewResult.component data={sampleData} />
+                        </ErrorBoundary>
+                      </div>
+                    ) : (
+                      <div className="border-2 border-dashed rounded-lg p-4 min-h-[300px] flex items-center justify-center text-muted-foreground">
+                        <div className="text-center">
+                          <Code className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">Kod yazın veya AI ile üretin</p>
+                          <p className="text-xs mt-1">Widget otomatik önizlenecek</p>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>

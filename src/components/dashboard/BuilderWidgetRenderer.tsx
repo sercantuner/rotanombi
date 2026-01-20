@@ -1,13 +1,13 @@
 // BuilderWidgetRenderer - Widget Builder ile oluşturulan widget'ları render eder (Drill-down destekli)
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import { WidgetBuilderConfig, AggregationType } from '@/lib/widgetBuilderTypes';
 import { useDynamicWidgetData } from '@/hooks/useDynamicWidgetData';
 import { DrillDownModal } from './DrillDownModal';
 import { StatCard } from './StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertCircle, BarChart3, Hash, MousePointerClick, Calendar, AlertTriangle } from 'lucide-react';
+import { AlertCircle, BarChart3, Hash, MousePointerClick, Calendar, AlertTriangle, Code } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { 
   BarChart, Bar, LineChart, Line, AreaChart, Area,
@@ -16,6 +16,46 @@ import {
 } from 'recharts';
 import { cn } from '@/lib/utils';
 import { useDashboardFilters } from '@/contexts/DashboardFilterContext';
+
+// Recharts bileşenlerini scope'a ekle (customCode için)
+const RechartsScope = {
+  BarChart, Bar, LineChart, Line, AreaChart, Area,
+  PieChart: RechartsPieChart, Pie, Cell, ReferenceLine,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+};
+
+// Error Boundary bileşeni
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  fallback: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Widget render error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
 
 // Agregasyon hesaplamaları (pivot için)
 function calculateAggregation(data: any[], field: string, aggregation: AggregationType): number {
@@ -209,6 +249,76 @@ export function BuilderWidgetRenderer({
         />
       </>
     );
+  }
+
+  // Custom Code Widget (yeni eklenen)
+  if (vizType === 'custom' && (builderConfig as any).customCode) {
+    const customCode = (builderConfig as any).customCode;
+    
+    try {
+      // Kodu çalıştırılabilir fonksiyona dönüştür
+      const fn = new Function(
+        'React',
+        'data',
+        'LucideIcons',
+        'Recharts',
+        customCode
+      );
+      
+      const WidgetComponent = fn(React, rawData, LucideIcons, RechartsScope);
+      
+      if (typeof WidgetComponent !== 'function') {
+        return (
+          <Card className={className}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2 text-destructive">
+                <Code className="h-4 w-4" />
+                {widgetName}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="py-4 text-sm text-muted-foreground">
+              Widget fonksiyonu bulunamadı
+            </CardContent>
+          </Card>
+        );
+      }
+      
+      return (
+        <Card className={className}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <DynamicIcon iconName={widgetIcon || 'Code'} className="h-4 w-4" />
+              {widgetName}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ErrorBoundary fallback={
+              <div className="text-destructive text-sm flex items-center gap-2 py-4">
+                <AlertCircle className="h-4 w-4" />
+                Widget render hatası
+              </div>
+            }>
+              <WidgetComponent data={rawData} />
+            </ErrorBoundary>
+          </CardContent>
+        </Card>
+      );
+    } catch (err: any) {
+      console.error('Custom widget error:', err);
+      return (
+        <Card className={className}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-4 w-4" />
+              {widgetName}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="py-4">
+            <p className="text-sm text-destructive">{err.message}</p>
+          </CardContent>
+        </Card>
+      );
+    }
   }
 
   // Bar Chart (drill-down destekli)
