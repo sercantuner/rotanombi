@@ -1,9 +1,10 @@
 // BuilderWidgetRenderer - Widget Builder ile oluşturulan widget'ları render eder (Drill-down destekli)
 
 import React, { useState, useMemo, Component, ErrorInfo, ReactNode } from 'react';
-import { WidgetBuilderConfig, AggregationType } from '@/lib/widgetBuilderTypes';
+import { WidgetBuilderConfig, AggregationType, DatePeriod } from '@/lib/widgetBuilderTypes';
 import { useDynamicWidgetData } from '@/hooks/useDynamicWidgetData';
 import { DrillDownModal } from './DrillDownModal';
+import { WidgetDateFilter, getDateRangeForPeriod } from './WidgetDateFilter';
 import { StatCard } from './StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -16,6 +17,14 @@ import {
 } from 'recharts';
 import { cn } from '@/lib/utils';
 import { useDashboardFilters } from '@/contexts/DashboardFilterContext';
+import { 
+  COLOR_PALETTES, 
+  PaletteKey, 
+  isDateField, 
+  detectDateGroupingType, 
+  groupDataForChartWithDates,
+  generateGradientColors 
+} from '@/lib/chartUtils';
 
 // Recharts bileşenlerini scope'a ekle (customCode için)
 const RechartsScope = {
@@ -78,20 +87,6 @@ function calculateAggregation(data: any[], field: string, aggregation: Aggregati
   }
 }
 
-// Renk paleti
-const COLORS = [
-  'hsl(var(--primary))',
-  'hsl(var(--chart-2))',
-  'hsl(var(--chart-3))',
-  'hsl(var(--chart-4))',
-  'hsl(var(--chart-5))',
-  'hsl(210, 70%, 50%)',
-  'hsl(280, 60%, 55%)',
-  'hsl(160, 60%, 45%)',
-  'hsl(35, 80%, 50%)',
-  'hsl(340, 70%, 55%)',
-];
-
 interface BuilderWidgetRendererProps {
   widgetId: string;
   widgetName: string;
@@ -141,16 +136,93 @@ export function BuilderWidgetRenderer({
   builderConfig,
   className = '',
 }: BuilderWidgetRendererProps) {
-  const { data, rawData, isLoading, error } = useDynamicWidgetData(builderConfig);
+  const { data, rawData, isLoading, error, refetch } = useDynamicWidgetData(builderConfig);
+  
+  // Tarih filtresi state
+  const [selectedDatePeriod, setSelectedDatePeriod] = useState<DatePeriod>(
+    builderConfig.dateFilter?.defaultPeriod || 'all'
+  );
+  const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | null>(null);
   
   // Drill-down state
   const [drillDownOpen, setDrillDownOpen] = useState(false);
   const [drillDownTitle, setDrillDownTitle] = useState('');
   const [drillDownData, setDrillDownData] = useState<any[]>([]);
 
+  // Chart ayarlarını al
+  const chartSettings = builderConfig.visualization?.chart;
+  const colorPalette = (chartSettings as any)?.colorPalette || 'default';
+  const showGrid = (chartSettings as any)?.showGrid !== false;
+  const legendPosition = (chartSettings as any)?.legendPosition || 'bottom';
+  const displayLimit = (chartSettings as any)?.maxRecords || 10;
+  
+  // Aktif renk paleti
+  const activeColors = COLOR_PALETTES[colorPalette as PaletteKey] || COLOR_PALETTES.default;
+  
+  // X ekseni tarih mi kontrol et
+  const xAxisField = chartSettings?.xAxis?.field || '';
+  const yAxisField = chartSettings?.yAxis?.field || chartSettings?.valueField || '';
+  const isXAxisDate = useMemo(() => {
+    return xAxisField && rawData.length > 0 && isDateField(xAxisField, rawData);
+  }, [xAxisField, rawData]);
+  
+  // Tarih filtresine göre veri filtrele
+  const filteredData = useMemo(() => {
+    if (!rawData || rawData.length === 0) return rawData;
+    if (selectedDatePeriod === 'all') return rawData;
+    
+    const dateField = builderConfig.dateFilter?.dateField || xAxisField;
+    if (!dateField) return rawData;
+    
+    let dateRange = customDateRange;
+    if (!dateRange && selectedDatePeriod !== 'custom') {
+      dateRange = getDateRangeForPeriod(selectedDatePeriod);
+    }
+    
+    if (!dateRange) return rawData;
+    
+    return rawData.filter(item => {
+      const dateValue = item[dateField];
+      if (!dateValue) return false;
+      
+      const itemDate = new Date(dateValue);
+      return itemDate >= dateRange!.start && itemDate <= dateRange!.end;
+    });
+  }, [rawData, selectedDatePeriod, customDateRange, builderConfig.dateFilter?.dateField, xAxisField]);
+  
+  // Grafik verisini hesapla (tarih boşluk doldurma ile)
+  const chartData = useMemo(() => {
+    if (!filteredData || filteredData.length === 0) return [];
+    if (!xAxisField || !yAxisField) return data?.chartData || [];
+    
+    const aggregation = chartSettings?.yAxis?.aggregation || 'sum';
+    const groupingType = isXAxisDate ? detectDateGroupingType(filteredData, xAxisField) : undefined;
+    
+    return groupDataForChartWithDates(
+      filteredData,
+      xAxisField,
+      yAxisField,
+      aggregation,
+      displayLimit,
+      isXAxisDate,
+      groupingType,
+      isXAxisDate // tarih ise boşlukları doldur
+    );
+  }, [filteredData, xAxisField, yAxisField, chartSettings, isXAxisDate, displayLimit, data?.chartData]);
+
+  // Tarih periyodu değişikliği
+  const handleDatePeriodChange = (period: DatePeriod, dateRange?: { start: Date; end: Date }) => {
+    setSelectedDatePeriod(period);
+    if (period === 'custom' && dateRange) {
+      setCustomDateRange(dateRange);
+    } else {
+      setCustomDateRange(null);
+    }
+  };
+
   // Drill-down işleyicisi
   const handleDrillDown = (clickedName: string, groupField: string) => {
-    const filteredItems = rawData.filter(item => 
+    const filteredItems = filteredData.filter(item => 
       String(item[groupField] || 'Belirsiz') === clickedName
     );
     setDrillDownTitle(`${widgetName} - ${clickedName}`);
@@ -161,7 +233,7 @@ export function BuilderWidgetRenderer({
   // KPI drill-down (tüm veriyi göster)
   const handleKpiDrillDown = () => {
     setDrillDownTitle(`${widgetName} - Detaylar`);
-    setDrillDownData(rawData);
+    setDrillDownData(filteredData);
     setDrillDownOpen(true);
   };
 
@@ -213,6 +285,29 @@ export function BuilderWidgetRenderer({
   }
 
   const vizType = builderConfig.visualization.type;
+  const dateFilterConfig = builderConfig.dateFilter;
+  const showDateFilter = dateFilterConfig?.enabled && dateFilterConfig?.showInWidget;
+
+  // Header bileşeni (tarih seçici ile)
+  const ChartHeader = ({ icon }: { icon: string }) => (
+    <CardHeader className="pb-2">
+      <div className="flex items-center justify-between gap-2">
+        <CardTitle className="text-base flex items-center gap-2 flex-1 min-w-0">
+          <DynamicIcon iconName={widgetIcon || icon} className="h-4 w-4 flex-shrink-0" />
+          <span className="truncate">{widgetName}</span>
+          <MousePointerClick className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+        </CardTitle>
+        {showDateFilter && (
+          <WidgetDateFilter
+            config={dateFilterConfig!}
+            currentPeriod={selectedDatePeriod}
+            onPeriodChange={handleDatePeriodChange}
+            compact
+          />
+        )}
+      </div>
+    </CardHeader>
+  );
 
   // KPI Widget (drill-down destekli)
   if (vizType === 'kpi' && data) {
@@ -243,7 +338,7 @@ export function BuilderWidgetRenderer({
           open={drillDownOpen}
           onOpenChange={setDrillDownOpen}
           title={drillDownTitle}
-          subtitle={`${data.recordCount || rawData.length} kayıt`}
+          subtitle={`${data.recordCount || filteredData.length} kayıt`}
           data={drillDownData}
           valueField={builderConfig.visualization.kpi?.valueField}
         />
@@ -251,12 +346,11 @@ export function BuilderWidgetRenderer({
     );
   }
 
-  // Custom Code Widget (yeni eklenen)
+  // Custom Code Widget
   if (vizType === 'custom' && (builderConfig as any).customCode) {
     const customCode = (builderConfig as any).customCode;
     
     try {
-      // Kodu çalıştırılabilir fonksiyona dönüştür
       const fn = new Function(
         'React',
         'data',
@@ -265,7 +359,7 @@ export function BuilderWidgetRenderer({
         customCode
       );
       
-      const WidgetComponent = fn(React, rawData, LucideIcons, RechartsScope);
+      const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope);
       
       if (typeof WidgetComponent !== 'function') {
         return (
@@ -285,12 +379,7 @@ export function BuilderWidgetRenderer({
       
       return (
         <Card className={className}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <DynamicIcon iconName={widgetIcon || 'Code'} className="h-4 w-4" />
-              {widgetName}
-            </CardTitle>
-          </CardHeader>
+          <ChartHeader icon="Code" />
           <CardContent>
             <ErrorBoundary fallback={
               <div className="text-destructive text-sm flex items-center gap-2 py-4">
@@ -298,7 +387,7 @@ export function BuilderWidgetRenderer({
                 Widget render hatası
               </div>
             }>
-              <WidgetComponent data={rawData} />
+              <WidgetComponent data={filteredData} />
             </ErrorBoundary>
           </CardContent>
         </Card>
@@ -321,28 +410,28 @@ export function BuilderWidgetRenderer({
     }
   }
 
-  // Bar Chart (drill-down destekli)
-  if (vizType === 'bar' && data?.chartData) {
-    const xField = builderConfig.visualization.chart?.xAxis?.field || '';
+  // Bar Chart (drill-down destekli, tarih ve renk desteği)
+  if (vizType === 'bar' && (chartData.length > 0 || data?.chartData)) {
+    const displayData = chartData.length > 0 ? chartData : data?.chartData || [];
+    const useGradient = isXAxisDate && displayData.length > 10;
+    const gradientColors = useGradient ? generateGradientColors(displayData, activeColors[0]) : [];
     
     return (
       <>
         <Card className={className}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <DynamicIcon iconName={widgetIcon || 'BarChart3'} className="h-4 w-4" />
-              {widgetName}
-              <MousePointerClick className="h-3 w-3 text-muted-foreground ml-auto" />
-            </CardTitle>
-          </CardHeader>
+          <ChartHeader icon="BarChart3" />
           <CardContent>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={data.chartData}>
-                {data.showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
+              <BarChart data={displayData}>
+                {showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
                 <XAxis 
                   dataKey="name" 
-                  tick={{ fontSize: 11 }}
+                  tick={{ fontSize: 10 }}
                   className="text-muted-foreground"
+                  interval={displayData.length > 15 ? Math.floor(displayData.length / 10) : 0}
+                  angle={displayData.length > 10 ? -45 : 0}
+                  textAnchor={displayData.length > 10 ? "end" : "middle"}
+                  height={displayData.length > 10 ? 60 : 30}
                 />
                 <YAxis tick={{ fontSize: 11 }} className="text-muted-foreground" />
                 <Tooltip 
@@ -351,15 +440,23 @@ export function BuilderWidgetRenderer({
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
                   }}
+                  formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
                 />
-                {data.showLegend && <Legend />}
+                {legendPosition !== 'none' && <Legend verticalAlign={legendPosition === 'top' ? 'top' : 'bottom'} />}
                 <Bar 
                   dataKey="value" 
-                  fill="hsl(var(--primary))" 
+                  name="Değer"
                   radius={[4, 4, 0, 0]}
                   className="cursor-pointer"
-                  onClick={(entry) => entry && handleDrillDown(entry.name, xField)}
-                />
+                  onClick={(entry) => entry && handleDrillDown(entry.name, xAxisField)}
+                >
+                  {displayData.map((_: any, index: number) => {
+                    if (useGradient) {
+                      return <Cell key={`cell-${index}`} fill={gradientColors[index] || activeColors[0]} />;
+                    }
+                    return <Cell key={`cell-${index}`} fill={activeColors[index % activeColors.length]} />;
+                  })}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -369,31 +466,32 @@ export function BuilderWidgetRenderer({
           onOpenChange={setDrillDownOpen}
           title={drillDownTitle}
           data={drillDownData}
-          valueField={builderConfig.visualization.chart?.yAxis?.field || builderConfig.visualization.chart?.valueField}
+          valueField={yAxisField}
         />
       </>
     );
   }
 
-  // Line Chart (drill-down destekli)
-  if (vizType === 'line' && data?.chartData) {
-    const xField = builderConfig.visualization.chart?.xAxis?.field || '';
+  // Line Chart (drill-down destekli, tarih ve renk desteği)
+  if (vizType === 'line' && (chartData.length > 0 || data?.chartData)) {
+    const displayData = chartData.length > 0 ? chartData : data?.chartData || [];
     
     return (
       <>
         <Card className={className}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <DynamicIcon iconName={widgetIcon || 'TrendingUp'} className="h-4 w-4" />
-              {widgetName}
-              <MousePointerClick className="h-3 w-3 text-muted-foreground ml-auto" />
-            </CardTitle>
-          </CardHeader>
+          <ChartHeader icon="TrendingUp" />
           <CardContent>
             <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={data.chartData}>
-                {data.showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <LineChart data={displayData}>
+                {showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
+                <XAxis 
+                  dataKey="name" 
+                  tick={{ fontSize: 10 }}
+                  interval={displayData.length > 15 ? Math.floor(displayData.length / 10) : 0}
+                  angle={displayData.length > 10 ? -45 : 0}
+                  textAnchor={displayData.length > 10 ? "end" : "middle"}
+                  height={displayData.length > 10 ? 60 : 30}
+                />
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip 
                   contentStyle={{ 
@@ -401,18 +499,20 @@ export function BuilderWidgetRenderer({
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
                   }}
+                  formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
                 />
-                {data.showLegend && <Legend />}
+                {legendPosition !== 'none' && <Legend verticalAlign={legendPosition === 'top' ? 'top' : 'bottom'} />}
                 <Line 
                   type="monotone" 
-                  dataKey="value" 
-                  stroke="hsl(var(--primary))" 
+                  dataKey="value"
+                  name="Değer"
+                  stroke={activeColors[0]} 
                   strokeWidth={2}
-                  dot={{ fill: 'hsl(var(--primary))', cursor: 'pointer' }}
+                  dot={{ fill: activeColors[0], r: 3, cursor: 'pointer' }}
                   activeDot={{ 
                     r: 6, 
                     cursor: 'pointer',
-                    onClick: (e: any) => e?.payload && handleDrillDown(e.payload.name, xField)
+                    onClick: (e: any) => e?.payload && handleDrillDown(e.payload.name, xAxisField)
                   }}
                 />
               </LineChart>
@@ -424,31 +524,32 @@ export function BuilderWidgetRenderer({
           onOpenChange={setDrillDownOpen}
           title={drillDownTitle}
           data={drillDownData}
-          valueField={builderConfig.visualization.chart?.yAxis?.field || builderConfig.visualization.chart?.valueField}
+          valueField={yAxisField}
         />
       </>
     );
   }
 
-  // Area Chart (drill-down destekli)
-  if (vizType === 'area' && data?.chartData) {
-    const xField = builderConfig.visualization.chart?.xAxis?.field || '';
+  // Area Chart (drill-down destekli, tarih ve renk desteği)
+  if (vizType === 'area' && (chartData.length > 0 || data?.chartData)) {
+    const displayData = chartData.length > 0 ? chartData : data?.chartData || [];
     
     return (
       <>
         <Card className={className}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <DynamicIcon iconName={widgetIcon || 'Activity'} className="h-4 w-4" />
-              {widgetName}
-              <MousePointerClick className="h-3 w-3 text-muted-foreground ml-auto" />
-            </CardTitle>
-          </CardHeader>
+          <ChartHeader icon="Activity" />
           <CardContent>
             <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={data.chartData}>
-                {data.showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <AreaChart data={displayData}>
+                {showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
+                <XAxis 
+                  dataKey="name" 
+                  tick={{ fontSize: 10 }}
+                  interval={displayData.length > 15 ? Math.floor(displayData.length / 10) : 0}
+                  angle={displayData.length > 10 ? -45 : 0}
+                  textAnchor={displayData.length > 10 ? "end" : "middle"}
+                  height={displayData.length > 10 ? 60 : 30}
+                />
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip 
                   contentStyle={{ 
@@ -456,18 +557,20 @@ export function BuilderWidgetRenderer({
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
                   }}
+                  formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
                 />
-                {data.showLegend && <Legend />}
+                {legendPosition !== 'none' && <Legend verticalAlign={legendPosition === 'top' ? 'top' : 'bottom'} />}
                 <Area 
                   type="monotone" 
-                  dataKey="value" 
-                  stroke="hsl(var(--primary))" 
-                  fill="hsl(var(--primary) / 0.3)"
+                  dataKey="value"
+                  name="Değer"
+                  stroke={activeColors[0]} 
+                  fill={`${activeColors[0]}40`}
                   strokeWidth={2}
                   activeDot={{ 
                     r: 6, 
                     cursor: 'pointer',
-                    onClick: (e: any) => e?.payload && handleDrillDown(e.payload.name, xField)
+                    onClick: (e: any) => e?.payload && handleDrillDown(e.payload.name, xAxisField)
                   }}
                 />
               </AreaChart>
@@ -479,7 +582,7 @@ export function BuilderWidgetRenderer({
           onOpenChange={setDrillDownOpen}
           title={drillDownTitle}
           data={drillDownData}
-          valueField={builderConfig.visualization.chart?.yAxis?.field || builderConfig.visualization.chart?.valueField}
+          valueField={yAxisField}
         />
       </>
     );
@@ -494,13 +597,7 @@ export function BuilderWidgetRenderer({
     return (
       <>
         <Card className={cn(className, 'overflow-visible')}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <DynamicIcon iconName={widgetIcon || 'PieChart'} className="h-4 w-4" />
-              {widgetName}
-              <MousePointerClick className="h-3 w-3 text-muted-foreground ml-auto" />
-            </CardTitle>
-          </CardHeader>
+          <ChartHeader icon="PieChart" />
           <CardContent className="flex flex-col items-center py-4">
             {/* Grafik alanı */}
             <div className="w-full max-w-[280px] mx-auto relative">
@@ -519,7 +616,7 @@ export function BuilderWidgetRenderer({
                     onClick={(entry) => entry && handleDrillDown(entry.name, legendField)}
                   >
                     {data.chartData.map((entry: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      <Cell key={`cell-${index}`} fill={activeColors[index % activeColors.length]} />
                     ))}
                   </Pie>
                   <Tooltip 
@@ -555,7 +652,7 @@ export function BuilderWidgetRenderer({
                   >
                     <div 
                       className="w-2.5 h-2.5 rounded-sm flex-shrink-0" 
-                      style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                      style={{ backgroundColor: activeColors[index % activeColors.length] }}
                     />
                     <span className="truncate flex-1" title={item.name}>
                       {String(item.name).slice(0, 15)}
@@ -577,7 +674,7 @@ export function BuilderWidgetRenderer({
           onOpenChange={setDrillDownOpen}
           title={drillDownTitle}
           data={drillDownData}
-          valueField={builderConfig.visualization.chart?.valueField || builderConfig.visualization.chart?.yAxis?.field}
+          valueField={builderConfig.visualization.chart?.valueField || yAxisField}
         />
       </>
     );
@@ -587,12 +684,7 @@ export function BuilderWidgetRenderer({
   if (vizType === 'table' && data?.tableData) {
     return (
       <Card className={className}>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <DynamicIcon iconName={widgetIcon || 'Table'} className="h-4 w-4" />
-            {widgetName}
-          </CardTitle>
-        </CardHeader>
+        <ChartHeader icon="Table" />
         <CardContent>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -624,7 +716,7 @@ export function BuilderWidgetRenderer({
   }
 
   // Pivot Table
-  if (vizType === 'pivot' && rawData.length > 0) {
+  if (vizType === 'pivot' && filteredData.length > 0) {
     const pivotConfig = builderConfig.visualization.pivot;
     const rowField = pivotConfig?.rowFields?.[0] || '';
     const columnField = pivotConfig?.columnField || '';
@@ -632,14 +724,14 @@ export function BuilderWidgetRenderer({
     const aggregation = pivotConfig?.aggregation || 'sum';
 
     // Pivot veri hesaplama
-    const rowValues = [...new Set(rawData.map(item => String(item[rowField] || 'Belirsiz')))];
+    const rowValues = [...new Set(filteredData.map(item => String(item[rowField] || 'Belirsiz')))];
     const columnValues = columnField 
-      ? [...new Set(rawData.map(item => String(item[columnField] || 'Belirsiz')))]
+      ? [...new Set(filteredData.map(item => String(item[columnField] || 'Belirsiz')))]
       : [];
 
     // Pivot tablo verisi oluştur
     const pivotData = rowValues.map(rowVal => {
-      const rowItems = rawData.filter(item => String(item[rowField] || 'Belirsiz') === rowVal);
+      const rowItems = filteredData.filter(item => String(item[rowField] || 'Belirsiz') === rowVal);
       const row: any = { _rowLabel: rowVal };
       
       if (columnField && columnValues.length > 0) {
@@ -659,12 +751,12 @@ export function BuilderWidgetRenderer({
     const columnTotals: any = { _rowLabel: 'Toplam' };
     if (columnField && columnValues.length > 0) {
       columnValues.forEach(colVal => {
-        const colItems = rawData.filter(item => String(item[columnField] || 'Belirsiz') === colVal);
+        const colItems = filteredData.filter(item => String(item[columnField] || 'Belirsiz') === colVal);
         columnTotals[colVal] = calculateAggregation(colItems, valueField, aggregation);
       });
-      columnTotals._rowTotal = calculateAggregation(rawData, valueField, aggregation);
+      columnTotals._rowTotal = calculateAggregation(filteredData, valueField, aggregation);
     } else {
-      columnTotals._value = calculateAggregation(rawData, valueField, aggregation);
+      columnTotals._value = calculateAggregation(filteredData, valueField, aggregation);
     }
 
     const formatPivotValue = (val: number) => {
@@ -675,12 +767,7 @@ export function BuilderWidgetRenderer({
 
     return (
       <Card className={className}>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <DynamicIcon iconName={widgetIcon || 'Grid3x3'} className="h-4 w-4" />
-            {widgetName}
-          </CardTitle>
-        </CardHeader>
+        <ChartHeader icon="Grid3x3" />
         <CardContent>
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
@@ -765,12 +852,7 @@ export function BuilderWidgetRenderer({
     
     return (
       <Card className={className}>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <DynamicIcon iconName={widgetIcon || 'List'} className="h-4 w-4" />
-            {widgetName}
-          </CardTitle>
-        </CardHeader>
+        <ChartHeader icon="List" />
         <CardContent>
           <ul className="space-y-2">
             {data.listData.map((item: any, idx: number) => (
