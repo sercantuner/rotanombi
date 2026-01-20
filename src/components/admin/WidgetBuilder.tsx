@@ -1,7 +1,9 @@
 // Widget Builder - Gelişmiş widget oluşturma ve düzenleme aracı
+// Veri Kaynağı seçimi ile entegre - API test yerine merkezi kaynakları kullanır
 
 import { useState, useEffect, useMemo } from 'react';
 import { useWidgetAdmin } from '@/hooks/useWidgets';
+import { useDataSources, DataSource } from '@/hooks/useDataSources';
 import { Widget, WidgetFormData, PAGE_CATEGORIES, WIDGET_SIZES } from '@/lib/widgetTypes';
 import {
   ChartType,
@@ -20,13 +22,7 @@ import {
   DateFilterConfig,
 } from '@/lib/widgetBuilderTypes';
 import { DateRangeConfig, getDefaultDateFilterConfig } from './DateRangeConfig';
-import { testDiaApi, DiaApiTestResponse, FieldStat } from '@/lib/diaApiTest';
-import { CompactFilterBuilder } from './CompactFilterBuilder';
-import { CompactSortBuilder } from './CompactSortBuilder';
-import { CompactColumnSelector } from './CompactColumnSelector';
-import { FilterBuilder } from './FilterBuilder';
-import { SortBuilder } from './SortBuilder';
-import { ColumnSelector } from './ColumnSelector';
+import { DataSourceSelector } from './DataSourceSelector';
 import { MultiQueryBuilder } from './MultiQueryBuilder';
 import { CalculatedFieldBuilder } from './CalculatedFieldBuilder';
 import { WidgetPreviewRenderer } from './WidgetPreviewRenderer';
@@ -35,19 +31,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Checkbox } from '@/components/ui/checkbox';
 import { 
-  Wand2, Code, BarChart3, Settings2, Play, Save, Plus, Trash2, 
-  Hash, TrendingUp, Activity, PieChart, Circle, Table, List, Filter, LayoutGrid, Crosshair, Radar, CheckCircle, XCircle, AlertCircle, Edit,
-  FileJson, MousePointer, Target, Columns, Database, Calculator, BookTemplate, Sparkles, Calendar
+  Wand2, BarChart3, Settings2, Save, 
+  Hash, TrendingUp, Activity, PieChart, Circle, Table, List, LayoutGrid, CheckCircle, Edit,
+  Database, Calculator, Sparkles, Calendar, Zap, Info
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -57,7 +50,6 @@ interface WidgetBuilderProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave?: () => void;
-  // Düzenleme modu için
   editWidget?: Widget | null;
 }
 
@@ -86,28 +78,11 @@ const getEmptyConfig = (): WidgetBuilderConfig => ({
   },
 });
 
-const RAW_JSON_TEMPLATE = `{
-  "scf_carikart_listele": {
-    "session_id": "{session_id}",
-    "firma_kodu": {firma_kodu},
-    "donem_kodu": {donem_kodu},
-    "filters": "",
-    "sorts": "",
-    "params": "",
-    "limit": 100,
-    "offset": 0
-  }
-}`;
-
 export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: WidgetBuilderProps) {
   const { createWidget, updateWidget, isLoading } = useWidgetAdmin();
+  const { activeDataSources, getDataSourceById } = useDataSources();
   const isEditMode = !!editWidget;
   const [activeTab, setActiveTab] = useState(isEditMode ? 'api' : 'templates');
-  const [apiMode, setApiMode] = useState<'normal' | 'raw'>('normal');
-  
-  // Manuel giriş modları
-  const [manualModuleMode, setManualModuleMode] = useState(false);
-  const [manualMethodMode, setManualMethodMode] = useState(false);
   
   // Widget temel bilgileri
   const [widgetKey, setWidgetKey] = useState('');
@@ -120,11 +95,9 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   // Builder config
   const [config, setConfig] = useState<WidgetBuilderConfig>(getEmptyConfig());
   
-  // API parametreleri için ayrı state'ler (no-code arrays)
-  const [apiFilters, setApiFilters] = useState<DiaApiFilter[]>([]);
-  const [apiSorts, setApiSorts] = useState<DiaApiSort[]>([]);
-  const [selectedColumnsArray, setSelectedColumnsArray] = useState<string[]>([]);
-  const [rawPayload, setRawPayload] = useState(RAW_JSON_TEMPLATE);
+  // Seçili veri kaynağı
+  const [selectedDataSourceId, setSelectedDataSourceId] = useState<string | null>(null);
+  const selectedDataSource = selectedDataSourceId ? getDataSourceById(selectedDataSourceId) : null;
   
   // Chart axis/series config
   const [xAxisField, setXAxisField] = useState('');
@@ -134,10 +107,6 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   
   // Widget filtreleri
   const [widgetFilters, setWidgetFilters] = useState<WidgetFilterConfig[]>([]);
-  
-  // Test sonucu
-  const [testResult, setTestResult] = useState<DiaApiTestResponse | null>(null);
-  const [isTesting, setIsTesting] = useState(false);
   
   // Aktif hedef alan (alan eşleme için)
   const [activeTarget, setActiveTarget] = useState<'xAxis' | 'yAxis' | 'legend' | 'value' | 'tooltip' | null>(null);
@@ -152,26 +121,24 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   // Şablon seçimi
   const [selectedTemplate, setSelectedTemplate] = useState<WidgetTemplate | null>(null);
   
-  // Görselleştirme için kullanılabilir alanlar (seçilen kolonlar + hesaplama alanları)
+  // Görselleştirme için kullanılabilir alanlar (veri kaynağından)
   const availableFieldsForVisualization = useMemo(() => {
-    const baseFields = selectedColumnsArray.length > 0 
-      ? selectedColumnsArray 
-      : testResult?.sampleFields || [];
+    const baseFields = selectedDataSource?.last_fields || 
+                       selectedDataSource?.selected_columns || 
+                       [];
     
     const calculatedFieldNames = calculatedFields.map(cf => cf.name);
     return [...baseFields, ...calculatedFieldNames];
-  }, [selectedColumnsArray, testResult?.sampleFields, calculatedFields]);
+  }, [selectedDataSource, calculatedFields]);
   
-  // Sayısal alanlar
+  // Sayısal alanlar 
   const numericFieldsForVisualization = useMemo(() => {
-    const fieldTypes = testResult?.fieldTypes || {};
     return availableFieldsForVisualization.filter(f => {
-      const type = fieldTypes[f];
-      // Hesaplanan alanlar her zaman sayısal
       if (calculatedFields.some(cf => cf.name === f)) return true;
-      return type === 'number' || type === 'number-string';
+      const numericPatterns = ['toplam', 'tutar', 'bakiye', 'miktar', 'adet', 'fiyat', 'oran', 'count', 'sum', 'avg'];
+      return numericPatterns.some(p => f.toLowerCase().includes(p));
     });
-  }, [availableFieldsForVisualization, testResult?.fieldTypes, calculatedFields]);
+  }, [availableFieldsForVisualization, calculatedFields]);
   
   // Düzenleme modunda widget verilerini yükle
   useEffect(() => {
@@ -182,28 +149,15 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
       setWidgetIcon(editWidget.icon || 'BarChart3');
       setWidgetSize(editWidget.size);
       setDefaultPage(editWidget.default_page);
-      setActiveTab('api'); // Edit modunda API sekmesi ile başla
+      setActiveTab('api');
       
-      // builder_config varsa yükle
       if (editWidget.builder_config) {
         const bc = editWidget.builder_config;
         setConfig(bc);
         
-        // API parametrelerini ayarla (yeni format)
-        if (bc.diaApi.parameters.filters) {
-          if (Array.isArray(bc.diaApi.parameters.filters)) {
-            setApiFilters(bc.diaApi.parameters.filters);
-          }
-        }
-        if (bc.diaApi.parameters.sorts) {
-          setApiSorts(bc.diaApi.parameters.sorts);
-        }
-        if (bc.diaApi.parameters.selectedcolumns) {
-          if (Array.isArray(bc.diaApi.parameters.selectedcolumns)) {
-            setSelectedColumnsArray(bc.diaApi.parameters.selectedcolumns);
-          } else if (typeof bc.diaApi.parameters.selectedcolumns === 'string') {
-            setSelectedColumnsArray(bc.diaApi.parameters.selectedcolumns.split(',').map(c => c.trim()).filter(c => c));
-          }
+        // Veri kaynağı ID'sini yükle
+        if (bc.dataSourceId) {
+          setSelectedDataSourceId(bc.dataSourceId);
         }
         
         // Chart ayarlarını yükle
@@ -214,13 +168,19 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
           setTooltipFields(bc.visualization.chart.tooltipFields?.join(', ') || '');
         }
         
-        // Tarih filtresi yükle
         if (bc.dateFilter) {
           setDateFilterConfig(bc.dateFilter);
         }
+        
+        if (bc.multiQuery) {
+          setMultiQuery(bc.multiQuery);
+        }
+        
+        if (bc.calculatedFields) {
+          setCalculatedFields(bc.calculatedFields);
+        }
       }
     } else if (!open) {
-      // Modal kapandığında formu temizle
       resetForm();
     }
   }, [editWidget, open]);
@@ -233,18 +193,13 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
     setWidgetSize('md');
     setDefaultPage('dashboard');
     setConfig(getEmptyConfig());
-    setApiFilters([]);
-    setApiSorts([]);
-    setSelectedColumnsArray([]);
-    setRawPayload(RAW_JSON_TEMPLATE);
+    setSelectedDataSourceId(null);
     setXAxisField('');
     setYAxisField('');
     setLegendField('');
     setTooltipFields('');
     setWidgetFilters([]);
-    setTestResult(null);
     setActiveTab('templates');
-    setApiMode('normal');
     setActiveTarget(null);
     setMultiQuery(null);
     setCalculatedFields([]);
@@ -255,14 +210,11 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   // Şablon uygulama
   const handleApplyTemplate = (template: WidgetTemplate) => {
     setSelectedTemplate(template);
-    
-    // Widget temel bilgilerini ayarla
     setWidgetKey(template.suggestedKey);
     setWidgetName(template.suggestedName);
     setWidgetDescription(template.description);
     setWidgetIcon(template.icon);
     
-    // API config'i ayarla
     if (template.config.diaApi) {
       setConfig(prev => ({
         ...prev,
@@ -276,22 +228,6 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
       }));
     }
     
-    // Filtreleri ayarla
-    if (template.filters) {
-      setApiFilters(template.filters);
-    }
-    
-    // Sıralamaları ayarla
-    if (template.sorts) {
-      setApiSorts(template.sorts);
-    }
-    
-    // Seçili kolonları ayarla
-    if (template.selectedColumns) {
-      setSelectedColumnsArray(template.selectedColumns);
-    }
-    
-    // Chart ayarlarını ayarla
     if (template.config.visualization?.chart) {
       const chart = template.config.visualization.chart;
       if (chart.xAxis?.field) setXAxisField(chart.xAxis.field);
@@ -299,34 +235,12 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
       if (chart.legendField) setLegendField(chart.legendField);
     }
     
-    // Kategori ayarla
     if (template.category === 'cari') setDefaultPage('cari');
     else if (template.category === 'finans') setDefaultPage('finans');
     else if (template.category === 'satis') setDefaultPage('satis');
     else setDefaultPage('dashboard');
     
     toast.success(`"${template.name}" şablonu uygulandı!`);
-  };
-
-  const handleModuleChange = (module: string) => {
-    setConfig(prev => ({
-      ...prev,
-      diaApi: {
-        ...prev.diaApi,
-        module: module as any,
-        method: DIA_MODULES.find(m => m.id === module)?.methods[0] || '',
-      },
-    }));
-  };
-
-  const handleMethodChange = (method: string) => {
-    setConfig(prev => ({
-      ...prev,
-      diaApi: {
-        ...prev.diaApi,
-        method,
-      },
-    }));
   };
 
   const handleChartTypeChange = (chartType: ChartType) => {
@@ -379,58 +293,35 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
       },
     }));
   };
-
-  const handleTestApi = async () => {
-    setIsTesting(true);
-    setTestResult(null);
-    
-    try {
-      let result: DiaApiTestResponse;
-      
-      if (apiMode === 'raw') {
-        // Raw mode - tam JSON payload
-        result = await testDiaApi({
-          module: 'scf',
-          method: 'carikart_listele',
-          rawMode: true,
-          rawPayload: rawPayload,
-        });
-      } else {
-        // Normal mode - no-code filters
-        result = await testDiaApi({
-          module: config.diaApi.module,
-          method: config.diaApi.method,
-          limit: config.diaApi.parameters.limit || 0, // 0 = limitsiz
-          filters: apiFilters.length > 0 ? apiFilters : undefined,
-          selectedColumns: selectedColumnsArray.length > 0 ? selectedColumnsArray : undefined,
-          sorts: apiSorts.length > 0 ? apiSorts : undefined,
-          orderby: config.diaApi.parameters.orderby,
-        });
-      }
-
-      setTestResult(result);
-
-      if (result.success) {
-        toast.success(`API testi başarılı! ${result.recordCount} kayıt bulundu.`);
-        
-        // Alanları otomatik olarak value field seçeneklerine ekle
-        if (result.sampleFields && result.sampleFields.length > 0) {
-          const numericField = result.sampleFields.find(f => 
-            result.fieldTypes?.[f] === 'number' || result.fieldTypes?.[f] === 'number-string'
-          );
-          if (numericField && config.visualization.type === 'kpi' && !config.visualization.kpi?.valueField) {
-            handleKpiConfigChange('valueField', numericField);
-          }
-        }
-      } else {
-        toast.error(`API hatası: ${result.error}`);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Beklenmeyen hata';
-      toast.error(`API testi başarısız: ${errorMessage}`);
-      setTestResult({ success: false, error: errorMessage });
-    } finally {
-      setIsTesting(false);
+  
+  // Veri kaynağı seçildiğinde config'i güncelle
+  const handleDataSourceSelect = (dataSource: DataSource | null) => {
+    if (dataSource) {
+      setSelectedDataSourceId(dataSource.id);
+      // Config'i veri kaynağından güncelle
+      setConfig(prev => ({
+        ...prev,
+        dataSourceId: dataSource.id,
+        dataSourceSlug: dataSource.slug,
+        diaApi: {
+          module: dataSource.module as any,
+          method: dataSource.method,
+          parameters: {
+            filters: dataSource.filters as DiaApiFilter[],
+            sorts: dataSource.sorts as DiaApiSort[],
+            selectedcolumns: dataSource.selected_columns || undefined,
+            limit: dataSource.limit_count || 0,
+          },
+        },
+      }));
+      toast.success(`"${dataSource.name}" veri kaynağı seçildi`);
+    } else {
+      setSelectedDataSourceId(null);
+      setConfig(prev => ({
+        ...prev,
+        dataSourceId: undefined,
+        dataSourceSlug: undefined,
+      }));
     }
   };
   
@@ -469,17 +360,15 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
       return;
     }
 
-    // builder_config'i oluştur - no-code arrays kullan
+    if (!selectedDataSourceId && !multiQuery) {
+      toast.error('Bir veri kaynağı seçmelisiniz');
+      return;
+    }
+
     const builderConfig: WidgetBuilderConfig = {
-      diaApi: {
-        ...config.diaApi,
-        parameters: {
-          ...config.diaApi.parameters,
-          filters: apiFilters.length > 0 ? apiFilters : undefined,
-          sorts: apiSorts.length > 0 ? apiSorts : undefined,
-          selectedcolumns: selectedColumnsArray.length > 0 ? selectedColumnsArray : undefined,
-        },
-      },
+      dataSourceId: selectedDataSourceId || undefined,
+      dataSourceSlug: selectedDataSource?.slug,
+      diaApi: config.diaApi,
       multiQuery: multiQuery || undefined,
       calculatedFields: calculatedFields.length > 0 ? calculatedFields : undefined,
       dateFilter: dateFilterConfig.enabled ? dateFilterConfig : undefined,
@@ -521,13 +410,11 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
     let success = false;
     
     if (isEditMode && editWidget) {
-      // Güncelleme modu
       success = await updateWidget(editWidget.id, formData);
       if (success) {
         toast.success('Widget güncellendi!');
       }
     } else {
-      // Oluşturma modu
       success = await createWidget(formData);
       if (success) {
         toast.success('Widget oluşturuldu!');
@@ -540,8 +427,6 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
       resetForm();
     }
   };
-
-  const currentModule = DIA_MODULES.find(m => m.id === config.diaApi.module);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -561,13 +446,13 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
           <DialogDescription>
             {isEditMode 
               ? 'Mevcut widget yapılandırmasını düzenleyin ve güncelleyin'
-              : 'DIA web servisinden veri çekecek ve görselleştirecek özel widget oluşturun'
+              : 'Merkezi veri kaynaklarından widget oluşturun'
             }
           </DialogDescription>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className={cn("grid w-full", isEditMode ? "grid-cols-7" : "grid-cols-8")}>
+          <TabsList className={cn("grid w-full", isEditMode ? "grid-cols-6" : "grid-cols-7")}>
             {!isEditMode && (
               <TabsTrigger value="templates" className="gap-1 text-xs">
                 <Sparkles className="h-3.5 w-3.5" />
@@ -575,8 +460,8 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
               </TabsTrigger>
             )}
             <TabsTrigger value="api" className="gap-1 text-xs">
-              <Code className="h-3.5 w-3.5" />
-              API
+              <Database className="h-3.5 w-3.5" />
+              Veri Kaynağı
             </TabsTrigger>
             <TabsTrigger value="merge" className="gap-1 text-xs">
               <Database className="h-3.5 w-3.5" />
@@ -597,10 +482,6 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
             <TabsTrigger value="settings" className="gap-1 text-xs">
               <Settings2 className="h-3.5 w-3.5" />
               Ayarlar
-            </TabsTrigger>
-            <TabsTrigger value="preview" className="gap-1 text-xs">
-              <Play className="h-3.5 w-3.5" />
-              Önizleme
             </TabsTrigger>
           </TabsList>
 
@@ -631,15 +512,12 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                           <div>
                             <p className="text-sm font-medium">"{selectedTemplate.name}" şablonu seçildi</p>
                             <p className="text-xs text-muted-foreground">
-                              API ve görselleştirme ayarları otomatik yapılandırıldı
+                              Şimdi bir veri kaynağı seçmeniz gerekiyor
                             </p>
                           </div>
                         </div>
-                        <Button
-                          size="sm"
-                          onClick={() => setActiveTab('api')}
-                        >
-                          Devam Et
+                        <Button size="sm" onClick={() => setActiveTab('api')}>
+                          Veri Kaynağı Seç
                           <TrendingUp className="h-4 w-4 ml-2" />
                         </Button>
                       </div>
@@ -649,270 +527,68 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
               </Card>
             </TabsContent>
 
-            {/* API YAPILANDIRMA */}
+            {/* VERİ KAYNAĞI SEÇİMİ */}
             <TabsContent value="api" className="m-0 space-y-4">
               <Card>
                 <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-base">DIA Web Servis Ayarları</CardTitle>
-                      <CardDescription>
-                        {apiMode === 'raw' ? 'Tam JSON payload ile API çağrısı' : 'Modül/metod seçerek veri çekin'}
-                      </CardDescription>
-                    </div>
-                    <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
-                      <Button
-                        size="sm"
-                        variant={apiMode === 'normal' ? 'default' : 'ghost'}
-                        className="h-7 px-3"
-                        onClick={() => setApiMode('normal')}
-                      >
-                        <Settings2 className="h-3.5 w-3.5 mr-1" />
-                        Normal
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={apiMode === 'raw' ? 'default' : 'ghost'}
-                        className="h-7 px-3"
-                        onClick={() => setApiMode('raw')}
-                      >
-                        <FileJson className="h-3.5 w-3.5 mr-1" />
-                        Raw JSON
-                      </Button>
-                    </div>
-                  </div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Database className="h-5 w-5 text-primary" />
+                    Veri Kaynağı Seçimi
+                  </CardTitle>
+                  <CardDescription>
+                    Merkezi veri kaynaklarından birini seçerek widget'ınız için veri sağlayın
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {apiMode === 'raw' ? (
-                    /* RAW JSON MODE */
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>JSON Payload</Label>
-                        <Textarea
-                          value={rawPayload}
-                          onChange={(e) => setRawPayload(e.target.value)}
-                          className="font-mono text-sm min-h-[200px]"
-                          placeholder={RAW_JSON_TEMPLATE}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          <code>{'{session_id}'}</code>, <code>{'{firma_kodu}'}</code>, <code>{'{donem_kodu}'}</code> otomatik değiştirilir
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    /* NORMAL MODE */
-                    <>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label>Modül</Label>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-6 px-2 text-xs"
-                              onClick={() => setManualModuleMode(!manualModuleMode)}
-                            >
-                              {manualModuleMode ? 'Listeden Seç' : 'Manuel Gir'}
-                            </Button>
-                          </div>
-                          {manualModuleMode ? (
-                            <Input
-                              value={config.diaApi.module}
-                              onChange={(e) => setConfig(prev => ({
-                                ...prev,
-                                diaApi: { ...prev.diaApi, module: e.target.value as any }
-                              }))}
-                              placeholder="Örn: scf, bcs, fat, stk..."
-                            />
-                          ) : (
-                            <Select value={config.diaApi.module} onValueChange={handleModuleChange}>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {DIA_MODULES.map(mod => (
-                                  <SelectItem key={mod.id} value={mod.id}>
-                                    {mod.name} ({mod.id})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label>Metod</Label>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-6 px-2 text-xs"
-                              onClick={() => setManualMethodMode(!manualMethodMode)}
-                            >
-                              {manualMethodMode ? 'Listeden Seç' : 'Manuel Gir'}
-                            </Button>
-                          </div>
-                          {manualMethodMode ? (
-                            <Input
-                              value={config.diaApi.method}
-                              onChange={(e) => setConfig(prev => ({
-                                ...prev,
-                                diaApi: { ...prev.diaApi, method: e.target.value }
-                              }))}
-                              placeholder="Örn: carikart_listele, fatura_listele..."
-                            />
-                          ) : (
-                            <Select value={config.diaApi.method} onValueChange={handleMethodChange}>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {currentModule?.methods.map(method => (
-                                  <SelectItem key={method} value={method}>
-                                    {method}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
+                  <DataSourceSelector
+                    selectedId={selectedDataSourceId}
+                    onSelect={handleDataSourceSelect}
+                    showDetails={true}
+                  />
+                  
+                  {/* Seçili kaynak yoksa bilgi */}
+                  {!selectedDataSourceId && (
+                    <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <Info className="h-5 w-5 text-amber-600 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium text-amber-700">Veri Kaynağı Gerekli</p>
+                          <p className="text-xs text-amber-600 mt-1">
+                            Widget oluşturmak için önce Super Admin → Veri Kaynakları bölümünden 
+                            bir veri kaynağı tanımlamanız gerekmektedir.
+                          </p>
                         </div>
                       </div>
-
-                      <Separator />
-
-                  {/* Kompakt No-Code Bileşenler */}
-                  <div className="space-y-2">
-                    <CompactColumnSelector
-                      availableFields={testResult?.sampleFields || []}
-                      selectedColumns={selectedColumnsArray}
-                      onChange={setSelectedColumnsArray}
-                      fieldTypes={testResult?.fieldTypes}
-                    />
-
-                    <CompactFilterBuilder
-                      filters={apiFilters}
-                      onChange={setApiFilters}
-                      availableFields={testResult?.sampleFields || []}
-                      fieldTypes={testResult?.fieldTypes}
-                    />
-
-                    <CompactSortBuilder
-                      sorts={apiSorts}
-                      onChange={setApiSorts}
-                      availableFields={testResult?.sampleFields || []}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Limit (0 = limitsiz)</Label>
-                      <Input
-                        type="number"
-                        value={config.diaApi.parameters.limit || 0}
-                        onChange={(e) => setConfig(prev => ({
-                          ...prev,
-                          diaApi: {
-                            ...prev.diaApi,
-                            parameters: {
-                              ...prev.diaApi.parameters,
-                              limit: parseInt(e.target.value) || 0,
-                            },
-                          },
-                        }))}
-                      />
                     </div>
-                    <div className="space-y-2">
-                      <Label>Sıralama</Label>
-                      <Input
-                        placeholder="toplambakiye DESC"
-                        value={config.diaApi.parameters.orderby || ''}
-                        onChange={(e) => setConfig(prev => ({
-                          ...prev,
-                          diaApi: {
-                            ...prev.diaApi,
-                            parameters: {
-                              ...prev.diaApi.parameters,
-                              orderby: e.target.value,
-                            },
-                          },
-                        }))}
-                      />
-                    </div>
-                      </div>
-                    </>
                   )}
-
-                  <Button onClick={handleTestApi} disabled={isTesting} className="w-full">
-                    <Play className="h-4 w-4 mr-2" />
-                    {isTesting ? 'Test Ediliyor...' : 'API Testi Yap'}
-                  </Button>
-
-                  {testResult && (
-                    <Card className={cn(
-                      'mt-4',
-                      testResult.success ? 'border-green-500/50 bg-green-500/5' : 'border-destructive/50 bg-destructive/5'
-                    )}>
-                      <CardContent className="pt-4">
-                        {testResult.success ? (
-                          <div className="space-y-4">
-                            <div className="flex items-center gap-2">
-                              <CheckCircle className="h-5 w-5 text-green-600" />
-                              <p className="text-sm font-medium text-green-600">
-                                {testResult.recordCount} kayıt bulundu
-                              </p>
-                            </div>
-                            
-                            {/* Alanlar ve Tipleri */}
-                            <div className="space-y-2">
-                              <p className="text-xs font-medium text-muted-foreground">Mevcut Alanlar:</p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {testResult.sampleFields?.map((field: string) => {
-                                  const fieldType = testResult.fieldTypes?.[field] || 'unknown';
-                                  const typeColor = 
-                                    fieldType === 'number' || fieldType === 'number-string' ? 'bg-blue-500/10 text-blue-600 border-blue-500/30' :
-                                    fieldType === 'date' ? 'bg-amber-500/10 text-amber-600 border-amber-500/30' :
-                                    fieldType === 'boolean' ? 'bg-purple-500/10 text-purple-600 border-purple-500/30' :
-                                    'bg-muted text-muted-foreground';
-                                  
-                                  return (
-                                    <Badge 
-                                      key={field} 
-                                      variant="outline" 
-                                      className={cn('text-xs cursor-pointer hover:opacity-80', typeColor)}
-                                      onClick={() => {
-                                        navigator.clipboard.writeText(field);
-                                        toast.success(`"${field}" kopyalandı`);
-                                      }}
-                                    >
-                                      {field}
-                                      <span className="ml-1 opacity-60 text-[10px]">
-                                        ({fieldType === 'number-string' ? 'num' : fieldType.slice(0, 3)})
-                                      </span>
-                                    </Badge>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                            
-                            {/* Örnek Veri */}
-                            {testResult.sampleData && testResult.sampleData.length > 0 && (
-                              <div className="space-y-2">
-                                <p className="text-xs font-medium text-muted-foreground">Örnek Veri (ilk {testResult.sampleData.length} kayıt):</p>
-                                <div className="max-h-40 overflow-auto rounded border">
-                                  <pre className="p-2 text-xs font-mono bg-muted/30">
-                                    {JSON.stringify(testResult.sampleData, null, 2)}
-                                  </pre>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <XCircle className="h-5 w-5 text-destructive" />
-                            <p className="text-sm text-destructive">{testResult.error}</p>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
+                  
+                  {/* Mevcut alanlar */}
+                  {selectedDataSource && availableFieldsForVisualization.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-sm">Mevcut Alanlar</Label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {availableFieldsForVisualization.map((field) => {
+                          const isNumeric = numericFieldsForVisualization.includes(field);
+                          return (
+                            <Badge 
+                              key={field} 
+                              variant="outline" 
+                              className={cn(
+                                'text-xs cursor-pointer hover:opacity-80',
+                                isNumeric ? 'bg-blue-500/10 text-blue-600 border-blue-500/30' : ''
+                              )}
+                              onClick={() => handleFieldClick(field)}
+                            >
+                              {field}
+                              {isNumeric && <span className="ml-1 opacity-60 text-[10px]">(num)</span>}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Alanları tıklayarak kopyalayabilir veya Görsel sekmesinde hedef alana atayabilirsiniz
+                      </p>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -931,9 +607,9 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
               <CalculatedFieldBuilder
                 calculatedFields={calculatedFields}
                 onChange={setCalculatedFields}
-                availableFields={testResult?.sampleFields || selectedColumnsArray}
-                fieldTypes={testResult?.fieldTypes}
-                sampleData={testResult?.sampleData}
+                availableFields={availableFieldsForVisualization}
+                fieldTypes={{}}
+                sampleData={[]}
               />
               
               {calculatedFields.length > 0 && (
@@ -953,365 +629,206 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
               <DateRangeConfig
                 config={dateFilterConfig}
                 onChange={setDateFilterConfig}
-                availableDateFields={testResult?.sampleFields?.filter(f => {
-                  const fieldType = testResult?.fieldTypes?.[f];
-                  return fieldType === 'date' || f.toLowerCase().includes('tarih') || f.toLowerCase().includes('date');
-                }) || []}
+                availableDateFields={availableFieldsForVisualization}
               />
-              
-              {dateFilterConfig.enabled && (
-                <Card className="bg-primary/5 border-primary/30">
-                  <CardContent className="pt-4">
-                    <div className="flex items-center gap-2 text-sm text-primary">
-                      <Calendar className="h-4 w-4" />
-                      <span>
-                        Tarih filtresi aktif - "{dateFilterConfig.dateField}" alanı "{dateFilterConfig.defaultPeriod}" varsayılan periyotla filtrelenecek
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+            </TabsContent>
             </TabsContent>
 
             {/* GÖRSELLEŞTİRME */}
             <TabsContent value="visualization" className="m-0 space-y-4">
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Grafik Tipi Seçin</CardTitle>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Görselleştirme Tipi</CardTitle>
+                  <CardDescription>Widget'ın nasıl görüntüleneceğini seçin</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-4 gap-3">
-                    {CHART_TYPES.map(chart => (
-                      <button
-                        key={chart.id}
-                        onClick={() => handleChartTypeChange(chart.id)}
-                        className={cn(
-                          'p-4 rounded-lg border-2 text-left transition-all',
-                          config.visualization.type === chart.id
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border hover:border-primary/50'
-                        )}
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-4 gap-2">
+                    {CHART_TYPES.filter(ct => ['kpi', 'bar', 'line', 'area', 'pie', 'donut', 'table'].includes(ct.id)).map(type => (
+                      <Button
+                        key={type.id}
+                        variant={config.visualization.type === type.id ? 'default' : 'outline'}
+                        className="h-auto py-3 flex-col gap-1"
+                        onClick={() => handleChartTypeChange(type.id)}
                       >
-                        <DynamicIcon iconName={chart.icon} className="h-6 w-6 mb-2" />
-                        <p className="font-medium text-sm">{chart.name}</p>
-                        <p className="text-xs text-muted-foreground">{chart.description}</p>
-                      </button>
+                        <DynamicIcon iconName={type.icon} className="h-5 w-5" />
+                        <span className="text-xs">{type.name}</span>
+                      </Button>
                     ))}
                   </div>
-                </CardContent>
-              </Card>
 
-              {/* KPI Yapılandırması */}
-              {config.visualization.type === 'kpi' && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">KPI Ayarları</CardTitle>
-                    <CardDescription>
-                      Görselleştirmede kullanılacak alanları seçin
-                      {availableFieldsForVisualization.length === 0 && (
-                        <span className="text-amber-600 ml-2">(Önce API Testi yapın)</span>
-                      )}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Değer Alanı</Label>
-                        {availableFieldsForVisualization.length > 0 ? (
+                  <Separator />
+
+                  {/* KPI ayarları */}
+                  {config.visualization.type === 'kpi' && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Değer Alanı</Label>
                           <Select 
-                            value={config.visualization.kpi?.valueField || ''}
+                            value={config.visualization.kpi?.valueField || ''} 
                             onValueChange={(v) => handleKpiConfigChange('valueField', v)}
                           >
                             <SelectTrigger>
-                              <SelectValue placeholder="Alan seçin..." />
+                              <SelectValue placeholder="Alan seçin" />
                             </SelectTrigger>
                             <SelectContent>
-                              {numericFieldsForVisualization.length > 0 ? (
-                                <>
-                                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Sayısal Alanlar</div>
-                                  {numericFieldsForVisualization.map(f => (
-                                    <SelectItem key={f} value={f}>
-                                      {calculatedFields.some(cf => cf.name === f) ? `📊 ${f} (hesaplanan)` : f}
-                                    </SelectItem>
-                                  ))}
-                                </>
-                              ) : (
-                                availableFieldsForVisualization.map(f => (
-                                  <SelectItem key={f} value={f}>{f}</SelectItem>
-                                ))
-                              )}
+                              {availableFieldsForVisualization.map(field => (
+                                <SelectItem key={field} value={field}>{field}</SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
-                        ) : (
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Hesaplama</Label>
+                          <Select 
+                            value={config.visualization.kpi?.aggregation || 'sum'} 
+                            onValueChange={(v) => handleKpiConfigChange('aggregation', v)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {AGGREGATION_TYPES.map(agg => (
+                                <SelectItem key={agg.id} value={agg.id}>{agg.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Format</Label>
+                          <Select 
+                            value={config.visualization.kpi?.format || 'currency'} 
+                            onValueChange={(v) => handleKpiConfigChange('format', v)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {FORMAT_OPTIONS.map(fmt => (
+                                <SelectItem key={fmt.id} value={fmt.id}>{fmt.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Prefix</Label>
                           <Input
-                            placeholder="toplambakiye"
-                            value={config.visualization.kpi?.valueField || ''}
-                            onChange={(e) => handleKpiConfigChange('valueField', e.target.value)}
+                            placeholder="₺"
+                            value={config.visualization.kpi?.prefix || ''}
+                            onChange={(e) => handleKpiConfigChange('prefix', e.target.value)}
                           />
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Agregasyon</Label>
-                        <Select 
-                          value={config.visualization.kpi?.aggregation || 'sum'}
-                          onValueChange={(v) => handleKpiConfigChange('aggregation', v)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {AGGREGATION_TYPES.map(agg => (
-                              <SelectItem key={agg.id} value={agg.id}>
-                                {agg.name} - {agg.description}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label>Format</Label>
-                        <Select 
-                          value={config.visualization.kpi?.format || 'currency'}
-                          onValueChange={(v) => handleKpiConfigChange('format', v)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {FORMAT_OPTIONS.map(fmt => (
-                              <SelectItem key={fmt.id} value={fmt.id}>
-                                {fmt.name} ({fmt.example})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Önek</Label>
-                        <Input
-                          placeholder="₺"
-                          value={config.visualization.kpi?.prefix || ''}
-                          onChange={(e) => handleKpiConfigChange('prefix', e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Sonek</Label>
-                        <Input
-                          placeholder="TL"
-                          value={config.visualization.kpi?.suffix || ''}
-                          onChange={(e) => handleKpiConfigChange('suffix', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Grafik Yapılandırması */}
-              {config.visualization.type !== 'kpi' && 
-               config.visualization.type !== 'table' && 
-               config.visualization.type !== 'list' && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Grafik Ayarları</CardTitle>
-                    <CardDescription>
-                      {availableFieldsForVisualization.length === 0 
-                        ? 'Önce API Testi yaparak alanları yükleyin' 
-                        : `${availableFieldsForVisualization.length} alan kullanılabilir`}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Bar, Line, Area için X ve Y ekseni */}
-                    {['bar', 'line', 'area', 'scatter'].includes(config.visualization.type) && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>X Ekseni Alanı</Label>
-                          {availableFieldsForVisualization.length > 0 ? (
-                            <Select value={xAxisField} onValueChange={setXAxisField}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Alan seçin..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {availableFieldsForVisualization.map(f => (
-                                  <SelectItem key={f} value={f}>
-                                    {calculatedFields.some(cf => cf.name === f) ? `📊 ${f}` : f}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <Input
-                              placeholder="sehir, tarih, ozelkod1..."
-                              value={xAxisField}
-                              onChange={(e) => setXAxisField(e.target.value)}
-                            />
-                          )}
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Y Ekseni Alanı (Değer)</Label>
-                          {availableFieldsForVisualization.length > 0 ? (
-                            <Select value={yAxisField} onValueChange={setYAxisField}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Alan seçin..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {numericFieldsForVisualization.length > 0 ? (
-                                  <>
-                                    <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Sayısal Alanlar</div>
-                                    {numericFieldsForVisualization.map(f => (
-                                      <SelectItem key={f} value={f}>
-                                        {calculatedFields.some(cf => cf.name === f) ? `📊 ${f} (hesaplanan)` : f}
-                                      </SelectItem>
-                                    ))}
-                                  </>
-                                ) : (
-                                  availableFieldsForVisualization.map(f => (
-                                    <SelectItem key={f} value={f}>{f}</SelectItem>
-                                  ))
-                                )}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <Input
-                              placeholder="toplambakiye, adet..."
-                              value={yAxisField}
-                              onChange={(e) => setYAxisField(e.target.value)}
-                            />
-                          )}
                         </div>
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    {/* Pie, Donut için Legend ve Value */}
-                    {['pie', 'donut'].includes(config.visualization.type) && (
+                  {/* Chart ayarları */}
+                  {['bar', 'line', 'area'].includes(config.visualization.type) && (
+                    <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>Legend Alanı (Dilimler)</Label>
-                          {availableFieldsForVisualization.length > 0 ? (
-                            <Select value={legendField} onValueChange={setLegendField}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Alan seçin..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {availableFieldsForVisualization.map(f => (
-                                  <SelectItem key={f} value={f}>{f}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <Input
-                              placeholder="sektor, kaynak, ozelkod1..."
-                              value={legendField}
-                              onChange={(e) => setLegendField(e.target.value)}
-                            />
-                          )}
+                          <Label>X Ekseni (Kategori)</Label>
+                          <Select value={xAxisField} onValueChange={setXAxisField}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Alan seçin" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableFieldsForVisualization.map(field => (
+                                <SelectItem key={field} value={field}>{field}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Y Ekseni (Değer)</Label>
+                          <Select value={yAxisField} onValueChange={setYAxisField}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Alan seçin" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {numericFieldsForVisualization.map(field => (
+                                <SelectItem key={field} value={field}>{field}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Pie/Donut ayarları */}
+                  {['pie', 'donut'].includes(config.visualization.type) && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Kategori Alanı</Label>
+                          <Select value={legendField} onValueChange={setLegendField}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Alan seçin" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableFieldsForVisualization.map(field => (
+                                <SelectItem key={field} value={field}>{field}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div className="space-y-2">
                           <Label>Değer Alanı</Label>
-                          {availableFieldsForVisualization.length > 0 ? (
-                            <Select value={yAxisField} onValueChange={setYAxisField}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Alan seçin..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {numericFieldsForVisualization.length > 0 ? (
-                                  numericFieldsForVisualization.map(f => (
-                                    <SelectItem key={f} value={f}>
-                                      {calculatedFields.some(cf => cf.name === f) ? `📊 ${f} (hesaplanan)` : f}
-                                    </SelectItem>
-                                  ))
-                                ) : (
-                                  availableFieldsForVisualization.map(f => (
-                                    <SelectItem key={f} value={f}>{f}</SelectItem>
-                                  ))
-                                )}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <Input
-                              placeholder="toplambakiye, adet..."
-                              value={yAxisField}
-                              onChange={(e) => setYAxisField(e.target.value)}
-                            />
-                          )}
+                          <Select value={yAxisField} onValueChange={setYAxisField}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Alan seçin" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {numericFieldsForVisualization.map(field => (
+                                <SelectItem key={field} value={field}>{field}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
-                    )}
-
-                    <div className="space-y-2">
-                      <Label>Tooltip Alanları</Label>
-                      <Input
-                        placeholder="cariadi, telefon, email (virgülle ayırın)"
-                        value={tooltipFields}
-                        onChange={(e) => setTooltipFields(e.target.value)}
-                      />
                     </div>
-
-                    <div className="flex items-center gap-6">
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={config.visualization.chart?.showLegend ?? true}
-                          onCheckedChange={(v) => handleChartConfigChange('showLegend', v)}
-                        />
-                        <Label>Legend Göster</Label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={config.visualization.chart?.showGrid ?? true}
-                          onCheckedChange={(v) => handleChartConfigChange('showGrid', v)}
-                        />
-                        <Label>Grid Göster</Label>
-                      </div>
-                      {['bar', 'area'].includes(config.visualization.type) && (
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={config.visualization.chart?.stacked ?? false}
-                            onCheckedChange={(v) => handleChartConfigChange('stacked', v)}
-                          />
-                          <Label>Yığılmış</Label>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
 
-            {/* WIDGET AYARLARI */}
+            {/* AYARLAR */}
             <TabsContent value="settings" className="m-0 space-y-4">
               <Card>
-                <CardHeader>
+                <CardHeader className="pb-3">
                   <CardTitle className="text-base">Widget Bilgileri</CardTitle>
+                  <CardDescription>Widget'ın temel bilgilerini girin</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Widget Key *</Label>
                       <Input
-                        placeholder="custom_widget_key"
                         value={widgetKey}
-                        onChange={(e) => setWidgetKey(e.target.value)}
+                        onChange={(e) => setWidgetKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
+                        placeholder="toplam_alacak"
                       />
-                      <p className="text-xs text-muted-foreground">Benzersiz tanımlayıcı (snake_case)</p>
+                      <p className="text-xs text-muted-foreground">Benzersiz teknik isim (a-z, 0-9, _)</p>
                     </div>
                     <div className="space-y-2">
                       <Label>Widget Adı *</Label>
                       <Input
-                        placeholder="Özel Widget Adı"
                         value={widgetName}
                         onChange={(e) => setWidgetName(e.target.value)}
+                        placeholder="Toplam Alacak"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <Label>Açıklama</Label>
-                    <Textarea
-                      placeholder="Widget açıklaması..."
+                    <Input
                       value={widgetDescription}
                       onChange={(e) => setWidgetDescription(e.target.value)}
+                      placeholder="Widget açıklaması..."
                     />
                   </div>
 
@@ -1320,10 +837,15 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                       <Label>İkon</Label>
                       <Select value={widgetIcon} onValueChange={setWidgetIcon}>
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue>
+                            <div className="flex items-center gap-2">
+                              <DynamicIcon iconName={widgetIcon} className="h-4 w-4" />
+                              {widgetIcon}
+                            </div>
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          {['BarChart3', 'TrendingUp', 'PieChart', 'Activity', 'Hash', 'DollarSign', 'Users', 'Package', 'ShoppingCart', 'Wallet'].map(icon => (
+                          {['Hash', 'BarChart3', 'TrendingUp', 'PieChart', 'Wallet', 'CreditCard', 'DollarSign', 'Users', 'ShoppingCart', 'Activity'].map(icon => (
                             <SelectItem key={icon} value={icon}>
                               <div className="flex items-center gap-2">
                                 <DynamicIcon iconName={icon} className="h-4 w-4" />
@@ -1342,9 +864,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                         </SelectTrigger>
                         <SelectContent>
                           {WIDGET_SIZES.map(size => (
-                            <SelectItem key={size.id} value={size.id}>
-                              {size.name} ({size.cols} sütun)
-                            </SelectItem>
+                            <SelectItem key={size.id} value={size.id}>{size.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -1356,72 +876,13 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {PAGE_CATEGORIES.map(cat => (
-                            <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                          ))}
+                          <SelectItem value="dashboard">Dashboard</SelectItem>
+                          <SelectItem value="satis">Satış</SelectItem>
+                          <SelectItem value="finans">Finans</SelectItem>
+                          <SelectItem value="cari">Cari</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* ÖNİZLEME - Gerçek zamanlı */}
-            <TabsContent value="preview" className="m-0 space-y-4">
-              {/* Gerçek zamanlı widget önizleme */}
-              <WidgetPreviewRenderer
-                config={config}
-                testResult={testResult}
-                widgetName={widgetName}
-                widgetIcon={widgetIcon}
-                xAxisField={xAxisField}
-                yAxisField={yAxisField}
-                legendField={legendField}
-                calculatedFields={calculatedFields}
-              />
-
-              {/* Config özeti */}
-              <Card>
-                <CardHeader className="py-3">
-                  <CardTitle className="text-sm">Yapılandırma Özeti</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                      <span className="text-muted-foreground">API:</span>
-                      <code className="text-[10px]">{config.diaApi.module}/{config.diaApi.method}</code>
-                    </div>
-                    <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                      <span className="text-muted-foreground">Tip:</span>
-                      <Badge variant="outline" className="text-[10px]">{config.visualization.type}</Badge>
-                    </div>
-                    <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                      <span className="text-muted-foreground">Boyut:</span>
-                      <Badge variant="secondary" className="text-[10px]">{widgetSize}</Badge>
-                    </div>
-                    <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                      <span className="text-muted-foreground">Sayfa:</span>
-                      <Badge variant="secondary" className="text-[10px]">{defaultPage}</Badge>
-                    </div>
-                    {apiFilters.length > 0 && (
-                      <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                        <span className="text-muted-foreground">Filtreler:</span>
-                        <Badge variant="outline" className="text-[10px]">{apiFilters.length} filtre</Badge>
-                      </div>
-                    )}
-                    {selectedColumnsArray.length > 0 && (
-                      <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                        <span className="text-muted-foreground">Kolonlar:</span>
-                        <Badge variant="outline" className="text-[10px]">{selectedColumnsArray.length} seçili</Badge>
-                      </div>
-                    )}
-                    {calculatedFields.length > 0 && (
-                      <div className="flex items-center justify-between p-2 bg-muted/50 rounded col-span-2">
-                        <span className="text-muted-foreground">Hesaplamalar:</span>
-                        <Badge variant="outline" className="text-[10px] bg-green-500/10">{calculatedFields.length} hesaplama</Badge>
-                      </div>
-                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -1433,9 +894,9 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             İptal
           </Button>
-          <Button onClick={handleSave} disabled={isLoading || !widgetKey || !widgetName}>
+          <Button onClick={handleSave} disabled={isLoading}>
             <Save className="h-4 w-4 mr-2" />
-            {isEditMode ? 'Güncelle' : 'Widget Oluştur'}
+            {isEditMode ? 'Güncelle' : 'Oluştur'}
           </Button>
         </DialogFooter>
       </DialogContent>
