@@ -425,7 +425,23 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       
       setMergedQueryData(dataMap);
       
-      // İlk sorgunun verisini sampleData olarak kullan (önizleme için)
+      // Tüm query verilerini birleştirerek sampleData oluştur (AI ve önizleme için)
+      // Her query'nin verisini ayrı key altında tut
+      const combinedData = {
+        _multiQuery: true,
+        _queries: config.queries.map(q => ({
+          id: q.id,
+          name: q.name,
+          dataSourceId: q.dataSourceId,
+          fields: dataMap[q.id]?.[0] ? Object.keys(dataMap[q.id][0]) : [],
+          recordCount: dataMap[q.id]?.length || 0,
+        })),
+        ...Object.fromEntries(
+          config.queries.map(q => [q.name || q.id, dataMap[q.id] || []])
+        ),
+      };
+      
+      // İlk sorgunun verisini ana sampleData olarak kullan (geriye uyumluluk)
       const primaryQuery = config.queries.find(q => q.id === config.primaryQueryId) || config.queries[0];
       if (primaryQuery && dataMap[primaryQuery.id]) {
         setSampleData(dataMap[primaryQuery.id]);
@@ -438,6 +454,44 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       setIsLoadingData(false);
     }
   };
+  
+  // Multi-query için zengin veri yapısı oluştur
+  const getMultiQueryJsonData = useCallback(() => {
+    if (!isMultiQueryMode || !multiQuery?.queries?.length) {
+      return sampleData;
+    }
+    
+    // Her query için veri ve metadata içeren yapı
+    const result: Record<string, any> = {
+      _meta: {
+        isMultiQuery: true,
+        queryCount: multiQuery.queries.length,
+        queries: multiQuery.queries.map(q => ({
+          id: q.id,
+          name: q.name,
+          dataSourceId: q.dataSourceId,
+          dataSourceName: q.dataSourceName,
+          fields: mergedQueryData[q.id]?.[0] ? Object.keys(mergedQueryData[q.id][0]) : [],
+          recordCount: mergedQueryData[q.id]?.length || 0,
+        })),
+        merges: multiQuery.merges?.map(m => ({
+          left: multiQuery.queries.find(q => q.id === m.leftQueryId)?.name,
+          right: multiQuery.queries.find(q => q.id === m.rightQueryId)?.name,
+          type: m.mergeType,
+          leftField: m.leftField,
+          rightField: m.rightField,
+        })),
+      },
+    };
+    
+    // Her query'nin verisini ayrı key altında ekle
+    multiQuery.queries.forEach(q => {
+      const key = q.name || `query_${q.id.slice(0, 8)}`;
+      result[key] = mergedQueryData[q.id] || [];
+    });
+    
+    return result;
+  }, [isMultiQueryMode, multiQuery, mergedQueryData, sampleData]);
 
   // Veri kaynağı seçildiğinde veri çek
   const handleDataSourceSelect = async (dataSource: DataSourceType | null) => {
@@ -605,17 +659,75 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       return;
     }
 
-    if (sampleData.length === 0) {
+    // Multi-query modunda mergedQueryData kontrolü
+    const hasData = isMultiQueryMode 
+      ? Object.keys(mergedQueryData).length > 0 
+      : sampleData.length > 0;
+    
+    if (!hasData) {
       toast.error('Önce veri kaynağı seçip veri yükleyin');
       return;
     }
 
     setIsGeneratingCode(true);
     try {
-      // Zengin veri analizi
-      const dataAnalysis = analyzeDataForAI(sampleData);
+      let systemPrompt: string;
+      let dataToSend: any;
       
-      const systemPrompt = `Veri Analizi:
+      if (isMultiQueryMode && multiQuery?.queries?.length) {
+        // Multi-query modu için zengin context
+        const queryAnalyses = multiQuery.queries.map(q => {
+          const qData = mergedQueryData[q.id] || [];
+          const analysis = qData.length > 0 ? analyzeDataForAI(qData) : {};
+          return {
+            queryName: q.name,
+            queryId: q.id,
+            dataSourceName: q.dataSourceName,
+            recordCount: qData.length,
+            fields: qData[0] ? Object.keys(qData[0]) : [],
+            fieldStats: analysis,
+            sampleRecord: qData[0] || null,
+          };
+        });
+        
+        systemPrompt = `MULTI-QUERY VERİ YAPISI:
+Bu widget birden fazla veri kaynağından besleniyor. Widget fonksiyonuna gelen "data" prop'u şu yapıda:
+
+{
+  _meta: { isMultiQuery: true, queryCount: ${multiQuery.queries.length}, queries: [...] },
+${multiQuery.queries.map(q => `  "${q.name}": [...] // ${mergedQueryData[q.id]?.length || 0} kayıt`).join(',\n')}
+}
+
+SORGULAR VE ALANLARI:
+${queryAnalyses.map(qa => `
+📊 ${qa.queryName} (${qa.recordCount} kayıt)
+   Alanlar: ${qa.fields.join(', ')}
+   ${Object.entries(qa.fieldStats).slice(0, 5).map(([f, s]: [string, any]) => {
+     let info = `   • ${f} (${s.type})`;
+     if (s.sum !== undefined) info += `: Σ${formatNumber(s.sum)}`;
+     return info;
+   }).join('\n')}`).join('\n')}
+
+${multiQuery.merges?.length ? `
+BİRLEŞTİRME KURALLARI:
+${multiQuery.merges.map(m => {
+  const left = multiQuery.queries.find(q => q.id === m.leftQueryId)?.name;
+  const right = multiQuery.queries.find(q => q.id === m.rightQueryId)?.name;
+  return `• ${left}.${m.leftField} ${m.mergeType.toUpperCase()} ${right}.${m.rightField}`;
+}).join('\n')}` : ''}
+
+ÖNEMLİ: Widget kodu data.${multiQuery.queries[0]?.name || 'queryName'} şeklinde her sorguya erişebilir.
+
+Kullanıcı isteği: ${aiPrompt}`;
+
+        // Multi-query için veri yapısını gönder
+        dataToSend = getMultiQueryJsonData();
+        
+      } else {
+        // Tek kaynak modu için mevcut mantık
+        const dataAnalysis = analyzeDataForAI(sampleData);
+        
+        systemPrompt = `Veri Analizi:
 - Toplam kayıt: ${sampleData.length}
 - Alan istatistikleri:
 ${Object.entries(dataAnalysis).map(([field, stats]) => {
@@ -630,11 +742,15 @@ ${Object.entries(dataAnalysis).map(([field, stats]) => {
 
 Kullanıcı isteği: ${aiPrompt}`;
 
+        dataToSend = sampleData.slice(0, 3);
+      }
+
       const response = await supabase.functions.invoke('ai-code-generator', {
         body: {
           prompt: systemPrompt,
-          sampleData: sampleData.slice(0, 3),
-          mode: 'generate'
+          sampleData: dataToSend,
+          mode: 'generate',
+          isMultiQuery: isMultiQueryMode,
         },
       });
 
@@ -645,7 +761,10 @@ Kullanıcı isteği: ${aiPrompt}`;
         setCustomCode(generatedCode);
         setChatHistory([
           { role: 'user', content: aiPrompt },
-          { role: 'assistant', content: 'Kod üretildi! Aşağıdaki chat alanından değişiklik isteyebilirsiniz.' }
+          { role: 'assistant', content: isMultiQueryMode 
+            ? `Kod üretildi! ${multiQuery?.queries?.length || 0} sorgu için multi-query yapısı kullanıldı.` 
+            : 'Kod üretildi! Aşağıdaki chat alanından değişiklik isteyebilirsiniz.' 
+          }
         ]);
         setActiveTab('code');
         toast.success('Kod üretildi! Kod editöründe görüntüleyebilirsiniz.');
@@ -1082,11 +1201,25 @@ Kullanıcı isteği: ${aiPrompt}`;
                 <div className="h-full flex flex-col">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-4">
-                      <Badge variant="secondary">{sampleData.length} kayıt</Badge>
+                      {isMultiQueryMode && multiQuery?.queries?.length ? (
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="bg-primary/10">
+                            <Layers className="h-3 w-3 mr-1" />
+                            {multiQuery.queries.length} sorgu
+                          </Badge>
+                          {multiQuery.queries.map(q => (
+                            <Badge key={q.id} variant="outline" className="text-xs">
+                              {q.name}: {mergedQueryData[q.id]?.length || 0}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <Badge variant="secondary">{sampleData.length} kayıt</Badge>
+                      )}
                       {isLoadingData && <Loader2 className="h-4 w-4 animate-spin" />}
                       
-                      {/* Slider kontrolü */}
-                      {sampleData.length > 0 && (
+                      {/* Slider kontrolü - tek kaynak modu */}
+                      {!isMultiQueryMode && sampleData.length > 0 && (
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-muted-foreground">Göster:</span>
                           <input
@@ -1103,27 +1236,66 @@ Kullanıcı isteği: ${aiPrompt}`;
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button size="sm" variant="outline" onClick={copyJson} disabled={sampleData.length === 0}>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={() => {
+                          const jsonData = isMultiQueryMode ? getMultiQueryJsonData() : sampleData;
+                          navigator.clipboard.writeText(JSON.stringify(jsonData, null, 2));
+                          toast.success('JSON kopyalandı');
+                        }} 
+                        disabled={!isMultiQueryMode && sampleData.length === 0}
+                      >
                         <Copy className="h-3 w-3 mr-1" />
                         Kopyala
                       </Button>
-                      <Button size="sm" variant="outline" onClick={downloadJson} disabled={sampleData.length === 0}>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={() => {
+                          const jsonData = isMultiQueryMode ? getMultiQueryJsonData() : sampleData;
+                          const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `widget_data_${new Date().toISOString().slice(0, 10)}.json`;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
+                          toast.success('JSON dosyası indirildi');
+                        }} 
+                        disabled={!isMultiQueryMode && sampleData.length === 0}
+                      >
                         <Download className="h-3 w-3 mr-1" />
                         İndir
                       </Button>
                     </div>
                   </div>
+                  
                   <ScrollArea className="flex-1 border rounded-lg">
                     <pre className="p-4 text-xs font-mono whitespace-pre-wrap">
-                      {sampleData.length > 0 
-                        ? JSON.stringify(sampleData.slice(0, jsonPreviewCount), null, 2)
-                        : 'Veri kaynağı seçin...'}
+                      {isMultiQueryMode && multiQuery?.queries?.length ? (
+                        JSON.stringify(getMultiQueryJsonData(), null, 2)
+                      ) : sampleData.length > 0 ? (
+                        JSON.stringify(sampleData.slice(0, jsonPreviewCount), null, 2)
+                      ) : (
+                        'Veri kaynağı seçin...'
+                      )}
                     </pre>
                   </ScrollArea>
-                  {sampleData.length > jsonPreviewCount && (
+                  
+                  {!isMultiQueryMode && sampleData.length > jsonPreviewCount && (
                     <p className="text-xs text-muted-foreground mt-2">
                       İlk {jsonPreviewCount} kayıt gösteriliyor (toplam {sampleData.length})
                     </p>
+                  )}
+                  
+                  {isMultiQueryMode && multiQuery?.queries?.length && (
+                    <div className="mt-2 p-2 rounded bg-muted/50 text-xs text-muted-foreground">
+                      <strong>Multi-Query Yapısı:</strong> Widget kodunda <code className="bg-background px-1 rounded">data._meta</code> ile sorgu bilgilerine, 
+                      <code className="bg-background px-1 rounded">data.["Sorgu Adı"]</code> ile her sorgunun verilerine erişebilirsiniz.
+                    </div>
                   )}
                 </div>
               </TabsContent>
