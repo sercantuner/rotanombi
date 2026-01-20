@@ -554,13 +554,13 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
               <BarChart3 className="h-3.5 w-3.5" />
               Görsel
             </TabsTrigger>
-            <TabsTrigger value="preview" className="gap-1 text-xs">
-              <Eye className="h-3.5 w-3.5" />
-              Önizleme
-            </TabsTrigger>
             <TabsTrigger value="settings" className="gap-1 text-xs">
               <Settings2 className="h-3.5 w-3.5" />
               Ayarlar
+            </TabsTrigger>
+            <TabsTrigger value="preview" className="gap-1 text-xs">
+              <Eye className="h-3.5 w-3.5" />
+              Önizleme
             </TabsTrigger>
           </TabsList>
 
@@ -903,23 +903,6 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
               </Card>
             </TabsContent>
 
-            {/* CANLI ÖNİZLEME */}
-            <TabsContent value="preview" className="m-0 space-y-4">
-              <LiveWidgetPreview
-                config={config}
-                widgetName={widgetName}
-                widgetIcon={widgetIcon}
-                xAxisField={xAxisField}
-                yAxisField={yAxisField}
-                legendField={legendField}
-                calculatedFields={calculatedFields}
-                postFetchFilters={postFetchFilters}
-                tableColumns={tableColumns}
-                pivotConfig={pivotConfig}
-                dataSourceId={selectedDataSourceId}
-              />
-            </TabsContent>
-
             {/* AYARLAR */}
             <TabsContent value="settings" className="m-0 space-y-4">
               <Card>
@@ -1031,6 +1014,23 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                   </div>
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* CANLI ÖNİZLEME - EN SON SEKME */}
+            <TabsContent value="preview" className="m-0 space-y-4">
+              <LiveWidgetPreview
+                config={config}
+                widgetName={widgetName}
+                widgetIcon={widgetIcon}
+                xAxisField={xAxisField}
+                yAxisField={yAxisField}
+                legendField={legendField}
+                calculatedFields={calculatedFields}
+                postFetchFilters={postFetchFilters}
+                tableColumns={tableColumns}
+                pivotConfig={pivotConfig}
+                dataSourceId={selectedDataSourceId}
+              />
             </TabsContent>
           </ScrollArea>
         </Tabs>

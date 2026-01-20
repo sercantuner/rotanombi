@@ -597,41 +597,68 @@ export function LiveWidgetPreview({
                 </div>
               )}
 
-              {/* Pie/Donut Chart */}
+              {/* Pie/Donut Chart - Düzgün boyutlandırma */}
               {['pie', 'donut'].includes(vizType) && visualizationData?.chartData && (
-                <div>
-                  <p className="text-sm font-medium mb-3 flex items-center gap-2">
+                <div className="flex flex-col items-center">
+                  <p className="text-sm font-medium mb-4 flex items-center gap-2 self-start">
                     <PieChart className="h-4 w-4" />
                     {widgetName || (vizType === 'donut' ? 'Donut Chart' : 'Pie Chart')}
                   </p>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <RechartsPieChart>
-                      <Pie
-                        data={visualizationData.chartData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={vizType === 'donut' ? 50 : 0}
-                        outerRadius={75}
-                        dataKey="value"
-                        nameKey="name"
-                        label={({ name, percent }) => `${String(name).slice(0, 10)} (${(percent * 100).toFixed(0)}%)`}
-                        labelLine={false}
-                      >
-                        {visualizationData.chartData.map((_: any, index: number) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'hsl(var(--card))', 
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px',
-                          fontSize: '11px'
-                        }}
-                      />
-                      {visualizationData.showLegend && <Legend />}
-                    </RechartsPieChart>
-                  </ResponsiveContainer>
+                  <div className="w-full max-w-[320px] mx-auto">
+                    <ResponsiveContainer width="100%" height={220}>
+                      <RechartsPieChart>
+                        <Pie
+                          data={visualizationData.chartData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={vizType === 'donut' ? 45 : 0}
+                          outerRadius={80}
+                          dataKey="value"
+                          nameKey="name"
+                          paddingAngle={2}
+                        >
+                          {visualizationData.chartData.map((_: any, index: number) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--card))', 
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                            fontSize: '11px'
+                          }}
+                          formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
+                        />
+                      </RechartsPieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {/* Legend ayrı grid olarak */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-4 w-full max-w-[400px]">
+                    {visualizationData.chartData.slice(0, 10).map((item: any, index: number) => {
+                      const total = visualizationData.chartData.reduce((sum: number, d: any) => sum + d.value, 0);
+                      const percent = total > 0 ? ((item.value / total) * 100).toFixed(1) : '0';
+                      return (
+                        <div key={index} className="flex items-center gap-2 text-xs">
+                          <div 
+                            className="w-3 h-3 rounded-sm flex-shrink-0" 
+                            style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                          />
+                          <span className="truncate flex-1" title={item.name}>
+                            {String(item.name).slice(0, 18)}
+                          </span>
+                          <span className="text-muted-foreground whitespace-nowrap">
+                            {percent}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {visualizationData.chartData.length > 10 && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      +{visualizationData.chartData.length - 10} daha...
+                    </p>
+                  )}
                 </div>
               )}
 
