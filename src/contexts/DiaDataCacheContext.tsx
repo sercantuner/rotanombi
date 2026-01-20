@@ -15,6 +15,8 @@ interface CacheStats {
   totalQueries: number;
   cacheHits: number;
   cacheMisses: number;
+  realApiCalls: number; // Gerçek DIA API çağrıları (kontör harcayan)
+  lastApiCallTime: number | null; // Son API çağrısı timestamp
 }
 
 interface DiaDataCacheContextType {
@@ -54,6 +56,7 @@ interface DiaDataCacheContextType {
   resetStats: () => void;
   incrementCacheHit: () => void;
   incrementCacheMiss: () => void;
+  recordApiCall: () => void; // Gerçek API çağrısı yapıldığında çağrılır
 }
 
 const DiaDataCacheContext = createContext<DiaDataCacheContextType | null>(null);
@@ -105,6 +108,8 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
     totalQueries: 0,
     cacheHits: 0,
     cacheMisses: 0,
+    realApiCalls: 0,
+    lastApiCallTime: null,
   });
 
   // Cache'den veri al (stale check ile)
@@ -264,6 +269,8 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
       totalQueries: 0,
       cacheHits: 0,
       cacheMisses: 0,
+      realApiCalls: 0,
+      lastApiCallTime: null,
     });
   }, []);
 
@@ -280,6 +287,14 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
       ...prev,
       totalQueries: prev.totalQueries + 1,
       cacheMisses: prev.cacheMisses + 1,
+    }));
+  }, []);
+
+  const recordApiCall = useCallback(() => {
+    setStats(prev => ({
+      ...prev,
+      realApiCalls: prev.realApiCalls + 1,
+      lastApiCallTime: Date.now(),
     }));
   }, []);
 
@@ -305,13 +320,14 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
     resetStats,
     incrementCacheHit,
     incrementCacheMiss,
+    recordApiCall,
   }), [
     getCachedData, getCachedDataWithStale, setCachedData, invalidateCache, 
     getDataSourceData, getDataSourceDataWithStale, setDataSourceData, 
     isDataSourceLoading, setDataSourceLoading,
     isDataSourceFetched, markDataSourceFetched, getFetchedDataSources, clearFetchedRegistry,
     isPageDataReady, setPageDataReady,
-    sharedData, setSharedData, stats, resetStats, incrementCacheHit, incrementCacheMiss
+    sharedData, setSharedData, stats, resetStats, incrementCacheHit, incrementCacheMiss, recordApiCall
   ]);
 
   return (
@@ -343,10 +359,11 @@ export function useDiaDataCache(): DiaDataCacheContextType {
       setPageDataReady: () => {},
       sharedData: { cariListesi: null, vadeBakiye: null },
       setSharedData: () => {},
-      stats: { totalQueries: 0, cacheHits: 0, cacheMisses: 0 },
+      stats: { totalQueries: 0, cacheHits: 0, cacheMisses: 0, realApiCalls: 0, lastApiCallTime: null },
       resetStats: () => {},
       incrementCacheHit: () => {},
       incrementCacheMiss: () => {},
+      recordApiCall: () => {},
     };
   }
   return context;
