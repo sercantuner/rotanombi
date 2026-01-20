@@ -154,7 +154,7 @@ export function BuilderWidgetRenderer({
   const vizChart = builderConfig.visualization?.chart;
   const fieldWells = builderConfig.fieldWells;
   
-  // Renk paleti ve görsel ayarlar
+  // Renk paleti ve görsel ayarlar - her widget kendi ayarlarını kullanır
   const colorPalette = chartSettings.colorPalette || 'default';
   const showGrid = chartSettings.showGrid !== false;
   const legendPosition = chartSettings.legendPosition || 'bottom';
@@ -162,8 +162,11 @@ export function BuilderWidgetRenderer({
   const showTrendLine = chartSettings.showTrendLine || false;
   const showAverageLine = chartSettings.showAverageLine || false;
   
-  // Aktif renk paleti
-  const activeColors = COLOR_PALETTES[colorPalette as PaletteKey] || COLOR_PALETTES.default;
+  // Aktif renk paleti - eski "colors" array desteği (geriye uyumluluk)
+  const legacyColors = (builderConfig as any).visualization?.chart?.colors as string[] | undefined;
+  const activeColors = legacyColors && legacyColors.length > 0 
+    ? legacyColors 
+    : (COLOR_PALETTES[colorPalette as PaletteKey] || COLOR_PALETTES.default);
   
   // X ve Y ekseni alanlarını belirle - fieldWells öncelikli
   const xAxisField = fieldWells?.xAxis?.field || vizChart?.xAxis?.field || '';
