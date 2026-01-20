@@ -18,9 +18,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Edit, Trash2, Eye, EyeOff, RefreshCw, LayoutGrid, Search, Shield, AlertTriangle, Wand2, Database, Tags, Loader2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, RefreshCw, LayoutGrid, Search, Shield, AlertTriangle, Wand2, Database, Tags, Loader2, Code } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WidgetBuilder } from '@/components/admin/WidgetBuilder';
+import { CustomCodeWidgetBuilder } from '@/components/admin/CustomCodeWidgetBuilder';
 import { DataSourceManager } from '@/components/admin/DataSourceManager';
 import * as LucideIcons from 'lucide-react';
 
@@ -73,6 +74,7 @@ export default function SuperAdminPage() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+  const [isCustomCodeBuilderOpen, setIsCustomCodeBuilderOpen] = useState(false);
   const [editingWidget, setEditingWidget] = useState<Widget | null>(null);
   const [builderEditWidget, setBuilderEditWidget] = useState<Widget | null>(null);
   const [formData, setFormData] = useState<WidgetFormData>(getEmptyFormData());
@@ -827,6 +829,13 @@ export default function SuperAdminPage() {
           <DataSourceManager />
         </TabsContent>
       </Tabs>
+
+      {/* Custom Code Widget Builder */}
+      <CustomCodeWidgetBuilder
+        open={isCustomCodeBuilderOpen}
+        onOpenChange={setIsCustomCodeBuilderOpen}
+        onSave={() => refetch()}
+      />
     </div>
   );
 }
