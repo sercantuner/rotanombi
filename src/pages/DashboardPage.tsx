@@ -13,7 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DiaQueryStats } from '@/components/dashboard/DiaQueryStats';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Plug, RefreshCw, Clock, Timer } from 'lucide-react';
+import { Plug, RefreshCw, Clock, Timer, Edit, Check } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 function DashboardContent() {
   const navigate = useNavigate();
@@ -31,6 +32,9 @@ function DashboardContent() {
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(60); // saniye cinsinden
   const [nextRefreshIn, setNextRefreshIn] = useState<number | null>(null);
+  
+  // Widget düzenleme modu
+  const [isWidgetEditMode, setIsWidgetEditMode] = useState(false);
 
   // Dashboard sayfası ID'sini al veya oluştur
   useEffect(() => {
@@ -276,8 +280,28 @@ function DashboardContent() {
               <DiaQueryStats />
             </div>
             
-            {/* Otomatik Yenileme Kontrolleri */}
+            {/* Kontroller */}
             <div className="flex items-center gap-3">
+              {/* Widget Düzenleme Modu Butonu */}
+              <Button
+                variant={isWidgetEditMode ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setIsWidgetEditMode(!isWidgetEditMode)}
+                className="h-8"
+              >
+                {isWidgetEditMode ? (
+                  <>
+                    <Check className="h-4 w-4 mr-2" />
+                    Düzenlemeyi Bitir
+                  </>
+                ) : (
+                  <>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Widget Düzenle
+                  </>
+                )}
+              </Button>
+              
               {autoRefreshEnabled && nextRefreshIn !== null && (
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                   <Clock className="h-3 w-3" />
@@ -325,6 +349,7 @@ function DashboardContent() {
             pageId={dashboardPageId}
             widgetData={widgetData}
             isLoading={isLoading}
+            isWidgetEditMode={isWidgetEditMode}
           />
         ) : (
           <div className="flex items-center justify-center h-64">

@@ -25,6 +25,7 @@ interface ContainerRendererProps {
   isDragMode?: boolean;
   widgetData?: any;
   isLoading?: boolean;
+  isWidgetEditMode?: boolean;
 }
 
 export function ContainerRenderer({ 
@@ -32,7 +33,8 @@ export function ContainerRenderer({
   onDelete, 
   isDragMode = false,
   widgetData = {},
-  isLoading = false 
+  isLoading = false,
+  isWidgetEditMode = false
 }: ContainerRendererProps) {
   const { widgets: containerWidgets, addWidget, removeWidget, refreshWidgets } = useContainerWidgets(container.id);
   const [widgetPickerOpen, setWidgetPickerOpen] = useState(false);
@@ -182,12 +184,13 @@ export function ContainerRenderer({
               containerWidgetId={slotWidget.id}
               widgetFilters={widgetFilters}
               onFiltersChange={(filters) => handleWidgetFilterChange(slotWidget.id, filters)}
+              isWidgetEditMode={isWidgetEditMode}
             />
-            {!isDragMode && (
+            {isWidgetEditMode && (
               <Button
                 variant="destructive"
                 size="icon"
-                className="absolute top-2 left-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-20"
+                className="absolute top-2 left-2 h-7 w-7 shadow-md z-20"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleRemoveWidget(slotWidget.id, widgetDetail.name);

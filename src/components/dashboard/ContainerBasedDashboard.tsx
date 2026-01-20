@@ -21,6 +21,7 @@ interface ContainerBasedDashboardProps {
   pageId: string;
   widgetData?: any;
   isLoading?: boolean;
+  isWidgetEditMode?: boolean;
 }
 
 // Sortable container wrapper
@@ -29,13 +30,15 @@ function SortableContainer({
   onDelete, 
   isDragMode, 
   widgetData, 
-  isLoading 
+  isLoading,
+  isWidgetEditMode
 }: { 
   container: PageContainer; 
   onDelete: () => void; 
   isDragMode: boolean;
   widgetData?: any;
   isLoading?: boolean;
+  isWidgetEditMode?: boolean;
 }) {
   const {
     attributes,
@@ -76,13 +79,14 @@ function SortableContainer({
           isDragMode={isDragMode}
           widgetData={widgetData}
           isLoading={isLoading}
+          isWidgetEditMode={isWidgetEditMode}
         />
       </div>
     </div>
   );
 }
 
-export function ContainerBasedDashboard({ pageId, widgetData = {}, isLoading = false }: ContainerBasedDashboardProps) {
+export function ContainerBasedDashboard({ pageId, widgetData = {}, isLoading = false, isWidgetEditMode = false }: ContainerBasedDashboardProps) {
   const { user } = useAuth();
   const { containers, addContainer, deleteContainer, reorderContainers, refreshContainers, isLoading: containersLoading } = usePageContainers(pageId);
   const [isDragMode, setIsDragMode] = useState(false);
@@ -238,6 +242,7 @@ export function ContainerBasedDashboard({ pageId, widgetData = {}, isLoading = f
               isDragMode={isDragMode}
               widgetData={widgetData}
               isLoading={isLoading}
+              isWidgetEditMode={isWidgetEditMode}
             />
           ))}
         </div>

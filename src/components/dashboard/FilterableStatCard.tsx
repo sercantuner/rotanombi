@@ -24,6 +24,8 @@ interface FilterableStatCardProps {
   currentFilters?: KpiFilter;
   onFiltersChange?: (filters: KpiFilter) => void;
   showFilterButton?: boolean;
+  // Widget düzenleme modu
+  isWidgetEditMode?: boolean;
 }
 
 export function FilterableStatCard({ 
@@ -40,6 +42,7 @@ export function FilterableStatCard({
   currentFilters,
   onFiltersChange,
   showFilterButton = true,
+  isWidgetEditMode = false,
 }: FilterableStatCardProps) {
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
@@ -107,11 +110,10 @@ export function FilterableStatCard({
   return (
     <>
       <div className="stat-card animate-slide-up group relative">
-        {/* Control Buttons - Hover'da görünür, sağ üstte yan yana */}
+        {/* Control Buttons - Sadece düzenleme modunda görünür */}
         <div className={cn(
           'absolute top-2 right-2 flex items-center gap-1 z-10 transition-opacity',
-          'opacity-0 group-hover:opacity-100',
-          (hasActiveFilters) && 'opacity-100'
+          isWidgetEditMode ? 'opacity-100' : 'opacity-0 pointer-events-none'
         )}>
           {/* Settings Button */}
           {canShowSettingsButton && (

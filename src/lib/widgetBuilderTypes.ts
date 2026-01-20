@@ -12,7 +12,12 @@ export type ChartType =
   | 'funnel'
   | 'treemap'
   | 'table'
-  | 'list';
+  | 'list'
+  // Özel grafik tipleri
+  | 'cashflow'      // Nakit akış projeksiyonu (vade yaşlandırma)
+  | 'aging'         // Yaşlandırma grafiği
+  | 'gauge'         // Gösterge (oran/yüzde)
+  | 'waterfall';    // Şelale grafiği
 
 export type AggregationType = 
   | 'sum'
@@ -259,6 +264,33 @@ export interface WidgetFilterConfig {
   defaultValue?: any;
 }
 
+// Özel grafik yapılandırması
+export interface SpecialChartConfig {
+  type: 'cashflow' | 'aging' | 'gauge' | 'waterfall';
+  
+  // Cashflow/Aging için segment tanımları
+  segments?: {
+    name: string;
+    valueField: string;
+    color: string;
+    type: 'past' | 'current' | 'future';
+  }[];
+  
+  // Periyot desteği
+  periodOptions?: ('daily' | 'weekly' | 'monthly')[];
+  defaultPeriod?: 'daily' | 'weekly' | 'monthly';
+  
+  // Gauge için
+  minValue?: number;
+  maxValue?: number;
+  thresholds?: { value: number; color: string; label: string }[];
+  
+  // Waterfall için
+  showTotal?: boolean;
+  positiveColor?: string;
+  negativeColor?: string;
+}
+
 export interface WidgetBuilderConfig {
   diaApi: DiaApiConfig;
   
@@ -273,6 +305,7 @@ export interface WidgetBuilderConfig {
     kpi?: KpiConfig;
     chart?: ChartConfig;
     table?: TableConfig;
+    specialChart?: SpecialChartConfig; // Özel grafik yapılandırması
   };
   
   availableFilters?: WidgetFilterConfig[]; // Widget için tanımlı filtreler
@@ -296,6 +329,11 @@ export const CHART_TYPES: { id: ChartType; name: string; icon: string; descripti
   { id: 'treemap', name: 'Treemap', icon: 'LayoutGrid', description: 'Hiyerarşik dağılım' },
   { id: 'table', name: 'Tablo', icon: 'Table', description: 'Detaylı veri listesi' },
   { id: 'list', name: 'Liste', icon: 'List', description: 'Basit liste görünümü' },
+  // Özel grafik tipleri
+  { id: 'cashflow', name: 'Nakit Akış', icon: 'Calendar', description: 'Nakit akış projeksiyonu ve vade yaşlandırma' },
+  { id: 'aging', name: 'Yaşlandırma', icon: 'Clock', description: 'Vade bazlı yaşlandırma grafiği' },
+  { id: 'gauge', name: 'Gösterge', icon: 'Gauge', description: 'Oran veya yüzde göstergesi' },
+  { id: 'waterfall', name: 'Şelale', icon: 'BarChart2', description: 'Kümülatif değişim analizi' },
 ];
 
 // Aggregation tipleri

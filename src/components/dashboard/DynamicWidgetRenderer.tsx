@@ -62,6 +62,8 @@ interface DynamicWidgetRendererProps {
   containerWidgetId?: string;
   widgetFilters?: KpiFilter;
   onFiltersChange?: (filters: KpiFilter) => void;
+  // Widget düzenleme modu
+  isWidgetEditMode?: boolean;
 }
 
 // Format large numbers
@@ -87,6 +89,7 @@ export function DynamicWidgetRenderer({
   containerWidgetId,
   widgetFilters,
   onFiltersChange,
+  isWidgetEditMode = false,
 }: DynamicWidgetRendererProps) {
   const widget = getWidgetById(widgetId);
   
