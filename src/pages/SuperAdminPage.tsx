@@ -223,6 +223,10 @@ export default function SuperAdminPage() {
               <RefreshCw className="h-4 w-4 mr-2" />
               Yenile
             </Button>
+            <Button variant="outline" onClick={() => openForm()}>
+              <Code className="h-4 w-4 mr-2" />
+              Hardcode Widget
+            </Button>
             <Button onClick={() => {
               setBuilderEditWidget(null);
               setIsBuilderOpen(true);
