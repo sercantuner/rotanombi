@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { DiaApiFilter, FilterOperator, FILTER_OPERATORS } from '@/lib/widgetBuilderTypes';
+import { DiaApiFilter, FilterOperator } from '@/lib/widgetBuilderTypes';
 import { detectFieldType, getUniqueValues, getNumericRange, formatNumber, FieldType } from '@/lib/filterUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +17,22 @@ import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Trash2, Filter, ChevronDown, ChevronRight, CalendarIcon, Hash, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// DIA API'nin desteklediği operatörler
+// NOT: "contains" operatör göndermezse DIA "içeren" gibi çalışır
+// "!" operatörü "içermeyen" anlamına gelir
+const DIA_FILTER_OPERATORS = [
+  { id: 'contains', label: 'İçerir (varsayılan)', description: 'Alanın içinde geçen' },
+  { id: '=', label: 'Eşit', description: 'Tam eşleşme' },
+  { id: '!=', label: 'Eşit Değil', description: 'Eşit olmayan' },
+  { id: '!', label: 'İçermez', description: 'İçinde geçmeyen' },
+  { id: '>', label: 'Büyük', description: 'Daha büyük' },
+  { id: '<', label: 'Küçük', description: 'Daha küçük' },
+  { id: '>=', label: 'Büyük Eşit', description: 'Büyük veya eşit' },
+  { id: '<=', label: 'Küçük Eşit', description: 'Küçük veya eşit' },
+  { id: 'IN', label: 'Liste İçinde', description: 'Virgülle ayrılmış değerlerden biri' },
+  { id: 'NOT IN', label: 'Liste Dışında', description: 'Listedeki değerler hariç' },
+];
 
 interface CompactFilterBuilderProps {
   filters: DiaApiFilter[];
@@ -344,7 +360,8 @@ export function CompactFilterBuilder({ filters, onChange, availableFields, field
   const [isOpen, setIsOpen] = useState(filters.length > 0);
 
   const addFilter = () => {
-    onChange([...filters, { field: '', operator: '=', value: '' }]);
+    // Varsayılan operatör "contains" - DIA'ya gönderilmeyecek
+    onChange([...filters, { field: '', operator: 'contains' as FilterOperator, value: '' }]);
     setIsOpen(true);
   };
 
@@ -417,14 +434,14 @@ export function CompactFilterBuilder({ filters, onChange, availableFields, field
                 </Select>
 
                 {/* Operatör */}
-                <Select value={filter.operator || '='} onValueChange={(v) => updateFilter(index, 'operator', v as FilterOperator)}>
-                  <SelectTrigger className="h-7 text-xs w-16 shrink-0">
+                <Select value={filter.operator || 'contains'} onValueChange={(v) => updateFilter(index, 'operator', v as FilterOperator)}>
+                  <SelectTrigger className="h-7 text-xs w-[100px] shrink-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {FILTER_OPERATORS.map(op => (
+                    {DIA_FILTER_OPERATORS.map(op => (
                       <SelectItem key={op.id} value={op.id} className="text-xs">
-                        <code>{op.id}</code>
+                        <span title={op.description}>{op.label}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>

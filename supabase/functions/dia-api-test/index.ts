@@ -188,7 +188,7 @@ serve(async (req) => {
       module, 
       method, 
       limit, // undefined olursa limitsiz çeker
-      filters = {}, 
+      filters, 
       selectedColumns = [], 
       orderby = '',
       rawMode = false,
@@ -197,6 +197,62 @@ serve(async (req) => {
       returnAllSampleData = false, // Filtre önerileri için tüm veriyi sampleData olarak döndür
       periodConfig, // Dönem loop yapılandırması
     } = body;
+    
+    // DIA uyumlu operatör dönüşümü
+    // DIA kuralları:
+    // - Operatör gönderilmezse "içeren" gibi çalışır
+    // - "!" operatörü "içermeyen" anlamına gelir
+    // - Desteklenen operatörler: =, !=, !, >, <, >=, <=, IN, NOT IN
+    function mapFiltersToDiaFormat(inputFilters: any): any[] {
+      if (!inputFilters) return [];
+      
+      // String ise parse et
+      let filtersArray = inputFilters;
+      if (typeof inputFilters === 'string') {
+        try {
+          filtersArray = JSON.parse(inputFilters);
+        } catch {
+          return [];
+        }
+      }
+      
+      // Array değilse boş döndür
+      if (!Array.isArray(filtersArray)) {
+        // Object ise legacy format olabilir, array'e çevir
+        if (typeof filtersArray === 'object' && filtersArray !== null) {
+          filtersArray = Object.entries(filtersArray).map(([field, value]) => ({
+            field,
+            operator: '=',
+            value: String(value)
+          }));
+        } else {
+          return [];
+        }
+      }
+      
+      // Her filtreyi DIA formatına dönüştür
+      return filtersArray.map((filter: any) => {
+        const diaFilter: Record<string, any> = {
+          field: filter.field,
+          value: filter.value
+        };
+        
+        // Operatör mapping
+        const op = filter.operator;
+        if (!op || op === 'contains') {
+          // Operatör yok veya "contains" ise DIA'ya operator gönderme (default: içeren)
+          // diaFilter.operator = undefined; (alanı ekleme)
+        } else if (op === 'not_contains') {
+          // İçermeyen için DIA "!" kullanıyor
+          diaFilter.operator = '!';
+        } else {
+          // Diğer operatörler aynen gönderilir: =, !=, !, >, <, >=, <=, IN, NOT IN
+          diaFilter.operator = op;
+        }
+        
+        return diaFilter;
+      });
+    }
 
     // DIA session al
     const diaResult = await getDiaSession(supabase, user.id);
@@ -267,9 +323,11 @@ serve(async (req) => {
         }
       };
 
-      // Filtreleri ekle
-      if (Object.keys(filters).length > 0) {
-        payload[methodKey].filters = JSON.stringify(filters);
+      // Filtreleri DIA formatına dönüştür ve ekle
+      const diaFilters = mapFiltersToDiaFormat(filters);
+      if (diaFilters.length > 0) {
+        payload[methodKey].filters = diaFilters;
+        console.log(`[DIA Filter] Applied ${diaFilters.length} filters:`, JSON.stringify(diaFilters.slice(0, 2)));
       }
 
       // Seçili kolonları ekle
@@ -406,7 +464,7 @@ serve(async (req) => {
         ? extractFieldsAndTypes(allData) 
         : { fields: [], fieldTypes: {}, fieldStats: {} };
       
-      const sampleData = returnAllData ? allData : allData.slice(0, 10);
+      const sampleData = (returnAllData || returnAllSampleData) ? allData : allData.slice(0, 10);
       
       return new Response(
         JSON.stringify({
