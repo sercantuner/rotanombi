@@ -48,11 +48,25 @@ export function LokasyonDagilimi({ cariler, isLoading }: Props) {
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
+      const total = chartData.reduce((acc, d) => acc + d.count, 0);
+      const percentage = ((data.count / total) * 100).toFixed(1);
       return (
-        <div className="bg-card border border-border rounded-lg shadow-lg p-3">
-          <p className="font-semibold text-sm">{data.name}</p>
+        <div className="bg-card border border-border rounded-lg shadow-lg p-3 z-50">
+          {/* Kategori adı - belirgin */}
+          <p className="font-bold text-sm text-foreground mb-1">{data.name}</p>
+          
+          {/* Değer */}
           <p className="text-lg font-bold text-primary">{data.count} cari</p>
-          <p className="text-xs text-muted-foreground">Toplam: {formatFullCurrency(data.value)}</p>
+          
+          {/* Yüzde - belirgin */}
+          <p className="text-md font-semibold text-accent">
+            %{percentage}
+          </p>
+          
+          {/* Tutar bilgisi */}
+          <p className="text-xs text-muted-foreground mt-1">
+            Toplam: {formatFullCurrency(data.value)}
+          </p>
         </div>
       );
     }

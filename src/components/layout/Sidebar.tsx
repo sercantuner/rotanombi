@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useUserPages } from '@/hooks/useUserPages';
 import { CreatePageModal } from '@/components/pages/CreatePageModal';
+import { DiaQueryStats } from '@/components/dashboard/DiaQueryStats';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -13,7 +14,10 @@ import {
   Boxes,
   Plus,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Edit,
+  Check,
+  Plug
 } from 'lucide-react';
 import rotanombiLogo from '@/assets/rotanombi-logo.png';
 import * as LucideIcons from 'lucide-react';
@@ -31,6 +35,10 @@ interface NavItem {
 interface SidebarProps {
   collapsed?: boolean;
   onToggle?: () => void;
+  // Dashboard kontrolleri için
+  isWidgetEditMode?: boolean;
+  onWidgetEditModeToggle?: () => void;
+  isDiaConnected?: boolean;
 }
 
 // Sabit menü öğeleri (rapor sayfaları kaldırıldı)
@@ -40,7 +48,13 @@ const staticNavItems: NavItem[] = [
   { path: '/super-admin', label: 'Widget Yönetimi', icon: Boxes, adminOnly: true },
 ];
 
-export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
+export function Sidebar({ 
+  collapsed = false, 
+  onToggle,
+  isWidgetEditMode = false,
+  onWidgetEditModeToggle,
+  isDiaConnected = false
+}: SidebarProps) {
   const { user, logout } = useAuth();
   const { isAdmin } = usePermissions();
   const { pages, createPage } = useUserPages();
@@ -204,6 +218,87 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
             ))}
           </div>
         </nav>
+
+        {/* Kontroller - Dashboard sayfasındayken göster */}
+        {(location.pathname === '/dashboard' || location.pathname.startsWith('/page/')) && (
+          <div className={cn("border-t border-border", collapsed ? "p-2" : "p-4")}>
+            {!collapsed && (
+              <p className="text-xs text-muted-foreground uppercase tracking-wide px-4 mb-2">
+                Kontroller
+              </p>
+            )}
+            
+            {/* DIA Bağlantı Durumu */}
+            {collapsed ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className={cn(
+                    "flex items-center justify-center p-2 rounded-lg mb-2",
+                    isDiaConnected ? "bg-success/10" : "bg-muted"
+                  )}>
+                    <Plug className={cn("w-4 h-4", isDiaConnected ? "text-success" : "text-muted-foreground")} />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {isDiaConnected ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <div className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg mb-2",
+                isDiaConnected ? "bg-success/10" : "bg-muted"
+              )}>
+                <Plug className={cn("w-4 h-4", isDiaConnected ? "text-success" : "text-muted-foreground")} />
+                <span className={cn("text-xs font-medium", isDiaConnected ? "text-success" : "text-muted-foreground")}>
+                  {isDiaConnected ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
+                </span>
+              </div>
+            )}
+            
+            {/* Widget Düzenle Butonu */}
+            {onWidgetEditModeToggle && (
+              collapsed ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={isWidgetEditMode ? 'default' : 'outline'}
+                      size="icon"
+                      className="w-full mb-2"
+                      onClick={onWidgetEditModeToggle}
+                    >
+                      {isWidgetEditMode ? <Check className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    {isWidgetEditMode ? 'Düzenlemeyi Bitir' : 'Widget Düzenle'}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <Button
+                  variant={isWidgetEditMode ? 'default' : 'outline'}
+                  size="sm"
+                  className="w-full mb-2"
+                  onClick={onWidgetEditModeToggle}
+                >
+                  {isWidgetEditMode ? (
+                    <>
+                      <Check className="w-4 h-4 mr-2" />
+                      Düzenlemeyi Bitir
+                    </>
+                  ) : (
+                    <>
+                      <Edit className="w-4 h-4 mr-2" />
+                      Widget Düzenle
+                    </>
+                  )}
+                </Button>
+              )
+            )}
+            
+            {/* Sorgu İstatistikleri */}
+            {!collapsed && <DiaQueryStats />}
+          </div>
+        )}
 
         {/* User Info & Logout */}
         <div className={cn("border-t border-border space-y-3", collapsed ? "p-2" : "p-4")}>
