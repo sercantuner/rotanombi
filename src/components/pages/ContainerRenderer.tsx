@@ -289,7 +289,7 @@ export function ContainerRenderer({
               </Button>
             </div>
           )}
-          <div className={cn('grid gap-4', template.gridClass)}>
+          <div className={cn('grid gap-4 items-stretch', template.gridClass)}>
             {renderSlots()}
           </div>
         </CardContent>

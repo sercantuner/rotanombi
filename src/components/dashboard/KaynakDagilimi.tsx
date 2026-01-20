@@ -35,12 +35,12 @@ export function KaynakDagilimi({ cariler, isLoading }: Props) {
   const totalCount = chartData.reduce((sum, item) => sum + item.value, 0);
 
   const COLORS = [
-    'hsl(280 70% 50%)',
-    'hsl(320 70% 50%)',
-    'hsl(180 70% 50%)',
-    'hsl(142 76% 46%)',
-    'hsl(38 92% 50%)',
-    'hsl(220 70% 50%)',
+    'hsl(var(--primary))',
+    'hsl(var(--chart-2))',
+    'hsl(var(--chart-3))',
+    'hsl(var(--chart-4))',
+    'hsl(var(--chart-5))',
+    'hsl(210, 70%, 50%)',
   ];
 
   const chartDataWithColors = chartData.map((item, index) => ({
