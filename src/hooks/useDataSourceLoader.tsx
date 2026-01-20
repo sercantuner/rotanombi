@@ -61,7 +61,8 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     markDataSourceFetched,
     clearFetchedRegistry,
     incrementCacheHit, 
-    incrementCacheMiss 
+    incrementCacheMiss,
+    recordApiCall,
   } = useDiaDataCache();
 
   // Sayfadaki widget'ların kullandığı veri kaynaklarını bul
@@ -186,6 +187,9 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
 
       const data = result.sampleData || [];
       console.log(`[DataSourceLoader] LOADED: ${dataSource.name} (${data.length} kayıt)`);
+      
+      // Gerçek API çağrısını kaydet (kontör harcandı!)
+      recordApiCall();
       
       // Cache'e kaydet - 10 dakika TTL
       setDataSourceData(dataSource.id, data, DEFAULT_TTL);
