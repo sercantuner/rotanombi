@@ -1072,8 +1072,8 @@ Kullanıcı isteği: ${aiPrompt}`;
                       <Database className="h-4 w-4" />
                       Veri Kaynağı
                     </h3>
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor="multi-query-mode" className="text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2 bg-secondary/60 rounded-lg px-2.5 py-1.5">
+                      <Label htmlFor="multi-query-mode" className="text-xs font-medium">
                         Çoklu
                       </Label>
                       <Switch
@@ -1098,6 +1098,7 @@ Kullanıcı isteği: ${aiPrompt}`;
                       <DataSourceSelector
                         selectedId={selectedDataSourceId}
                         onSelect={handleDataSourceSelect}
+                        hideHeader={true}
                       />
 
                       {selectedDataSource && (

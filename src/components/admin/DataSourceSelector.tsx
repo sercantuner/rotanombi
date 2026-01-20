@@ -30,6 +30,7 @@ interface DataSourceSelectorProps {
   onSelect: (dataSource: DataSource | null) => void;
   onCreateNew?: () => void;
   showDetails?: boolean;
+  hideHeader?: boolean;
   className?: string;
 }
 
@@ -38,6 +39,7 @@ export function DataSourceSelector({
   onSelect,
   onCreateNew,
   showDetails = true,
+  hideHeader = false,
   className
 }: DataSourceSelectorProps) {
   const { activeDataSources, isLoading, getDataSourceById } = useDataSources();
@@ -64,16 +66,18 @@ export function DataSourceSelector({
 
   return (
     <div className={cn("space-y-3", className)}>
-      <div className="flex items-center gap-2">
-        <Database className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">Veri Kaynağı</span>
-        <Badge variant="outline" className="ml-auto text-xs">
-          <Zap className="h-3 w-3 mr-1" />
-          Kontör Tasarrufu
-        </Badge>
-      </div>
+      {!hideHeader && (
+        <div className="flex items-center gap-2">
+          <Database className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Veri Kaynağı</span>
+          <Badge variant="outline" className="ml-auto text-xs">
+            <Zap className="h-3 w-3 mr-1" />
+            Kontör Tasarrufu
+          </Badge>
+        </div>
+      )}
 
-      <Select 
+      <Select
         value={selectedId || '__none__'} 
         onValueChange={handleSelect}
         disabled={isLoading}
