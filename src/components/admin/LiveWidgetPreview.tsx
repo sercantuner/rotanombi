@@ -17,7 +17,7 @@ import {
   Play, RefreshCw, Eye, AlertCircle, CheckCircle2, Hash, 
   BarChart3, TrendingUp, PieChart, Activity, Table, List, Loader2,
   Palette, ChevronDown, Edit2, ArrowUp, ArrowDown, ArrowUpDown,
-  Grid3X3, LayoutGrid, Settings2, Minus
+  Grid3X3, LayoutGrid, Settings2, Minus, Calendar
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { 
@@ -143,6 +143,11 @@ const ICON_OPTIONS = [
 // Field Wells ve Chart Settings tipleri
 import { FieldWellsConfig } from './FieldWellBuilder';
 import { ChartSettingsData } from './ChartSettingsPanel';
+import { DateFilterConfig, DatePeriod, DATE_PERIODS } from '@/lib/widgetBuilderTypes';
+import { format, startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, 
+  subDays, subWeeks, subMonths, subQuarters, subYears, endOfDay, endOfWeek, endOfMonth, 
+  endOfQuarter, endOfYear, isWithinInterval, parseISO, isValid } from 'date-fns';
+import { tr } from 'date-fns/locale';
 
 interface LiveWidgetPreviewProps {
   config: WidgetBuilderConfig;
@@ -159,6 +164,8 @@ interface LiveWidgetPreviewProps {
   // Power BI tarzı Field Wells ve Chart Settings (Görsel sekmesinden gelir)
   fieldWells?: FieldWellsConfig;
   chartSettings?: ChartSettingsData;
+  // Tarih filtresi ayarları
+  dateFilterConfig?: DateFilterConfig;
   onNameChange?: (name: string) => void;
   onIconChange?: (icon: string) => void;
 }
@@ -226,31 +233,184 @@ function calculateAggregation(data: any[], field: string, aggregation: Aggregati
   }
 }
 
-// Grafik verileri için gruplama
+// Tarih alanı olup olmadığını tespit et
+function isDateField(fieldName: string, sampleValue: any): boolean {
+  // Alan adına göre kontrol
+  const fieldLower = fieldName.toLowerCase();
+  if (fieldLower.includes('tarih') || fieldLower.includes('date') || 
+      fieldLower.includes('zaman') || fieldLower.includes('time') ||
+      fieldLower.includes('created') || fieldLower.includes('updated')) {
+    return true;
+  }
+  
+  // Değer formatına göre kontrol
+  if (typeof sampleValue === 'string') {
+    // ISO tarih formatı (2024-01-15 veya 2024-01-15T10:30:00)
+    if (/^\d{4}-\d{2}-\d{2}/.test(sampleValue)) return true;
+    // TR tarih formatı (15.01.2024)
+    if (/^\d{2}\.\d{2}\.\d{4}/.test(sampleValue)) return true;
+    // US tarih formatı (01/15/2024)
+    if (/^\d{2}\/\d{2}\/\d{4}/.test(sampleValue)) return true;
+  }
+  
+  return false;
+}
+
+// Tarih değerini Date objesine çevir
+function parseDate(value: any): Date | null {
+  if (!value) return null;
+  
+  if (value instanceof Date) return value;
+  
+  if (typeof value === 'string') {
+    // ISO format
+    if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
+      const parsed = parseISO(value);
+      if (isValid(parsed)) return parsed;
+    }
+    // TR format (DD.MM.YYYY)
+    if (/^\d{2}\.\d{2}\.\d{4}/.test(value)) {
+      const [day, month, year] = value.split('.').map(Number);
+      const parsed = new Date(year, month - 1, day);
+      if (isValid(parsed)) return parsed;
+    }
+    // US format (MM/DD/YYYY)
+    if (/^\d{2}\/\d{2}\/\d{4}/.test(value)) {
+      const [month, day, year] = value.split('/').map(Number);
+      const parsed = new Date(year, month - 1, day);
+      if (isValid(parsed)) return parsed;
+    }
+  }
+  
+  return null;
+}
+
+// Tarih periyoduna göre aralık hesapla
+function getDateRangeForPeriod(period: DatePeriod): { start: Date; end: Date } | null {
+  const now = new Date();
+  
+  switch (period) {
+    case 'all':
+      return null; // Filtre yok
+    case 'today':
+      return { start: startOfDay(now), end: endOfDay(now) };
+    case 'yesterday':
+      const yesterday = subDays(now, 1);
+      return { start: startOfDay(yesterday), end: endOfDay(yesterday) };
+    case 'this_week':
+      return { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) };
+    case 'last_week':
+      const lastWeek = subWeeks(now, 1);
+      return { start: startOfWeek(lastWeek, { weekStartsOn: 1 }), end: endOfWeek(lastWeek, { weekStartsOn: 1 }) };
+    case 'this_month':
+      return { start: startOfMonth(now), end: endOfMonth(now) };
+    case 'last_month':
+      const lastMonth = subMonths(now, 1);
+      return { start: startOfMonth(lastMonth), end: endOfMonth(lastMonth) };
+    case 'this_quarter':
+      return { start: startOfQuarter(now), end: endOfQuarter(now) };
+    case 'last_quarter':
+      const lastQuarter = subQuarters(now, 1);
+      return { start: startOfQuarter(lastQuarter), end: endOfQuarter(lastQuarter) };
+    case 'this_year':
+      return { start: startOfYear(now), end: endOfYear(now) };
+    case 'last_year':
+      const lastYear = subYears(now, 1);
+      return { start: startOfYear(lastYear), end: endOfYear(lastYear) };
+    case 'last_7_days':
+      return { start: startOfDay(subDays(now, 7)), end: endOfDay(now) };
+    case 'last_30_days':
+      return { start: startOfDay(subDays(now, 30)), end: endOfDay(now) };
+    case 'last_90_days':
+      return { start: startOfDay(subDays(now, 90)), end: endOfDay(now) };
+    case 'custom':
+      return null; // Özel aralık için DateFilterConfig'den alınır
+    default:
+      return null;
+  }
+}
+
+// Tarih filtresini uygula
+function applyDateFilter(data: any[], dateField: string, period: DatePeriod, customStart?: string, customEnd?: string): any[] {
+  if (!dateField || period === 'all') return data;
+  
+  let range = getDateRangeForPeriod(period);
+  
+  // Özel aralık için
+  if (period === 'custom' && customStart && customEnd) {
+    const start = parseDate(customStart);
+    const end = parseDate(customEnd);
+    if (start && end) {
+      range = { start: startOfDay(start), end: endOfDay(end) };
+    }
+  }
+  
+  if (!range) return data;
+  
+  return data.filter(row => {
+    const dateValue = parseDate(row[dateField]);
+    if (!dateValue) return false;
+    return isWithinInterval(dateValue, range);
+  });
+}
+
+// Tarihsel sıraya göre sırala (kronolojik)
+function sortByDateField(data: any[], dateField: string, ascending: boolean = true): any[] {
+  if (!dateField) return data;
+  
+  return [...data].sort((a, b) => {
+    const dateA = parseDate(a[dateField]);
+    const dateB = parseDate(b[dateField]);
+    
+    if (!dateA && !dateB) return 0;
+    if (!dateA) return 1;
+    if (!dateB) return -1;
+    
+    const diff = dateA.getTime() - dateB.getTime();
+    return ascending ? diff : -diff;
+  });
+}
+
+// Grafik verileri için gruplama (tarihsel sıralama destekli)
 function groupDataForChart(
   data: any[], 
   groupField: string, 
   valueField: string, 
   aggregation: AggregationType = 'sum',
-  displayLimit: number = 10
-): { name: string; value: number }[] {
+  displayLimit: number = 10,
+  isDateGrouping: boolean = false
+): { name: string; value: number; sortKey?: number }[] {
   if (!data || data.length === 0) return [];
 
   const groups: Record<string, any[]> = {};
+  const groupDates: Record<string, Date | null> = {};
   
   data.forEach(item => {
     const key = String(item[groupField] || 'Belirsiz');
-    if (!groups[key]) groups[key] = [];
+    if (!groups[key]) {
+      groups[key] = [];
+      if (isDateGrouping) {
+        groupDates[key] = parseDate(item[groupField]);
+      }
+    }
     groups[key].push(item);
   });
 
-  return Object.entries(groups)
+  const result = Object.entries(groups)
     .map(([name, items]) => ({
       name,
       value: calculateAggregation(items, valueField, aggregation),
-    }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, displayLimit);
+      sortKey: isDateGrouping && groupDates[name] ? groupDates[name]!.getTime() : 0,
+    }));
+    
+  // Tarihsel gruplama ise kronolojik sırala, değilse değere göre sırala
+  if (isDateGrouping) {
+    result.sort((a, b) => a.sortKey! - b.sortKey!);
+  } else {
+    result.sort((a, b) => b.value - a.value);
+  }
+  
+  return result.slice(0, displayLimit);
 }
 
 // Post-fetch filtreleme
@@ -381,6 +541,7 @@ export function LiveWidgetPreview({
   dataSourceId,
   fieldWells,
   chartSettings,
+  dateFilterConfig,
   onNameChange,
   onIconChange,
 }: LiveWidgetPreviewProps) {
@@ -478,7 +639,32 @@ export function LiveWidgetPreview({
     return COLOR_PALETTES[selectedPalette]?.colors || COLOR_PALETTES.default.colors;
   }, [selectedPalette]);
 
-  // İşlenmiş veri (filtreler + hesaplamalar uygulanmış)
+  // Tarih alanını tespit et - X ekseninde veya dateFilterConfig'den
+  const detectedDateField = useMemo(() => {
+    const xAxisFieldName = fieldWells?.xAxis?.field || xAxisField || '';
+    const dateConfigField = dateFilterConfig?.dateField || '';
+    
+    // Önce açıkça belirtilmiş tarih alanını kontrol et
+    if (dateConfigField) return dateConfigField;
+    
+    // Sonra X ekseni tarih mi bak
+    if (xAxisFieldName && rawData.length > 0) {
+      const sampleValue = rawData[0][xAxisFieldName];
+      if (isDateField(xAxisFieldName, sampleValue)) return xAxisFieldName;
+    }
+    
+    return '';
+  }, [fieldWells, xAxisField, dateFilterConfig, rawData]);
+  
+  // X ekseni tarih mi?
+  const isXAxisDate = useMemo(() => {
+    const xAxisFieldName = fieldWells?.xAxis?.field || xAxisField || '';
+    if (!xAxisFieldName || rawData.length === 0) return false;
+    const sampleValue = rawData[0][xAxisFieldName];
+    return isDateField(xAxisFieldName, sampleValue);
+  }, [fieldWells, xAxisField, rawData]);
+
+  // İşlenmiş veri (filtreler + hesaplamalar + tarih filtresi uygulanmış)
   const processedData = useMemo(() => {
     if (!rawData || rawData.length === 0) return [];
     
@@ -488,8 +674,28 @@ export function LiveWidgetPreview({
     // 2. Post-fetch filtreleri uygula
     data = applyPostFetchFilters(data, postFetchFilters);
     
+    // 3. Tarih filtresi uygula (eğer aktifse)
+    if (dateFilterConfig?.enabled && dateFilterConfig.dateField) {
+      data = applyDateFilter(
+        data, 
+        dateFilterConfig.dateField, 
+        dateFilterConfig.defaultPeriod,
+        dateFilterConfig.customStartDate,
+        dateFilterConfig.customEndDate
+      );
+    }
+    
+    // 4. Tarih alanına göre sırala (X ekseni tarihse veya dateFilterConfig varsa)
+    const sortField = detectedDateField || dateFilterConfig?.dateField;
+    if (sortField && data.length > 0) {
+      const sampleValue = data[0][sortField];
+      if (isDateField(sortField, sampleValue)) {
+        data = sortByDateField(data, sortField, true); // Kronolojik sıra
+      }
+    }
+    
     return data;
-  }, [rawData, calculatedFields, postFetchFilters]);
+  }, [rawData, calculatedFields, postFetchFilters, dateFilterConfig, detectedDateField]);
 
   // Ortalama değer hesapla (trend/average çizgileri için)
   const averageValue = useMemo(() => {
@@ -530,11 +736,14 @@ export function LiveWidgetPreview({
       };
     })();
     
-    // Chart data için ortak hesaplama - Field Wells öncelikli
+    // Chart data için ortak hesaplama - Field Wells öncelikli + tarihsel sıralama
     const chartData = (() => {
       const groupField = fwXAxis || fwCategory || legendField || xAxisField || config.visualization.chart?.xAxis?.field || '';
       const valueField = fwYAxis || fwValue || yAxisField || config.visualization.chart?.yAxis?.field || config.visualization.chart?.valueField || '';
       const aggregation = (fwAggregation || (config.visualization.chart as any)?.aggregation || 'count') as AggregationType;
+      
+      // X ekseni tarih mi tespit et
+      const isGroupDateField = isXAxisDate || (groupField === dateFilterConfig?.dateField);
       
       if (!groupField) {
         // Grup alanı yoksa ilk string alanı bul
@@ -542,13 +751,14 @@ export function LiveWidgetPreview({
         if (firstRow) {
           const stringField = Object.keys(firstRow).find(k => typeof firstRow[k] === 'string' && k !== 'id');
           if (stringField) {
-            return groupDataForChart(processedData, stringField, valueField || 'toplambakiye', aggregation);
+            return groupDataForChart(processedData, stringField, valueField || 'toplambakiye', aggregation, 10, false);
           }
         }
         return [];
       }
       
-      return groupDataForChart(processedData, groupField, valueField || 'toplambakiye', aggregation);
+      // Tarihsel gruplama flag'i ile çağır
+      return groupDataForChart(processedData, groupField, valueField || 'toplambakiye', aggregation, 15, isGroupDateField);
     })();
     
     // Table data - TÜM kolonları göster
@@ -570,8 +780,9 @@ export function LiveWidgetPreview({
       tableData,
       showLegend: config.visualization.chart?.showLegend !== false,
       showGrid: config.visualization.chart?.showGrid !== false,
+      isDateBasedChart: isXAxisDate || !!(dateFilterConfig?.enabled && dateFilterConfig.dateField),
     };
-  }, [processedData, config, xAxisField, yAxisField, legendField, tableColumns, tableRowLimit]);
+  }, [processedData, config, xAxisField, yAxisField, legendField, tableColumns, tableRowLimit, fieldWells, isXAxisDate, dateFilterConfig]);
 
   // Kullanılabilir görsel tipler
   const availableVizTypes = [
@@ -705,7 +916,7 @@ export function LiveWidgetPreview({
               </div>
             </div>
 
-            {/* İstatistikler */}
+            {/* İstatistikler ve Tarih Filtresi Bilgisi */}
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="text-xs">
                 Ham: {rawData.length} kayıt
@@ -718,6 +929,21 @@ export function LiveWidgetPreview({
               {calculatedFields.length > 0 && (
                 <Badge variant="outline" className="text-xs">
                   +{calculatedFields.length} hesaplanan alan
+                </Badge>
+              )}
+              {/* Tarih Filtresi Durumu */}
+              {dateFilterConfig?.enabled && dateFilterConfig.dateField && (
+                <Badge className="text-xs bg-blue-600 gap-1">
+                  <Calendar className="h-3 w-3" />
+                  {DATE_PERIODS.find(p => p.id === dateFilterConfig.defaultPeriod)?.name || dateFilterConfig.defaultPeriod}
+                  <span className="opacity-75">({dateFilterConfig.dateField})</span>
+                </Badge>
+              )}
+              {/* X Ekseni Tarih Tespiti */}
+              {isXAxisDate && !dateFilterConfig?.enabled && (
+                <Badge variant="outline" className="text-xs gap-1 text-blue-600 border-blue-500/30">
+                  <Calendar className="h-3 w-3" />
+                  Tarihsel Sıralama Aktif
                 </Badge>
               )}
             </div>
@@ -770,6 +996,12 @@ export function LiveWidgetPreview({
                       </Badge>
                     )}
                   </>
+                )}
+                {visualizationData?.isDateBasedChart && (
+                  <Badge variant="outline" className="text-xs text-blue-600 border-blue-500/30">
+                    <Calendar className="h-3 w-3 mr-1" />
+                    Kronolojik
+                  </Badge>
                 )}
                 <span className="text-[10px] italic ml-auto">(Görsel sekmesinden değiştirin)</span>
               </div>
