@@ -170,6 +170,16 @@ export function BuilderWidgetRenderer({
   const yAxisField = fieldWells?.yAxis?.[0]?.field || vizChart?.yAxis?.field || vizChart?.valueField || '';
   const yAxisAggregation = fieldWells?.yAxis?.[0]?.aggregation || vizChart?.yAxis?.aggregation || 'sum';
   
+  // Dinamik etiketler - fieldWells'den veya config'den al
+  const yAxisLabel = fieldWells?.yAxis?.[0]?.label 
+    || fieldWells?.value?.label 
+    || vizChart?.yAxis?.label 
+    || 'Değer';
+  const xAxisLabel = fieldWells?.xAxis?.label 
+    || fieldWells?.category?.label 
+    || vizChart?.xAxis?.label 
+    || 'Kategori';
+  
   // X ekseni tarih mi kontrol et
   const isXAxisDate = useMemo(() => {
     return xAxisField && rawData.length > 0 && isDateField(xAxisField, rawData);
@@ -449,12 +459,12 @@ export function BuilderWidgetRenderer({
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
                   }}
-                  formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
+                  formatter={(value: number) => [value.toLocaleString('tr-TR'), yAxisLabel]}
                 />
                 {legendPosition !== 'hidden' && <Legend verticalAlign={legendPosition === 'top' ? 'top' : 'bottom'} />}
                 <Bar 
                   dataKey="value" 
-                  name="Değer"
+                  name={yAxisLabel}
                   radius={[4, 4, 0, 0]}
                   className="cursor-pointer"
                   onClick={(entry) => entry && handleDrillDown(entry.name, xAxisField)}
@@ -508,14 +518,14 @@ export function BuilderWidgetRenderer({
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
                   }}
-                  formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
+                  formatter={(value: number) => [value.toLocaleString('tr-TR'), yAxisLabel]}
                 />
                 {legendPosition !== 'hidden' && <Legend verticalAlign={legendPosition === 'top' ? 'top' : 'bottom'} />}
                 <Line 
                   type="monotone" 
                   dataKey="value"
-                  name="Değer"
-                  stroke={activeColors[0]} 
+                  name={yAxisLabel}
+                  stroke={activeColors[0]}
                   strokeWidth={2}
                   dot={{ fill: activeColors[0], r: 3, cursor: 'pointer' }}
                   activeDot={{ 
@@ -566,14 +576,14 @@ export function BuilderWidgetRenderer({
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
                   }}
-                  formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
+                  formatter={(value: number) => [value.toLocaleString('tr-TR'), yAxisLabel]}
                 />
                 {legendPosition !== 'hidden' && <Legend verticalAlign={legendPosition === 'top' ? 'top' : 'bottom'} />}
                 <Area 
                   type="monotone" 
                   dataKey="value"
-                  name="Değer"
-                  stroke={activeColors[0]} 
+                  name={yAxisLabel}
+                  stroke={activeColors[0]}
                   fill={`${activeColors[0]}40`}
                   strokeWidth={2}
                   activeDot={{ 
@@ -634,24 +644,27 @@ export function BuilderWidgetRenderer({
                       border: '1px solid hsl(var(--border))',
                       borderRadius: '8px',
                       fontSize: '11px',
-                      zIndex: 50,
                     }}
-                    formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
+                    wrapperStyle={{ zIndex: 100 }}
+                    formatter={(value: number) => [value.toLocaleString('tr-TR'), yAxisLabel]}
                   />
                 </RechartsPieChart>
               </ResponsiveContainer>
-              {/* Donut merkez metin */}
+              {/* Donut merkez metin - düşük z-index */}
               {isDonut && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <div 
+                  className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
+                  style={{ zIndex: 10 }}
+                >
                   <span className="text-2xl font-bold">{data.chartData.length}</span>
-                  <span className="text-xs text-muted-foreground">Kategori</span>
+                  <span className="text-xs text-muted-foreground">{xAxisLabel}</span>
                 </div>
               )}
             </div>
             
-            {/* Özel Legend - 2 sütunlu grid */}
+            {/* Özel Legend - 2 sütunlu grid, displayLimit kadar kategori */}
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-3 w-full max-w-[380px]">
-              {data.chartData.slice(0, 8).map((item: any, index: number) => {
+              {data.chartData.slice(0, displayLimit).map((item: any, index: number) => {
                 const percent = chartDataTotal > 0 ? ((item.value / chartDataTotal) * 100).toFixed(1) : '0';
                 return (
                   <div 
@@ -670,9 +683,9 @@ export function BuilderWidgetRenderer({
                   </div>
                 );
               })}
-              {data.chartData.length > 8 && (
+              {data.chartData.length > displayLimit && (
                 <span className="text-xs text-muted-foreground col-span-2 text-center mt-1">
-                  +{data.chartData.length - 8} daha...
+                  +{data.chartData.length - displayLimit} daha...
                 </span>
               )}
             </div>
