@@ -33,6 +33,8 @@ import { WidgetTemplates, WidgetTemplate, WIDGET_TEMPLATES } from './WidgetTempl
 import { PostFetchFilterBuilder } from './PostFetchFilterBuilder';
 import { TableColumnBuilder, TableColumn } from './TableColumnBuilder';
 import { PivotConfigBuilder, getDefaultPivotConfig } from './PivotConfigBuilder';
+import { FieldWellBuilder, FieldWellsConfig } from './FieldWellBuilder';
+import { ChartSettingsPanel, ChartSettingsData, getDefaultChartSettings } from './ChartSettingsPanel';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,7 +49,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { 
   Wand2, BarChart3, Settings2, Save, 
   Hash, TrendingUp, Activity, PieChart, Circle, Table, List, LayoutGrid, CheckCircle, Edit,
-  Database, Calculator, Sparkles, Calendar, Zap, Info, Filter, Eye
+  Database, Calculator, Sparkles, Calendar, Zap, Info, Filter, Eye, Layers
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -161,6 +163,10 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   
   // Şablon seçimi
   const [selectedTemplate, setSelectedTemplate] = useState<WidgetTemplate | null>(null);
+  
+  // Power BI tarzı Field Wells ve Chart Settings
+  const [fieldWells, setFieldWells] = useState<FieldWellsConfig>({});
+  const [chartSettings, setChartSettings] = useState<ChartSettingsData>(getDefaultChartSettings());
   
   // Görselleştirme için kullanılabilir alanlar (veri kaynağından)
   const availableFieldsForVisualization = useMemo(() => {
@@ -723,184 +729,111 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
             </TabsContent>
 
             {/* GÖRSELLEŞTİRME */}
-            <TabsContent value="visualization" className="m-0 space-y-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Görselleştirme Tipi</CardTitle>
-                  <CardDescription>Widget'ın nasıl görüntüleneceğini seçin</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-5 gap-2">
-                    {CHART_TYPES.filter(ct => ['kpi', 'bar', 'line', 'area', 'pie', 'donut', 'table', 'list', 'pivot'].includes(ct.id)).map(type => (
-                      <Button
-                        key={type.id}
-                        variant={config.visualization.type === type.id ? 'default' : 'outline'}
-                        className="h-auto py-3 flex-col gap-1"
-                        onClick={() => handleChartTypeChange(type.id)}
-                      >
-                        <DynamicIcon iconName={type.icon} className="h-5 w-5" />
-                        <span className="text-xs">{type.name}</span>
-                      </Button>
-                    ))}
-                  </div>
-
-                  <Separator />
-
-                  {/* KPI ayarları */}
-                  {config.visualization.type === 'kpi' && (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Değer Alanı</Label>
-                          <Select 
-                            value={config.visualization.kpi?.valueField || ''} 
-                            onValueChange={(v) => handleKpiConfigChange('valueField', v)}
+            <TabsContent value="visualization" className="m-0 overflow-hidden">
+              <ScrollArea className="h-[calc(90vh-220px)]">
+                <div className="space-y-4 pr-4">
+                  {/* Grafik Tipi Seçici */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Görselleştirme Tipi</CardTitle>
+                      <CardDescription>Widget'ın nasıl görüntüleneceğini seçin</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-5 gap-2">
+                        {CHART_TYPES.filter(ct => ['kpi', 'bar', 'line', 'area', 'pie', 'donut', 'table', 'list', 'pivot'].includes(ct.id)).map(type => (
+                          <Button
+                            key={type.id}
+                            variant={config.visualization.type === type.id ? 'default' : 'outline'}
+                            className="h-auto py-3 flex-col gap-1"
+                            onClick={() => handleChartTypeChange(type.id)}
                           >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Alan seçin" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {availableFieldsForVisualization.map(field => (
-                                <SelectItem key={field} value={field}>{field}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Hesaplama</Label>
-                          <Select 
-                            value={config.visualization.kpi?.aggregation || 'sum'} 
-                            onValueChange={(v) => handleKpiConfigChange('aggregation', v)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {AGGREGATION_TYPES.map(agg => (
-                                <SelectItem key={agg.id} value={agg.id}>{agg.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                            <DynamicIcon iconName={type.icon} className="h-5 w-5" />
+                            <span className="text-xs">{type.name}</span>
+                          </Button>
+                        ))}
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Format</Label>
-                          <Select 
-                            value={config.visualization.kpi?.format || 'currency'} 
-                            onValueChange={(v) => handleKpiConfigChange('format', v)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {FORMAT_OPTIONS.map(fmt => (
-                                <SelectItem key={fmt.id} value={fmt.id}>{fmt.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Prefix</Label>
-                          <Input
-                            placeholder="₺"
-                            value={config.visualization.kpi?.prefix || ''}
-                            onChange={(e) => handleKpiConfigChange('prefix', e.target.value)}
-                          />
-                        </div>
-                      </div>
-                    </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Power BI Tarzı Field Wells - Grafikler için */}
+                  {['bar', 'line', 'area', 'pie', 'donut', 'kpi'].includes(config.visualization.type) && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Layers className="h-4 w-4" />
+                          Veri Alanları
+                        </CardTitle>
+                        <CardDescription>
+                          Alanları tıklayarak grafik bölgelerine atayın
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <FieldWellBuilder
+                          chartType={config.visualization.type}
+                          availableFields={availableFieldsForVisualization}
+                          numericFields={numericFieldsForVisualization}
+                          fieldWells={fieldWells}
+                          onChange={setFieldWells}
+                          sampleData={selectedDataSource?.last_sample_data as any[] || []}
+                        />
+                      </CardContent>
+                    </Card>
                   )}
 
-                  {/* Chart ayarları */}
-                  {['bar', 'line', 'area'].includes(config.visualization.type) && (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>X Ekseni (Kategori)</Label>
-                          <Select value={xAxisField} onValueChange={setXAxisField}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Alan seçin" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {availableFieldsForVisualization.map(field => (
-                                <SelectItem key={field} value={field}>{field}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Y Ekseni (Değer)</Label>
-                          <Select value={yAxisField} onValueChange={setYAxisField}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Alan seçin" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {numericFieldsForVisualization.map(field => (
-                                <SelectItem key={field} value={field}>{field}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Pie/Donut ayarları */}
-                  {['pie', 'donut'].includes(config.visualization.type) && (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Kategori Alanı</Label>
-                          <Select value={legendField} onValueChange={setLegendField}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Alan seçin" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {availableFieldsForVisualization.map(field => (
-                                <SelectItem key={field} value={field}>{field}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Değer Alanı</Label>
-                          <Select value={yAxisField} onValueChange={setYAxisField}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Alan seçin" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {numericFieldsForVisualization.map(field => (
-                                <SelectItem key={field} value={field}>{field}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </div>
+                  {/* Grafik Görünüm Ayarları */}
+                  {['bar', 'line', 'area', 'pie', 'donut'].includes(config.visualization.type) && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Settings2 className="h-4 w-4" />
+                          Görünüm Ayarları
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ChartSettingsPanel
+                          chartType={config.visualization.type}
+                          settings={chartSettings}
+                          onChange={setChartSettings}
+                        />
+                      </CardContent>
+                    </Card>
                   )}
 
                   {/* Tablo/Liste/Pivot kolon ayarları */}
                   {['table', 'list', 'pivot'].includes(config.visualization.type) && (
-                    <TableColumnBuilder
-                      columns={tableColumns}
-                      onChange={setTableColumns}
-                      availableFields={availableFieldsForVisualization}
-                      visualizationType={config.visualization.type as 'table' | 'list' | 'pivot'}
-                    />
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Kolon Ayarları</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <TableColumnBuilder
+                          columns={tableColumns}
+                          onChange={setTableColumns}
+                          availableFields={availableFieldsForVisualization}
+                          visualizationType={config.visualization.type as 'table' | 'list' | 'pivot'}
+                        />
+                      </CardContent>
+                    </Card>
                   )}
 
                   {/* Pivot özel ayarları */}
                   {config.visualization.type === 'pivot' && (
-                    <PivotConfigBuilder
-                      config={pivotConfig}
-                      onChange={setPivotConfig}
-                      availableFields={availableFieldsForVisualization}
-                      numericFields={numericFieldsForVisualization}
-                    />
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Pivot Ayarları</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <PivotConfigBuilder
+                          config={pivotConfig}
+                          onChange={setPivotConfig}
+                          availableFields={availableFieldsForVisualization}
+                          numericFields={numericFieldsForVisualization}
+                        />
+                      </CardContent>
+                    </Card>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </ScrollArea>
             </TabsContent>
 
             {/* AYARLAR */}
