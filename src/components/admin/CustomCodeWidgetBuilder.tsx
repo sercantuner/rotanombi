@@ -938,7 +938,7 @@ Kullanıcı isteği: ${aiPrompt}`;
                             Widget render hatası
                           </div>
                         }>
-                          <PreviewResult.component data={sampleData} />
+                          {React.createElement(PreviewResult.component, { data: sampleData })}
                         </ErrorBoundary>
                       </div>
                     ) : (
