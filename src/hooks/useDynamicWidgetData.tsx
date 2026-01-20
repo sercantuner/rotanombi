@@ -560,13 +560,21 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
         });
       } else if (['pie', 'donut'].includes(vizType) && config.visualization.chart) {
         const chartConfig = config.visualization.chart;
-        const aggType = (chartConfig as any).aggregation || 'count';
+        
+        // fieldWells öncelikli - sonra chartConfig
+        const groupField = config.fieldWells?.category?.field || chartConfig.legendField || '';
+        const valueField = config.fieldWells?.value?.field || chartConfig.valueField || '';
+        const aggType = config.fieldWells?.value?.aggregation || (chartConfig as any).aggregation || 'count';
+        
+        // displayLimit: chartSettings öncelikli, sonra chartConfig, sonra default 10
+        const effectiveDisplayLimit = config.chartSettings?.displayLimit || chartConfig.displayLimit || 10;
+        
         const pieData = groupDataForChart(
           fetchedData, 
-          chartConfig.legendField || '', 
-          chartConfig.valueField || '', 
+          groupField, 
+          valueField, 
           aggType, 
-          chartConfig.displayLimit || 10
+          effectiveDisplayLimit
         );
         setData({ 
           chartData: pieData,

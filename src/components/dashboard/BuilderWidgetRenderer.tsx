@@ -170,15 +170,31 @@ export function BuilderWidgetRenderer({
   const yAxisField = fieldWells?.yAxis?.[0]?.field || vizChart?.yAxis?.field || vizChart?.valueField || '';
   const yAxisAggregation = fieldWells?.yAxis?.[0]?.aggregation || vizChart?.yAxis?.aggregation || 'sum';
   
-  // Dinamik etiketler - fieldWells'den veya config'den al
-  const yAxisLabel = fieldWells?.yAxis?.[0]?.label 
-    || fieldWells?.value?.label 
-    || vizChart?.yAxis?.label 
-    || 'Değer';
-  const xAxisLabel = fieldWells?.xAxis?.label 
-    || fieldWells?.category?.label 
-    || vizChart?.xAxis?.label 
-    || 'Kategori';
+  // Dinamik etiketler - fieldWells'den veya config'den al, anlamlı fallback ile
+  const getSmartLabel = (type: 'y' | 'x') => {
+    if (type === 'y') {
+      // Y ekseni / değer etiketi
+      if (fieldWells?.yAxis?.[0]?.label) return fieldWells.yAxis[0].label;
+      if (fieldWells?.value?.label) return fieldWells.value.label;
+      if (vizChart?.yAxis?.label) return vizChart.yAxis.label;
+      // Fallback: aggregation tipine göre anlamlı isim
+      const agg = fieldWells?.yAxis?.[0]?.aggregation || fieldWells?.value?.aggregation || vizChart?.yAxis?.aggregation;
+      if (agg === 'count' || agg === 'count_distinct') return 'Kayıt Sayısı';
+      if (agg === 'sum') return 'Toplam';
+      if (agg === 'avg') return 'Ortalama';
+      return 'Değer';
+    } else {
+      // X ekseni / kategori etiketi
+      if (fieldWells?.xAxis?.label) return fieldWells.xAxis.label;
+      if (fieldWells?.category?.label) return fieldWells.category.label;
+      if (vizChart?.xAxis?.label) return vizChart.xAxis.label;
+      if (vizChart?.legendField) return 'Kategori';
+      return 'Kategori';
+    }
+  };
+  
+  const yAxisLabel = getSmartLabel('y');
+  const xAxisLabel = getSmartLabel('x');
   
   // X ekseni tarih mi kontrol et
   const isXAxisDate = useMemo(() => {
