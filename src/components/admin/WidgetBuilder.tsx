@@ -20,6 +20,8 @@ import {
   MultiQueryConfig,
   CalculatedField,
   DateFilterConfig,
+  PostFetchFilter,
+  PivotConfig,
 } from '@/lib/widgetBuilderTypes';
 import { DateRangeConfig, getDefaultDateFilterConfig } from './DateRangeConfig';
 import { DataSourceSelector } from './DataSourceSelector';
@@ -27,6 +29,9 @@ import { MultiQueryBuilder } from './MultiQueryBuilder';
 import { CalculatedFieldBuilder } from './CalculatedFieldBuilder';
 import { WidgetPreviewRenderer } from './WidgetPreviewRenderer';
 import { WidgetTemplates, WidgetTemplate, WIDGET_TEMPLATES } from './WidgetTemplates';
+import { PostFetchFilterBuilder } from './PostFetchFilterBuilder';
+import { TableColumnBuilder, TableColumn } from './TableColumnBuilder';
+import { PivotConfigBuilder, getDefaultPivotConfig } from './PivotConfigBuilder';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,15 +41,38 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { 
   Wand2, BarChart3, Settings2, Save, 
   Hash, TrendingUp, Activity, PieChart, Circle, Table, List, LayoutGrid, CheckCircle, Edit,
-  Database, Calculator, Sparkles, Calendar, Zap, Info
+  Database, Calculator, Sparkles, Calendar, Zap, Info, Filter
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+
+// Genişletilmiş ikon listesi - 50+ ikon
+const AVAILABLE_ICONS = [
+  // Finans/Para
+  'Wallet', 'CreditCard', 'DollarSign', 'Coins', 'Banknote', 'PiggyBank', 'Receipt', 'Scale',
+  // Grafikler
+  'BarChart', 'BarChart2', 'BarChart3', 'LineChart', 'PieChart', 'TrendingUp', 'TrendingDown', 'Activity',
+  // Kullanıcı/İş
+  'Users', 'User', 'UserCheck', 'Building', 'Building2', 'Briefcase', 'Award', 'Target',
+  // Alışveriş
+  'ShoppingCart', 'ShoppingBag', 'Package', 'Box', 'Truck', 'Store',
+  // Belgeler
+  'FileText', 'Files', 'FolderOpen', 'ClipboardList', 'ClipboardCheck',
+  // Zaman
+  'Clock', 'Calendar', 'CalendarDays', 'Timer', 'History',
+  // Durum
+  'CheckCircle', 'XCircle', 'AlertCircle', 'AlertTriangle', 'Info', 'HelpCircle',
+  // Diğer
+  'Hash', 'Percent', 'Database', 'Server', 'Globe', 'Map', 'MapPin', 'Layers', 'LayoutGrid', 'Grid3x3',
+  'ArrowUpRight', 'ArrowDownRight', 'Zap', 'Sparkles', 'Star', 'Heart', 'Bookmark', 'Eye', 'Search',
+  'Settings', 'Gauge', 'Compass', 'Flag', 'Bell', 'Phone', 'Mail', 'MessageSquare',
+];
 
 interface WidgetBuilderProps {
   open: boolean;
@@ -107,6 +135,18 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   
   // Widget filtreleri
   const [widgetFilters, setWidgetFilters] = useState<WidgetFilterConfig[]>([]);
+  
+  // Post-fetch filtreler
+  const [postFetchFilters, setPostFetchFilters] = useState<PostFetchFilter[]>([]);
+  
+  // Tablo kolonları
+  const [tableColumns, setTableColumns] = useState<TableColumn[]>([]);
+  
+  // Pivot config
+  const [pivotConfig, setPivotConfig] = useState<PivotConfig>(getDefaultPivotConfig());
+  
+  // Varsayılan widget
+  const [isDefaultWidget, setIsDefaultWidget] = useState(false);
   
   // Aktif hedef alan (alan eşleme için)
   const [activeTarget, setActiveTarget] = useState<'xAxis' | 'yAxis' | 'legend' | 'value' | 'tooltip' | null>(null);
@@ -452,7 +492,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className={cn("grid w-full", isEditMode ? "grid-cols-6" : "grid-cols-7")}>
+          <TabsList className={cn("grid w-full", isEditMode ? "grid-cols-7" : "grid-cols-8")}>
             {!isEditMode && (
               <TabsTrigger value="templates" className="gap-1 text-xs">
                 <Sparkles className="h-3.5 w-3.5" />
@@ -461,15 +501,19 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
             )}
             <TabsTrigger value="api" className="gap-1 text-xs">
               <Database className="h-3.5 w-3.5" />
-              Veri Kaynağı
+              Veri
             </TabsTrigger>
             <TabsTrigger value="merge" className="gap-1 text-xs">
               <Database className="h-3.5 w-3.5" />
-              Birleştirme
+              Birleştir
             </TabsTrigger>
             <TabsTrigger value="calculation" className="gap-1 text-xs">
               <Calculator className="h-3.5 w-3.5" />
-              Hesaplama
+              Hesapla
+            </TabsTrigger>
+            <TabsTrigger value="filter" className="gap-1 text-xs">
+              <Filter className="h-3.5 w-3.5" />
+              Filtrele
             </TabsTrigger>
             <TabsTrigger value="date" className="gap-1 text-xs">
               <Calendar className="h-3.5 w-3.5" />
@@ -633,6 +677,15 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
               />
             </TabsContent>
 
+            {/* POST-FETCH VERİ FİLTRELEME */}
+            <TabsContent value="filter" className="m-0 space-y-4">
+              <PostFetchFilterBuilder
+                filters={postFetchFilters}
+                onChange={setPostFetchFilters}
+                availableFields={availableFieldsForVisualization}
+              />
+            </TabsContent>
+
             {/* GÖRSELLEŞTİRME */}
             <TabsContent value="visualization" className="m-0 space-y-4">
               <Card>
@@ -641,8 +694,8 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                   <CardDescription>Widget'ın nasıl görüntüleneceğini seçin</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid grid-cols-4 gap-2">
-                    {CHART_TYPES.filter(ct => ['kpi', 'bar', 'line', 'area', 'pie', 'donut', 'table'].includes(ct.id)).map(type => (
+                  <div className="grid grid-cols-5 gap-2">
+                    {CHART_TYPES.filter(ct => ['kpi', 'bar', 'line', 'area', 'pie', 'donut', 'table', 'list', 'pivot'].includes(ct.id)).map(type => (
                       <Button
                         key={type.id}
                         variant={config.visualization.type === type.id ? 'default' : 'outline'}
@@ -790,6 +843,26 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                       </div>
                     </div>
                   )}
+
+                  {/* Tablo/Liste/Pivot kolon ayarları */}
+                  {['table', 'list', 'pivot'].includes(config.visualization.type) && (
+                    <TableColumnBuilder
+                      columns={tableColumns}
+                      onChange={setTableColumns}
+                      availableFields={availableFieldsForVisualization}
+                      visualizationType={config.visualization.type as 'table' | 'list' | 'pivot'}
+                    />
+                  )}
+
+                  {/* Pivot özel ayarları */}
+                  {config.visualization.type === 'pivot' && (
+                    <PivotConfigBuilder
+                      config={pivotConfig}
+                      onChange={setPivotConfig}
+                      availableFields={availableFieldsForVisualization}
+                      numericFields={numericFieldsForVisualization}
+                    />
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -843,15 +916,21 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                             </div>
                           </SelectValue>
                         </SelectTrigger>
-                        <SelectContent>
-                          {['Hash', 'BarChart3', 'TrendingUp', 'PieChart', 'Wallet', 'CreditCard', 'DollarSign', 'Users', 'ShoppingCart', 'Activity'].map(icon => (
-                            <SelectItem key={icon} value={icon}>
-                              <div className="flex items-center gap-2">
+                        <SelectContent className="max-h-60">
+                          <div className="grid grid-cols-6 gap-1 p-2">
+                            {AVAILABLE_ICONS.map(icon => (
+                              <Button
+                                key={icon}
+                                variant={widgetIcon === icon ? 'default' : 'ghost'}
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => setWidgetIcon(icon)}
+                                title={icon}
+                              >
                                 <DynamicIcon iconName={icon} className="h-4 w-4" />
-                                {icon}
-                              </div>
-                            </SelectItem>
-                          ))}
+                              </Button>
+                            ))}
+                          </div>
                         </SelectContent>
                       </Select>
                     </div>
@@ -882,6 +961,20 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+
+                  {/* Varsayılan Widget Toggle */}
+                  <div className="flex items-center justify-between p-4 bg-primary/5 rounded-lg border border-primary/20">
+                    <div>
+                      <Label className="text-base font-medium">Varsayılan Widget</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Bu widget tüm yeni kullanıcılarda otomatik görünsün
+                      </p>
+                    </div>
+                    <Switch 
+                      checked={isDefaultWidget}
+                      onCheckedChange={setIsDefaultWidget}
+                    />
                   </div>
                 </CardContent>
               </Card>

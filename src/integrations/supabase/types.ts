@@ -562,12 +562,14 @@ export type Database = {
           data_source: string
           default_filters: Json | null
           default_page: string
+          default_sort_order: number | null
           default_visible: boolean
           description: string | null
           grid_cols: number | null
           icon: string | null
           id: string
           is_active: boolean
+          is_default: boolean | null
           min_height: string | null
           name: string
           size: string
@@ -585,12 +587,14 @@ export type Database = {
           data_source?: string
           default_filters?: Json | null
           default_page?: string
+          default_sort_order?: number | null
           default_visible?: boolean
           description?: string | null
           grid_cols?: number | null
           icon?: string | null
           id?: string
           is_active?: boolean
+          is_default?: boolean | null
           min_height?: string | null
           name: string
           size?: string
@@ -608,12 +612,14 @@ export type Database = {
           data_source?: string
           default_filters?: Json | null
           default_page?: string
+          default_sort_order?: number | null
           default_visible?: boolean
           description?: string | null
           grid_cols?: number | null
           icon?: string | null
           id?: string
           is_active?: boolean
+          is_default?: boolean | null
           min_height?: string | null
           name?: string
           size?: string
