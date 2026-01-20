@@ -8,12 +8,12 @@ import {
   LayoutDashboard, 
   Settings, 
   LogOut,
-  BarChart3,
   User,
   Shield,
   Boxes,
   Plus
 } from 'lucide-react';
+import rotanombiLogo from '@/assets/rotanombi-logo.png';
 import * as LucideIcons from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -63,13 +63,12 @@ export function Sidebar() {
       {/* Logo */}
       <div className="p-6 border-b border-border">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-            <BarChart3 className="w-6 h-6 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="font-bold text-lg gradient-text">RotanomBI</h1>
-            <p className="text-xs text-muted-foreground">Rapor Portalı</p>
-          </div>
+          <img 
+            src={rotanombiLogo} 
+            alt="RotanomBI" 
+            className="h-8 w-auto"
+          />
+          <p className="text-xs text-muted-foreground">Rapor Portalı</p>
         </div>
       </div>
 

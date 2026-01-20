@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { BarChart3, Mail, Lock, Loader2, UserPlus } from 'lucide-react';
+import { Mail, Lock, Loader2, UserPlus } from 'lucide-react';
+import rotanombiLogo from '@/assets/rotanombi-logo.png';
 
 export function LoginPage() {
   const { login, register, isLoading, isAuthenticated } = useAuth();
@@ -61,10 +62,11 @@ export function LoginPage() {
       <div className="w-full max-w-md relative z-10">
         {/* Logo */}
         <div className="text-center mb-8 animate-fade-in">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-4 glow-border">
-            <BarChart3 className="w-8 h-8 text-primary-foreground" />
-          </div>
-          <h1 className="text-3xl font-bold gradient-text">RotanomBI</h1>
+          <img 
+            src={rotanombiLogo} 
+            alt="RotanomBI" 
+            className="h-12 w-auto mx-auto mb-4"
+          />
           <p className="text-muted-foreground mt-2">İş Zekası Rapor Portalı</p>
         </div>
 
