@@ -132,6 +132,88 @@ export type PaletteKey = keyof typeof COLOR_PALETTES;
 
 export { COLOR_PALETTES };
 
+// HSL renk parse ve interpolasyon fonksiyonları
+function parseHslColor(color: string): { h: number; s: number; l: number } | null {
+  // hsl(210, 70%, 50%) formatı
+  const hslMatch = color.match(/hsl\((\d+),?\s*(\d+)%?,?\s*(\d+)%?\)/);
+  if (hslMatch) {
+    return { h: parseInt(hslMatch[1]), s: parseInt(hslMatch[2]), l: parseInt(hslMatch[3]) };
+  }
+  
+  // CSS variable formatı: hsl(var(--primary))
+  if (color.includes('var(--')) {
+    // Varsayılan primary renk döndür
+    return { h: 210, s: 70, l: 50 };
+  }
+  
+  // Hex formatı
+  const hexMatch = color.match(/^#([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+  if (hexMatch) {
+    const r = parseInt(hexMatch[1], 16) / 255;
+    const g = parseInt(hexMatch[2], 16) / 255;
+    const b = parseInt(hexMatch[3], 16) / 255;
+    
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0, s = 0;
+    const l = (max + min) / 2;
+
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+        case g: h = ((b - r) / d + 2) / 6; break;
+        case b: h = ((r - g) / d + 4) / 6; break;
+      }
+    }
+
+    return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+  }
+  
+  return null;
+}
+
+function hslToString(h: number, s: number, l: number): string {
+  return `hsl(${h}, ${s}%, ${l}%)`;
+}
+
+// Değer bazlı renk üretimi - büyük değerler koyu, küçük değerler açık
+function getValueBasedColor(
+  value: number, 
+  minValue: number, 
+  maxValue: number, 
+  baseColor: string
+): string {
+  const parsed = parseHslColor(baseColor);
+  if (!parsed) return baseColor;
+  
+  // Normalize edilmiş değer (0-1 arası)
+  const range = maxValue - minValue;
+  const normalized = range > 0 ? (value - minValue) / range : 0.5;
+  
+  // Lightness değerini ayarla: düşük değer = açık (70%), yüksek değer = koyu (30%)
+  const lightness = 70 - (normalized * 40); // 70'ten 30'a
+  
+  // Saturation değerini de ayarla: düşük değer = soluk (40%), yüksek değer = canlı (90%)
+  const saturation = 40 + (normalized * 50); // 40'tan 90'a
+  
+  return hslToString(parsed.h, saturation, lightness);
+}
+
+// Tarih bazlı grafikler için gradyan renk dizisi oluştur
+function generateGradientColors(
+  data: { name: string; value: number }[],
+  baseColor: string
+): string[] {
+  if (!data || data.length === 0) return [];
+  
+  const values = data.map(d => d.value);
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  
+  return data.map(d => getValueBasedColor(d.value, minValue, maxValue, baseColor));
+}
+
 // İkon listesi
 const ICON_OPTIONS = [
   'Hash', 'BarChart3', 'TrendingUp', 'Activity', 'PieChart', 'DollarSign',
@@ -1214,9 +1296,15 @@ export function LiveWidgetPreview({
                         />
                       )}
                       <Bar dataKey="value" name="Değer" radius={[4, 4, 0, 0]}>
-                        {visualizationData.chartData.map((_: any, index: number) => (
-                          <Cell key={`cell-${index}`} fill={activeColors[index % activeColors.length]} />
-                        ))}
+                        {visualizationData.chartData.map((item: any, index: number) => {
+                          // Tarih bazlı grafiklerde değer bazlı gradyan renk kullan
+                          const useGradient = isXAxisDate && visualizationData.chartData.length > 10;
+                          if (useGradient) {
+                            const gradientColors = generateGradientColors(visualizationData.chartData, activeColors[0]);
+                            return <Cell key={`cell-${index}`} fill={gradientColors[index] || activeColors[0]} />;
+                          }
+                          return <Cell key={`cell-${index}`} fill={activeColors[index % activeColors.length]} />;
+                        })}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
