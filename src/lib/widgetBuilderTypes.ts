@@ -92,7 +92,10 @@ export const MERGE_TYPES: { id: MergeType; name: string; description: string; ic
 export interface DiaApiQuery {
   id: string;
   name: string;
-  module: 'scf' | 'bcs' | 'fat' | 'sis' | 'stk' | 'gts';
+  // Veri kaynağı referansı (varsa modül/metod yerine kullanılır)
+  dataSourceId?: string;
+  dataSourceName?: string;
+  module: 'scf' | 'bcs' | 'fat' | 'sis' | 'stk' | 'gts' | string;
   method: string;
   parameters: {
     filters?: DiaApiFilter[];
@@ -100,7 +103,7 @@ export interface DiaApiQuery {
     selectedcolumns?: string[];
     limit?: number;
   };
-  // Test sonuçları (geçici)
+  // Veri kaynağından gelen alanlar veya test sonuçları
   testResult?: {
     sampleFields?: string[];
     fieldTypes?: Record<string, string>;

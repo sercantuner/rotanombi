@@ -1,4 +1,5 @@
 // MultiQueryBuilder - Çoklu sorgu ve birleştirme yapılandırma
+// Veri Kaynağı (Data Source) seçimi ile çalışır, API test mantığı kaldırıldı
 
 import React, { useState } from 'react';
 import { 
@@ -11,24 +12,19 @@ import {
   DiaApiFilter,
   DiaApiSort,
 } from '@/lib/widgetBuilderTypes';
-import { testDiaApi, DiaApiTestResponse } from '@/lib/diaApiTest';
+import { useDataSources, DataSource } from '@/hooks/useDataSources';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { FilterBuilder } from './FilterBuilder';
-import { SortBuilder } from './SortBuilder';
-import { ColumnSelector } from './ColumnSelector';
 import { 
-  Plus, Trash2, Play, Link2, Database, ChevronDown, ChevronRight, 
-  Settings2, CheckCircle, XCircle, ArrowDown, GripVertical, Loader2,
-  ArrowLeftRight, Merge, ArrowRightLeft, Maximize2, Layers, Copy, Grid3x3
+  Plus, Trash2, Link2, Database, ChevronDown, ChevronRight, 
+  CheckCircle, ArrowDown, GripVertical,
+  ArrowLeftRight, Merge, ArrowRightLeft, Maximize2, Layers, Copy, Grid3x3, Share2
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -64,34 +60,64 @@ function createEmptyQuery(index: number): DiaApiQuery {
   };
 }
 
-// Tek sorgu düzenleyici
+// Tek sorgu düzenleyici - Veri kaynağı seçimi ile çalışır
 function QueryEditor({
   query,
   index,
   isPrimary,
   onChange,
   onDelete,
-  onTest,
-  isTesting,
   canDelete,
+  dataSources,
 }: {
   query: DiaApiQuery;
   index: number;
   isPrimary: boolean;
   onChange: (query: DiaApiQuery) => void;
   onDelete: () => void;
-  onTest: () => Promise<void>;
-  isTesting: boolean;
   canDelete: boolean;
+  dataSources: DataSource[];
 }) {
   const [isExpanded, setIsExpanded] = useState(index === 0);
-  const [filters, setFilters] = useState<DiaApiFilter[]>(query.parameters.filters || []);
-  const [sorts, setSorts] = useState<DiaApiSort[]>(query.parameters.sorts || []);
-  const [selectedColumns, setSelectedColumns] = useState<string[]>(query.parameters.selectedcolumns || []);
   const [manualModuleMode, setManualModuleMode] = useState(false);
   const [manualMethodMode, setManualMethodMode] = useState(false);
   
   const currentModule = DIA_MODULES.find(m => m.id === query.module);
+  
+  // Veri kaynağı seçildiğinde sorgu parametrelerini güncelle
+  const handleDataSourceSelect = (dataSourceId: string) => {
+    if (dataSourceId === 'none') {
+      // Veri kaynağı kaldırıldı - manuel moda geç
+      onChange({
+        ...query,
+        dataSourceId: undefined,
+        dataSourceName: undefined,
+        testResult: undefined,
+      });
+      return;
+    }
+    
+    const source = dataSources.find(ds => ds.id === dataSourceId);
+    if (source) {
+      onChange({
+        ...query,
+        dataSourceId: source.id,
+        dataSourceName: source.name,
+        module: source.module as any,
+        method: source.method,
+        parameters: {
+          filters: source.filters as DiaApiFilter[] || [],
+          sorts: source.sorts as DiaApiSort[] || [],
+          selectedcolumns: source.selected_columns || [],
+          limit: source.limit_count || 1000,
+        },
+        testResult: {
+          sampleFields: source.last_fields as string[] || [],
+          fieldTypes: {},
+        },
+      });
+    }
+  };
   
   const handleModuleChange = (module: string) => {
     const newModule = DIA_MODULES.find(m => m.id === module);
@@ -104,30 +130,6 @@ function QueryEditor({
   
   const handleMethodChange = (method: string) => {
     onChange({ ...query, method });
-  };
-  
-  const handleFiltersChange = (newFilters: DiaApiFilter[]) => {
-    setFilters(newFilters);
-    onChange({
-      ...query,
-      parameters: { ...query.parameters, filters: newFilters },
-    });
-  };
-  
-  const handleSortsChange = (newSorts: DiaApiSort[]) => {
-    setSorts(newSorts);
-    onChange({
-      ...query,
-      parameters: { ...query.parameters, sorts: newSorts },
-    });
-  };
-  
-  const handleColumnsChange = (newColumns: string[]) => {
-    setSelectedColumns(newColumns);
-    onChange({
-      ...query,
-      parameters: { ...query.parameters, selectedcolumns: newColumns },
-    });
   };
   
   return (
@@ -152,24 +154,22 @@ function QueryEditor({
               />
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs">
-                {query.module}/{query.method}
-              </Badge>
-              {query.testResult?.sampleFields && (
+              {query.dataSourceId ? (
+                <Badge variant="outline" className="text-xs text-green-600 border-green-500/30 bg-green-500/10">
+                  <Share2 className="h-3 w-3 mr-1" />
+                  {query.dataSourceName || 'Veri Kaynağı'}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-xs">
+                  {query.module}/{query.method}
+                </Badge>
+              )}
+              {query.testResult?.sampleFields && query.testResult.sampleFields.length > 0 && (
                 <Badge variant="outline" className="text-xs text-green-600 border-green-500/30 bg-green-500/10">
                   <CheckCircle className="h-3 w-3 mr-1" />
                   {query.testResult.sampleFields.length} alan
                 </Badge>
               )}
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={onTest}
-                disabled={isTesting}
-                className="h-7 px-2"
-              >
-                {isTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-              </Button>
               {canDelete && (
                 <Button variant="ghost" size="icon" onClick={onDelete} className="h-7 w-7 text-destructive hover:text-destructive">
                   <Trash2 className="h-3.5 w-3.5" />
@@ -181,98 +181,128 @@ function QueryEditor({
         
         <CollapsibleContent>
           <CardContent className="pt-1 pb-3 px-3 space-y-3">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Modül</Label>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-5 px-2 text-[10px]"
-                    onClick={() => setManualModuleMode(!manualModuleMode)}
-                  >
-                    {manualModuleMode ? 'Liste' : 'Manuel'}
-                  </Button>
-                </div>
-                {manualModuleMode ? (
-                  <Input
-                    value={query.module}
-                    onChange={(e) => onChange({ ...query, module: e.target.value as any })}
-                    className="h-8 text-sm"
-                    placeholder="Örn: scf, bcs, fat..."
-                  />
-                ) : (
-                  <Select value={query.module} onValueChange={handleModuleChange}>
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DIA_MODULES.map(mod => (
-                        <SelectItem key={mod.id} value={mod.id}>
-                          {mod.name} ({mod.id})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Metod</Label>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-5 px-2 text-[10px]"
-                    onClick={() => setManualMethodMode(!manualMethodMode)}
-                  >
-                    {manualMethodMode ? 'Liste' : 'Manuel'}
-                  </Button>
-                </div>
-                {manualMethodMode ? (
-                  <Input
-                    value={query.method}
-                    onChange={(e) => handleMethodChange(e.target.value)}
-                    className="h-8 text-sm"
-                    placeholder="Örn: carikart_listele..."
-                  />
-                ) : (
-                  <Select value={query.method} onValueChange={handleMethodChange}>
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {currentModule?.methods.map(method => (
-                        <SelectItem key={method} value={method}>{method}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
+            {/* Veri Kaynağı Seçimi */}
+            <div className="space-y-2">
+              <Label className="text-xs flex items-center gap-2">
+                <Database className="h-3 w-3" />
+                Veri Kaynağı
+              </Label>
+              <Select 
+                value={query.dataSourceId || 'none'} 
+                onValueChange={handleDataSourceSelect}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="Veri kaynağı seçin..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">-- Manuel Yapılandırma --</SelectItem>
+                  {dataSources.map(source => (
+                    <SelectItem key={source.id} value={source.id}>
+                      <div className="flex items-center gap-2">
+                        {source.is_shared && <Share2 className="h-3 w-3 text-blue-500" />}
+                        <span>{source.name}</span>
+                        <span className="text-muted-foreground text-xs">
+                          ({source.module}/{source.method})
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             
-            {/* Kolon Seçici */}
-            <ColumnSelector
-              availableFields={query.testResult?.sampleFields || []}
-              selectedColumns={selectedColumns}
-              onChange={handleColumnsChange}
-              fieldTypes={query.testResult?.fieldTypes}
-            />
+            {/* Veri kaynağı seçilmemişse manuel modül/metod seçimi */}
+            {!query.dataSourceId && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Modül</Label>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-5 px-2 text-[10px]"
+                      onClick={() => setManualModuleMode(!manualModuleMode)}
+                    >
+                      {manualModuleMode ? 'Liste' : 'Manuel'}
+                    </Button>
+                  </div>
+                  {manualModuleMode ? (
+                    <Input
+                      value={query.module}
+                      onChange={(e) => onChange({ ...query, module: e.target.value as any })}
+                      className="h-8 text-sm"
+                      placeholder="Örn: scf, bcs, fat..."
+                    />
+                  ) : (
+                    <Select value={query.module} onValueChange={handleModuleChange}>
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DIA_MODULES.map(mod => (
+                          <SelectItem key={mod.id} value={mod.id}>
+                            {mod.name} ({mod.id})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Metod</Label>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-5 px-2 text-[10px]"
+                      onClick={() => setManualMethodMode(!manualMethodMode)}
+                    >
+                      {manualMethodMode ? 'Liste' : 'Manuel'}
+                    </Button>
+                  </div>
+                  {manualMethodMode ? (
+                    <Input
+                      value={query.method}
+                      onChange={(e) => handleMethodChange(e.target.value)}
+                      className="h-8 text-sm"
+                      placeholder="Örn: carikart_listele..."
+                    />
+                  ) : (
+                    <Select value={query.method} onValueChange={handleMethodChange}>
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {currentModule?.methods.map(method => (
+                          <SelectItem key={method} value={method}>{method}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+            )}
             
-            {/* Filtreler */}
-            <FilterBuilder
-              filters={filters}
-              onChange={handleFiltersChange}
-              availableFields={query.testResult?.sampleFields || []}
-              fieldTypes={query.testResult?.fieldTypes}
-            />
-            
-            {/* Sıralama */}
-            <SortBuilder
-              sorts={sorts}
-              onChange={handleSortsChange}
-              availableFields={query.testResult?.sampleFields || []}
-            />
-            
+            {/* Seçili alanlar bilgisi */}
+            {query.testResult?.sampleFields && query.testResult.sampleFields.length > 0 && (
+              <div className="border rounded-md p-2 bg-muted/30">
+                <Label className="text-xs text-muted-foreground mb-1.5 block">Mevcut Alanlar</Label>
+                <div className="flex flex-wrap gap-1">
+                  {query.testResult.sampleFields.slice(0, 10).map(field => (
+                    <Badge key={field} variant="outline" className="text-[10px] py-0">
+                      {field}
+                    </Badge>
+                  ))}
+                  {query.testResult.sampleFields.length > 10 && (
+                    <Badge variant="secondary" className="text-[10px] py-0">
+                      +{query.testResult.sampleFields.length - 10} daha
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Limit */}
             <div className="space-y-2">
               <Label className="text-xs">Limit (0 = limitsiz)</Label>
               <Input
@@ -398,7 +428,8 @@ function MergeEditor({
 }
 
 export function MultiQueryBuilder({ multiQuery, onChange }: MultiQueryBuilderProps) {
-  const [testingQueryId, setTestingQueryId] = useState<string | null>(null);
+  // Veri kaynaklarını hook ile çek
+  const { activeDataSources, isLoading: isLoadingDataSources } = useDataSources();
   
   // Çoklu sorgu modunu aktifleştir
   const enableMultiQuery = () => {
@@ -447,39 +478,6 @@ export function MultiQueryBuilder({ multiQuery, onChange }: MultiQueryBuilderPro
     });
   };
   
-  // Sorgu test et
-  const testQuery = async (query: DiaApiQuery, index: number) => {
-    setTestingQueryId(query.id);
-    try {
-      const result = await testDiaApi({
-        module: query.module,
-        method: query.method,
-        limit: query.parameters.limit || 0,
-        filters: query.parameters.filters,
-        selectedColumns: query.parameters.selectedcolumns,
-        sorts: query.parameters.sorts,
-      });
-      
-      if (result.success) {
-        const updatedQuery = {
-          ...query,
-          testResult: {
-            sampleFields: result.sampleFields || [],
-            fieldTypes: result.fieldTypes || {},
-          },
-        };
-        updateQuery(index, updatedQuery);
-        toast.success(`"${query.name}" testi başarılı: ${result.recordCount} kayıt`);
-      } else {
-        toast.error(`API hatası: ${result.error}`);
-      }
-    } catch (error) {
-      toast.error(`Test hatası: ${error instanceof Error ? error.message : 'Bilinmeyen hata'}`);
-    } finally {
-      setTestingQueryId(null);
-    }
-  };
-  
   // Birleştirme ekle
   const addMerge = () => {
     if (!multiQuery || multiQuery.queries.length < 2) {
@@ -526,14 +524,14 @@ export function MultiQueryBuilder({ multiQuery, onChange }: MultiQueryBuilderPro
             Çoklu Veri Kaynağı
           </CardTitle>
           <CardDescription>
-            Birden fazla DIA web servisinden veri çekip birleştirin
+            Birden fazla veri kaynağını birleştirin
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="text-center py-6">
             <Database className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
             <p className="text-sm text-muted-foreground mb-4">
-              Birden fazla tabloyu birleştirmek için çoklu sorgu modunu aktifleştirin
+              Birden fazla veri kaynağını birleştirmek için çoklu sorgu modunu aktifleştirin
             </p>
             <Button onClick={enableMultiQuery}>
               <Plus className="h-4 w-4 mr-2" />
@@ -562,7 +560,7 @@ export function MultiQueryBuilder({ multiQuery, onChange }: MultiQueryBuilderPro
               <Badge variant="secondary" className="text-xs">{multiQuery.queries.length} sorgu</Badge>
             </CardTitle>
             <CardDescription className="text-xs">
-              Sorgular sırayla çalıştırılır ve birleştirilir
+              Her sorgu için mevcut bir veri kaynağı seçin
             </CardDescription>
           </div>
           <div className="flex gap-2">
@@ -581,7 +579,7 @@ export function MultiQueryBuilder({ multiQuery, onChange }: MultiQueryBuilderPro
         {/* Sorgular - Kompakt scroll alanı */}
         <div className="border rounded-md">
           <div className="p-2 bg-muted/30 border-b">
-            <Label className="text-xs font-medium">Sorgular</Label>
+            <Label className="text-xs font-medium">Sorgular ({activeDataSources?.length || 0} kaynak mevcut)</Label>
           </div>
           <ScrollArea className="h-[280px]">
             <div className="p-2 space-y-2">
@@ -593,9 +591,8 @@ export function MultiQueryBuilder({ multiQuery, onChange }: MultiQueryBuilderPro
                     isPrimary={multiQuery.primaryQueryId === query.id || (index === 0 && !multiQuery.primaryQueryId)}
                     onChange={(q) => updateQuery(index, q)}
                     onDelete={() => deleteQuery(index)}
-                    onTest={() => testQuery(query, index)}
-                    isTesting={testingQueryId === query.id}
                     canDelete={multiQuery.queries.length > 1}
+                    dataSources={activeDataSources || []}
                   />
                   {index < multiQuery.queries.length - 1 && (
                     <div className="flex justify-center my-1">
