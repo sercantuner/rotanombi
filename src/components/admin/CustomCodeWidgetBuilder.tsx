@@ -1,5 +1,5 @@
 // Custom Code Widget Builder - Hardcoded React kodu ile widget oluşturma
-// Veri kaynağı seçimi, JSON görüntüleme, kod editörü ve önizleme
+// Veri kaynağı seçimi, JSON görüntüleme/indirme, AI kod üretimi, kod editörü ve önizleme
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useDataSources, DataSource as DataSourceType } from '@/hooks/useDataSources';
@@ -20,7 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { 
   Code, Database, Eye, Save, Play, Copy, Check, 
   LayoutGrid, AlertCircle, FileJson, Wand2, X,
-  RefreshCw, Loader2
+  RefreshCw, Loader2, Download, Sparkles, Send
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -269,6 +269,10 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave }: CustomCo
   const [customCode, setCustomCode] = useState(getDefaultCodeTemplate());
   const [codeError, setCodeError] = useState<string | null>(null);
   
+  // AI kod üretimi
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [isGeneratingCode, setIsGeneratingCode] = useState(false);
+  
   // Kopyalama durumu
   const [copied, setCopied] = useState(false);
   
@@ -356,6 +360,93 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave }: CustomCo
   const copyJson = () => {
     navigator.clipboard.writeText(JSON.stringify(sampleData, null, 2));
     toast.success('JSON kopyalandı');
+  };
+
+  // JSON indir
+  const downloadJson = () => {
+    const blob = new Blob([JSON.stringify(sampleData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${selectedDataSource?.slug || 'data'}_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success('JSON dosyası indirildi');
+  };
+
+  // AI ile kod üret
+  const generateCodeWithAI = async () => {
+    if (!aiPrompt.trim()) {
+      toast.error('Lütfen ne tür bir widget istediğinizi açıklayın');
+      return;
+    }
+
+    if (sampleData.length === 0) {
+      toast.error('Önce veri kaynağı seçip veri yükleyin');
+      return;
+    }
+
+    setIsGeneratingCode(true);
+    try {
+      // Veri yapısını analiz et
+      const sampleFields = sampleData.length > 0 ? Object.keys(sampleData[0]) : [];
+      const fieldTypes: Record<string, string> = {};
+      
+      if (sampleData.length > 0) {
+        sampleFields.forEach(field => {
+          const value = sampleData[0][field];
+          if (typeof value === 'number') fieldTypes[field] = 'number';
+          else if (typeof value === 'boolean') fieldTypes[field] = 'boolean';
+          else if (value && !isNaN(Date.parse(value))) fieldTypes[field] = 'date';
+          else fieldTypes[field] = 'string';
+        });
+      }
+
+      const systemPrompt = `Sen bir React widget geliştirme uzmanısın. Kullanıcının isteğine göre React bileşeni kodu yazacaksın.
+
+Kurallar:
+1. Sadece JavaScript/JSX kodu yaz, TypeScript kullanma
+2. "function Widget({ data })" formatında tek bir bileşen yaz
+3. React hook'ları React.useState, React.useMemo şeklinde kullan (import etme)
+4. Tailwind CSS sınıflarını kullan
+5. Lucide ikonları kullanabilirsin (LucideIcons. ile erişilebilir)
+6. En sonda "return Widget;" ile bileşeni döndür
+7. Veri yoksa "Veri bulunamadı" göster
+8. Para birimi için ₺ kullan ve formatla (K, M)
+9. Renklerde hsl(var(--primary)), hsl(var(--destructive)) gibi CSS değişkenleri kullan
+
+Veri yapısı:
+- Alanlar: ${sampleFields.join(', ')}
+- Tipleri: ${JSON.stringify(fieldTypes)}
+- Örnek kayıt: ${JSON.stringify(sampleData[0], null, 2)}
+
+Kullanıcı isteği: ${aiPrompt}`;
+
+      const response = await supabase.functions.invoke('ai-code-generator', {
+        body: {
+          prompt: systemPrompt,
+          sampleData: sampleData.slice(0, 3),
+        },
+      });
+
+      if (response.error) throw response.error;
+      
+      const generatedCode = response.data?.code || response.data?.content;
+      if (generatedCode) {
+        setCustomCode(generatedCode);
+        setActiveTab('code');
+        toast.success('Kod üretildi! Kod editöründe görüntüleyebilirsiniz.');
+      } else {
+        throw new Error('AI yanıtı alınamadı');
+      }
+    } catch (err: any) {
+      console.error('AI kod üretimi hatası:', err);
+      toast.error(err.message || 'Kod üretilemedi. Lütfen tekrar deneyin.');
+    } finally {
+      setIsGeneratingCode(false);
+    }
   };
 
   // Widget kaydet
@@ -604,6 +695,10 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave }: CustomCo
                   <FileJson className="h-4 w-4" />
                   JSON Veri
                 </TabsTrigger>
+                <TabsTrigger value="ai" className="gap-2">
+                  <Sparkles className="h-4 w-4" />
+                  AI Kod Üret
+                </TabsTrigger>
                 <TabsTrigger value="code" className="gap-2">
                   <Code className="h-4 w-4" />
                   Kod Editörü
@@ -622,10 +717,16 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave }: CustomCo
                       <Badge variant="secondary">{sampleData.length} kayıt</Badge>
                       {isLoadingData && <Loader2 className="h-4 w-4 animate-spin" />}
                     </div>
-                    <Button size="sm" variant="outline" onClick={copyJson}>
-                      <Copy className="h-3 w-3 mr-1" />
-                      Kopyala
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={copyJson} disabled={sampleData.length === 0}>
+                        <Copy className="h-3 w-3 mr-1" />
+                        Kopyala
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={downloadJson} disabled={sampleData.length === 0}>
+                        <Download className="h-3 w-3 mr-1" />
+                        İndir
+                      </Button>
+                    </div>
                   </div>
                   <ScrollArea className="flex-1 border rounded-lg">
                     <pre className="p-4 text-xs font-mono whitespace-pre-wrap">
@@ -639,6 +740,74 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave }: CustomCo
                       İlk 10 kayıt gösteriliyor (toplam {sampleData.length})
                     </p>
                   )}
+                </div>
+              </TabsContent>
+
+              {/* AI Kod Üretimi Sekmesi */}
+              <TabsContent value="ai" className="flex-1 p-4 m-0">
+                <div className="h-full flex flex-col gap-4">
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      Ne tür bir widget istiyorsunuz?
+                    </Label>
+                    <Textarea
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      placeholder="Örnek: Vade yaşlandırma grafiği oluştur. X ekseninde vade dilimleri (90+ gün, 60-90, 30-60, 0-30, bugün, gelecek) Y ekseninde toplam bakiye göster. Vadesi geçmişleri kırmızı tonlarında, gelecekleri yeşil tonlarında renklendir."
+                      className="min-h-[120px] resize-none"
+                    />
+                  </div>
+
+                  {sampleData.length > 0 && (
+                    <div className="p-3 rounded-lg bg-muted/50 border">
+                      <div className="text-xs text-muted-foreground mb-2">Kullanılabilir alanlar:</div>
+                      <div className="flex flex-wrap gap-1">
+                        {Object.keys(sampleData[0] || {}).slice(0, 15).map(field => (
+                          <Badge key={field} variant="outline" className="text-xs cursor-pointer hover:bg-accent" onClick={() => setAiPrompt(prev => prev + ` ${field}`)}>
+                            {field}
+                          </Badge>
+                        ))}
+                        {Object.keys(sampleData[0] || {}).length > 15 && (
+                          <Badge variant="secondary" className="text-xs">
+                            +{Object.keys(sampleData[0] || {}).length - 15} alan
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={generateCodeWithAI}
+                      disabled={isGeneratingCode || !aiPrompt.trim() || sampleData.length === 0}
+                      className="gap-2"
+                    >
+                      {isGeneratingCode ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                      {isGeneratingCode ? 'Kod Üretiliyor...' : 'AI ile Kod Üret'}
+                    </Button>
+                    
+                    {sampleData.length === 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        Önce sol panelden veri kaynağı seçin
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex-1 p-4 rounded-lg border-2 border-dashed flex items-center justify-center text-muted-foreground">
+                    <div className="text-center max-w-md">
+                      <Sparkles className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm font-medium mb-2">AI Kod Üretimi</p>
+                      <p className="text-xs">
+                        Veri yapısını ve istediğiniz görselleştirmeyi açıklayın. 
+                        AI, React/JavaScript kodu oluşturacak ve "Kod Editörü" sekmesine yazacak.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </TabsContent>
 
