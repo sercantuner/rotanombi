@@ -48,10 +48,18 @@ function DashboardContent() {
     refresh: refreshDataSources,
     getSourceData 
   } = useDataSourceLoader(dashboardPageId);
-  // Dashboard sayfası ID'sini al veya oluştur
+  // Dashboard sayfası ID'sini al veya oluştur + DIA bağlantı durumunu kontrol et
   useEffect(() => {
-    const getOrCreateDashboardPage = async () => {
+    const initializeDashboard = async () => {
       if (!user) return;
+
+      // DIA bağlantı durumunu kontrol et
+      try {
+        const diaInfo = await getDiaConnectionInfo();
+        setDiaConnectionInfo(diaInfo);
+      } catch (error) {
+        console.error('DIA connection check failed:', error);
+      }
 
       // Önce mevcut dashboard sayfasını ara
       const { data: existingPage } = await supabase
@@ -85,7 +93,7 @@ function DashboardContent() {
       }
     };
 
-    getOrCreateDashboardPage();
+    initializeDashboard();
   }, [user]);
 
   const fetchData = useCallback(async () => {
