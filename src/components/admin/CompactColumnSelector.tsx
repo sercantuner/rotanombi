@@ -6,7 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Columns, Search, CheckSquare, Square, ChevronDown, ChevronRight, X } from 'lucide-react';
+import { Columns, Search, CheckSquare, Square, ChevronDown, ChevronRight, X, Maximize2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface CompactColumnSelectorProps {
@@ -14,9 +14,10 @@ interface CompactColumnSelectorProps {
   selectedColumns: string[];
   onChange: (columns: string[]) => void;
   fieldTypes?: Record<string, string>;
+  onExpandClick?: () => void;
 }
 
-export function CompactColumnSelector({ availableFields, selectedColumns, onChange, fieldTypes }: CompactColumnSelectorProps) {
+export function CompactColumnSelector({ availableFields, selectedColumns, onChange, fieldTypes, onExpandClick }: CompactColumnSelectorProps) {
   const [isOpen, setIsOpen] = useState(selectedColumns.length > 0);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -72,6 +73,17 @@ export function CompactColumnSelector({ availableFields, selectedColumns, onChan
           <Button size="sm" variant="ghost" onClick={clearAll} className="h-6 text-[10px] px-1.5">
             <Square className="h-3 w-3" />
           </Button>
+          {onExpandClick && availableFields.length > 0 && (
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              onClick={onExpandClick} 
+              className="h-6 text-[10px] px-1.5"
+              title="Tam Ekran"
+            >
+              <Maximize2 className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       </div>
       
