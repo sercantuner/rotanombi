@@ -713,6 +713,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                 filters={postFetchFilters}
                 onChange={setPostFetchFilters}
                 availableFields={availableFieldsForVisualization}
+                sampleData={selectedDataSource?.last_sample_data as any[] || []}
               />
             </TabsContent>
 

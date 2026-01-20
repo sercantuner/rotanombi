@@ -34,6 +34,7 @@ export interface DataSource {
   last_fetched_at: string | null;
   last_record_count: number | null;
   last_fields: string[] | null;
+  last_sample_data: any[] | null; // Filtreleme için örnek veriler
   
   is_active: boolean;
   is_shared: boolean;
@@ -82,6 +83,7 @@ export function useDataSources() {
         sorts: (ds.sorts as unknown as DiaApiSort[]) || [],
         period_config: ds.period_config as unknown as PeriodConfig | null,
         last_fields: ds.last_fields as unknown as string[] | null,
+        last_sample_data: (ds as any).last_sample_data as any[] | null,
       })) as DataSource[];
     },
   });
@@ -189,17 +191,33 @@ export function useDataSources() {
     },
   });
 
-  // Son çalışma bilgisini güncelle
-  const updateLastFetch = useCallback(async (id: string, recordCount: number, fields: string[]) => {
+  // Son çalışma bilgisini güncelle (opsiyonel örnek veri dahil)
+  const updateLastFetch = useCallback(async (
+    id: string, 
+    recordCount: number, 
+    fields: string[], 
+    sampleData?: any[]
+  ) => {
+    const updatePayload: Record<string, any> = {
+      last_fetched_at: new Date().toISOString(),
+      last_record_count: recordCount,
+      last_fields: fields,
+    };
+    
+    // Örnek veriyi kaydet (filtreleme için benzersiz değer önerileri)
+    if (sampleData && sampleData.length > 0) {
+      // Max 100 kayıt sakla (performans için)
+      updatePayload.last_sample_data = sampleData.slice(0, 100);
+    }
+    
     await supabase
       .from('data_sources')
-      .update({
-        last_fetched_at: new Date().toISOString(),
-        last_record_count: recordCount,
-        last_fields: fields,
-      })
+      .update(updatePayload)
       .eq('id', id);
-  }, []);
+      
+    // Cache'i güncelle
+    queryClient.invalidateQueries({ queryKey: ['data-sources'] });
+  }, [queryClient]);
 
   // Slug'dan ID bul
   const getDataSourceBySlug = useCallback((slug: string) => {
