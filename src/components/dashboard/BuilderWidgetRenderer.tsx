@@ -136,6 +136,8 @@ export function BuilderWidgetRenderer({
   builderConfig,
   className = '',
 }: BuilderWidgetRendererProps) {
+  // CSS izolasyonu - konteyner stillerinin widget'ı etkilememesi için
+  const isolatedClassName = cn(className, 'isolate overflow-visible');
   const { data, rawData, isLoading, error, refetch } = useDynamicWidgetData(builderConfig);
   
   // Tarih filtresi state
@@ -274,7 +276,7 @@ export function BuilderWidgetRenderer({
 
   if (isLoading) {
     return (
-      <Card className={className}>
+      <Card className={isolatedClassName}>
         <CardHeader>
           <Skeleton className="h-5 w-32" />
         </CardHeader>
@@ -287,7 +289,7 @@ export function BuilderWidgetRenderer({
 
   if (error) {
     return (
-      <Card className={`${className} border-muted`}>
+      <Card className={cn(isolatedClassName, 'border-muted')}>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2 text-muted-foreground">
             <DynamicIcon iconName={widgetIcon || 'BarChart3'} className="h-4 w-4" />
@@ -305,7 +307,7 @@ export function BuilderWidgetRenderer({
   // Veri yok durumu
   if (!data && !isLoading) {
     return (
-      <Card className={className}>
+      <Card className={isolatedClassName}>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2 text-muted-foreground">
             <DynamicIcon iconName={widgetIcon || 'BarChart3'} className="h-4 w-4" />
@@ -398,7 +400,7 @@ export function BuilderWidgetRenderer({
       
       if (typeof WidgetComponent !== 'function') {
         return (
-          <Card className={className}>
+          <Card className={isolatedClassName}>
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2 text-destructive">
                 <Code className="h-4 w-4" />
@@ -413,7 +415,7 @@ export function BuilderWidgetRenderer({
       }
       
       return (
-        <Card className={className}>
+        <Card className={isolatedClassName}>
           <ChartHeader icon="Code" />
           <CardContent>
             <ErrorBoundary fallback={
@@ -430,7 +432,7 @@ export function BuilderWidgetRenderer({
     } catch (err: any) {
       console.error('Custom widget error:', err);
       return (
-        <Card className={className}>
+        <Card className={isolatedClassName}>
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2 text-destructive">
               <AlertCircle className="h-4 w-4" />
@@ -453,7 +455,7 @@ export function BuilderWidgetRenderer({
     
     return (
       <>
-        <Card className={className}>
+        <Card className={isolatedClassName}>
           <ChartHeader icon="BarChart3" />
           <CardContent>
             <ResponsiveContainer width="100%" height={200}>
@@ -513,7 +515,7 @@ export function BuilderWidgetRenderer({
     
     return (
       <>
-        <Card className={className}>
+        <Card className={isolatedClassName}>
           <ChartHeader icon="TrendingUp" />
           <CardContent>
             <ResponsiveContainer width="100%" height={200}>
@@ -571,7 +573,7 @@ export function BuilderWidgetRenderer({
     
     return (
       <>
-        <Card className={className}>
+        <Card className={isolatedClassName}>
           <ChartHeader icon="Activity" />
           <CardContent>
             <ResponsiveContainer width="100%" height={200}>
@@ -631,7 +633,7 @@ export function BuilderWidgetRenderer({
     
     return (
       <>
-        <Card className={cn(className, 'overflow-visible')}>
+        <Card className={cn(isolatedClassName, 'overflow-visible')}>
           <ChartHeader icon="PieChart" />
           <CardContent className="flex flex-col items-center py-4">
             {/* Grafik alanı */}
@@ -721,7 +723,7 @@ export function BuilderWidgetRenderer({
   // Table (zaten detay gösteriyor)
   if (vizType === 'table' && data?.tableData) {
     return (
-      <Card className={className}>
+      <Card className={isolatedClassName}>
         <ChartHeader icon="Table" />
         <CardContent>
           <div className="overflow-x-auto">
@@ -804,7 +806,7 @@ export function BuilderWidgetRenderer({
     };
 
     return (
-      <Card className={className}>
+      <Card className={isolatedClassName}>
         <ChartHeader icon="Grid3x3" />
         <CardContent>
           <div className="overflow-x-auto">
@@ -889,7 +891,7 @@ export function BuilderWidgetRenderer({
     };
     
     return (
-      <Card className={className}>
+      <Card className={isolatedClassName}>
         <ChartHeader icon="List" />
         <CardContent>
           <ul className="space-y-2">
@@ -916,7 +918,7 @@ export function BuilderWidgetRenderer({
 
   // Fallback
   return (
-    <Card className={className}>
+    <Card className={isolatedClassName}>
       <CardContent className="py-8 text-center text-muted-foreground">
         <DynamicIcon iconName={widgetIcon || 'BarChart3'} className="h-8 w-8 mx-auto mb-2" />
         <p className="text-sm">{widgetName}</p>

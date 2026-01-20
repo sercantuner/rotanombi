@@ -9,6 +9,7 @@ import { ContainerSettingsModal, getContainerStyleClasses } from './ContainerSet
 import { DynamicWidgetRenderer } from '@/components/dashboard/DynamicWidgetRenderer';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Plus, Trash2, GripVertical, Settings, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -167,14 +168,23 @@ export function ContainerRenderer({
       const slotWidget = containerWidgets.find(w => w.slot_index === slotIndex);
       const widgetDetail = slotWidget ? widgetDetails[slotWidget.widget_id] : null;
 
+      // Widget var ama detayları henüz yüklenmedi - skeleton göster
+      if (slotWidget && !widgetDetail) {
+        return (
+          <div key={slotIndex} className="min-h-[120px]">
+            <Skeleton className="h-full w-full min-h-[120px] rounded-xl" />
+          </div>
+        );
+      }
+
       if (slotWidget && widgetDetail) {
         // Widget ayarlarını parse et
         const widgetSettings = slotWidget.settings as ContainerWidgetSettings | null;
         const widgetFilters = widgetSettings?.filters;
 
-        // Widget var, render et
+        // Widget var, render et - CSS izolasyonu için isolate class
         return (
-          <div key={slotIndex} className="relative group min-h-[120px]">
+          <div key={slotIndex} className="relative group min-h-[120px] isolate">
             <DynamicWidgetRenderer
               widgetId={widgetDetail.widget_key}
               data={widgetData}
