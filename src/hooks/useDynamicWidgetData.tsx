@@ -560,9 +560,14 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
       
       if (vizType === 'kpi' && config.visualization.kpi) {
         const kpiConfig = config.visualization.kpi;
-        const kpiValue = kpiConfig.aggregation === 'count' 
+        let kpiValue = kpiConfig.aggregation === 'count' 
           ? recordCount 
           : calculateAggregation(fetchedData, kpiConfig.valueField, kpiConfig.aggregation);
+        
+        // isAbsoluteValue desteği (borç gibi negatif değerler için)
+        if ((kpiConfig as any).isAbsoluteValue && kpiValue < 0) {
+          kpiValue = Math.abs(kpiValue);
+        }
         
         setData({
           value: kpiValue,
@@ -574,20 +579,69 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
         });
       } else if (['bar', 'line', 'area'].includes(vizType) && config.visualization.chart) {
         const chartConfig = config.visualization.chart;
+        const barAggType = chartConfig.yAxis?.aggregation || (chartConfig as any).aggregation || 'sum';
         const chartData = groupDataForChart(
           fetchedData, 
           chartConfig.xAxis?.field || '', 
           chartConfig.yAxis?.field || chartConfig.valueField || '', 
-          chartConfig.yAxis?.aggregation || 'sum',
+          barAggType,
           chartConfig.displayLimit || 10
         );
-        setData({ chartData, xField: chartConfig.xAxis?.field, yField: chartConfig.yAxis?.field });
+        setData({ 
+          chartData, 
+          xField: chartConfig.xAxis?.field, 
+          yField: chartConfig.yAxis?.field,
+          showGrid: chartConfig.showGrid !== false,
+          showLegend: chartConfig.showLegend !== false,
+        });
       } else if (['pie', 'donut'].includes(vizType) && config.visualization.chart) {
         const chartConfig = config.visualization.chart;
-        const pieData = groupDataForChart(fetchedData, chartConfig.legendField || '', chartConfig.valueField || '', 'sum', chartConfig.displayLimit || 10);
-        setData({ chartData: pieData });
+        const aggType = (chartConfig as any).aggregation || 'count';
+        const pieData = groupDataForChart(
+          fetchedData, 
+          chartConfig.legendField || '', 
+          chartConfig.valueField || '', 
+          aggType, 
+          chartConfig.displayLimit || 10
+        );
+        setData({ 
+          chartData: pieData,
+          showLegend: chartConfig.showLegend !== false,
+        });
+      } else if (vizType === 'table') {
+        const tableConfig = config.visualization.table;
+        const columns = tableConfig?.columns || config.tableColumns || [];
+        const rowLimit = tableConfig?.pageSize || 50;
+        setData({ 
+          tableData: fetchedData.slice(0, rowLimit), 
+          columns,
+          recordCount,
+        });
+      } else if (vizType === 'list') {
+        const listConfig = (config.visualization as any).list;
+        let listData = [...fetchedData];
+        
+        // Sıralama
+        if (listConfig?.sortField) {
+          listData.sort((a, b) => {
+            const aVal = a[listConfig.sortField] || 0;
+            const bVal = b[listConfig.sortField] || 0;
+            return listConfig.sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
+          });
+        }
+        
+        // Limit
+        if (listConfig?.limit) {
+          listData = listData.slice(0, listConfig.limit);
+        }
+        
+        setData({ 
+          listData, 
+          listConfig,
+          recordCount,
+        });
       } else {
-        setData({ rawData: fetchedData });
+        setData({ rawData: fetchedData, recordCount });
       }
     } catch (err) {
       console.error('Dynamic widget data fetch error:', err);

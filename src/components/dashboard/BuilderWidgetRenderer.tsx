@@ -572,6 +572,23 @@ export function BuilderWidgetRenderer({
 
   // List
   if (vizType === 'list' && data?.listData) {
+    const listConfig = data.listConfig || {};
+    const titleField = listConfig.titleField || Object.keys(data.listData[0] || {})[0] || 'name';
+    const subtitleField = listConfig.subtitleField;
+    const valueField = listConfig.valueField;
+    const format = listConfig.format;
+    
+    const formatListValue = (val: any) => {
+      if (val === null || val === undefined) return '-';
+      if (format === 'currency') {
+        const num = typeof val === 'number' ? val : parseFloat(val) || 0;
+        if (Math.abs(num) >= 1_000_000) return `₺${(num / 1_000_000).toFixed(1)}M`;
+        if (Math.abs(num) >= 1_000) return `₺${(num / 1_000).toFixed(0)}K`;
+        return `₺${num.toLocaleString('tr-TR')}`;
+      }
+      return String(val);
+    };
+    
     return (
       <Card className={className}>
         <CardHeader className="pb-2">
@@ -583,8 +600,18 @@ export function BuilderWidgetRenderer({
         <CardContent>
           <ul className="space-y-2">
             {data.listData.map((item: any, idx: number) => (
-              <li key={idx} className="text-sm p-2 bg-muted/50 rounded hover:bg-muted transition-colors">
-                {JSON.stringify(item).slice(0, 100)}...
+              <li key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded hover:bg-muted transition-colors">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{item[titleField] || '-'}</p>
+                  {subtitleField && (
+                    <p className="text-xs text-muted-foreground truncate">{item[subtitleField] || ''}</p>
+                  )}
+                </div>
+                {valueField && (
+                  <span className="text-sm font-semibold ml-2 whitespace-nowrap">
+                    {formatListValue(item[valueField])}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
