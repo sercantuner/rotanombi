@@ -24,6 +24,15 @@ export interface DiaApiTestRequest {
   // Raw mode için yeni alanlar
   rawMode?: boolean;
   rawPayload?: string;
+  // Dönem loop için
+  periodConfig?: {
+    enabled: boolean;
+    periodField: string;
+    currentPeriod?: number;
+    fetchHistorical: boolean;
+    historicalCount: number;
+    mergeStrategy: 'union' | 'separate';
+  };
 }
 
 export interface DiaApiTestResponse {

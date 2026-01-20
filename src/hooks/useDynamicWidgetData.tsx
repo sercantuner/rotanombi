@@ -364,6 +364,14 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
             incrementCacheMiss();
             
             const diaApiLimit = config.diaApi.parameters.limit;
+            
+            // Data source'dan period_config al (varsa)
+            let periodConfigToSend = undefined;
+            if (config.dataSourceId) {
+              // TODO: Data source'u cache'den veya başka yerden al
+              // Şimdilik config üzerinden geçiyoruz
+            }
+            
             const response = await fetch(`${SUPABASE_URL}/functions/v1/dia-api-test`, {
               method: 'POST',
               headers: {
@@ -384,6 +392,8 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
                 sorts: config.diaApi.parameters.sorts,
                 orderby: config.diaApi.parameters.orderby,
                 returnAllData: true, // Tüm veriyi al
+                // Period config (eğer config üzerinde varsa)
+                periodConfig: periodConfigToSend,
               }),
             });
 

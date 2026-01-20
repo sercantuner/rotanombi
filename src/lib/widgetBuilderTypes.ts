@@ -471,7 +471,7 @@ export interface PeriodConfig {
 
 export const getDefaultPeriodConfig = (): PeriodConfig => ({
   enabled: false,
-  periodField: 'donem',
+  periodField: '_level2',  // DIA ERP için standart dönem alanı
   currentPeriod: undefined,
   fetchHistorical: false,
   historicalCount: 12,
