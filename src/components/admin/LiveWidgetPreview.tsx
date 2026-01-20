@@ -144,9 +144,14 @@ const ICON_OPTIONS = [
 import { FieldWellsConfig } from './FieldWellBuilder';
 import { ChartSettingsData } from './ChartSettingsPanel';
 import { DateFilterConfig, DatePeriod, DATE_PERIODS } from '@/lib/widgetBuilderTypes';
-import { format, startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, 
+import { 
+  format, startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, 
   subDays, subWeeks, subMonths, subQuarters, subYears, endOfDay, endOfWeek, endOfMonth, 
-  endOfQuarter, endOfYear, isWithinInterval, parseISO, isValid } from 'date-fns';
+  endOfQuarter, endOfYear, isWithinInterval, parseISO, isValid,
+  addDays, addWeeks, addMonths, addQuarters, isBefore, isAfter, isEqual,
+  differenceInDays, differenceInWeeks, differenceInMonths, differenceInQuarters, differenceInYears,
+  getWeek, getMonth, getQuarter, getYear
+} from 'date-fns';
 import { tr } from 'date-fns/locale';
 
 interface LiveWidgetPreviewProps {
@@ -371,41 +376,179 @@ function sortByDateField(data: any[], dateField: string, ascending: boolean = tr
   });
 }
 
-// Grafik verileri için gruplama (tarihsel sıralama destekli)
+// Tarih gruplama tipini belirle (gün, hafta, ay, çeyrek bazlı)
+type DateGroupingType = 'day' | 'week' | 'month' | 'quarter' | 'year';
+
+function detectDateGroupingType(data: any[], dateField: string): DateGroupingType {
+  if (!data || data.length < 2) return 'day';
+  
+  const dates = data
+    .map(item => parseDate(item[dateField]))
+    .filter((d): d is Date => d !== null)
+    .sort((a, b) => a.getTime() - b.getTime());
+  
+  if (dates.length < 2) return 'day';
+  
+  // İki tarih arasındaki farka bak
+  const firstDate = dates[0];
+  const lastDate = dates[dates.length - 1];
+  const totalDays = differenceInDays(lastDate, firstDate);
+  
+  // Veri noktası sayısına göre gruplama tipi belirle
+  if (totalDays > 365 * 2) return 'quarter'; // 2 yıldan fazla -> çeyrek
+  if (totalDays > 365) return 'month'; // 1 yıldan fazla -> ay
+  if (totalDays > 90) return 'month'; // 3 aydan fazla -> ay
+  if (totalDays > 30) return 'week'; // 1 aydan fazla -> hafta
+  return 'day'; // Varsayılan gün bazlı
+}
+
+// Tarih için gruplama anahtarı oluştur
+function getDateGroupKey(date: Date, groupingType: DateGroupingType): string {
+  switch (groupingType) {
+    case 'day':
+      return format(date, 'dd.MM.yyyy', { locale: tr });
+    case 'week':
+      const weekNum = getWeek(date, { weekStartsOn: 1 });
+      const year = getYear(date);
+      return `${year} - ${weekNum}. Hafta`;
+    case 'month':
+      return format(date, 'MMMM yyyy', { locale: tr });
+    case 'quarter':
+      const q = getQuarter(date);
+      const y = getYear(date);
+      return `${y} Q${q}`;
+    case 'year':
+      return format(date, 'yyyy');
+    default:
+      return format(date, 'dd.MM.yyyy', { locale: tr });
+  }
+}
+
+// Tarih gruplama için başlangıç noktası
+function getDateGroupStart(date: Date, groupingType: DateGroupingType): Date {
+  switch (groupingType) {
+    case 'day': return startOfDay(date);
+    case 'week': return startOfWeek(date, { weekStartsOn: 1 });
+    case 'month': return startOfMonth(date);
+    case 'quarter': return startOfQuarter(date);
+    case 'year': return startOfYear(date);
+    default: return startOfDay(date);
+  }
+}
+
+// Tarih grubunu bir sonraki adıma taşı
+function addDateGroup(date: Date, groupingType: DateGroupingType): Date {
+  switch (groupingType) {
+    case 'day': return addDays(date, 1);
+    case 'week': return addWeeks(date, 1);
+    case 'month': return addMonths(date, 1);
+    case 'quarter': return addQuarters(date, 1);
+    case 'year': return addMonths(date, 12);
+    default: return addDays(date, 1);
+  }
+}
+
+// Boş tarihleri doldurarak tam tarih akışı oluştur
+function fillDateGaps(
+  data: { name: string; value: number; sortKey?: number }[],
+  rawData: any[],
+  dateField: string,
+  groupingType: DateGroupingType
+): { name: string; value: number; sortKey?: number }[] {
+  if (!rawData || rawData.length === 0) return data;
+  
+  // Tüm tarihleri topla ve sırala
+  const allDates = rawData
+    .map(item => parseDate(item[dateField]))
+    .filter((d): d is Date => d !== null)
+    .sort((a, b) => a.getTime() - b.getTime());
+  
+  if (allDates.length === 0) return data;
+  
+  const minDate = getDateGroupStart(allDates[0], groupingType);
+  const maxDate = getDateGroupStart(allDates[allDates.length - 1], groupingType);
+  
+  // Mevcut veriyi map'e çevir
+  const dataMap = new Map<string, number>();
+  data.forEach(item => {
+    dataMap.set(item.name, item.value);
+  });
+  
+  // Tüm tarih aralığını doldur
+  const filledData: { name: string; value: number; sortKey?: number }[] = [];
+  let currentDate = minDate;
+  
+  while (isBefore(currentDate, maxDate) || isEqual(currentDate, maxDate)) {
+    const key = getDateGroupKey(currentDate, groupingType);
+    const value = dataMap.get(key) || 0;
+    
+    filledData.push({
+      name: key,
+      value,
+      sortKey: currentDate.getTime()
+    });
+    
+    currentDate = addDateGroup(currentDate, groupingType);
+    
+    // Sonsuz döngüden korunma (maks 500 iterasyon)
+    if (filledData.length > 500) break;
+  }
+  
+  return filledData;
+}
+
+// Grafik verileri için gruplama (tarihsel sıralama destekli + boş tarih doldurma)
 function groupDataForChart(
   data: any[], 
   groupField: string, 
   valueField: string, 
   aggregation: AggregationType = 'sum',
-  displayLimit: number = 10,
-  isDateGrouping: boolean = false
+  displayLimit: number = 100,
+  isDateGrouping: boolean = false,
+  dateGroupingType?: DateGroupingType
 ): { name: string; value: number; sortKey?: number }[] {
   if (!data || data.length === 0) return [];
+
+  // Tarih gruplama tipini otomatik belirle
+  const effectiveGroupingType = dateGroupingType || (isDateGrouping ? detectDateGroupingType(data, groupField) : 'day');
 
   const groups: Record<string, any[]> = {};
   const groupDates: Record<string, Date | null> = {};
   
   data.forEach(item => {
-    const key = String(item[groupField] || 'Belirsiz');
+    let key: string;
+    
+    if (isDateGrouping) {
+      const date = parseDate(item[groupField]);
+      if (date) {
+        key = getDateGroupKey(date, effectiveGroupingType);
+        groupDates[key] = getDateGroupStart(date, effectiveGroupingType);
+      } else {
+        key = 'Belirsiz';
+      }
+    } else {
+      key = String(item[groupField] || 'Belirsiz');
+    }
+    
     if (!groups[key]) {
       groups[key] = [];
-      if (isDateGrouping) {
-        groupDates[key] = parseDate(item[groupField]);
-      }
     }
     groups[key].push(item);
   });
 
-  const result = Object.entries(groups)
+  let result: { name: string; value: number; sortKey?: number }[] = Object.entries(groups)
     .map(([name, items]) => ({
       name,
       value: calculateAggregation(items, valueField, aggregation),
-      sortKey: isDateGrouping && groupDates[name] ? groupDates[name]!.getTime() : 0,
+      sortKey: groupDates[name] ? groupDates[name]!.getTime() : 0,
     }));
     
-  // Tarihsel gruplama ise kronolojik sırala, değilse değere göre sırala
+  // Tarihsel gruplama ise kronolojik sırala ve boşlukları doldur
   if (isDateGrouping) {
-    result.sort((a, b) => a.sortKey! - b.sortKey!);
+    result.sort((a, b) => (a.sortKey || 0) - (b.sortKey || 0));
+    
+    // Boş tarihleri doldur
+    result = fillDateGaps(result, data, groupField, effectiveGroupingType);
   } else {
     result.sort((a, b) => b.value - a.value);
   }
