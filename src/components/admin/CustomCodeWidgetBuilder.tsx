@@ -84,10 +84,23 @@ const AVAILABLE_ICONS = [
   'Hash', 'Percent', 'Database', 'Server', 'Globe', 'Map', 'MapPin', 'Layers', 'LayoutGrid', 'Grid3x3',
 ];
 
+// Widget tipi
+interface WidgetForEdit {
+  id: string;
+  widget_key: string;
+  name: string;
+  description?: string | null;
+  icon?: string | null;
+  size: string;
+  default_page: string;
+  builder_config?: any;
+}
+
 interface CustomCodeWidgetBuilderProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave?: () => void;
+  editingWidget?: WidgetForEdit | null;
 }
 
 // Dinamik icon renderer
@@ -292,8 +305,8 @@ interface ChatMessage {
   content: string;
 }
 
-export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave }: CustomCodeWidgetBuilderProps) {
-  const { createWidget, isLoading: isSaving } = useWidgetAdmin();
+export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWidget }: CustomCodeWidgetBuilderProps) {
+  const { createWidget, updateWidget, isLoading: isSaving } = useWidgetAdmin();
   const { activeDataSources, getDataSourceById } = useDataSources();
   const { user } = useAuth();
   
@@ -313,6 +326,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave }: CustomCo
   const [sampleData, setSampleData] = useState<any[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [customCode, setCustomCode] = useState(getDefaultCodeTemplate());
+  const [jsonPreviewCount, setJsonPreviewCount] = useState(10);
   const [codeError, setCodeError] = useState<string | null>(null);
   
   // AI kod üretimi
@@ -329,6 +343,47 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave }: CustomCo
   
   // Aktif sekme
   const [activeTab, setActiveTab] = useState('datasource');
+
+  // Düzenleme modunda widget verilerini yükle
+  useEffect(() => {
+    if (editingWidget && open) {
+      const config = editingWidget.builder_config;
+      setWidgetKey(editingWidget.widget_key);
+      setWidgetName(editingWidget.name);
+      setWidgetDescription(editingWidget.description || '');
+      setWidgetIcon(editingWidget.icon || 'Code');
+      setWidgetSize((editingWidget.size as any) || 'lg');
+      setDefaultPage((editingWidget.default_page as any) || 'dashboard');
+      
+      if (config?.customCode) {
+        setCustomCode(config.customCode);
+      }
+      if (config?.dataSourceId) {
+        setSelectedDataSourceId(config.dataSourceId);
+        // Veri kaynağından veri çek
+        const ds = getDataSourceById(config.dataSourceId);
+        if (ds) {
+          if (ds.last_sample_data) {
+            setSampleData(ds.last_sample_data as any[]);
+          } else {
+            fetchDataFromSource(ds);
+          }
+        }
+      }
+    } else if (!editingWidget && open) {
+      // Yeni widget oluşturma - form sıfırla
+      setWidgetKey('custom_widget_' + Date.now());
+      setWidgetName('Özel Widget');
+      setWidgetDescription('');
+      setWidgetIcon('Code');
+      setWidgetSize('lg');
+      setDefaultPage('dashboard');
+      setCustomCode(getDefaultCodeTemplate());
+      setSelectedDataSourceId(null);
+      setSampleData([]);
+      setChatHistory([]);
+    }
+  }, [editingWidget, open]);
 
   // Veri kaynağı seçildiğinde veri çek
   const handleDataSourceSelect = async (dataSource: DataSourceType | null) => {
@@ -427,6 +482,68 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave }: CustomCo
     toast.success('JSON dosyası indirildi');
   };
 
+  // Veri analizi fonksiyonu - AI için zengin context
+  const analyzeDataForAI = useCallback((data: any[]) => {
+    if (!data || data.length === 0) return {};
+    
+    const fields = Object.keys(data[0]);
+    const analysis: Record<string, any> = {};
+    
+    fields.forEach(field => {
+      const values = data.map(d => d[field]).filter(v => v != null);
+      const numericValues = values.filter(v => typeof v === 'number' || !isNaN(parseFloat(v)));
+      
+      // Tip tespiti
+      const detectType = () => {
+        if (values.length === 0) return 'empty';
+        const first = values[0];
+        if (typeof first === 'number') return 'number';
+        if (typeof first === 'boolean') return 'boolean';
+        if (typeof first === 'string') {
+          if (!isNaN(Date.parse(first)) && first.includes('-')) return 'date';
+          if (!isNaN(parseFloat(first)) && values.every(v => !isNaN(parseFloat(v)))) return 'numeric-string';
+        }
+        return 'string';
+      };
+      
+      const fieldType = detectType();
+      
+      analysis[field] = {
+        type: fieldType,
+        uniqueCount: new Set(values).size,
+        nullCount: data.filter(d => d[field] == null).length,
+        sampleValues: [...new Set(values)].slice(0, 5),
+      };
+      
+      // Sayısal alan ise istatistikler
+      if (numericValues.length > 0 && (fieldType === 'number' || fieldType === 'numeric-string')) {
+        const nums = numericValues.map(v => typeof v === 'number' ? v : parseFloat(v));
+        analysis[field].min = Math.min(...nums);
+        analysis[field].max = Math.max(...nums);
+        analysis[field].avg = Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 100) / 100;
+        analysis[field].sum = Math.round(nums.reduce((a, b) => a + b, 0) * 100) / 100;
+      }
+      
+      // Tarih alanı ise aralık
+      if (fieldType === 'date') {
+        const dates = values.map(v => new Date(v)).filter(d => !isNaN(d.getTime()));
+        if (dates.length > 0) {
+          analysis[field].minDate = new Date(Math.min(...dates.map(d => d.getTime()))).toISOString().split('T')[0];
+          analysis[field].maxDate = new Date(Math.max(...dates.map(d => d.getTime()))).toISOString().split('T')[0];
+        }
+      }
+    });
+    
+    return analysis;
+  }, []);
+
+  // Sayı formatlama
+  const formatNumber = (value: number) => {
+    if (Math.abs(value) >= 1000000) return (value / 1000000).toFixed(1) + 'M';
+    if (Math.abs(value) >= 1000) return (value / 1000).toFixed(1) + 'K';
+    return value.toLocaleString('tr-TR');
+  };
+
   // AI ile kod üret
   const generateCodeWithAI = async () => {
     if (!aiPrompt.trim()) {
@@ -441,24 +558,21 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave }: CustomCo
 
     setIsGeneratingCode(true);
     try {
-      // Veri yapısını analiz et
-      const sampleFields = sampleData.length > 0 ? Object.keys(sampleData[0]) : [];
-      const fieldTypes: Record<string, string> = {};
+      // Zengin veri analizi
+      const dataAnalysis = analyzeDataForAI(sampleData);
       
-      if (sampleData.length > 0) {
-        sampleFields.forEach(field => {
-          const value = sampleData[0][field];
-          if (typeof value === 'number') fieldTypes[field] = 'number';
-          else if (typeof value === 'boolean') fieldTypes[field] = 'boolean';
-          else if (value && !isNaN(Date.parse(value))) fieldTypes[field] = 'date';
-          else fieldTypes[field] = 'string';
-        });
-      }
+      const systemPrompt = `Veri Analizi:
+- Toplam kayıt: ${sampleData.length}
+- Alan istatistikleri:
+${Object.entries(dataAnalysis).map(([field, stats]) => {
+  const s = stats as any;
+  let info = `  • ${field} (${s.type}): ${s.uniqueCount} benzersiz değer`;
+  if (s.min !== undefined) info += `, min: ${formatNumber(s.min)}, max: ${formatNumber(s.max)}, toplam: ${formatNumber(s.sum)}`;
+  if (s.minDate) info += `, tarih aralığı: ${s.minDate} - ${s.maxDate}`;
+  return info;
+}).join('\n')}
 
-      const systemPrompt = `Veri yapısı:
-- Alanlar: ${sampleFields.join(', ')}
-- Tipleri: ${JSON.stringify(fieldTypes)}
-- Örnek kayıt: ${JSON.stringify(sampleData[0], null, 2)}
+Örnek kayıt: ${JSON.stringify(sampleData[0], null, 2)}
 
 Kullanıcı isteği: ${aiPrompt}`;
 
@@ -602,11 +716,21 @@ Kullanıcı isteği: ${aiPrompt}`;
       builder_config: builderConfig,
     };
 
-    const success = await createWidget(formData);
-    if (success) {
-      toast.success('Widget oluşturuldu!');
-      onSave?.();
-      onOpenChange(false);
+    // Düzenleme veya yeni oluşturma
+    if (editingWidget) {
+      const success = await updateWidget(editingWidget.id, formData);
+      if (success) {
+        toast.success('Widget güncellendi!');
+        onSave?.();
+        onOpenChange(false);
+      }
+    } else {
+      const success = await createWidget(formData);
+      if (success) {
+        toast.success('Widget oluşturuldu!');
+        onSave?.();
+        onOpenChange(false);
+      }
     }
   };
 
@@ -836,10 +960,27 @@ Kullanıcı isteği: ${aiPrompt}`;
               {/* JSON Veri Sekmesi */}
               <TabsContent value="datasource" className="flex-1 p-4 m-0">
                 <div className="h-full flex flex-col">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-4">
                       <Badge variant="secondary">{sampleData.length} kayıt</Badge>
                       {isLoadingData && <Loader2 className="h-4 w-4 animate-spin" />}
+                      
+                      {/* Slider kontrolü */}
+                      {sampleData.length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Göster:</span>
+                          <input
+                            type="range"
+                            min={5}
+                            max={Math.min(100, sampleData.length)}
+                            step={5}
+                            value={jsonPreviewCount}
+                            onChange={(e) => setJsonPreviewCount(parseInt(e.target.value))}
+                            className="w-20 h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
+                          />
+                          <span className="text-xs font-mono w-6 text-center">{jsonPreviewCount}</span>
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <Button size="sm" variant="outline" onClick={copyJson} disabled={sampleData.length === 0}>
@@ -855,13 +996,13 @@ Kullanıcı isteği: ${aiPrompt}`;
                   <ScrollArea className="flex-1 border rounded-lg">
                     <pre className="p-4 text-xs font-mono whitespace-pre-wrap">
                       {sampleData.length > 0 
-                        ? JSON.stringify(sampleData.slice(0, 10), null, 2)
+                        ? JSON.stringify(sampleData.slice(0, jsonPreviewCount), null, 2)
                         : 'Veri kaynağı seçin...'}
                     </pre>
                   </ScrollArea>
-                  {sampleData.length > 10 && (
+                  {sampleData.length > jsonPreviewCount && (
                     <p className="text-xs text-muted-foreground mt-2">
-                      İlk 10 kayıt gösteriliyor (toplam {sampleData.length})
+                      İlk {jsonPreviewCount} kayıt gösteriliyor (toplam {sampleData.length})
                     </p>
                   )}
                 </div>
@@ -883,9 +1024,28 @@ Kullanıcı isteği: ${aiPrompt}`;
                     />
                   </div>
 
+                  {/* Veri Analizi Özeti */}
                   {sampleData.length > 0 && (
-                    <div className="p-3 rounded-lg bg-muted/50 border">
-                      <div className="text-xs text-muted-foreground mb-2">Kullanılabilir alanlar:</div>
+                    <div className="p-3 rounded-lg bg-muted/50 border space-y-3">
+                      <div className="text-xs font-semibold flex items-center gap-2">
+                        <Database className="h-3 w-3" />
+                        Veri Analizi ({sampleData.length} kayıt)
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {Object.entries(analyzeDataForAI(sampleData)).slice(0, 6).map(([field, stats]) => {
+                          const s = stats as any;
+                          return (
+                            <div key={field} className="p-2 bg-background rounded border text-xs">
+                              <div className="font-medium truncate">{field}</div>
+                              <div className="text-muted-foreground">
+                                {s.type} • {s.uniqueCount} değer
+                                {s.sum !== undefined && ` • Σ ${formatNumber(s.sum)}`}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Kullanılabilir alanlar (tıkla ekle):</div>
                       <div className="flex flex-wrap gap-1">
                         {Object.keys(sampleData[0] || {}).slice(0, 15).map(field => (
                           <Badge key={field} variant="outline" className="text-xs cursor-pointer hover:bg-accent" onClick={() => setAiPrompt(prev => prev + ` ${field}`)}>
@@ -1117,7 +1277,7 @@ Kullanıcı isteği: ${aiPrompt}`;
           </Button>
           <Button onClick={handleSave} disabled={isSaving || !selectedDataSourceId}>
             {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-            Widget Oluştur
+            {editingWidget ? 'Widget Güncelle' : 'Widget Oluştur'}
           </Button>
         </DialogFooter>
       </DialogContent>
