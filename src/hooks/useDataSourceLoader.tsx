@@ -123,26 +123,11 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     if (cachedData && !forceRefresh) {
       console.log(`[DataSourceLoader] Cache HIT: ${dataSource.name} (${cachedData.length} kayıt)${isStale ? ' [STALE]' : ''}`);
       incrementCacheHit();
-      
-      // Stale ise arka planda güncelle (fire-and-forget)
-      if (isStale) {
-        console.log(`[DataSourceLoader] Revalidating stale data: ${dataSource.name}`);
-        // Arka planda güncelleme - await etmiyoruz
-        loadDataSourceFromApi(dataSource, accessToken).then(freshData => {
-          if (freshData) {
-            setDataSourceData(dataSource.id, freshData, DEFAULT_TTL);
-            setSourceDataMap(prev => {
-              const next = new Map(prev);
-              next.set(dataSource.id, freshData);
-              return next;
-            });
-            console.log(`[DataSourceLoader] Background revalidation complete: ${dataSource.name}`);
-          }
-        }).catch(err => {
-          console.warn(`[DataSourceLoader] Background revalidation failed: ${dataSource.name}`, err);
-        });
-      }
-      
+
+      // NOT: Kontör tasarrufu için otomatik arka-plan revalidate KAPALI.
+      // Veri "stale" olsa bile burada DIA çağrısı tetiklemiyoruz.
+      // Yenileme yalnızca forceRefresh=true (manuel) ile yapılır.
+
       return cachedData;
     }
 

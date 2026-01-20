@@ -25,7 +25,7 @@ function DashboardContent() {
   const { refreshSettings } = useUserSettings();
   const [genelRapor, setGenelRapor] = useState<DiaGenelRapor | null>(null);
   const [finansRapor, setFinansRapor] = useState<DiaFinansRapor | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [diaConnectionInfo, setDiaConnectionInfo] = useState<DiaConnectionInfo | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [dashboardPageId, setDashboardPageId] = useState<string | null>(null);
@@ -162,10 +162,11 @@ function DashboardContent() {
     }
   }, []);
 
-  // İlk yükleme
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // NOT: Kontör tasarrufu için legacy DIA rapor çekimi otomatik başlatılmıyor.
+  // Dashboard verileri merkezi DataSourceLoader üzerinden bir kez yüklenir.
+  // useEffect(() => {
+  //   fetchData();
+  // }, [fetchData]);
 
   // Otomatik yenileme zamanlayıcısı
   useEffect(() => {
@@ -187,15 +188,16 @@ function DashboardContent() {
     }, 1000);
 
     // Yenileme zamanlayıcısı
-    const refreshTimer = setInterval(() => {
-      if (!isLoading) {
-        fetchData();
-      }
-    }, refreshInterval * 1000);
+     // NOT: Kontör tasarrufu için otomatik yenileme (DIA çağrısı) devre dışı.
+     // const refreshTimer = setInterval(() => {
+     //   if (!isLoading) {
+     //     fetchData();
+     //   }
+     // }, refreshInterval * 1000);
 
     return () => {
       clearInterval(countdownInterval);
-      clearInterval(refreshTimer);
+      // clearInterval(refreshTimer);
     };
   }, [autoRefreshEnabled, refreshInterval, fetchData, isLoading]);
 
@@ -245,8 +247,8 @@ function DashboardContent() {
       <Header 
         title="Dashboard" 
         subtitle="Günlük özet ve kritik bilgiler"
-        onRefresh={fetchData}
-        isRefreshing={isLoading}
+        onRefresh={refreshDataSources}
+        isRefreshing={dataSourcesLoading}
         currentPage="dashboard"
         showWidgetPicker={false}
       />
@@ -273,11 +275,11 @@ function DashboardContent() {
             <div className="flex items-center gap-2">
               {diaConnectionInfo?.hasCredentials && (
                 <button 
-                  onClick={fetchData}
-                  disabled={isLoading}
+                  onClick={refreshDataSources}
+                  disabled={dataSourcesLoading}
                   className="btn-primary text-sm px-4 py-2 flex items-center gap-2"
                 >
-                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`w-4 h-4 ${dataSourcesLoading ? 'animate-spin' : ''}`} />
                   Yeniden Bağlan
                 </button>
               )}
