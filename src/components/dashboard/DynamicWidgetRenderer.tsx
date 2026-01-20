@@ -418,7 +418,12 @@ export function DynamicWidgetRenderer({
         );
 
       // ========== CHART WIDGETS ==========
+      // NOT: Aşağıdaki grafik widget'ları artık builder_config varsa
+      // üstteki BuilderWidgetRenderer bloğunda render ediliyor.
+      // Bu case'ler sadece eski/legacy widget'lar için fallback olarak kalıyor.
+      
       case 'grafik_vade_yaslandirma':
+        // Vade yaşlandırma özel bir widget, legacy kalabilir
         return (
           <VadeYaslandirmasi
             yaslandirma={yaslandirma || {
@@ -436,7 +441,10 @@ export function DynamicWidgetRenderer({
           />
         );
       
+      // Bu grafik widget'ları artık BuilderWidgetRenderer ile render edilmeli
+      // Legacy fallback - sadece dbWidget olmadan çağrılırsa kullanılır
       case 'grafik_ozelkod_dagilimi':
+        console.warn('grafik_ozelkod_dagilimi: Legacy render kullanıldı - dbWidget ile BuilderWidgetRenderer kullanılmalı');
         return (
           <OzelKodDonutChart
             cariler={getFilteredCariler()}
@@ -445,6 +453,7 @@ export function DynamicWidgetRenderer({
         );
       
       case 'grafik_sektor_dagilimi':
+        console.warn('grafik_sektor_dagilimi: Legacy render kullanıldı - dbWidget ile BuilderWidgetRenderer kullanılmalı');
         return (
           <SektorDagilimi
             cariler={getFilteredCariler()}
@@ -453,6 +462,7 @@ export function DynamicWidgetRenderer({
         );
       
       case 'grafik_kaynak_dagilimi':
+        console.warn('grafik_kaynak_dagilimi: Legacy render kullanıldı - dbWidget ile BuilderWidgetRenderer kullanılmalı');
         return (
           <KaynakDagilimi
             cariler={getFilteredCariler()}
@@ -461,6 +471,7 @@ export function DynamicWidgetRenderer({
         );
       
       case 'grafik_lokasyon_dagilimi':
+        console.warn('grafik_lokasyon_dagilimi: Legacy render kullanıldı - dbWidget ile BuilderWidgetRenderer kullanılmalı');
         return (
           <LokasyonDagilimi
             cariler={getFilteredCariler()}
@@ -469,6 +480,7 @@ export function DynamicWidgetRenderer({
         );
       
       case 'grafik_cari_donusum_trend':
+        console.warn('grafik_cari_donusum_trend: Legacy render kullanıldı - dbWidget ile BuilderWidgetRenderer kullanılmalı');
         return (
           <CariDonusumTrend
             cariler={getFilteredCariler()}
