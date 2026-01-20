@@ -1,6 +1,6 @@
 // DiaDataCacheContext - DIA API sonuçlarını önbelleğe alma
-// Aynı verinin birden fazla kez çekilmesini önler, kontör tasarrufu sağlar
-// Stale-While-Revalidate stratejisi ile eski veriyi gösterirken arka planda günceller
+// GLOBAL cache: Tüm sayfalar arası paylaşılan veri havuzu
+// Aynı sorgu bir kez yapılır, tüm sayfalarda kullanılır
 
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode, useRef } from 'react';
 
@@ -30,6 +30,13 @@ interface DiaDataCacheContextType {
   setDataSourceData: (dataSourceId: string, data: any[], ttl?: number) => void;
   isDataSourceLoading: (dataSourceId: string) => boolean;
   setDataSourceLoading: (dataSourceId: string, loading: boolean) => void;
+  
+  // GLOBAL - Hangi veri kaynaklarının ZATEN sorgulandığını takip eder
+  // Sayfa geçişlerinde aynı sorgu tekrar yapılmaz
+  isDataSourceFetched: (dataSourceId: string) => boolean;
+  markDataSourceFetched: (dataSourceId: string) => void;
+  getFetchedDataSources: () => string[];
+  clearFetchedRegistry: () => void; // Manuel yenileme için
   
   // Sayfa seviyesi yükleme durumu
   isPageDataReady: boolean;
@@ -81,6 +88,11 @@ interface DiaDataCacheProviderProps {
 export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
   const [cache, setCache] = useState<Map<string, CacheEntry>>(new Map());
   const [loadingDataSources, setLoadingDataSources] = useState<Set<string>>(new Set());
+  
+  // GLOBAL: Hangi veri kaynakları bu oturumda zaten sorgulandı?
+  // Bu sayede sayfa geçişlerinde aynı sorgu tekrar yapılmaz
+  const fetchedDataSourcesRef = useRef<Set<string>>(new Set());
+  
   const [isPageDataReady, setPageDataReady] = useState(false);
   const [sharedData, setSharedDataState] = useState<{
     cariListesi: any[] | null;
@@ -227,6 +239,25 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
     });
   }, []);
 
+  // GLOBAL Fetched Registry - Hangi veri kaynakları bu oturumda sorgulandı?
+  const isDataSourceFetched = useCallback((dataSourceId: string): boolean => {
+    return fetchedDataSourcesRef.current.has(dataSourceId);
+  }, []);
+
+  const markDataSourceFetched = useCallback((dataSourceId: string) => {
+    fetchedDataSourcesRef.current.add(dataSourceId);
+    console.log(`[GlobalRegistry] Marked as fetched: ${dataSourceId} (total: ${fetchedDataSourcesRef.current.size})`);
+  }, []);
+
+  const getFetchedDataSources = useCallback((): string[] => {
+    return Array.from(fetchedDataSourcesRef.current);
+  }, []);
+
+  const clearFetchedRegistry = useCallback(() => {
+    fetchedDataSourcesRef.current.clear();
+    console.log('[GlobalRegistry] Cleared - next page load will refetch all sources');
+  }, []);
+
   // İstatistik güncellemeleri
   const resetStats = useCallback(() => {
     setStats({
@@ -262,6 +293,10 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
     setDataSourceData,
     isDataSourceLoading,
     setDataSourceLoading,
+    isDataSourceFetched,
+    markDataSourceFetched,
+    getFetchedDataSources,
+    clearFetchedRegistry,
     isPageDataReady,
     setPageDataReady,
     sharedData,
@@ -274,6 +309,7 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
     getCachedData, getCachedDataWithStale, setCachedData, invalidateCache, 
     getDataSourceData, getDataSourceDataWithStale, setDataSourceData, 
     isDataSourceLoading, setDataSourceLoading,
+    isDataSourceFetched, markDataSourceFetched, getFetchedDataSources, clearFetchedRegistry,
     isPageDataReady, setPageDataReady,
     sharedData, setSharedData, stats, resetStats, incrementCacheHit, incrementCacheMiss
   ]);
@@ -299,6 +335,10 @@ export function useDiaDataCache(): DiaDataCacheContextType {
       setDataSourceData: () => {},
       isDataSourceLoading: () => false,
       setDataSourceLoading: () => {},
+      isDataSourceFetched: () => false,
+      markDataSourceFetched: () => {},
+      getFetchedDataSources: () => [],
+      clearFetchedRegistry: () => {},
       isPageDataReady: false,
       setPageDataReady: () => {},
       sharedData: { cariListesi: null, vadeBakiye: null },
