@@ -17,7 +17,9 @@ import {
   DiaApiSort,
   MultiQueryConfig,
   CalculatedField,
+  DateFilterConfig,
 } from '@/lib/widgetBuilderTypes';
+import { DateRangeConfig, getDefaultDateFilterConfig } from './DateRangeConfig';
 import { testDiaApi, DiaApiTestResponse, FieldStat } from '@/lib/diaApiTest';
 import { CompactFilterBuilder } from './CompactFilterBuilder';
 import { CompactSortBuilder } from './CompactSortBuilder';
@@ -45,7 +47,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Wand2, Code, BarChart3, Settings2, Play, Save, Plus, Trash2, 
   Hash, TrendingUp, Activity, PieChart, Circle, Table, List, Filter, LayoutGrid, Crosshair, Radar, CheckCircle, XCircle, AlertCircle, Edit,
-  FileJson, MousePointer, Target, Columns, Database, Calculator, BookTemplate, Sparkles
+  FileJson, MousePointer, Target, Columns, Database, Calculator, BookTemplate, Sparkles, Calendar
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -144,6 +146,9 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   const [multiQuery, setMultiQuery] = useState<MultiQueryConfig | null>(null);
   const [calculatedFields, setCalculatedFields] = useState<CalculatedField[]>([]);
   
+  // Tarih filtresi
+  const [dateFilterConfig, setDateFilterConfig] = useState<DateFilterConfig>(getDefaultDateFilterConfig());
+  
   // Şablon seçimi
   const [selectedTemplate, setSelectedTemplate] = useState<WidgetTemplate | null>(null);
   
@@ -208,6 +213,11 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
           setLegendField(bc.visualization.chart.legendField || '');
           setTooltipFields(bc.visualization.chart.tooltipFields?.join(', ') || '');
         }
+        
+        // Tarih filtresi yükle
+        if (bc.dateFilter) {
+          setDateFilterConfig(bc.dateFilter);
+        }
       }
     } else if (!open) {
       // Modal kapandığında formu temizle
@@ -238,6 +248,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
     setActiveTarget(null);
     setMultiQuery(null);
     setCalculatedFields([]);
+    setDateFilterConfig(getDefaultDateFilterConfig());
     setSelectedTemplate(null);
   };
   
@@ -471,6 +482,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
       },
       multiQuery: multiQuery || undefined,
       calculatedFields: calculatedFields.length > 0 ? calculatedFields : undefined,
+      dateFilter: dateFilterConfig.enabled ? dateFilterConfig : undefined,
       visualization: {
         ...config.visualization,
         chart: config.visualization.chart ? {
@@ -555,7 +567,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className={cn("grid w-full", isEditMode ? "grid-cols-6" : "grid-cols-7")}>
+          <TabsList className={cn("grid w-full", isEditMode ? "grid-cols-7" : "grid-cols-8")}>
             {!isEditMode && (
               <TabsTrigger value="templates" className="gap-1 text-xs">
                 <Sparkles className="h-3.5 w-3.5" />
@@ -573,6 +585,10 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
             <TabsTrigger value="calculation" className="gap-1 text-xs">
               <Calculator className="h-3.5 w-3.5" />
               Hesaplama
+            </TabsTrigger>
+            <TabsTrigger value="date" className="gap-1 text-xs">
+              <Calendar className="h-3.5 w-3.5" />
+              Tarih
             </TabsTrigger>
             <TabsTrigger value="visualization" className="gap-1 text-xs">
               <BarChart3 className="h-3.5 w-3.5" />
@@ -926,6 +942,31 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                     <div className="flex items-center gap-2 text-sm text-green-600">
                       <CheckCircle className="h-4 w-4" />
                       <span>{calculatedFields.length} hesaplama alanı tanımlandı - Görselleştirme sekmesinde kullanılabilir</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+
+            {/* TARİH FİLTRELEME */}
+            <TabsContent value="date" className="m-0 space-y-4">
+              <DateRangeConfig
+                config={dateFilterConfig}
+                onChange={setDateFilterConfig}
+                availableDateFields={testResult?.sampleFields?.filter(f => {
+                  const fieldType = testResult?.fieldTypes?.[f];
+                  return fieldType === 'date' || f.toLowerCase().includes('tarih') || f.toLowerCase().includes('date');
+                }) || []}
+              />
+              
+              {dateFilterConfig.enabled && (
+                <Card className="bg-primary/5 border-primary/30">
+                  <CardContent className="pt-4">
+                    <div className="flex items-center gap-2 text-sm text-primary">
+                      <Calendar className="h-4 w-4" />
+                      <span>
+                        Tarih filtresi aktif - "{dateFilterConfig.dateField}" alanı "{dateFilterConfig.defaultPeriod}" varsayılan periyotla filtrelenecek
+                      </span>
                     </div>
                   </CardContent>
                 </Card>

@@ -3,7 +3,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useDiaDataCache, generateCacheKey, SHARED_CACHE_KEYS } from '@/contexts/DiaDataCacheContext';
-import { WidgetBuilderConfig, AggregationType, CalculatedField, CalculationExpression, QueryMerge } from '@/lib/widgetBuilderTypes';
+import { useDataSources } from './useDataSources';
+import { WidgetBuilderConfig, AggregationType, CalculatedField, CalculationExpression, QueryMerge, DatePeriod, DiaApiFilter } from '@/lib/widgetBuilderTypes';
+import { 
+  startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, 
+  startOfQuarter, endOfQuarter, startOfYear, endOfYear, 
+  subDays, subWeeks, subMonths, subQuarters, subYears, format 
+} from 'date-fns';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -13,6 +19,81 @@ interface DynamicWidgetDataResult {
   isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+}
+
+// Tarih aralığı hesaplama
+function getDateRangeFilter(period: DatePeriod, dateField: string, customStart?: string, customEnd?: string): DiaApiFilter[] | null {
+  const now = new Date();
+  let startDate: Date;
+  let endDate: Date = now;
+  
+  switch (period) {
+    case 'all':
+      return null;
+    case 'today':
+      startDate = startOfDay(now);
+      endDate = endOfDay(now);
+      break;
+    case 'this_week':
+      startDate = startOfWeek(now, { weekStartsOn: 1 });
+      endDate = endOfWeek(now, { weekStartsOn: 1 });
+      break;
+    case 'this_month':
+      startDate = startOfMonth(now);
+      endDate = endOfMonth(now);
+      break;
+    case 'this_quarter':
+      startDate = startOfQuarter(now);
+      endDate = endOfQuarter(now);
+      break;
+    case 'this_year':
+      startDate = startOfYear(now);
+      endDate = endOfYear(now);
+      break;
+    case 'last_week':
+      startDate = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
+      endDate = endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
+      break;
+    case 'last_month':
+      startDate = startOfMonth(subMonths(now, 1));
+      endDate = endOfMonth(subMonths(now, 1));
+      break;
+    case 'last_quarter':
+      startDate = startOfQuarter(subQuarters(now, 1));
+      endDate = endOfQuarter(subQuarters(now, 1));
+      break;
+    case 'last_year':
+      startDate = startOfYear(subYears(now, 1));
+      endDate = endOfYear(subYears(now, 1));
+      break;
+    case 'last_7_days':
+      startDate = subDays(now, 7);
+      endDate = now;
+      break;
+    case 'last_30_days':
+      startDate = subDays(now, 30);
+      endDate = now;
+      break;
+    case 'last_90_days':
+      startDate = subDays(now, 90);
+      endDate = now;
+      break;
+    case 'custom':
+      if (customStart && customEnd) {
+        startDate = new Date(customStart);
+        endDate = new Date(customEnd);
+      } else {
+        return null;
+      }
+      break;
+    default:
+      return null;
+  }
+  
+  return [
+    { field: dateField, operator: '>=', value: format(startDate, 'yyyy-MM-dd') },
+    { field: dateField, operator: '<=', value: format(endDate, 'yyyy-MM-dd') },
+  ];
 }
 
 // Agregasyon hesaplamaları
