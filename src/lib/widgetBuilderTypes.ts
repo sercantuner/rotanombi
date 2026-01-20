@@ -18,7 +18,8 @@ export type ChartType =
   | 'cashflow'      // Nakit akış projeksiyonu (vade yaşlandırma)
   | 'aging'         // Yaşlandırma grafiği
   | 'gauge'         // Gösterge (oran/yüzde)
-  | 'waterfall';    // Şelale grafiği
+  | 'waterfall'     // Şelale grafiği
+  | 'custom';       // Özel kod widget
 
 export type AggregationType = 
   | 'sum'
@@ -403,6 +404,7 @@ export const CHART_TYPES: { id: ChartType; name: string; icon: string; descripti
   { id: 'aging', name: 'Yaşlandırma', icon: 'Clock', description: 'Vade bazlı yaşlandırma grafiği' },
   { id: 'gauge', name: 'Gösterge', icon: 'Gauge', description: 'Oran veya yüzde göstergesi' },
   { id: 'waterfall', name: 'Şelale', icon: 'BarChart2', description: 'Kümülatif değişim analizi' },
+  { id: 'custom', name: 'Özel Kod', icon: 'Code', description: 'React/JavaScript ile özel widget' },
 ];
 
 // Aggregation tipleri
