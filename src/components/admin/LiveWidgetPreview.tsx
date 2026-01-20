@@ -16,20 +16,23 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { 
   Play, RefreshCw, Eye, AlertCircle, CheckCircle2, Hash, 
   BarChart3, TrendingUp, PieChart, Activity, Table, List, Loader2,
-  Palette, ChevronDown, Edit2
+  Palette, ChevronDown, Edit2, ArrowUp, ArrowDown, ArrowUpDown,
+  Grid3X3, LayoutGrid, Settings2, Minus
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { 
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   PieChart as RechartsPieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  ReferenceLine
 } from 'recharts';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { LegendPosition } from '@/lib/widgetBuilderTypes';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
-// Renk paletleri
+// Genişletilmiş renk paletleri (12 adet)
 const COLOR_PALETTES = {
   default: {
     name: 'Varsayılan',
@@ -87,10 +90,47 @@ const COLOR_PALETTES = {
       '#ff6b6b', '#feca57', '#ff9ff3', '#54a0ff', '#5f27cd',
       '#ee5a24', '#f8c291', '#6d214f', '#b33939', '#c44569'
     ]
-  }
+  },
+  forest: {
+    name: 'Orman',
+    colors: [
+      '#2d6a4f', '#40916c', '#52b788', '#74c69d', '#95d5b2',
+      '#1b4332', '#b7e4c7', '#d8f3dc', '#081c15', '#344e41'
+    ]
+  },
+  berry: {
+    name: 'Meyve',
+    colors: [
+      '#7b2d8e', '#9c3587', '#c04b7d', '#e06974', '#f4986e',
+      '#5c2751', '#d94f70', '#eb6b9d', '#ff8fa3', '#ffb3c1'
+    ]
+  },
+  earth: {
+    name: 'Toprak',
+    colors: [
+      '#8b4513', '#a0522d', '#cd853f', '#daa520', '#d2691e',
+      '#5d3a1a', '#bc6c25', '#dda15e', '#606c38', '#283618'
+    ]
+  },
+  neon: {
+    name: 'Neon',
+    colors: [
+      '#ff00ff', '#00ffff', '#ff00aa', '#00ff00', '#ffff00',
+      '#ff6600', '#0099ff', '#cc00ff', '#00ff99', '#ff3366'
+    ]
+  },
+  retro: {
+    name: 'Retro',
+    colors: [
+      '#e63946', '#f4a261', '#e9c46a', '#2a9d8f', '#264653',
+      '#a8dadc', '#457b9d', '#1d3557', '#f1faee', '#ffb4a2'
+    ]
+  },
 };
 
-type PaletteKey = keyof typeof COLOR_PALETTES;
+export type PaletteKey = keyof typeof COLOR_PALETTES;
+
+export { COLOR_PALETTES };
 
 // İkon listesi
 const ICON_OPTIONS = [
@@ -115,6 +155,13 @@ interface LiveWidgetPreviewProps {
   onNameChange?: (name: string) => void;
   onIconChange?: (icon: string) => void;
   onColorsChange?: (colors: string[]) => void;
+  onPaletteChange?: (palette: string) => void;
+  onChartSettingsChange?: (settings: { 
+    showGrid: boolean; 
+    legendPosition: LegendPosition;
+    showTrendLine: boolean;
+    showAverageLine: boolean;
+  }) => void;
 }
 
 // Dinamik icon renderer
@@ -336,6 +383,8 @@ export function LiveWidgetPreview({
   onNameChange,
   onIconChange,
   onColorsChange,
+  onPaletteChange,
+  onChartSettingsChange,
 }: LiveWidgetPreviewProps) {
   const [rawData, setRawData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -349,11 +398,25 @@ export function LiveWidgetPreview({
   // Önizleme düzenleme state'leri
   const [editableName, setEditableName] = useState(widgetName);
   const [editableIcon, setEditableIcon] = useState(widgetIcon);
-  const [selectedPalette, setSelectedPalette] = useState<PaletteKey>('default');
+  const [selectedPalette, setSelectedPalette] = useState<PaletteKey>(
+    (config.visualization.chart?.colorPalette as PaletteKey) || 'default'
+  );
   const [customColors, setCustomColors] = useState<string[]>(COLOR_PALETTES.default.colors);
+  
+  // Tablo sıralama state'i
+  const [tableSortColumn, setTableSortColumn] = useState<string | null>(null);
+  const [tableSortDirection, setTableSortDirection] = useState<'ASC' | 'DESC'>('ASC');
   
   // Tablo satır limiti
   const [tableRowLimit, setTableRowLimit] = useState(20);
+  
+  // Grafik ayarları state'leri
+  const [showGrid, setShowGrid] = useState(config.visualization.chart?.showGrid !== false);
+  const [legendPosition, setLegendPosition] = useState<LegendPosition>(
+    config.visualization.chart?.legendPosition || 'bottom'
+  );
+  const [showTrendLine, setShowTrendLine] = useState(config.visualization.chart?.showTrendLine || false);
+  const [showAverageLine, setShowAverageLine] = useState(config.visualization.chart?.showAverageLine || false);
   
   // Props değişince state'leri güncelle
   useEffect(() => {
@@ -425,7 +488,18 @@ export function LiveWidgetPreview({
   // Palet değiştiğinde parent'a bildir
   useEffect(() => {
     onColorsChange?.(activeColors);
-  }, [activeColors, onColorsChange]);
+    onPaletteChange?.(selectedPalette);
+  }, [activeColors, selectedPalette, onColorsChange, onPaletteChange]);
+
+  // Grafik ayarları değiştiğinde parent'a bildir
+  useEffect(() => {
+    onChartSettingsChange?.({
+      showGrid,
+      legendPosition,
+      showTrendLine,
+      showAverageLine,
+    });
+  }, [showGrid, legendPosition, showTrendLine, showAverageLine, onChartSettingsChange]);
 
   // İşlenmiş veri (filtreler + hesaplamalar uygulanmış)
   const processedData = useMemo(() => {
@@ -439,6 +513,19 @@ export function LiveWidgetPreview({
     
     return data;
   }, [rawData, calculatedFields, postFetchFilters]);
+
+  // Ortalama değer hesapla (trend/average çizgileri için)
+  const averageValue = useMemo(() => {
+    if (!processedData || processedData.length === 0) return 0;
+    const valueField = yAxisField || config.visualization.chart?.yAxis?.field || config.visualization.chart?.valueField || 'toplambakiye';
+    const sum = processedData.reduce((acc, row) => {
+      const val = row[valueField];
+      if (typeof val === 'number') return acc + val;
+      if (typeof val === 'string') return acc + (parseFloat(val.replace(/[^\d.-]/g, '')) || 0);
+      return acc;
+    }, 0);
+    return sum / processedData.length;
+  }, [processedData, yAxisField, config.visualization.chart]);
 
   // Görselleştirme verisi - previewVizType kullanarak dinamik
   const visualizationData = useMemo(() => {
@@ -691,6 +778,87 @@ export function LiveWidgetPreview({
               })}
             </div>
 
+            {/* Grafik Ayarları Paneli - sadece grafik tipleri için */}
+            {['bar', 'line', 'area', 'pie', 'donut'].includes(previewVizType) && (
+              <div className="flex flex-wrap items-center gap-3 p-3 bg-muted/30 rounded-lg border">
+                <span className="text-xs font-medium flex items-center gap-1.5">
+                  <Settings2 className="h-3.5 w-3.5" />
+                  Grafik Ayarları:
+                </span>
+                
+                {/* Grid Toggle */}
+                <Button
+                  variant={showGrid ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-7 px-2 text-xs gap-1"
+                  onClick={() => setShowGrid(!showGrid)}
+                >
+                  <Grid3X3 className="h-3.5 w-3.5" />
+                  Grid
+                </Button>
+                
+                {/* Legend Konumu */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-7 px-2 text-xs gap-1">
+                      <LayoutGrid className="h-3.5 w-3.5" />
+                      Legend: {legendPosition === 'bottom' ? 'Alt' : legendPosition === 'right' ? 'Sağ' : 'Gizli'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-36 p-1" align="start">
+                    <Button
+                      variant={legendPosition === 'bottom' ? 'default' : 'ghost'}
+                      size="sm"
+                      className="w-full justify-start h-7 text-xs"
+                      onClick={() => setLegendPosition('bottom')}
+                    >
+                      Alt
+                    </Button>
+                    <Button
+                      variant={legendPosition === 'right' ? 'default' : 'ghost'}
+                      size="sm"
+                      className="w-full justify-start h-7 text-xs"
+                      onClick={() => setLegendPosition('right')}
+                    >
+                      Sağ
+                    </Button>
+                    <Button
+                      variant={legendPosition === 'hidden' ? 'default' : 'ghost'}
+                      size="sm"
+                      className="w-full justify-start h-7 text-xs"
+                      onClick={() => setLegendPosition('hidden')}
+                    >
+                      Gizli
+                    </Button>
+                  </PopoverContent>
+                </Popover>
+
+                {/* Trend ve Ortalama Çizgileri - sadece bar, line, area için */}
+                {['bar', 'line', 'area'].includes(previewVizType) && (
+                  <>
+                    <Button
+                      variant={showTrendLine ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-7 px-2 text-xs gap-1"
+                      onClick={() => setShowTrendLine(!showTrendLine)}
+                    >
+                      <TrendingUp className="h-3.5 w-3.5" />
+                      Trend
+                    </Button>
+                    <Button
+                      variant={showAverageLine ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-7 px-2 text-xs gap-1"
+                      onClick={() => setShowAverageLine(!showAverageLine)}
+                    >
+                      <Minus className="h-3.5 w-3.5" />
+                      Ortalama
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
+
             <Separator />
 
             {/* Widget Önizleme */}
@@ -725,7 +893,7 @@ export function LiveWidgetPreview({
                   </p>
                   <ResponsiveContainer width="100%" height={240}>
                     <BarChart data={visualizationData.chartData}>
-                      {visualizationData.showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
+                      {showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
                       <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={60} />
                       <YAxis tick={{ fontSize: 10 }} />
                       <Tooltip 
@@ -737,7 +905,24 @@ export function LiveWidgetPreview({
                         }}
                         formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
                       />
-                      <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {legendPosition !== 'hidden' && (
+                        <Legend 
+                          verticalAlign={legendPosition === 'right' ? 'middle' : 'bottom'}
+                          align={legendPosition === 'right' ? 'right' : 'center'}
+                          layout={legendPosition === 'right' ? 'vertical' : 'horizontal'}
+                        />
+                      )}
+                      {/* Ortalama Çizgisi */}
+                      {showAverageLine && (
+                        <ReferenceLine 
+                          y={averageValue} 
+                          stroke="#f97316" 
+                          strokeDasharray="5 5" 
+                          strokeWidth={2}
+                          label={{ value: `Ort: ${averageValue.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}`, fill: '#f97316', fontSize: 10, position: 'right' }}
+                        />
+                      )}
+                      <Bar dataKey="value" name="Değer" radius={[4, 4, 0, 0]}>
                         {visualizationData.chartData.map((_: any, index: number) => (
                           <Cell key={`cell-${index}`} fill={activeColors[index % activeColors.length]} />
                         ))}
@@ -756,7 +941,7 @@ export function LiveWidgetPreview({
                   </p>
                   <ResponsiveContainer width="100%" height={240}>
                     <LineChart data={visualizationData.chartData}>
-                      {visualizationData.showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
+                      {showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
                       <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={60} />
                       <YAxis tick={{ fontSize: 10 }} />
                       <Tooltip 
@@ -768,7 +953,11 @@ export function LiveWidgetPreview({
                         }}
                         formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
                       />
-                      <Line type="monotone" dataKey="value" stroke={activeColors[0]} strokeWidth={2} dot={{ r: 4, fill: activeColors[0] }} />
+                      {legendPosition !== 'hidden' && <Legend verticalAlign={legendPosition === 'right' ? 'middle' : 'bottom'} />}
+                      {showAverageLine && (
+                        <ReferenceLine y={averageValue} stroke="#f97316" strokeDasharray="5 5" strokeWidth={2} />
+                      )}
+                      <Line type="monotone" dataKey="value" name="Değer" stroke={activeColors[0]} strokeWidth={2} dot={{ r: 4, fill: activeColors[0] }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -783,7 +972,7 @@ export function LiveWidgetPreview({
                   </p>
                   <ResponsiveContainer width="100%" height={240}>
                     <AreaChart data={visualizationData.chartData}>
-                      {visualizationData.showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
+                      {showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
                       <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={60} />
                       <YAxis tick={{ fontSize: 10 }} />
                       <Tooltip 
@@ -795,7 +984,11 @@ export function LiveWidgetPreview({
                         }}
                         formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
                       />
-                      <Area type="monotone" dataKey="value" stroke={activeColors[0]} fill={`${activeColors[0]}40`} strokeWidth={2} />
+                      {legendPosition !== 'hidden' && <Legend verticalAlign={legendPosition === 'right' ? 'middle' : 'bottom'} />}
+                      {showAverageLine && (
+                        <ReferenceLine y={averageValue} stroke="#f97316" strokeDasharray="5 5" strokeWidth={2} />
+                      )}
+                      <Area type="monotone" dataKey="value" name="Değer" stroke={activeColors[0]} fill={`${activeColors[0]}40`} strokeWidth={2} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>

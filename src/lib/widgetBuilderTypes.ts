@@ -258,6 +258,9 @@ export interface ChartSeriesConfig {
   type?: 'bar' | 'line' | 'area';
 }
 
+// Legend konumu
+export type LegendPosition = 'bottom' | 'right' | 'hidden';
+
 export interface ChartConfig {
   chartType: ChartType;
   xAxis?: ChartAxisConfig;
@@ -267,10 +270,18 @@ export interface ChartConfig {
   valueField?: string;
   tooltipFields?: string[];
   colors?: string[];
+  colorPalette?: string;           // Renk paleti adı (pastel, vivid, vb.)
   showLegend?: boolean;
+  legendPosition?: LegendPosition; // Legend konumu (alt, sağ, gizli)
   showGrid?: boolean;
   stacked?: boolean;
-  displayLimit?: number; // Grafikte gösterilecek maksimum kayıt sayısı (varsayılan: 10)
+  displayLimit?: number;           // Grafikte gösterilecek maksimum kayıt sayısı (varsayılan: 10)
+  // Power BI özellikleri
+  showTrendLine?: boolean;         // Trend çizgisi göster
+  showAverageLine?: boolean;       // Ortalama çizgisi göster
+  showMinMaxMarkers?: boolean;     // Min/Max noktalarını işaretle
+  trendLineColor?: string;         // Trend çizgisi rengi
+  averageLineColor?: string;       // Ortalama çizgisi rengi
 }
 
 export interface TableConfig {
@@ -279,11 +290,17 @@ export interface TableConfig {
     header: string;
     format?: 'currency' | 'number' | 'date' | 'text' | 'badge' | 'percentage';
     width?: string;
+    minWidth?: string;
+    maxWidth?: string;
     sortable?: boolean;
+    defaultSort?: 'ASC' | 'DESC';
+    align?: 'left' | 'center' | 'right';
   }[];
   pagination?: boolean;
   pageSize?: number;
   searchable?: boolean;
+  stripedRows?: boolean;
+  compactMode?: boolean;
 }
 
 // Widget için kullanılabilir filtreler
