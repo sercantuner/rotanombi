@@ -189,36 +189,47 @@ export function ContainerBasedDashboard({ pageId, widgetData = {}, isLoading = f
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 mb-4">
-        <Button 
-          variant="outline" 
-          size="sm"
-          onClick={() => setContainerPickerOpen(true)}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Container Ekle
-        </Button>
-
-        <div className="flex items-center gap-2">
-          {isDragMode ? (
-            <>
-              <Button variant="outline" size="sm" onClick={handleCancel}>
-                <X className="h-4 w-4 mr-2" />
-                İptal
-              </Button>
-              <Button size="sm" onClick={handleSave} disabled={!hasChanges}>
-                <Check className="h-4 w-4 mr-2" />
-                Kaydet
-              </Button>
-            </>
-          ) : (
-            <Button variant="outline" size="sm" onClick={() => setIsDragMode(true)}>
-              <Move className="h-4 w-4 mr-2" />
-              Düzenle
+      {/* Floating Toolbar - Sağ Alt Köşe */}
+      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2">
+        {isDragMode ? (
+          <>
+            <Button 
+              variant="outline" 
+              size="icon"
+              onClick={handleCancel}
+              className="h-10 w-10 rounded-full shadow-lg bg-background"
+            >
+              <X className="h-4 w-4" />
             </Button>
-          )}
-        </div>
+            <Button 
+              size="icon"
+              onClick={handleSave} 
+              disabled={!hasChanges}
+              className="h-10 w-10 rounded-full shadow-lg"
+            >
+              <Check className="h-4 w-4" />
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button 
+              variant="outline" 
+              size="icon"
+              onClick={() => setContainerPickerOpen(true)}
+              className="h-10 w-10 rounded-full shadow-lg bg-background"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant="outline" 
+              size="icon"
+              onClick={() => setIsDragMode(true)}
+              className="h-10 w-10 rounded-full shadow-lg bg-background"
+            >
+              <Move className="h-4 w-4" />
+            </Button>
+          </>
+        )}
       </div>
 
       {isDragMode && (

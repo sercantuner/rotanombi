@@ -109,7 +109,7 @@ export function FilterableStatCard({
 
   return (
     <>
-      <div className="stat-card animate-slide-up group relative h-full min-h-0 flex flex-col overflow-hidden">
+      <div className="stat-card animate-slide-up group relative h-full flex flex-col overflow-hidden">
         {/* Control Buttons - Sadece düzenleme modunda görünür */}
         <div className={cn(
           'absolute top-2 right-2 flex items-center gap-1 z-10 transition-opacity',
@@ -153,9 +153,9 @@ export function FilterableStatCard({
           )}
         </div>
 
-        <div className="flex items-start justify-between flex-1 min-w-0">
-          <div className="flex-1 min-w-0 pr-2">
-            <p className="metric-label mb-1 truncate">{title}</p>
+        <div className="flex items-stretch justify-between flex-1 min-w-0">
+          <div className="flex-1 min-w-0 pr-2 flex flex-col justify-center">
+            <p className="metric-label mb-1 line-clamp-2">{title}</p>
             <p className={cn(
               'metric-value truncate',
               variantStyles[variant],
@@ -170,7 +170,7 @@ export function FilterableStatCard({
           {/* İkon - küçük ekranlarda gizlenir */}
           {kpiSettings.showIcon && (
             <div className={cn(
-              "p-2 md:p-3 rounded-lg bg-secondary flex-shrink-0 hidden sm:flex items-center justify-center",
+              "p-2 md:p-3 rounded-lg bg-secondary flex-shrink-0 hidden sm:flex items-center justify-center self-center",
               variantStyles[variant]
             )}>
               <Icon className="w-5 h-5 md:w-6 md:h-6" />

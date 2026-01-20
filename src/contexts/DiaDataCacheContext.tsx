@@ -51,6 +51,10 @@ interface DiaDataCacheContextType {
   };
   setSharedData: (key: 'cariListesi' | 'vadeBakiye', data: any[]) => void;
   
+  // DIA bağlantı durumu - GLOBAL
+  isDiaConnected: boolean;
+  setDiaConnected: (connected: boolean) => void;
+  
   // İstatistikler
   stats: CacheStats;
   resetStats: () => void;
@@ -104,6 +108,7 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
     cariListesi: null,
     vadeBakiye: null,
   });
+  const [isDiaConnected, setDiaConnected] = useState(false);
   const [stats, setStats] = useState<CacheStats>({
     totalQueries: 0,
     cacheHits: 0,
@@ -316,6 +321,8 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
     setPageDataReady,
     sharedData,
     setSharedData,
+    isDiaConnected,
+    setDiaConnected,
     stats,
     resetStats,
     incrementCacheHit,
@@ -327,7 +334,8 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
     isDataSourceLoading, setDataSourceLoading,
     isDataSourceFetched, markDataSourceFetched, getFetchedDataSources, clearFetchedRegistry,
     isPageDataReady, setPageDataReady,
-    sharedData, setSharedData, stats, resetStats, incrementCacheHit, incrementCacheMiss, recordApiCall
+    sharedData, setSharedData, isDiaConnected, setDiaConnected,
+    stats, resetStats, incrementCacheHit, incrementCacheMiss, recordApiCall
   ]);
 
   return (
@@ -359,6 +367,8 @@ export function useDiaDataCache(): DiaDataCacheContextType {
       setPageDataReady: () => {},
       sharedData: { cariListesi: null, vadeBakiye: null },
       setSharedData: () => {},
+      isDiaConnected: false,
+      setDiaConnected: () => {},
       stats: { totalQueries: 0, cacheHits: 0, cacheMisses: 0, realApiCalls: 0, lastApiCallTime: null },
       resetStats: () => {},
       incrementCacheHit: () => {},
