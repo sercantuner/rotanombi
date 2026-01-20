@@ -22,6 +22,7 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Slider } from '@/components/ui/slider';
 import { 
   Code, Database, Eye, Save, Play, Copy, Check, 
   LayoutGrid, AlertCircle, FileJson, Wand2, X,
@@ -1222,14 +1223,13 @@ Kullanıcı isteği: ${aiPrompt}`;
                       {!isMultiQueryMode && sampleData.length > 0 && (
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-muted-foreground">Göster:</span>
-                          <input
-                            type="range"
+                          <Slider
+                            value={[jsonPreviewCount]}
+                            onValueChange={([val]) => setJsonPreviewCount(val)}
                             min={5}
                             max={Math.min(100, sampleData.length)}
                             step={5}
-                            value={jsonPreviewCount}
-                            onChange={(e) => setJsonPreviewCount(parseInt(e.target.value))}
-                            className="w-20 h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
+                            className="w-24"
                           />
                           <span className="text-xs font-mono w-6 text-center">{jsonPreviewCount}</span>
                         </div>
@@ -1302,25 +1302,28 @@ Kullanıcı isteği: ${aiPrompt}`;
 
               {/* Multi-Query Kaynak Birleştirme Sekmesi */}
               {isMultiQueryMode && (
-                <TabsContent value="multiquery" className="flex-1 p-4 m-0 overflow-auto">
-                  <div className="h-full">
-                    <MultiQueryBuilder
-                      multiQuery={multiQuery}
-                      onChange={(config) => {
-                        setMultiQuery(config);
-                        // Config değiştiğinde veriyi yükle
-                        if (config) {
-                          loadMultiQueryData(config);
-                        }
-                      }}
-                    />
-                  </div>
+                <TabsContent value="multiquery" className="flex-1 p-0 m-0 overflow-hidden">
+                  <ScrollArea className="h-[calc(90vh-180px)]">
+                    <div className="p-4">
+                      <MultiQueryBuilder
+                        multiQuery={multiQuery}
+                        onChange={(config) => {
+                          setMultiQuery(config);
+                          // Config değiştiğinde veriyi yükle
+                          if (config) {
+                            loadMultiQueryData(config);
+                          }
+                        }}
+                      />
+                    </div>
+                  </ScrollArea>
                 </TabsContent>
               )}
 
               {/* AI Kod Üretimi Sekmesi */}
-              <TabsContent value="ai" className="flex-1 p-4 m-0">
-                <div className="h-full flex flex-col gap-4">
+              <TabsContent value="ai" className="flex-1 p-0 m-0 overflow-hidden">
+                <ScrollArea className="h-[calc(90vh-180px)]">
+                <div className="p-4 flex flex-col gap-4">
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-primary" />
@@ -1403,11 +1406,13 @@ Kullanıcı isteği: ${aiPrompt}`;
                     </div>
                   </div>
                 </div>
+                </ScrollArea>
               </TabsContent>
 
               {/* Kod Editörü Sekmesi */}
-              <TabsContent value="code" className="flex-1 p-4 m-0">
-                <div className="h-full flex flex-col">
+              <TabsContent value="code" className="flex-1 p-0 m-0 overflow-hidden">
+                <ScrollArea className="h-[calc(90vh-180px)]">
+                <div className="p-4 flex flex-col h-full">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">React / JavaScript</Badge>
@@ -1525,6 +1530,7 @@ Kullanıcı isteği: ${aiPrompt}`;
                     </div>
                   </div>
                 </div>
+                </ScrollArea>
               </TabsContent>
 
               {/* Önizleme Sekmesi */}

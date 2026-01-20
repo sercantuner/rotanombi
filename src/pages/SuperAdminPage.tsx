@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -54,7 +55,7 @@ const getEmptyFormData = (): WidgetFormData => ({
 
 export default function SuperAdminPage() {
   const { widgets, isLoading, refetch } = useWidgets();
-  const { createWidget, updateWidget, deleteWidget, activateWidget } = useWidgetAdmin();
+  const { createWidget, updateWidget, deleteWidget, activateWidget, permanentlyDeleteWidget } = useWidgetAdmin();
   const { isAdmin, loading: permissionsLoading } = usePermissions();
   const { 
     categories, 
@@ -79,6 +80,7 @@ export default function SuperAdminPage() {
   const [builderEditWidget, setBuilderEditWidget] = useState<Widget | null>(null);
   const [editingCustomCodeWidget, setEditingCustomCodeWidget] = useState<Widget | null>(null);
   const [formData, setFormData] = useState<WidgetFormData>(getEmptyFormData());
+  const [deleteConfirmWidget, setDeleteConfirmWidget] = useState<Widget | null>(null);
   
   // Kategori form state
   const [isCategoryFormOpen, setIsCategoryFormOpen] = useState(false);
@@ -177,6 +179,14 @@ export default function SuperAdminPage() {
     } else {
       await activateWidget(widget.id);
     }
+    refetch();
+  };
+
+  // Widget kalıcı sil
+  const handlePermanentDelete = async () => {
+    if (!deleteConfirmWidget) return;
+    await permanentlyDeleteWidget(deleteConfirmWidget.id);
+    setDeleteConfirmWidget(null);
     refetch();
   };
 
@@ -370,6 +380,15 @@ export default function SuperAdminPage() {
                             ) : (
                               <Eye className="h-4 w-4" />
                             )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDeleteConfirmWidget(widget)}
+                            title="Kalıcı Sil"
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </TableCell>
@@ -856,6 +875,24 @@ export default function SuperAdminPage() {
         onSave={() => refetch()}
         editingWidget={editingCustomCodeWidget}
       />
+
+      {/* Widget Kalıcı Silme Onay Dialog'u */}
+      <AlertDialog open={!!deleteConfirmWidget} onOpenChange={() => setDeleteConfirmWidget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Widget'ı Kalıcı Olarak Sil?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{deleteConfirmWidget?.name}" widget'ı kalıcı olarak silinecek. Bu işlem geri alınamaz.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>İptal</AlertDialogCancel>
+            <AlertDialogAction onClick={handlePermanentDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Kalıcı Sil
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
