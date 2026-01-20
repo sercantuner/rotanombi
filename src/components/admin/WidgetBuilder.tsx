@@ -22,6 +22,7 @@ import {
   DateFilterConfig,
   PostFetchFilter,
   PivotConfig,
+  LegendPosition,
 } from '@/lib/widgetBuilderTypes';
 import { DateRangeConfig, getDefaultDateFilterConfig } from './DateRangeConfig';
 import { DataSourceSelector } from './DataSourceSelector';
@@ -34,7 +35,7 @@ import { PostFetchFilterBuilder } from './PostFetchFilterBuilder';
 import { TableColumnBuilder, TableColumn } from './TableColumnBuilder';
 import { PivotConfigBuilder, getDefaultPivotConfig } from './PivotConfigBuilder';
 import { FieldWellBuilder, FieldWellsConfig } from './FieldWellBuilder';
-import { ChartSettingsPanel, ChartSettingsData, getDefaultChartSettings } from './ChartSettingsPanel';
+import { ChartSettingsPanel, ChartSettingsData, getDefaultChartSettings, PaletteKey } from './ChartSettingsPanel';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -213,6 +214,30 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
           setYAxisField(bc.visualization.chart.yAxis?.field || bc.visualization.chart.valueField || '');
           setLegendField(bc.visualization.chart.legendField || '');
           setTooltipFields(bc.visualization.chart.tooltipFields?.join(', ') || '');
+        }
+        
+        // FieldWells yükle
+        if (bc.fieldWells) {
+          setFieldWells(bc.fieldWells as FieldWellsConfig);
+        }
+        
+        // ChartSettings yükle
+        if (bc.chartSettings) {
+          const defaults = getDefaultChartSettings();
+          setChartSettings({
+            ...defaults,
+            colorPalette: (bc.chartSettings.colorPalette as PaletteKey) || defaults.colorPalette,
+            showLegend: bc.chartSettings.showLegend ?? defaults.showLegend,
+            legendPosition: (bc.chartSettings.legendPosition as LegendPosition) || defaults.legendPosition,
+            showGrid: bc.chartSettings.showGrid ?? defaults.showGrid,
+            stacked: bc.chartSettings.stacked ?? defaults.stacked,
+            displayLimit: bc.chartSettings.displayLimit ?? defaults.displayLimit,
+            showTrendLine: bc.chartSettings.showTrendLine ?? defaults.showTrendLine,
+            showAverageLine: bc.chartSettings.showAverageLine ?? defaults.showAverageLine,
+            showMinMaxMarkers: bc.chartSettings.showMinMaxMarkers ?? defaults.showMinMaxMarkers,
+            trendLineColor: bc.chartSettings.trendLineColor ?? defaults.trendLineColor,
+            averageLineColor: bc.chartSettings.averageLineColor ?? defaults.averageLineColor,
+          });
         }
         
         if (bc.dateFilter) {
@@ -448,6 +473,22 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
       tableColumns: tableColumns.length > 0 ? tableColumns : undefined,
       // Pivot config ekle (pivot tipi seçiliyse)
       pivot: config.visualization.type === 'pivot' ? pivotConfig : undefined,
+      // Field Wells yapılandırması (Power BI tarzı)
+      fieldWells: Object.keys(fieldWells).length > 0 ? fieldWells : undefined,
+      // Chart ayarları (renk paleti, legend, grid vb.)
+      chartSettings: {
+        colorPalette: chartSettings.colorPalette,
+        showLegend: chartSettings.showLegend,
+        legendPosition: chartSettings.legendPosition,
+        showGrid: chartSettings.showGrid,
+        stacked: chartSettings.stacked,
+        displayLimit: chartSettings.displayLimit,
+        showTrendLine: chartSettings.showTrendLine,
+        showAverageLine: chartSettings.showAverageLine,
+        showMinMaxMarkers: chartSettings.showMinMaxMarkers,
+        trendLineColor: chartSettings.trendLineColor,
+        averageLineColor: chartSettings.averageLineColor,
+      },
       visualization: {
         ...config.visualization,
         chart: config.visualization.chart ? {
