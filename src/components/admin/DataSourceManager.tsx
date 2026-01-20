@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useDataSources, DataSourceFormData } from '@/hooks/useDataSources';
 import { testDiaApi, DiaApiTestResponse } from '@/lib/diaApiTest';
-import { DiaApiFilter, DiaApiSort, DIA_MODULES } from '@/lib/widgetBuilderTypes';
+import { DiaApiFilter, DiaApiSort, DIA_MODULES, PeriodConfig, getDefaultPeriodConfig } from '@/lib/widgetBuilderTypes';
 import { CompactFilterBuilder } from './CompactFilterBuilder';
 import { CompactSortBuilder } from './CompactSortBuilder';
 import { CompactColumnSelector } from './CompactColumnSelector';
@@ -15,12 +15,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { 
   Database, Plus, Edit, Trash2, Play, RefreshCw, Clock, Check, AlertCircle, 
-  Share2, CheckCircle, XCircle, Loader2
+  Share2, CheckCircle, XCircle, Loader2, CalendarClock, History
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -74,6 +75,15 @@ export function DataSourceManager() {
   const [apiSorts, setApiSorts] = useState<DiaApiSort[]>([]);
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   
+  // Dönem ayarları state
+  const [periodConfig, setPeriodConfig] = useState<PeriodConfig>(getDefaultPeriodConfig());
+  
+  // Hızlı test sonucu state
+  const [quickTestResult, setQuickTestResult] = useState<{
+    sourceId: string;
+    recordCount: number;
+  } | null>(null);
+  
   const currentModule = DIA_MODULES.find(m => m.id === formData.module);
   
   // Formu aç
@@ -123,6 +133,7 @@ export function DataSourceManager() {
       setApiFilters([]);
       setApiSorts([]);
       setSelectedColumns([]);
+      setPeriodConfig(getDefaultPeriodConfig());
     }
     setTestResult(null);
     setIsFormOpen(true);
@@ -183,6 +194,9 @@ export function DataSourceManager() {
           result.recordCount || 0, 
           result.sampleFields || []
         );
+        // Hızlı test sonucunu göster
+        setQuickTestResult({ sourceId, recordCount: result.recordCount || 0 });
+        setTimeout(() => setQuickTestResult(null), 5000);
         toast.success(`${source.name}: ${result.recordCount} kayıt`);
       } else {
         toast.error(`${source.name}: ${result.error}`);
@@ -213,6 +227,7 @@ export function DataSourceManager() {
       filters: apiFilters,
       sorts: apiSorts,
       selected_columns: selectedColumns,
+      period_config: periodConfig.enabled ? periodConfig : undefined,
     };
     
     if (editingSourceId) {
@@ -298,6 +313,13 @@ export function DataSourceManager() {
                         )}
                         {!source.is_active && (
                           <Badge variant="destructive" className="text-xs">Pasif</Badge>
+                        )}
+                        {/* Hızlı test sonucu */}
+                        {quickTestResult?.sourceId === source.id && (
+                          <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            {quickTestResult.recordCount} kayıt
+                          </Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
@@ -576,6 +598,112 @@ export function DataSourceManager() {
                       )}
                     </CardContent>
                   </Card>
+                )}
+              </div>
+              
+              <Separator />
+              
+              {/* Dönem Ayarları */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium flex items-center gap-2">
+                  <CalendarClock className="h-4 w-4 text-primary" />
+                  Dönem Ayarları
+                </h3>
+                
+                <div className="flex items-center justify-between p-3 border rounded-lg">
+                  <div>
+                    <Label>Dönem Bağımlı Sorgu</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Bu sorgu belirli dönemlere göre çalışır (ör: mali dönem)
+                    </p>
+                  </div>
+                  <Switch
+                    checked={periodConfig.enabled}
+                    onCheckedChange={(checked) => 
+                      setPeriodConfig(prev => ({ ...prev, enabled: checked }))
+                    }
+                  />
+                </div>
+                
+                {periodConfig.enabled && (
+                  <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Dönem Alanı</Label>
+                        <Input
+                          value={periodConfig.periodField}
+                          onChange={e => setPeriodConfig(prev => ({ 
+                            ...prev, 
+                            periodField: e.target.value 
+                          }))}
+                          placeholder="donem veya donemkodu"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          DIA API'deki dönem parametre adı
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Mevcut Dönem</Label>
+                        <Input
+                          type="number"
+                          value={periodConfig.currentPeriod || ''}
+                          onChange={e => setPeriodConfig(prev => ({ 
+                            ...prev, 
+                            currentPeriod: parseInt(e.target.value) || undefined 
+                          }))}
+                          placeholder="Örn: 1, 2, 3..."
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Şu anki aktif dönem numarası
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between p-3 border rounded-lg bg-background">
+                      <div className="flex items-center gap-2">
+                        <History className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <Label>Eski Dönemleri de Çek</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Geriye doğru dönemleri loop ile çeker
+                          </p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={periodConfig.fetchHistorical}
+                        onCheckedChange={(checked) => 
+                          setPeriodConfig(prev => ({ ...prev, fetchHistorical: checked }))
+                        }
+                      />
+                    </div>
+                    
+                    {periodConfig.fetchHistorical && (
+                      <div className="space-y-3 p-3 border rounded-lg bg-background">
+                        <Label>Kaç Dönem Geriye Git?</Label>
+                        <div className="flex items-center gap-4">
+                          <Slider
+                            value={[periodConfig.historicalCount]}
+                            onValueChange={([val]) => 
+                              setPeriodConfig(prev => ({ ...prev, historicalCount: val }))
+                            }
+                            min={1}
+                            max={24}
+                            step={1}
+                            className="flex-1"
+                          />
+                          <span className="text-sm font-mono w-10 text-center">
+                            {periodConfig.historicalCount}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {periodConfig.currentPeriod 
+                            ? `Dönem ${Math.max(1, periodConfig.currentPeriod - periodConfig.historicalCount + 1)} - ${periodConfig.currentPeriod} arası çekilecek`
+                            : 'Mevcut dönem belirtilmedi'
+                          }
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
               

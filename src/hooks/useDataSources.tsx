@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { DiaApiFilter, DiaApiSort } from '@/lib/widgetBuilderTypes';
+import { DiaApiFilter, DiaApiSort, PeriodConfig } from '@/lib/widgetBuilderTypes';
 
 // Veri kaynağı tipi
 export interface DataSource {
@@ -21,6 +21,9 @@ export interface DataSource {
   sorts: DiaApiSort[];
   selected_columns: string[] | null;
   limit_count: number;
+  
+  // Dönem yapılandırması
+  period_config: PeriodConfig | null;
   
   // Önbellek ayarları
   cache_ttl: number;
@@ -50,6 +53,7 @@ export interface DataSourceFormData {
   sorts?: DiaApiSort[];
   selected_columns?: string[];
   limit_count?: number;
+  period_config?: PeriodConfig;
   cache_ttl?: number;
   auto_refresh?: boolean;
   refresh_schedule?: string;
@@ -76,6 +80,7 @@ export function useDataSources() {
         ...ds,
         filters: (ds.filters as unknown as DiaApiFilter[]) || [],
         sorts: (ds.sorts as unknown as DiaApiSort[]) || [],
+        period_config: ds.period_config as unknown as PeriodConfig | null,
         last_fields: ds.last_fields as unknown as string[] | null,
       })) as DataSource[];
     },
@@ -100,6 +105,7 @@ export function useDataSources() {
           sorts: JSON.parse(JSON.stringify(formData.sorts || [])),
           selected_columns: formData.selected_columns || null,
           limit_count: formData.limit_count || 0,
+          period_config: formData.period_config ? JSON.parse(JSON.stringify(formData.period_config)) : null,
           cache_ttl: formData.cache_ttl || 300,
           auto_refresh: formData.auto_refresh || false,
           refresh_schedule: formData.refresh_schedule || null,
@@ -138,6 +144,7 @@ export function useDataSources() {
       if (formData.sorts !== undefined) updateData.sorts = JSON.parse(JSON.stringify(formData.sorts));
       if (formData.selected_columns !== undefined) updateData.selected_columns = formData.selected_columns;
       if (formData.limit_count !== undefined) updateData.limit_count = formData.limit_count;
+      if (formData.period_config !== undefined) updateData.period_config = JSON.parse(JSON.stringify(formData.period_config));
       if (formData.cache_ttl !== undefined) updateData.cache_ttl = formData.cache_ttl;
       if (formData.auto_refresh !== undefined) updateData.auto_refresh = formData.auto_refresh;
       if (formData.refresh_schedule !== undefined) updateData.refresh_schedule = formData.refresh_schedule;
