@@ -96,6 +96,23 @@ function getDateRangeFilter(period: DatePeriod, dateField: string, customStart?:
   ];
 }
 
+// DIA hata mesajlarını kullanıcı dostu hale getir
+function getDiaErrorMessage(error: string): string {
+  if (error.includes('dönem yetkiniz')) {
+    return 'Bu veri kaynağı için dönem erişim yetkiniz bulunmuyor.';
+  }
+  if (error.includes('CREDITS_ERROR') || error.includes('UNKNOWN_CREDITS')) {
+    return 'DIA servis limiti aşıldı. Lütfen biraz bekleyip tekrar deneyin.';
+  }
+  if (error.includes('bağlantı hatası') || error.includes('500')) {
+    return 'DIA sunucusuna bağlanılamadı. Lütfen tekrar deneyin.';
+  }
+  if (error.includes('INVALID_SESSION')) {
+    return 'Oturum süresi doldu. Sayfa yenileniyor...';
+  }
+  return error;
+}
+
 // Agregasyon hesaplamaları
 function calculateAggregation(data: any[], field: string, aggregation: AggregationType): number {
   if (!data || data.length === 0) return 0;
@@ -482,12 +499,18 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
 
             const result = await response.json();
             if (!result.success) {
-              throw new Error(result.error || 'API hatası');
+              // DIA API hataları için özel mesajlar
+              const errorMsg = result.error || 'API hatası';
+              console.warn(`[Widget] DataSource ${config.dataSourceId} hatası:`, errorMsg);
+              
+              // Boş veri ile devam et, ancak hatayı kaydet
+              fetchedData = [];
+              setError(getDiaErrorMessage(errorMsg));
+            } else {
+              fetchedData = result.sampleData || [];
+              // Veri kaynağı cache'ine kaydet
+              setDataSourceData(config.dataSourceId, fetchedData, 5 * 60 * 1000);
             }
-            fetchedData = result.sampleData || [];
-            
-            // Veri kaynağı cache'ine kaydet
-            setDataSourceData(config.dataSourceId, fetchedData, 5 * 60 * 1000);
           }
         } else {
           // 2. Veri kaynağı ID yok - Eski genel cache mantığı
@@ -530,12 +553,18 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
 
             const result = await response.json();
             if (!result.success) {
-              throw new Error(result.error || 'API hatası');
+              // DIA API hataları için özel mesajlar
+              const errorMsg = result.error || 'API hatası';
+              console.warn(`[Widget] Cache key ${cacheKey} hatası:`, errorMsg);
+              
+              // Boş veri ile devam et, ancak hatayı kaydet
+              fetchedData = [];
+              setError(getDiaErrorMessage(errorMsg));
+            } else {
+              fetchedData = result.sampleData || [];
+              // Sonucu cache'e kaydet
+              setCachedData(cacheKey, result, 5 * 60 * 1000);
             }
-            fetchedData = result.sampleData || [];
-            
-            // Sonucu cache'e kaydet
-            setCachedData(cacheKey, result, 5 * 60 * 1000);
           }
         }
       }
