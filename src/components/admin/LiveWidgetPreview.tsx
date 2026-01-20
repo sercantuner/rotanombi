@@ -267,6 +267,14 @@ export function LiveWidgetPreview({
   const [error, setError] = useState<string | null>(null);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
   const [recordCount, setRecordCount] = useState(0);
+  
+  // Anlık görsel tip değiştirme
+  const [previewVizType, setPreviewVizType] = useState<string>(config.visualization.type);
+  
+  // Config değişince preview tipini güncelle
+  useEffect(() => {
+    setPreviewVizType(config.visualization.type);
+  }, [config.visualization.type]);
 
   // Veri çek
   const fetchPreviewData = useCallback(async () => {
@@ -332,97 +340,71 @@ export function LiveWidgetPreview({
     return data;
   }, [rawData, calculatedFields, postFetchFilters]);
 
-  // Görselleştirme verisi
+  // Görselleştirme verisi - previewVizType kullanarak dinamik
   const visualizationData = useMemo(() => {
-    const vizType = config.visualization.type;
+    if (!processedData || processedData.length === 0) return null;
     
-    if (vizType === 'kpi') {
-      const valueField = config.visualization.kpi?.valueField || '';
-      const aggregation = (config.visualization.kpi?.aggregation || 'sum') as AggregationType;
-      if (!valueField) return null;
-      
+    // KPI için özel hesaplama
+    const kpiData = (() => {
+      const valueField = config.visualization.kpi?.valueField || yAxisField || '';
+      const aggregation = (config.visualization.kpi?.aggregation || 'count') as AggregationType;
       return {
-        value: calculateAggregation(processedData, valueField, aggregation),
+        value: valueField ? calculateAggregation(processedData, valueField, aggregation) : processedData.length,
         format: config.visualization.kpi?.format,
         prefix: config.visualization.kpi?.prefix,
         suffix: config.visualization.kpi?.suffix,
         recordCount: processedData.length,
       };
-    }
+    })();
     
-    if (['bar', 'line', 'area'].includes(vizType)) {
-      const xField = xAxisField || config.visualization.chart?.xAxis?.field || '';
-      const yField = yAxisField || config.visualization.chart?.yAxis?.field || '';
-      const aggregation = ((config.visualization.chart as any)?.aggregation || 'sum') as AggregationType;
+    // Chart data için ortak hesaplama
+    const chartData = (() => {
+      const groupField = legendField || xAxisField || config.visualization.chart?.xAxis?.field || '';
+      const valueField = yAxisField || config.visualization.chart?.yAxis?.field || config.visualization.chart?.valueField || '';
+      const aggregation = ((config.visualization.chart as any)?.aggregation || 'count') as AggregationType;
       
-      if (!xField) return null;
-      
-      return {
-        chartData: groupDataForChart(processedData, xField, yField || 'toplambakiye', aggregation),
-        showLegend: config.visualization.chart?.showLegend !== false,
-        showGrid: config.visualization.chart?.showGrid !== false,
-      };
-    }
-    
-    if (['pie', 'donut'].includes(vizType)) {
-      const groupField = legendField || xAxisField || config.visualization.chart?.legendField || '';
-      const valueField = yAxisField || config.visualization.chart?.valueField || '';
-      const aggregation = ((config.visualization.chart as any)?.aggregation || 'sum') as AggregationType;
-      
-      if (!groupField) return null;
-      
-      return {
-        chartData: groupDataForChart(processedData, groupField, valueField || 'toplambakiye', aggregation),
-        showLegend: config.visualization.chart?.showLegend !== false,
-      };
-    }
-    
-    if (['table', 'list'].includes(vizType)) {
-      return {
-        tableData: processedData.slice(0, 10),
-        columns: tableColumns.length > 0 
-          ? tableColumns 
-          : Object.keys(processedData[0] || {}).slice(0, 6).map(f => ({ field: f, header: f })),
-      };
-    }
-    
-    if (vizType === 'pivot') {
-      const rowField = pivotConfig?.rowFields?.[0] || '';
-      const columnField = pivotConfig?.columnField || '';
-      const valueField = pivotConfig?.valueField || '';
-      const aggregation = (pivotConfig?.aggregation || 'sum') as AggregationType;
-      
-      if (!rowField || !valueField) return null;
-      
-      const rowValues = [...new Set(processedData.map(item => String(item[rowField] || 'Belirsiz')))];
-      const columnValues = columnField 
-        ? [...new Set(processedData.map(item => String(item[columnField] || 'Belirsiz')))]
-        : [];
-      
-      const pivotData = rowValues.slice(0, 10).map(rowVal => {
-        const rowItems = processedData.filter(item => String(item[rowField] || 'Belirsiz') === rowVal);
-        const row: any = { _rowLabel: rowVal };
-        
-        if (columnField && columnValues.length > 0) {
-          columnValues.slice(0, 5).forEach(colVal => {
-            const cellItems = rowItems.filter(item => String(item[columnField] || 'Belirsiz') === colVal);
-            row[colVal] = calculateAggregation(cellItems, valueField, aggregation);
-          });
-          row._rowTotal = calculateAggregation(rowItems, valueField, aggregation);
-        } else {
-          row._value = calculateAggregation(rowItems, valueField, aggregation);
+      if (!groupField) {
+        // Grup alanı yoksa ilk string alanı bul
+        const firstRow = processedData[0];
+        if (firstRow) {
+          const stringField = Object.keys(firstRow).find(k => typeof firstRow[k] === 'string' && k !== 'id');
+          if (stringField) {
+            return groupDataForChart(processedData, stringField, valueField || 'toplambakiye', aggregation);
+          }
         }
-        
-        return row;
-      });
+        return [];
+      }
       
-      return { pivotData, columnValues: columnValues.slice(0, 5), rowField, columnField, valueField };
-    }
+      return groupDataForChart(processedData, groupField, valueField || 'toplambakiye', aggregation);
+    })();
     
-    return null;
-  }, [processedData, config, xAxisField, yAxisField, legendField, tableColumns, pivotConfig]);
+    // Table data
+    const tableData = {
+      rows: processedData.slice(0, 10),
+      columns: tableColumns.length > 0 
+        ? tableColumns 
+        : Object.keys(processedData[0] || {}).slice(0, 6).map(f => ({ field: f, header: f })),
+    };
+    
+    return {
+      kpiData,
+      chartData,
+      tableData,
+      showLegend: config.visualization.chart?.showLegend !== false,
+      showGrid: config.visualization.chart?.showGrid !== false,
+    };
+  }, [processedData, config, xAxisField, yAxisField, legendField, tableColumns]);
 
-  const vizType = config.visualization.type;
+  // Kullanılabilir görsel tipler
+  const availableVizTypes = [
+    { id: 'kpi', label: 'KPI', icon: Hash },
+    { id: 'bar', label: 'Çubuk', icon: BarChart3 },
+    { id: 'line', label: 'Çizgi', icon: TrendingUp },
+    { id: 'area', label: 'Alan', icon: Activity },
+    { id: 'pie', label: 'Pasta', icon: PieChart },
+    { id: 'donut', label: 'Simit', icon: PieChart },
+    { id: 'table', label: 'Tablo', icon: Table },
+  ];
 
   return (
     <Card className="border-2 border-primary/20">
@@ -478,12 +460,12 @@ export function LiveWidgetPreview({
         ) : (
           <div className="space-y-4">
             {/* İstatistikler */}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="text-xs">
                 Ham: {rawData.length} kayıt
               </Badge>
               {postFetchFilters.length > 0 && (
-                <Badge variant="secondary" className="text-xs">
+                <Badge className="text-xs bg-green-600">
                   Filtrelenmiş: {processedData.length} kayıt
                 </Badge>
               )}
@@ -494,39 +476,62 @@ export function LiveWidgetPreview({
               )}
             </div>
 
+            {/* Görsel Tip Değiştirici */}
+            <div className="flex flex-wrap gap-1 p-2 bg-muted/50 rounded-lg">
+              <span className="text-xs text-muted-foreground mr-2 self-center">Görsel:</span>
+              {availableVizTypes.map(vt => {
+                const Icon = vt.icon;
+                return (
+                  <Button
+                    key={vt.id}
+                    variant={previewVizType === vt.id ? 'default' : 'ghost'}
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1"
+                    onClick={() => setPreviewVizType(vt.id)}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {vt.label}
+                  </Button>
+                );
+              })}
+            </div>
+
             <Separator />
 
             {/* Widget Önizleme */}
-            <div className="bg-card rounded-lg border p-4">
+            <div className="bg-card rounded-lg border p-4 min-h-[280px]">
               {/* KPI */}
-              {vizType === 'kpi' && visualizationData && (
-                <div className="text-center">
-                  <DynamicIcon iconName={widgetIcon || 'Hash'} className="h-10 w-10 mx-auto mb-3 text-primary" />
-                  <p className="text-4xl font-bold">
+              {previewVizType === 'kpi' && visualizationData && (
+                <div className="text-center py-4">
+                  <DynamicIcon iconName={widgetIcon || 'Hash'} className="h-12 w-12 mx-auto mb-4 text-primary" />
+                  <p className="text-5xl font-bold">
                     {formatValue(
-                      visualizationData.value || 0,
-                      visualizationData.format,
-                      visualizationData.prefix,
-                      visualizationData.suffix
+                      visualizationData.kpiData.value || 0,
+                      visualizationData.kpiData.format,
+                      visualizationData.kpiData.prefix,
+                      visualizationData.kpiData.suffix
                     )}
                   </p>
-                  <p className="text-sm text-muted-foreground mt-2">
+                  <p className="text-sm text-muted-foreground mt-3">
                     {widgetName || 'KPI Widget'}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {processedData.length} kayıt üzerinden hesaplandı
                   </p>
                 </div>
               )}
 
               {/* Bar Chart */}
-              {vizType === 'bar' && visualizationData?.chartData && (
+              {previewVizType === 'bar' && visualizationData?.chartData && (
                 <div>
                   <p className="text-sm font-medium mb-3 flex items-center gap-2">
                     <BarChart3 className="h-4 w-4" />
-                    {widgetName || 'Bar Chart'}
+                    {widgetName || 'Çubuk Grafik'}
                   </p>
-                  <ResponsiveContainer width="100%" height={200}>
+                  <ResponsiveContainer width="100%" height={240}>
                     <BarChart data={visualizationData.chartData}>
                       {visualizationData.showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
-                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={60} />
                       <YAxis tick={{ fontSize: 10 }} />
                       <Tooltip 
                         contentStyle={{ 
@@ -535,8 +540,8 @@ export function LiveWidgetPreview({
                           borderRadius: '8px',
                           fontSize: '11px'
                         }}
+                        formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
                       />
-                      {visualizationData.showLegend && <Legend />}
                       <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -544,16 +549,16 @@ export function LiveWidgetPreview({
               )}
 
               {/* Line Chart */}
-              {vizType === 'line' && visualizationData?.chartData && (
+              {previewVizType === 'line' && visualizationData?.chartData && (
                 <div>
                   <p className="text-sm font-medium mb-3 flex items-center gap-2">
                     <TrendingUp className="h-4 w-4" />
-                    {widgetName || 'Line Chart'}
+                    {widgetName || 'Çizgi Grafik'}
                   </p>
-                  <ResponsiveContainer width="100%" height={200}>
+                  <ResponsiveContainer width="100%" height={240}>
                     <LineChart data={visualizationData.chartData}>
                       {visualizationData.showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
-                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={60} />
                       <YAxis tick={{ fontSize: 10 }} />
                       <Tooltip 
                         contentStyle={{ 
@@ -562,25 +567,25 @@ export function LiveWidgetPreview({
                           borderRadius: '8px',
                           fontSize: '11px'
                         }}
+                        formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
                       />
-                      {visualizationData.showLegend && <Legend />}
-                      <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
               )}
 
               {/* Area Chart */}
-              {vizType === 'area' && visualizationData?.chartData && (
+              {previewVizType === 'area' && visualizationData?.chartData && (
                 <div>
                   <p className="text-sm font-medium mb-3 flex items-center gap-2">
                     <Activity className="h-4 w-4" />
-                    {widgetName || 'Area Chart'}
+                    {widgetName || 'Alan Grafik'}
                   </p>
-                  <ResponsiveContainer width="100%" height={200}>
+                  <ResponsiveContainer width="100%" height={240}>
                     <AreaChart data={visualizationData.chartData}>
                       {visualizationData.showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
-                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={60} />
                       <YAxis tick={{ fontSize: 10 }} />
                       <Tooltip 
                         contentStyle={{ 
@@ -589,30 +594,86 @@ export function LiveWidgetPreview({
                           borderRadius: '8px',
                           fontSize: '11px'
                         }}
+                        formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
                       />
-                      {visualizationData.showLegend && <Legend />}
                       <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary) / 0.3)" strokeWidth={2} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
               )}
 
-              {/* Pie/Donut Chart - Düzgün boyutlandırma */}
-              {['pie', 'donut'].includes(vizType) && visualizationData?.chartData && (
+              {/* Pie Chart */}
+              {previewVizType === 'pie' && visualizationData?.chartData && visualizationData.chartData.length > 0 && (
                 <div className="flex flex-col items-center">
                   <p className="text-sm font-medium mb-4 flex items-center gap-2 self-start">
                     <PieChart className="h-4 w-4" />
-                    {widgetName || (vizType === 'donut' ? 'Donut Chart' : 'Pie Chart')}
+                    {widgetName || 'Pasta Grafik'}
                   </p>
-                  <div className="w-full max-w-[320px] mx-auto">
-                    <ResponsiveContainer width="100%" height={220}>
+                  <div className="w-full max-w-[280px] mx-auto">
+                    <ResponsiveContainer width="100%" height={200}>
                       <RechartsPieChart>
                         <Pie
                           data={visualizationData.chartData}
                           cx="50%"
                           cy="50%"
-                          innerRadius={vizType === 'donut' ? 45 : 0}
-                          outerRadius={80}
+                          outerRadius={85}
+                          dataKey="value"
+                          nameKey="name"
+                          paddingAngle={1}
+                        >
+                          {visualizationData.chartData.map((_: any, index: number) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--card))', 
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                            fontSize: '11px'
+                          }}
+                          formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
+                        />
+                      </RechartsPieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-3 w-full max-w-[380px]">
+                    {visualizationData.chartData.slice(0, 8).map((item: any, index: number) => {
+                      const total = visualizationData.chartData.reduce((sum: number, d: any) => sum + d.value, 0);
+                      const percent = total > 0 ? ((item.value / total) * 100).toFixed(1) : '0';
+                      return (
+                        <div key={index} className="flex items-center gap-2 text-xs">
+                          <div 
+                            className="w-2.5 h-2.5 rounded-sm flex-shrink-0" 
+                            style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                          />
+                          <span className="truncate flex-1" title={item.name}>
+                            {String(item.name).slice(0, 15)}
+                          </span>
+                          <span className="text-muted-foreground">{percent}%</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Donut Chart */}
+              {previewVizType === 'donut' && visualizationData?.chartData && visualizationData.chartData.length > 0 && (
+                <div className="flex flex-col items-center">
+                  <p className="text-sm font-medium mb-4 flex items-center gap-2 self-start">
+                    <PieChart className="h-4 w-4" />
+                    {widgetName || 'Simit Grafik'}
+                  </p>
+                  <div className="w-full max-w-[280px] mx-auto relative">
+                    <ResponsiveContainer width="100%" height={200}>
+                      <RechartsPieChart>
+                        <Pie
+                          data={visualizationData.chartData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={50}
+                          outerRadius={85}
                           dataKey="value"
                           nameKey="name"
                           paddingAngle={2}
@@ -632,48 +693,45 @@ export function LiveWidgetPreview({
                         />
                       </RechartsPieChart>
                     </ResponsiveContainer>
+                    {/* Center text */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <span className="text-2xl font-bold">{processedData.length}</span>
+                      <span className="text-xs text-muted-foreground">Kayıt</span>
+                    </div>
                   </div>
-                  {/* Legend ayrı grid olarak */}
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-4 w-full max-w-[400px]">
-                    {visualizationData.chartData.slice(0, 10).map((item: any, index: number) => {
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-3 w-full max-w-[380px]">
+                    {visualizationData.chartData.slice(0, 8).map((item: any, index: number) => {
                       const total = visualizationData.chartData.reduce((sum: number, d: any) => sum + d.value, 0);
                       const percent = total > 0 ? ((item.value / total) * 100).toFixed(1) : '0';
                       return (
                         <div key={index} className="flex items-center gap-2 text-xs">
                           <div 
-                            className="w-3 h-3 rounded-sm flex-shrink-0" 
+                            className="w-2.5 h-2.5 rounded-sm flex-shrink-0" 
                             style={{ backgroundColor: COLORS[index % COLORS.length] }}
                           />
                           <span className="truncate flex-1" title={item.name}>
-                            {String(item.name).slice(0, 18)}
+                            {String(item.name).slice(0, 15)}
                           </span>
-                          <span className="text-muted-foreground whitespace-nowrap">
-                            {percent}%
-                          </span>
+                          <span className="text-muted-foreground">{percent}%</span>
                         </div>
                       );
                     })}
                   </div>
-                  {visualizationData.chartData.length > 10 && (
-                    <p className="text-xs text-muted-foreground mt-2">
-                      +{visualizationData.chartData.length - 10} daha...
-                    </p>
-                  )}
                 </div>
               )}
 
-              {/* Table/List */}
-              {['table', 'list'].includes(vizType) && visualizationData?.tableData && (
+              {/* Table */}
+              {previewVizType === 'table' && visualizationData?.tableData && (
                 <div>
                   <p className="text-sm font-medium mb-3 flex items-center gap-2">
-                    {vizType === 'table' ? <Table className="h-4 w-4" /> : <List className="h-4 w-4" />}
-                    {widgetName || (vizType === 'table' ? 'Tablo' : 'Liste')}
+                    <Table className="h-4 w-4" />
+                    {widgetName || 'Tablo'}
                   </p>
-                  <ScrollArea className="h-[200px]">
+                  <ScrollArea className="h-[220px]">
                     <table className="w-full text-xs">
                       <thead className="sticky top-0 bg-muted">
                         <tr>
-                          {visualizationData.columns.slice(0, 5).map((col: any) => (
+                          {visualizationData.tableData.columns.slice(0, 5).map((col: any) => (
                             <th key={col.field} className="text-left py-2 px-2 font-medium">
                               {col.header || col.field}
                             </th>
@@ -681,9 +739,9 @@ export function LiveWidgetPreview({
                         </tr>
                       </thead>
                       <tbody>
-                        {visualizationData.tableData.map((row: any, idx: number) => (
+                        {visualizationData.tableData.rows.map((row: any, idx: number) => (
                           <tr key={idx} className="border-b last:border-0 hover:bg-muted/50">
-                            {visualizationData.columns.slice(0, 5).map((col: any) => (
+                            {visualizationData.tableData.columns.slice(0, 5).map((col: any) => (
                               <td key={col.field} className="py-2 px-2 truncate max-w-[150px]">
                                 {String(row[col.field] ?? '-').slice(0, 30)}
                               </td>
@@ -696,72 +754,12 @@ export function LiveWidgetPreview({
                 </div>
               )}
 
-              {/* Pivot Table */}
-              {vizType === 'pivot' && visualizationData?.pivotData && (
-                <div>
-                  <p className="text-sm font-medium mb-3 flex items-center gap-2">
-                    <BarChart3 className="h-4 w-4" />
-                    {widgetName || 'Pivot Tablo'}
-                  </p>
-                  <ScrollArea className="h-[200px]">
-                    <table className="w-full text-xs">
-                      <thead className="sticky top-0 bg-muted">
-                        <tr>
-                          <th className="text-left py-2 px-2 font-medium">
-                            {visualizationData.rowField}
-                          </th>
-                          {visualizationData.columnField ? (
-                            <>
-                              {visualizationData.columnValues.map((col: string) => (
-                                <th key={col} className="text-right py-2 px-2 font-medium">
-                                  {col}
-                                </th>
-                              ))}
-                              <th className="text-right py-2 px-2 font-medium bg-primary/10">
-                                Toplam
-                              </th>
-                            </>
-                          ) : (
-                            <th className="text-right py-2 px-2 font-medium">
-                              {visualizationData.valueField}
-                            </th>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {visualizationData.pivotData.map((row: any, idx: number) => (
-                          <tr key={idx} className="border-b last:border-0 hover:bg-muted/50">
-                            <td className="py-2 px-2 font-medium">{row._rowLabel}</td>
-                            {visualizationData.columnField ? (
-                              <>
-                                {visualizationData.columnValues.map((col: string) => (
-                                  <td key={col} className="text-right py-2 px-2">
-                                    {formatValue(row[col] || 0, 'number')}
-                                  </td>
-                                ))}
-                                <td className="text-right py-2 px-2 font-medium bg-primary/5">
-                                  {formatValue(row._rowTotal || 0, 'number')}
-                                </td>
-                              </>
-                            ) : (
-                              <td className="text-right py-2 px-2">
-                                {formatValue(row._value || 0, 'number')}
-                              </td>
-                            )}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </ScrollArea>
-                </div>
-              )}
-
-              {/* Fallback */}
-              {!visualizationData && rawData.length > 0 && (
+              {/* Fallback - veri var ama chart data yok */}
+              {!visualizationData?.chartData?.length && !['kpi', 'table'].includes(previewVizType) && rawData.length > 0 && (
                 <div className="text-center py-8 text-muted-foreground">
                   <DynamicIcon iconName={widgetIcon || 'BarChart3'} className="h-10 w-10 mx-auto mb-3 opacity-30" />
                   <p className="text-sm">{widgetName || 'Widget'}</p>
-                  <p className="text-xs mt-1">Görselleştirme ayarlarını tamamlayın</p>
+                  <p className="text-xs mt-1">Gruplama alanı (X Ekseni) seçerek grafik oluşturun</p>
                 </div>
               )}
             </div>
