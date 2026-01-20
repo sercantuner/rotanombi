@@ -1,20 +1,21 @@
 // BuilderWidgetRenderer - Widget Builder ile oluşturulan widget'ları render eder (Drill-down destekli)
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { WidgetBuilderConfig, AggregationType } from '@/lib/widgetBuilderTypes';
 import { useDynamicWidgetData } from '@/hooks/useDynamicWidgetData';
 import { DrillDownModal } from './DrillDownModal';
 import { StatCard } from './StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertCircle, BarChart3, Hash, MousePointerClick } from 'lucide-react';
+import { AlertCircle, BarChart3, Hash, MousePointerClick, Calendar, AlertTriangle } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { 
   BarChart, Bar, LineChart, Line, AreaChart, Area,
-  PieChart as RechartsPieChart, Pie, Cell,
+  PieChart as RechartsPieChart, Pie, Cell, ReferenceLine,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { cn } from '@/lib/utils';
+import { useDashboardFilters } from '@/contexts/DashboardFilterContext';
 
 // Agregasyon hesaplamaları (pivot için)
 function calculateAggregation(data: any[], field: string, aggregation: AggregationType): number {
