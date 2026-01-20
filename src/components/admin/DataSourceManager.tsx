@@ -113,6 +113,25 @@ export function DataSourceManager() {
         setApiFilters((source.filters as DiaApiFilter[]) || []);
         setApiSorts((source.sorts as DiaApiSort[]) || []);
         setSelectedColumns(source.selected_columns || []);
+        
+        // Dönem ayarlarını yükle
+        if (source.period_config) {
+          setPeriodConfig(source.period_config as PeriodConfig);
+        } else {
+          setPeriodConfig(getDefaultPeriodConfig());
+        }
+        
+        // Kayıtlı sampleData varsa, testResult'a yükle (akıllı filtre önerileri için)
+        if (source.last_sample_data && Array.isArray(source.last_sample_data) && source.last_sample_data.length > 0) {
+          setTestResult({
+            success: true,
+            recordCount: source.last_record_count || 0,
+            sampleFields: (source.last_fields as string[]) || [],
+            sampleData: source.last_sample_data as any[],
+          });
+        } else {
+          setTestResult(null);
+        }
       }
     } else {
       setEditingSourceId(null);
@@ -136,8 +155,8 @@ export function DataSourceManager() {
       setApiSorts([]);
       setSelectedColumns([]);
       setPeriodConfig(getDefaultPeriodConfig());
+      setTestResult(null);
     }
-    setTestResult(null);
     setIsFormOpen(true);
   };
   
@@ -259,10 +278,24 @@ export function DataSourceManager() {
       period_config: periodConfig.enabled ? periodConfig : undefined,
     };
     
+    let savedSourceId: string | undefined;
+    
     if (editingSourceId) {
       await updateDataSource(editingSourceId, dataToSave as Partial<DataSourceFormData>);
+      savedSourceId = editingSourceId;
     } else {
-      await createDataSource(dataToSave);
+      const newSource = await createDataSource(dataToSave);
+      savedSourceId = newSource?.id;
+    }
+    
+    // Test sonucu varsa (yeni veya mevcut kaynak için), sampleData'yı veritabanına kaydet
+    if (savedSourceId && testResult?.success && testResult?.sampleData) {
+      await updateLastFetch(
+        savedSourceId,
+        testResult.recordCount || 0,
+        testResult.sampleFields || [],
+        testResult.sampleData
+      );
     }
     
     setIsFormOpen(false);
