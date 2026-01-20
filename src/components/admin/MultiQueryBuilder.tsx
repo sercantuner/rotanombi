@@ -581,7 +581,7 @@ export function MultiQueryBuilder({ multiQuery, onChange }: MultiQueryBuilderPro
           <div className="p-2 bg-muted/30 border-b">
             <Label className="text-xs font-medium">Sorgular ({activeDataSources?.length || 0} kaynak mevcut)</Label>
           </div>
-          <ScrollArea className="h-[280px]">
+          <ScrollArea className="h-[350px]">
             <div className="p-2 space-y-2">
               {multiQuery.queries.map((query, index) => (
                 <div key={query.id}>
