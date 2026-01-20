@@ -796,6 +796,19 @@ export function LiveWidgetPreview({
   const legendPosition = chartSettings?.legendPosition || 'bottom';
   const showTrendLine = chartSettings?.showTrendLine || false;
   const showAverageLine = chartSettings?.showAverageLine || false;
+  const displayLimit = chartSettings?.displayLimit || 10;
+  
+  // Dinamik etiketler - fieldWells'ten veya config'den al
+  const yAxisLabel = fieldWells?.yAxis?.[0]?.label 
+    || fieldWells?.value?.label 
+    || config.visualization.chart?.yAxis?.label
+    || config.visualization.kpi?.valueField
+    || 'Değer';
+    
+  const xAxisLabel = fieldWells?.xAxis?.label 
+    || fieldWells?.category?.label 
+    || config.visualization.chart?.xAxis?.label 
+    || 'Kategori';
   
   // Props değişince state'leri güncelle
   useEffect(() => {
@@ -1274,9 +1287,11 @@ export function LiveWidgetPreview({
                           backgroundColor: 'hsl(var(--card))', 
                           border: '1px solid hsl(var(--border))',
                           borderRadius: '8px',
-                          fontSize: '11px'
+                          fontSize: '11px',
+                          zIndex: 100
                         }}
-                        formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
+                        wrapperStyle={{ zIndex: 100 }}
+                        formatter={(value: number) => [value.toLocaleString('tr-TR'), yAxisLabel]}
                       />
                       {legendPosition !== 'hidden' && (
                         <Legend 
@@ -1295,7 +1310,7 @@ export function LiveWidgetPreview({
                           label={{ value: `Ort: ${averageValue.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}`, fill: '#f97316', fontSize: 10, position: 'right' }}
                         />
                       )}
-                      <Bar dataKey="value" name="Değer" radius={[4, 4, 0, 0]}>
+                      <Bar dataKey="value" name={yAxisLabel} radius={[4, 4, 0, 0]}>
                         {visualizationData.chartData.map((item: any, index: number) => {
                           // Tarih bazlı grafiklerde değer bazlı gradyan renk kullan
                           const useGradient = isXAxisDate && visualizationData.chartData.length > 10;
@@ -1328,15 +1343,17 @@ export function LiveWidgetPreview({
                           backgroundColor: 'hsl(var(--card))', 
                           border: '1px solid hsl(var(--border))',
                           borderRadius: '8px',
-                          fontSize: '11px'
+                          fontSize: '11px',
+                          zIndex: 100
                         }}
-                        formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
+                        wrapperStyle={{ zIndex: 100 }}
+                        formatter={(value: number) => [value.toLocaleString('tr-TR'), yAxisLabel]}
                       />
                       {legendPosition !== 'hidden' && <Legend verticalAlign={legendPosition === 'right' ? 'middle' : 'bottom'} />}
                       {showAverageLine && (
                         <ReferenceLine y={averageValue} stroke="#f97316" strokeDasharray="5 5" strokeWidth={2} />
                       )}
-                      <Line type="monotone" dataKey="value" name="Değer" stroke={activeColors[0]} strokeWidth={2} dot={{ r: 4, fill: activeColors[0] }} />
+                      <Line type="monotone" dataKey="value" name={yAxisLabel} stroke={activeColors[0]} strokeWidth={2} dot={{ r: 4, fill: activeColors[0] }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -1359,15 +1376,17 @@ export function LiveWidgetPreview({
                           backgroundColor: 'hsl(var(--card))', 
                           border: '1px solid hsl(var(--border))',
                           borderRadius: '8px',
-                          fontSize: '11px'
+                          fontSize: '11px',
+                          zIndex: 100
                         }}
-                        formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
+                        wrapperStyle={{ zIndex: 100 }}
+                        formatter={(value: number) => [value.toLocaleString('tr-TR'), yAxisLabel]}
                       />
                       {legendPosition !== 'hidden' && <Legend verticalAlign={legendPosition === 'right' ? 'middle' : 'bottom'} />}
                       {showAverageLine && (
                         <ReferenceLine y={averageValue} stroke="#f97316" strokeDasharray="5 5" strokeWidth={2} />
                       )}
-                      <Area type="monotone" dataKey="value" name="Değer" stroke={activeColors[0]} fill={`${activeColors[0]}40`} strokeWidth={2} />
+                      <Area type="monotone" dataKey="value" name={yAxisLabel} stroke={activeColors[0]} fill={`${activeColors[0]}40`} strokeWidth={2} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -1401,15 +1420,17 @@ export function LiveWidgetPreview({
                             backgroundColor: 'hsl(var(--card))', 
                             border: '1px solid hsl(var(--border))',
                             borderRadius: '8px',
-                            fontSize: '11px'
+                            fontSize: '11px',
+                            zIndex: 100
                           }}
-                          formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
+                          wrapperStyle={{ zIndex: 100 }}
+                          formatter={(value: number) => [value.toLocaleString('tr-TR'), yAxisLabel]}
                         />
                       </RechartsPieChart>
                     </ResponsiveContainer>
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-3 w-full max-w-[380px]">
-                    {visualizationData.chartData.slice(0, 8).map((item: any, index: number) => {
+                    {visualizationData.chartData.slice(0, displayLimit).map((item: any, index: number) => {
                       const total = visualizationData.chartData.reduce((sum: number, d: any) => sum + d.value, 0);
                       const percent = total > 0 ? ((item.value / total) * 100).toFixed(1) : '0';
                       return (
@@ -1425,6 +1446,11 @@ export function LiveWidgetPreview({
                         </div>
                       );
                     })}
+                    {visualizationData.chartData.length > displayLimit && (
+                      <span className="text-xs text-muted-foreground col-span-2 text-center mt-1">
+                        +{visualizationData.chartData.length - displayLimit} daha...
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
@@ -1458,20 +1484,22 @@ export function LiveWidgetPreview({
                             backgroundColor: 'hsl(var(--card))', 
                             border: '1px solid hsl(var(--border))',
                             borderRadius: '8px',
-                            fontSize: '11px'
+                            fontSize: '11px',
+                            zIndex: 100
                           }}
-                          formatter={(value: number) => [value.toLocaleString('tr-TR'), 'Değer']}
+                          wrapperStyle={{ zIndex: 100 }}
+                          formatter={(value: number) => [value.toLocaleString('tr-TR'), yAxisLabel]}
                         />
                       </RechartsPieChart>
                     </ResponsiveContainer>
-                    {/* Center text */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                      <span className="text-2xl font-bold">{processedData.length}</span>
-                      <span className="text-xs text-muted-foreground">Kayıt</span>
+                    {/* Center text - düşük z-index */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" style={{ zIndex: 10 }}>
+                      <span className="text-2xl font-bold">{visualizationData.chartData.length}</span>
+                      <span className="text-xs text-muted-foreground">{xAxisLabel}</span>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-3 w-full max-w-[380px]">
-                    {visualizationData.chartData.slice(0, 8).map((item: any, index: number) => {
+                    {visualizationData.chartData.slice(0, displayLimit).map((item: any, index: number) => {
                       const total = visualizationData.chartData.reduce((sum: number, d: any) => sum + d.value, 0);
                       const percent = total > 0 ? ((item.value / total) * 100).toFixed(1) : '0';
                       return (
@@ -1487,6 +1515,11 @@ export function LiveWidgetPreview({
                         </div>
                       );
                     })}
+                    {visualizationData.chartData.length > displayLimit && (
+                      <span className="text-xs text-muted-foreground col-span-2 text-center mt-1">
+                        +{visualizationData.chartData.length - displayLimit} daha...
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
