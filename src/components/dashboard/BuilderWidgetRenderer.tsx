@@ -139,10 +139,33 @@ export function BuilderWidgetRenderer({
 
   if (error) {
     return (
-      <Card className={`${className} border-destructive/50`}>
-        <CardContent className="flex items-center gap-2 py-4 text-destructive">
-          <AlertCircle className="h-5 w-5" />
-          <span className="text-sm">{error}</span>
+      <Card className={`${className} border-muted`}>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2 text-muted-foreground">
+            <DynamicIcon iconName={widgetIcon || 'BarChart3'} className="h-4 w-4" />
+            {widgetName}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center gap-2 py-4 text-muted-foreground">
+          <AlertCircle className="h-4 w-4" />
+          <span className="text-xs">{error}</span>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Veri yok durumu
+  if (!data && !isLoading) {
+    return (
+      <Card className={className}>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2 text-muted-foreground">
+            <DynamicIcon iconName={widgetIcon || 'BarChart3'} className="h-4 w-4" />
+            {widgetName}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center justify-center py-4 text-muted-foreground">
+          <span className="text-sm">Veri bulunamadı</span>
         </CardContent>
       </Card>
     );
