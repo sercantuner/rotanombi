@@ -377,7 +377,7 @@ export function DataSourceManager() {
       
       {/* Form Dialog */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-3xl w-[95vw] h-[85vh] flex flex-col overflow-hidden">
           <DialogHeader className="flex-shrink-0">
             <DialogTitle>
               {editingSourceId ? 'Veri Kaynağı Düzenle' : 'Yeni Veri Kaynağı'}
@@ -387,7 +387,7 @@ export function DataSourceManager() {
             </DialogDescription>
           </DialogHeader>
           
-          <ScrollArea className="flex-1 -mx-6 px-6" style={{ maxHeight: 'calc(90vh - 180px)' }}>
+          <ScrollArea className="flex-1 pr-4">
             <div className="space-y-6">
               {/* Temel Bilgiler */}
               <div className="space-y-4">
@@ -554,63 +554,6 @@ export function DataSourceManager() {
                   </div>
                 </div>
                 
-                <Button onClick={handleTest} disabled={isTesting} variant="secondary" className="w-full">
-                  {isTesting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Test Ediliyor...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-4 w-4 mr-2" />
-                      API Testi Yap
-                    </>
-                  )}
-                </Button>
-                
-                {/* Test Sonucu */}
-                {testResult && (
-                  <Card className={cn(
-                    "overflow-hidden",
-                    testResult.success 
-                      ? 'border-green-500/50 bg-green-500/5' 
-                      : 'border-destructive/50 bg-destructive/5'
-                  )}>
-                    <CardContent className="pt-4 pb-3">
-                      {testResult.success ? (
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-                            <p className="text-sm font-medium text-green-600">
-                              {testResult.recordCount} kayıt bulundu
-                            </p>
-                          </div>
-                          {testResult.sampleFields && testResult.sampleFields.length > 0 && (
-                            <div className="max-h-24 overflow-y-auto">
-                              <div className="flex flex-wrap gap-1">
-                                {testResult.sampleFields.slice(0, 20).map(field => (
-                                  <Badge key={field} variant="outline" className="text-xs truncate max-w-[120px]">
-                                    {field}
-                                  </Badge>
-                                ))}
-                                {testResult.sampleFields.length > 20 && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    +{testResult.sampleFields.length - 20} alan
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="flex items-start gap-2">
-                          <XCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-                          <p className="text-sm text-destructive break-words">{testResult.error}</p>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
               </div>
               
               <Separator />
@@ -760,7 +703,45 @@ export function DataSourceManager() {
             </div>
           </ScrollArea>
           
-          <DialogFooter className="pt-4 border-t">
+          {/* Sabit API Test Bölümü */}
+          <div className="flex-shrink-0 py-3 border-t bg-background space-y-2">
+            <Button onClick={handleTest} disabled={isTesting} variant="secondary" className="w-full">
+              {isTesting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Test Ediliyor...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  API Testi Yap
+                </>
+              )}
+            </Button>
+            
+            {testResult && (
+              <div className={cn(
+                "flex items-center gap-2 p-2 rounded-md text-sm",
+                testResult.success 
+                  ? 'bg-green-500/10 text-green-600' 
+                  : 'bg-destructive/10 text-destructive'
+              )}>
+                {testResult.success ? (
+                  <>
+                    <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                    <span>{testResult.recordCount} kayıt · {testResult.sampleFields?.length || 0} alan</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">{testResult.error}</span>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter className="pt-3 border-t">
             <Button variant="outline" onClick={() => setIsFormOpen(false)}>
               İptal
             </Button>
