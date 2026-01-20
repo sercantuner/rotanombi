@@ -198,11 +198,12 @@ export function DataSourceManager() {
       });
       
       if (result.success) {
-        // Son çekme bilgilerini güncelle
+        // Son çekme bilgilerini güncelle (örnek veri dahil)
         await updateLastFetch(
           sourceId, 
           result.recordCount || 0, 
-          result.sampleFields || []
+          result.sampleFields || [],
+          result.sampleData || [] // Filtreleme için örnek veri
         );
         // Hızlı test sonucunu göster
         setQuickTestResult({ sourceId, recordCount: result.recordCount || 0 });

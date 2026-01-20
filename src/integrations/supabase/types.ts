@@ -108,6 +108,7 @@ export type Database = {
           last_fetched_at: string | null
           last_fields: Json | null
           last_record_count: number | null
+          last_sample_data: Json | null
           limit_count: number | null
           method: string
           module: string
@@ -132,6 +133,7 @@ export type Database = {
           last_fetched_at?: string | null
           last_fields?: Json | null
           last_record_count?: number | null
+          last_sample_data?: Json | null
           limit_count?: number | null
           method: string
           module: string
@@ -156,6 +158,7 @@ export type Database = {
           last_fetched_at?: string | null
           last_fields?: Json | null
           last_record_count?: number | null
+          last_sample_data?: Json | null
           limit_count?: number | null
           method?: string
           module?: string
