@@ -632,7 +632,6 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                 availableDateFields={availableFieldsForVisualization}
               />
             </TabsContent>
-            </TabsContent>
 
             {/* GÖRSELLEŞTİRME */}
             <TabsContent value="visualization" className="m-0 space-y-4">
