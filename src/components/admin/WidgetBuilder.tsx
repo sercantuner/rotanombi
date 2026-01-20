@@ -715,6 +715,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                 config={dateFilterConfig}
                 onChange={setDateFilterConfig}
                 availableDateFields={availableFieldsForVisualization}
+                selectedAxisField={fieldWells?.xAxis?.field}
               />
             </TabsContent>
 
@@ -963,18 +964,10 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                 tableColumns={tableColumns}
                 pivotConfig={pivotConfig}
                 dataSourceId={selectedDataSourceId}
+                fieldWells={fieldWells}
+                chartSettings={chartSettings}
                 onNameChange={setWidgetName}
                 onIconChange={setWidgetIcon}
-                onColorsChange={(colors) => {
-                  // Renkleri config'e kaydet
-                  setConfig(prev => ({
-                    ...prev,
-                    visualization: {
-                      ...prev.visualization,
-                      colors
-                    }
-                  }));
-                }}
               />
             </TabsContent>
           </ScrollArea>

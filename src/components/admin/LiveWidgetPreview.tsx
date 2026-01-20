@@ -140,6 +140,10 @@ const ICON_OPTIONS = [
   'Zap', 'Scale', 'Percent', 'ArrowUpRight', 'ArrowDownRight', 'Gauge'
 ];
 
+// Field Wells ve Chart Settings tipleri
+import { FieldWellsConfig } from './FieldWellBuilder';
+import { ChartSettingsData } from './ChartSettingsPanel';
+
 interface LiveWidgetPreviewProps {
   config: WidgetBuilderConfig;
   widgetName: string;
@@ -152,16 +156,11 @@ interface LiveWidgetPreviewProps {
   tableColumns: TableColumn[];
   pivotConfig: PivotConfig;
   dataSourceId: string | null;
+  // Power BI tarzı Field Wells ve Chart Settings (Görsel sekmesinden gelir)
+  fieldWells?: FieldWellsConfig;
+  chartSettings?: ChartSettingsData;
   onNameChange?: (name: string) => void;
   onIconChange?: (icon: string) => void;
-  onColorsChange?: (colors: string[]) => void;
-  onPaletteChange?: (palette: string) => void;
-  onChartSettingsChange?: (settings: { 
-    showGrid: boolean; 
-    legendPosition: LegendPosition;
-    showTrendLine: boolean;
-    showAverageLine: boolean;
-  }) => void;
 }
 
 // Dinamik icon renderer
@@ -380,11 +379,10 @@ export function LiveWidgetPreview({
   tableColumns,
   pivotConfig,
   dataSourceId,
+  fieldWells,
+  chartSettings,
   onNameChange,
   onIconChange,
-  onColorsChange,
-  onPaletteChange,
-  onChartSettingsChange,
 }: LiveWidgetPreviewProps) {
   const [rawData, setRawData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -398,10 +396,6 @@ export function LiveWidgetPreview({
   // Önizleme düzenleme state'leri
   const [editableName, setEditableName] = useState(widgetName);
   const [editableIcon, setEditableIcon] = useState(widgetIcon);
-  const [selectedPalette, setSelectedPalette] = useState<PaletteKey>(
-    (config.visualization.chart?.colorPalette as PaletteKey) || 'default'
-  );
-  const [customColors, setCustomColors] = useState<string[]>(COLOR_PALETTES.default.colors);
   
   // Tablo sıralama state'i
   const [tableSortColumn, setTableSortColumn] = useState<string | null>(null);
@@ -410,13 +404,12 @@ export function LiveWidgetPreview({
   // Tablo satır limiti
   const [tableRowLimit, setTableRowLimit] = useState(20);
   
-  // Grafik ayarları state'leri
-  const [showGrid, setShowGrid] = useState(config.visualization.chart?.showGrid !== false);
-  const [legendPosition, setLegendPosition] = useState<LegendPosition>(
-    config.visualization.chart?.legendPosition || 'bottom'
-  );
-  const [showTrendLine, setShowTrendLine] = useState(config.visualization.chart?.showTrendLine || false);
-  const [showAverageLine, setShowAverageLine] = useState(config.visualization.chart?.showAverageLine || false);
+  // chartSettings'ten türetilen değerler (prop olarak gelir, lokal state yok)
+  const selectedPalette = (chartSettings?.colorPalette || 'default') as PaletteKey;
+  const showGrid = chartSettings?.showGrid !== false;
+  const legendPosition = chartSettings?.legendPosition || 'bottom';
+  const showTrendLine = chartSettings?.showTrendLine || false;
+  const showAverageLine = chartSettings?.showAverageLine || false;
   
   // Props değişince state'leri güncelle
   useEffect(() => {
@@ -480,26 +473,10 @@ export function LiveWidgetPreview({
     }
   }, [config, dataSourceId]);
 
-  // Aktif renk paleti
+  // Aktif renk paleti (chartSettings'ten gelir)
   const activeColors = useMemo(() => {
-    return COLOR_PALETTES[selectedPalette]?.colors || customColors;
-  }, [selectedPalette, customColors]);
-
-  // Palet değiştiğinde parent'a bildir
-  useEffect(() => {
-    onColorsChange?.(activeColors);
-    onPaletteChange?.(selectedPalette);
-  }, [activeColors, selectedPalette, onColorsChange, onPaletteChange]);
-
-  // Grafik ayarları değiştiğinde parent'a bildir
-  useEffect(() => {
-    onChartSettingsChange?.({
-      showGrid,
-      legendPosition,
-      showTrendLine,
-      showAverageLine,
-    });
-  }, [showGrid, legendPosition, showTrendLine, showAverageLine, onChartSettingsChange]);
+    return COLOR_PALETTES[selectedPalette]?.colors || COLOR_PALETTES.default.colors;
+  }, [selectedPalette]);
 
   // İşlenmiş veri (filtreler + hesaplamalar uygulanmış)
   const processedData = useMemo(() => {
@@ -517,7 +494,8 @@ export function LiveWidgetPreview({
   // Ortalama değer hesapla (trend/average çizgileri için)
   const averageValue = useMemo(() => {
     if (!processedData || processedData.length === 0) return 0;
-    const valueField = yAxisField || config.visualization.chart?.yAxis?.field || config.visualization.chart?.valueField || 'toplambakiye';
+    // Field Wells öncelikli
+    const valueField = fieldWells?.yAxis?.[0]?.field || yAxisField || config.visualization.chart?.yAxis?.field || config.visualization.chart?.valueField || 'toplambakiye';
     const sum = processedData.reduce((acc, row) => {
       const val = row[valueField];
       if (typeof val === 'number') return acc + val;
@@ -525,30 +503,38 @@ export function LiveWidgetPreview({
       return acc;
     }, 0);
     return sum / processedData.length;
-  }, [processedData, yAxisField, config.visualization.chart]);
+  }, [processedData, fieldWells, yAxisField, config.visualization.chart]);
 
   // Görselleştirme verisi - previewVizType kullanarak dinamik
   const visualizationData = useMemo(() => {
     if (!processedData || processedData.length === 0) return null;
     
+    // Field Wells'ten değerleri al (öncelikli)
+    const fwXAxis = fieldWells?.xAxis?.field;
+    const fwYAxis = fieldWells?.yAxis?.[0]?.field;
+    const fwValue = fieldWells?.value?.field;
+    const fwCategory = fieldWells?.category?.field;
+    const fwAggregation = fieldWells?.yAxis?.[0]?.aggregation || fieldWells?.value?.aggregation || 'sum';
+    
     // KPI için özel hesaplama
     const kpiData = (() => {
-      const valueField = config.visualization.kpi?.valueField || yAxisField || '';
-      const aggregation = (config.visualization.kpi?.aggregation || 'count') as AggregationType;
+      const valueField = fwValue || fwYAxis || config.visualization.kpi?.valueField || yAxisField || '';
+      const aggregation = (fieldWells?.value?.aggregation || config.visualization.kpi?.aggregation || 'count') as AggregationType;
+      const format = fieldWells?.value?.format || config.visualization.kpi?.format;
       return {
         value: valueField ? calculateAggregation(processedData, valueField, aggregation) : processedData.length,
-        format: config.visualization.kpi?.format,
-        prefix: config.visualization.kpi?.prefix,
-        suffix: config.visualization.kpi?.suffix,
+        format,
+        prefix: fieldWells?.value?.prefix || config.visualization.kpi?.prefix,
+        suffix: fieldWells?.value?.suffix || config.visualization.kpi?.suffix,
         recordCount: processedData.length,
       };
     })();
     
-    // Chart data için ortak hesaplama
+    // Chart data için ortak hesaplama - Field Wells öncelikli
     const chartData = (() => {
-      const groupField = legendField || xAxisField || config.visualization.chart?.xAxis?.field || '';
-      const valueField = yAxisField || config.visualization.chart?.yAxis?.field || config.visualization.chart?.valueField || '';
-      const aggregation = ((config.visualization.chart as any)?.aggregation || 'count') as AggregationType;
+      const groupField = fwXAxis || fwCategory || legendField || xAxisField || config.visualization.chart?.xAxis?.field || '';
+      const valueField = fwYAxis || fwValue || yAxisField || config.visualization.chart?.yAxis?.field || config.visualization.chart?.valueField || '';
+      const aggregation = (fwAggregation || (config.visualization.chart as any)?.aggregation || 'count') as AggregationType;
       
       if (!groupField) {
         // Grup alanı yoksa ilk string alanı bul
@@ -701,44 +687,22 @@ export function LiveWidgetPreview({
                 />
               </div>
 
-              {/* Renk Paleti Seçici */}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-9 gap-2">
-                    <Palette className="h-4 w-4" />
-                    <span className="text-xs hidden sm:inline">{COLOR_PALETTES[selectedPalette].name}</span>
-                    <ChevronDown className="h-3 w-3" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64 p-3" align="end">
-                  <Label className="text-xs text-muted-foreground mb-3 block">Renk Paleti</Label>
-                  <div className="space-y-2">
-                    {(Object.keys(COLOR_PALETTES) as PaletteKey[]).map((paletteKey) => {
-                      const palette = COLOR_PALETTES[paletteKey];
-                      return (
-                        <Button
-                          key={paletteKey}
-                          variant={selectedPalette === paletteKey ? 'default' : 'ghost'}
-                          size="sm"
-                          className="w-full justify-start gap-3 h-9"
-                          onClick={() => setSelectedPalette(paletteKey)}
-                        >
-                          <div className="flex gap-0.5">
-                            {palette.colors.slice(0, 6).map((color, idx) => (
-                              <div
-                                key={idx}
-                                className="w-3 h-3 rounded-sm"
-                                style={{ backgroundColor: color }}
-                              />
-                            ))}
-                          </div>
-                          <span className="text-xs">{palette.name}</span>
-                        </Button>
-                      );
-                    })}
-                  </div>
-                </PopoverContent>
-              </Popover>
+              {/* Renk Paleti Göstergesi (Salt Okunur) */}
+              <div className="flex items-center gap-2 px-3 py-2 rounded border bg-muted/20">
+                <Palette className="h-4 w-4 text-muted-foreground" />
+                <div className="flex gap-0.5">
+                  {COLOR_PALETTES[selectedPalette]?.colors.slice(0, 5).map((color, idx) => (
+                    <div
+                      key={idx}
+                      className="w-3 h-3 rounded-sm"
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {COLOR_PALETTES[selectedPalette]?.name || 'Varsayılan'}
+                </span>
+              </div>
             </div>
 
             {/* İstatistikler */}
@@ -778,84 +742,36 @@ export function LiveWidgetPreview({
               })}
             </div>
 
-            {/* Grafik Ayarları Paneli - sadece grafik tipleri için */}
+            {/* Grafik Ayarları Özeti (Salt Okunur - Görsel sekmesinden değiştirilir) */}
             {['bar', 'line', 'area', 'pie', 'donut'].includes(previewVizType) && (
-              <div className="flex flex-wrap items-center gap-3 p-3 bg-muted/30 rounded-lg border">
-                <span className="text-xs font-medium flex items-center gap-1.5">
-                  <Settings2 className="h-3.5 w-3.5" />
-                  Grafik Ayarları:
-                </span>
-                
-                {/* Grid Toggle */}
-                <Button
-                  variant={showGrid ? 'default' : 'outline'}
-                  size="sm"
-                  className="h-7 px-2 text-xs gap-1"
-                  onClick={() => setShowGrid(!showGrid)}
-                >
-                  <Grid3X3 className="h-3.5 w-3.5" />
-                  Grid
-                </Button>
-                
-                {/* Legend Konumu */}
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-7 px-2 text-xs gap-1">
-                      <LayoutGrid className="h-3.5 w-3.5" />
-                      Legend: {legendPosition === 'bottom' ? 'Alt' : legendPosition === 'right' ? 'Sağ' : 'Gizli'}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-36 p-1" align="start">
-                    <Button
-                      variant={legendPosition === 'bottom' ? 'default' : 'ghost'}
-                      size="sm"
-                      className="w-full justify-start h-7 text-xs"
-                      onClick={() => setLegendPosition('bottom')}
-                    >
-                      Alt
-                    </Button>
-                    <Button
-                      variant={legendPosition === 'right' ? 'default' : 'ghost'}
-                      size="sm"
-                      className="w-full justify-start h-7 text-xs"
-                      onClick={() => setLegendPosition('right')}
-                    >
-                      Sağ
-                    </Button>
-                    <Button
-                      variant={legendPosition === 'hidden' ? 'default' : 'ghost'}
-                      size="sm"
-                      className="w-full justify-start h-7 text-xs"
-                      onClick={() => setLegendPosition('hidden')}
-                    >
-                      Gizli
-                    </Button>
-                  </PopoverContent>
-                </Popover>
-
-                {/* Trend ve Ortalama Çizgileri - sadece bar, line, area için */}
+              <div className="flex flex-wrap items-center gap-2 p-2 bg-muted/20 rounded-lg text-xs text-muted-foreground">
+                <Settings2 className="h-3.5 w-3.5" />
+                <span>Ayarlar:</span>
+                <Badge variant="outline" className="text-xs">
+                  <Grid3X3 className="h-3 w-3 mr-1" />
+                  Grid: {showGrid ? 'Açık' : 'Kapalı'}
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  <LayoutGrid className="h-3 w-3 mr-1" />
+                  Legend: {legendPosition === 'bottom' ? 'Alt' : legendPosition === 'right' ? 'Sağ' : 'Gizli'}
+                </Badge>
                 {['bar', 'line', 'area'].includes(previewVizType) && (
                   <>
-                    <Button
-                      variant={showTrendLine ? 'default' : 'outline'}
-                      size="sm"
-                      className="h-7 px-2 text-xs gap-1"
-                      onClick={() => setShowTrendLine(!showTrendLine)}
-                    >
-                      <TrendingUp className="h-3.5 w-3.5" />
-                      Trend
-                    </Button>
-                    <Button
-                      variant={showAverageLine ? 'default' : 'outline'}
-                      size="sm"
-                      className="h-7 px-2 text-xs gap-1"
-                      onClick={() => setShowAverageLine(!showAverageLine)}
-                    >
-                      <Minus className="h-3.5 w-3.5" />
-                      Ortalama
-                    </Button>
+                    {showTrendLine && (
+                      <Badge variant="outline" className="text-xs">
+                        <TrendingUp className="h-3 w-3 mr-1" />
+                        Trend
+                      </Badge>
+                    )}
+                    {showAverageLine && (
+                      <Badge variant="outline" className="text-xs">
+                        <Minus className="h-3 w-3 mr-1" />
+                        Ortalama
+                      </Badge>
+                    )}
                   </>
                 )}
+                <span className="text-[10px] italic ml-auto">(Görsel sekmesinden değiştirin)</span>
               </div>
             )}
 

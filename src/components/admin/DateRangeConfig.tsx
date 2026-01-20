@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Calendar, CalendarClock, CalendarDays, CalendarRange, Infinity, Settings2 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -16,6 +17,7 @@ interface DateRangeConfigProps {
   config: DateFilterConfig;
   onChange: (config: DateFilterConfig) => void;
   availableDateFields: string[];
+  selectedAxisField?: string; // Field Wells'ten gelen X ekseni alanı
   className?: string;
 }
 
@@ -29,6 +31,7 @@ export function DateRangeConfig({
   config,
   onChange,
   availableDateFields,
+  selectedAxisField,
   className
 }: DateRangeConfigProps) {
   const handleChange = (key: keyof DateFilterConfig, value: any) => {
@@ -79,6 +82,26 @@ export function DateRangeConfig({
 
       {config.enabled && (
         <CardContent className="space-y-4">
+          {/* X Ekseni Senkronizasyon Önerisi */}
+          {selectedAxisField && dateFields.includes(selectedAxisField) && config.dateField !== selectedAxisField && (
+            <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
+                  <CalendarClock className="h-4 w-4" />
+                  <span>X ekseninde "<strong>{selectedAxisField}</strong>" seçili</span>
+                </div>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => handleChange('dateField', selectedAxisField)}
+                >
+                  Bu alanı kullan
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Tarih Alanı Seçimi */}
           <div className="space-y-2">
             <Label className="text-sm">Tarih Alanı</Label>
@@ -96,6 +119,9 @@ export function DateRangeConfig({
                       <div className="flex items-center gap-2">
                         <Calendar className="h-3.5 w-3.5" />
                         {field}
+                        {field === selectedAxisField && (
+                          <Badge variant="secondary" className="text-[10px] ml-1">X Ekseni</Badge>
+                        )}
                       </div>
                     </SelectItem>
                   ))
