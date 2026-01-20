@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useWidgets, useWidgetAdmin } from '@/hooks/useWidgets';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useWidgetCategories, WidgetCategoryFormData } from '@/hooks/useWidgetCategories';
 import { Widget, WidgetFormData, PAGE_CATEGORIES, WIDGET_TYPES, WIDGET_SIZES, DATA_SOURCES, AVAILABLE_FILTERS, WidgetCategory, WidgetType, WidgetSize, DataSource } from '@/lib/widgetTypes';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,7 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Edit, Trash2, Eye, EyeOff, RefreshCw, LayoutGrid, Search, Shield, AlertTriangle, Wand2, Database } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, RefreshCw, LayoutGrid, Search, Shield, AlertTriangle, Wand2, Database, Tags, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WidgetBuilder } from '@/components/admin/WidgetBuilder';
 import { DataSourceManager } from '@/components/admin/DataSourceManager';
@@ -54,6 +55,18 @@ export default function SuperAdminPage() {
   const { widgets, isLoading, refetch } = useWidgets();
   const { createWidget, updateWidget, deleteWidget, activateWidget } = useWidgetAdmin();
   const { isAdmin, loading: permissionsLoading } = usePermissions();
+  const { 
+    categories, 
+    activeCategories,
+    isLoading: categoriesLoading, 
+    refetch: refetchCategories,
+    createCategory,
+    updateCategory,
+    deleteCategory,
+    isCreating: isCategoryCreating,
+    isUpdating: isCategoryUpdating,
+    isDeleting: isCategoryDeleting
+  } = useWidgetCategories();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -63,6 +76,19 @@ export default function SuperAdminPage() {
   const [editingWidget, setEditingWidget] = useState<Widget | null>(null);
   const [builderEditWidget, setBuilderEditWidget] = useState<Widget | null>(null);
   const [formData, setFormData] = useState<WidgetFormData>(getEmptyFormData());
+  
+  // Kategori form state
+  const [isCategoryFormOpen, setIsCategoryFormOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [categoryFormData, setCategoryFormData] = useState<WidgetCategoryFormData>({
+    slug: '',
+    name: '',
+    description: '',
+    icon: 'Folder',
+    color: '',
+    sort_order: 0,
+    is_active: true,
+  });
 
   // Erişim kontrolü
   if (permissionsLoading) {
@@ -177,6 +203,10 @@ export default function SuperAdminPage() {
               <LayoutGrid className="h-4 w-4" />
               Widget Yönetimi
             </TabsTrigger>
+            <TabsTrigger value="categories" className="gap-2">
+              <Tags className="h-4 w-4" />
+              Kategoriler
+            </TabsTrigger>
             <TabsTrigger value="datasources" className="gap-2">
               <Database className="h-4 w-4" />
               Veri Kaynakları
@@ -191,11 +221,10 @@ export default function SuperAdminPage() {
               <RefreshCw className="h-4 w-4 mr-2" />
               Yenile
             </Button>
-            <Button variant="secondary" onClick={() => setIsBuilderOpen(true)}>
-              <Wand2 className="h-4 w-4 mr-2" />
-              Widget Builder
-            </Button>
-            <Button onClick={() => openForm()}>
+            <Button onClick={() => {
+              setBuilderEditWidget(null);
+              setIsBuilderOpen(true);
+            }}>
               <Plus className="h-4 w-4 mr-2" />
               Yeni Widget
             </Button>
@@ -301,27 +330,22 @@ export default function SuperAdminPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {widget.builder_config ? (
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              onClick={() => {
-                                setBuilderEditWidget(widget);
-                                setIsBuilderOpen(true);
-                              }}
-                              title="Widget Builder ile Düzenle"
-                            >
-                              <Wand2 className="h-4 w-4 text-primary" />
-                            </Button>
-                          ) : (
-                            <Button variant="ghost" size="icon" onClick={() => openForm(widget)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          )}
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => {
+                              setBuilderEditWidget(widget);
+                              setIsBuilderOpen(true);
+                            }}
+                            title="Widget Builder ile Düzenle"
+                          >
+                            <Wand2 className="h-4 w-4 text-primary" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => handleDelete(widget)}
+                            title={widget.is_active ? 'Pasif Yap' : 'Aktif Yap'}
                           >
                             {widget.is_active ? (
                               <EyeOff className="h-4 w-4" />
@@ -580,6 +604,223 @@ export default function SuperAdminPage() {
         onSave={() => refetch()}
         editWidget={builderEditWidget}
       />
+        </TabsContent>
+
+        {/* Kategoriler Tab */}
+        <TabsContent value="categories" className="space-y-6 mt-0">
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="outline" onClick={() => refetchCategories()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Yenile
+            </Button>
+            <Button onClick={() => {
+              setEditingCategory(null);
+              setCategoryFormData({
+                slug: '',
+                name: '',
+                description: '',
+                icon: 'Folder',
+                color: '',
+                sort_order: categories.length,
+                is_active: true,
+              });
+              setIsCategoryFormOpen(true);
+            }}>
+              <Plus className="h-4 w-4 mr-2" />
+              Yeni Kategori
+            </Button>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Kategori Listesi</CardTitle>
+              <CardDescription>Widget kategorilerini yönetin</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {categoriesLoading ? (
+                <div className="space-y-2">
+                  {[...Array(4)].map((_, i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : categories.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Tags className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                  <p>Henüz kategori tanımlanmadı</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[50px]">İkon</TableHead>
+                      <TableHead>Slug</TableHead>
+                      <TableHead>Ad</TableHead>
+                      <TableHead>Açıklama</TableHead>
+                      <TableHead>Sıra</TableHead>
+                      <TableHead>Durum</TableHead>
+                      <TableHead className="text-right">İşlemler</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {categories.map((cat) => (
+                      <TableRow key={cat.id} className={!cat.is_active ? 'opacity-50' : ''}>
+                        <TableCell>
+                          <DynamicIcon iconName={cat.icon || 'Folder'} className="h-5 w-5" />
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">{cat.slug}</TableCell>
+                        <TableCell className="font-medium">{cat.name}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">
+                          {cat.description || '-'}
+                        </TableCell>
+                        <TableCell>{cat.sort_order}</TableCell>
+                        <TableCell>
+                          {cat.is_active ? (
+                            <Badge className="bg-green-500/20 text-green-600">Aktif</Badge>
+                          ) : (
+                            <Badge variant="destructive">Pasif</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => {
+                                setEditingCategory(cat.id);
+                                setCategoryFormData({
+                                  slug: cat.slug,
+                                  name: cat.name,
+                                  description: cat.description || '',
+                                  icon: cat.icon || 'Folder',
+                                  color: cat.color || '',
+                                  sort_order: cat.sort_order,
+                                  is_active: cat.is_active,
+                                });
+                                setIsCategoryFormOpen(true);
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={async () => {
+                                if (confirm('Bu kategoriyi silmek istediğinize emin misiniz?')) {
+                                  await deleteCategory(cat.id);
+                                }
+                              }}
+                              disabled={isCategoryDeleting}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Kategori Form Dialog */}
+          <Dialog open={isCategoryFormOpen} onOpenChange={setIsCategoryFormOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>{editingCategory ? 'Kategori Düzenle' : 'Yeni Kategori'}</DialogTitle>
+                <DialogDescription>
+                  Widget kategorisi bilgilerini girin
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Slug *</Label>
+                    <Input
+                      value={categoryFormData.slug}
+                      onChange={e => setCategoryFormData(prev => ({ ...prev, slug: e.target.value }))}
+                      placeholder="dashboard"
+                      className="font-mono"
+                      disabled={!!editingCategory}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Ad *</Label>
+                    <Input
+                      value={categoryFormData.name}
+                      onChange={e => setCategoryFormData(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="Dashboard"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Açıklama</Label>
+                  <Textarea
+                    value={categoryFormData.description}
+                    onChange={e => setCategoryFormData(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="Kategori açıklaması..."
+                    rows={2}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>İkon (Lucide)</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={categoryFormData.icon}
+                        onChange={e => setCategoryFormData(prev => ({ ...prev, icon: e.target.value }))}
+                        placeholder="Folder"
+                      />
+                      <div className="flex items-center justify-center w-10 h-10 border rounded-md">
+                        <DynamicIcon iconName={categoryFormData.icon || 'Folder'} className="h-5 w-5" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Sıra</Label>
+                    <Input
+                      type="number"
+                      value={categoryFormData.sort_order}
+                      onChange={e => setCategoryFormData(prev => ({ ...prev, sort_order: parseInt(e.target.value) || 0 }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={categoryFormData.is_active}
+                    onCheckedChange={checked => setCategoryFormData(prev => ({ ...prev, is_active: checked }))}
+                  />
+                  <Label>Aktif</Label>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsCategoryFormOpen(false)}>
+                  İptal
+                </Button>
+                <Button 
+                  onClick={async () => {
+                    if (!categoryFormData.slug || !categoryFormData.name) return;
+                    
+                    if (editingCategory) {
+                      await updateCategory(editingCategory, categoryFormData);
+                    } else {
+                      await createCategory(categoryFormData);
+                    }
+                    setIsCategoryFormOpen(false);
+                  }}
+                  disabled={!categoryFormData.slug || !categoryFormData.name || isCategoryCreating || isCategoryUpdating}
+                >
+                  {(isCategoryCreating || isCategoryUpdating) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {editingCategory ? 'Güncelle' : 'Oluştur'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <TabsContent value="datasources" className="mt-0">

@@ -583,7 +583,7 @@ export function MultiQueryBuilder({ multiQuery, onChange }: MultiQueryBuilderPro
           <div className="p-2 bg-muted/30 border-b">
             <Label className="text-xs font-medium">Sorgular</Label>
           </div>
-          <ScrollArea className="h-[200px]">
+          <ScrollArea className="h-[280px]">
             <div className="p-2 space-y-2">
               {multiQuery.queries.map((query, index) => (
                 <div key={query.id}>
@@ -621,7 +621,7 @@ export function MultiQueryBuilder({ multiQuery, onChange }: MultiQueryBuilderPro
                 Ekle
               </Button>
             </div>
-            <ScrollArea className="h-[120px]">
+            <ScrollArea className="h-[200px]">
               {multiQuery.merges.length > 0 ? (
                 <div className="p-2 space-y-1.5">
                   {multiQuery.merges.map((merge, index) => (
