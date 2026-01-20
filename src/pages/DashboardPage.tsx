@@ -26,9 +26,6 @@ function DashboardContent() {
   const [diaConnectionInfo, setDiaConnectionInfo] = useState<DiaConnectionInfo | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [dashboardPageId, setDashboardPageId] = useState<string | null>(null);
-  
-  // Widget düzenleme modu
-  const [isWidgetEditMode, setIsWidgetEditMode] = useState(false);
 
   // Merkezi veri kaynağı loader - Sayfadaki tüm widget'ların veri kaynaklarını yükler
   const { 
@@ -280,7 +277,6 @@ function DashboardContent() {
             pageId={dashboardPageId}
             widgetData={widgetData}
             isLoading={isLoading || dataSourcesLoading}
-            isWidgetEditMode={isWidgetEditMode}
           />
         ) : (
           <div className="flex items-center justify-center h-64">

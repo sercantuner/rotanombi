@@ -17,8 +17,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  Edit,
-  Check,
   Plug
 } from 'lucide-react';
 import rotanombiLogo from '@/assets/rotanombi-logo.png';
@@ -38,9 +36,6 @@ interface NavItem {
 interface SidebarProps {
   collapsed?: boolean;
   onToggle?: () => void;
-  // Dashboard kontrolleri için
-  isWidgetEditMode?: boolean;
-  onWidgetEditModeToggle?: () => void;
 }
 
 // Sabit menü öğeleri (rapor sayfaları kaldırıldı)
@@ -52,9 +47,7 @@ const staticNavItems: NavItem[] = [
 
 export function Sidebar({ 
   collapsed = false, 
-  onToggle,
-  isWidgetEditMode = false,
-  onWidgetEditModeToggle
+  onToggle
 }: SidebarProps) {
   const { user, logout } = useAuth();
   const { isAdmin } = usePermissions();
@@ -277,46 +270,6 @@ export function Sidebar({
                       {isDiaConnected ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
                     </span>
                   </div>
-                )}
-                
-                {/* Widget Düzenle Butonu */}
-                {onWidgetEditModeToggle && (
-                  collapsed ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant={isWidgetEditMode ? 'default' : 'outline'}
-                          size="icon"
-                          className="w-full mb-2"
-                          onClick={onWidgetEditModeToggle}
-                        >
-                          {isWidgetEditMode ? <Check className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="right">
-                        {isWidgetEditMode ? 'Düzenlemeyi Bitir' : 'Widget Düzenle'}
-                      </TooltipContent>
-                    </Tooltip>
-                  ) : (
-                    <Button
-                      variant={isWidgetEditMode ? 'default' : 'outline'}
-                      size="sm"
-                      className="w-full mb-2"
-                      onClick={onWidgetEditModeToggle}
-                    >
-                      {isWidgetEditMode ? (
-                        <>
-                          <Check className="w-4 h-4 mr-2" />
-                          Düzenlemeyi Bitir
-                        </>
-                      ) : (
-                        <>
-                          <Edit className="w-4 h-4 mr-2" />
-                          Widget Düzenle
-                        </>
-                      )}
-                    </Button>
-                  )
                 )}
                 
                 {/* Sorgu İstatistikleri */}
