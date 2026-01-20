@@ -219,6 +219,24 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
         if (bc.calculatedFields) {
           setCalculatedFields(bc.calculatedFields);
         }
+        
+        // Post-fetch filtrelerini yükle
+        if (bc.postFetchFilters && Array.isArray(bc.postFetchFilters)) {
+          setPostFetchFilters(bc.postFetchFilters);
+        }
+        
+        // Tablo kolonlarını yükle
+        if (bc.tableColumns && Array.isArray(bc.tableColumns)) {
+          setTableColumns(bc.tableColumns);
+        }
+        
+        // Pivot config yükle
+        if (bc.pivot) {
+          setPivotConfig(bc.pivot);
+        }
+        
+        // Varsayılan widget durumunu yükle
+        setIsDefaultWidget(editWidget.is_default === true);
       }
     } else if (!open) {
       resetForm();
@@ -245,6 +263,11 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
     setCalculatedFields([]);
     setDateFilterConfig(getDefaultDateFilterConfig());
     setSelectedTemplate(null);
+    // Yeni state'leri sıfırla
+    setPostFetchFilters([]);
+    setTableColumns([]);
+    setPivotConfig(getDefaultPivotConfig());
+    setIsDefaultWidget(false);
   };
   
   // Şablon uygulama
@@ -412,6 +435,12 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
       multiQuery: multiQuery || undefined,
       calculatedFields: calculatedFields.length > 0 ? calculatedFields : undefined,
       dateFilter: dateFilterConfig.enabled ? dateFilterConfig : undefined,
+      // Post-fetch filtreleri ekle
+      postFetchFilters: postFetchFilters.length > 0 ? postFetchFilters : undefined,
+      // Tablo kolonlarını ekle
+      tableColumns: tableColumns.length > 0 ? tableColumns : undefined,
+      // Pivot config ekle (pivot tipi seçiliyse)
+      pivot: config.visualization.type === 'pivot' ? pivotConfig : undefined,
       visualization: {
         ...config.visualization,
         chart: config.visualization.chart ? {
@@ -443,6 +472,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
       min_height: '',
       grid_cols: null,
       is_active: true,
+      is_default: isDefaultWidget,
       sort_order: editWidget?.sort_order || 100,
       builder_config: builderConfig,
     };

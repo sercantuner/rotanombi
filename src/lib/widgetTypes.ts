@@ -34,6 +34,7 @@ export interface Widget {
   min_height: string | null;
   grid_cols: number | null;
   is_active: boolean;
+  is_default?: boolean; // Varsayılan widget mi?
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -70,6 +71,7 @@ export interface WidgetFormData {
   min_height: string;
   grid_cols: number | null;
   is_active: boolean;
+  is_default?: boolean; // Varsayılan widget mi?
   sort_order: number;
   builder_config?: WidgetBuilderConfig | null; // Widget Builder yapılandırması
 }
