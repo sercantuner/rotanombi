@@ -103,6 +103,10 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   const [activeTab, setActiveTab] = useState(isEditMode ? 'api' : 'templates');
   const [apiMode, setApiMode] = useState<'normal' | 'raw'>('normal');
   
+  // Manuel giriş modları
+  const [manualModuleMode, setManualModuleMode] = useState(false);
+  const [manualMethodMode, setManualMethodMode] = useState(false);
+  
   // Widget temel bilgileri
   const [widgetKey, setWidgetKey] = useState('');
   const [widgetName, setWidgetName] = useState('');
@@ -684,34 +688,76 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                     <>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>Modül</Label>
-                          <Select value={config.diaApi.module} onValueChange={handleModuleChange}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {DIA_MODULES.map(mod => (
-                                <SelectItem key={mod.id} value={mod.id}>
-                                  {mod.name} ({mod.id})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <div className="flex items-center justify-between">
+                            <Label>Modül</Label>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-6 px-2 text-xs"
+                              onClick={() => setManualModuleMode(!manualModuleMode)}
+                            >
+                              {manualModuleMode ? 'Listeden Seç' : 'Manuel Gir'}
+                            </Button>
+                          </div>
+                          {manualModuleMode ? (
+                            <Input
+                              value={config.diaApi.module}
+                              onChange={(e) => setConfig(prev => ({
+                                ...prev,
+                                diaApi: { ...prev.diaApi, module: e.target.value as any }
+                              }))}
+                              placeholder="Örn: scf, bcs, fat, stk..."
+                            />
+                          ) : (
+                            <Select value={config.diaApi.module} onValueChange={handleModuleChange}>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {DIA_MODULES.map(mod => (
+                                  <SelectItem key={mod.id} value={mod.id}>
+                                    {mod.name} ({mod.id})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
                         </div>
                         <div className="space-y-2">
-                          <Label>Metod</Label>
-                          <Select value={config.diaApi.method} onValueChange={handleMethodChange}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {currentModule?.methods.map(method => (
-                                <SelectItem key={method} value={method}>
-                                  {method}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <div className="flex items-center justify-between">
+                            <Label>Metod</Label>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-6 px-2 text-xs"
+                              onClick={() => setManualMethodMode(!manualMethodMode)}
+                            >
+                              {manualMethodMode ? 'Listeden Seç' : 'Manuel Gir'}
+                            </Button>
+                          </div>
+                          {manualMethodMode ? (
+                            <Input
+                              value={config.diaApi.method}
+                              onChange={(e) => setConfig(prev => ({
+                                ...prev,
+                                diaApi: { ...prev.diaApi, method: e.target.value }
+                              }))}
+                              placeholder="Örn: carikart_listele, fatura_listele..."
+                            />
+                          ) : (
+                            <Select value={config.diaApi.method} onValueChange={handleMethodChange}>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {currentModule?.methods.map(method => (
+                                  <SelectItem key={method} value={method}>
+                                    {method}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
                         </div>
                       </div>
 

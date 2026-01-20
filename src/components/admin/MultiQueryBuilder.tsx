@@ -88,6 +88,8 @@ function QueryEditor({
   const [filters, setFilters] = useState<DiaApiFilter[]>(query.parameters.filters || []);
   const [sorts, setSorts] = useState<DiaApiSort[]>(query.parameters.sorts || []);
   const [selectedColumns, setSelectedColumns] = useState<string[]>(query.parameters.selectedcolumns || []);
+  const [manualModuleMode, setManualModuleMode] = useState(false);
+  const [manualMethodMode, setManualMethodMode] = useState(false);
   
   const currentModule = DIA_MODULES.find(m => m.id === query.module);
   
@@ -181,32 +183,70 @@ function QueryEditor({
           <CardContent className="pt-1 pb-3 px-3 space-y-3">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-xs">Modül</Label>
-                <Select value={query.module} onValueChange={handleModuleChange}>
-                  <SelectTrigger className="h-8 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DIA_MODULES.map(mod => (
-                      <SelectItem key={mod.id} value={mod.id}>
-                        {mod.name} ({mod.id})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Modül</Label>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-5 px-2 text-[10px]"
+                    onClick={() => setManualModuleMode(!manualModuleMode)}
+                  >
+                    {manualModuleMode ? 'Liste' : 'Manuel'}
+                  </Button>
+                </div>
+                {manualModuleMode ? (
+                  <Input
+                    value={query.module}
+                    onChange={(e) => onChange({ ...query, module: e.target.value as any })}
+                    className="h-8 text-sm"
+                    placeholder="Örn: scf, bcs, fat..."
+                  />
+                ) : (
+                  <Select value={query.module} onValueChange={handleModuleChange}>
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DIA_MODULES.map(mod => (
+                        <SelectItem key={mod.id} value={mod.id}>
+                          {mod.name} ({mod.id})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="space-y-2">
-                <Label className="text-xs">Metod</Label>
-                <Select value={query.method} onValueChange={handleMethodChange}>
-                  <SelectTrigger className="h-8 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currentModule?.methods.map(method => (
-                      <SelectItem key={method} value={method}>{method}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Metod</Label>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-5 px-2 text-[10px]"
+                    onClick={() => setManualMethodMode(!manualMethodMode)}
+                  >
+                    {manualMethodMode ? 'Liste' : 'Manuel'}
+                  </Button>
+                </div>
+                {manualMethodMode ? (
+                  <Input
+                    value={query.method}
+                    onChange={(e) => handleMethodChange(e.target.value)}
+                    className="h-8 text-sm"
+                    placeholder="Örn: carikart_listele..."
+                  />
+                ) : (
+                  <Select value={query.method} onValueChange={handleMethodChange}>
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {currentModule?.methods.map(method => (
+                        <SelectItem key={method} value={method}>{method}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
             
