@@ -7,6 +7,7 @@ import { DiaApiFilter, DiaApiSort, DIA_MODULES, PeriodConfig, getDefaultPeriodCo
 import { CompactFilterBuilder } from './CompactFilterBuilder';
 import { CompactSortBuilder } from './CompactSortBuilder';
 import { CompactColumnSelector } from './CompactColumnSelector';
+import { FullscreenColumnSelector } from './FullscreenColumnSelector';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,6 +48,7 @@ export function DataSourceManager() {
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<DiaApiTestResponse | null>(null);
   const [testingSourceId, setTestingSourceId] = useState<string | null>(null);
+  const [isColumnSelectorOpen, setIsColumnSelectorOpen] = useState(false);
   
   // Manuel mod
   const [manualModuleMode, setManualModuleMode] = useState(false);
@@ -534,6 +536,16 @@ export function DataSourceManager() {
                 {/* Kompakt Bileşenler */}
                 <div className="space-y-2">
                   <CompactColumnSelector
+                    availableFields={testResult?.sampleFields || []}
+                    selectedColumns={selectedColumns}
+                    onChange={setSelectedColumns}
+                    fieldTypes={testResult?.fieldTypes}
+                    onExpandClick={() => setIsColumnSelectorOpen(true)}
+                  />
+                  
+                  <FullscreenColumnSelector
+                    open={isColumnSelectorOpen}
+                    onOpenChange={setIsColumnSelectorOpen}
                     availableFields={testResult?.sampleFields || []}
                     selectedColumns={selectedColumns}
                     onChange={setSelectedColumns}
