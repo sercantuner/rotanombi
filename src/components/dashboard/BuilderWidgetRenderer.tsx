@@ -463,14 +463,19 @@ export function BuilderWidgetRenderer({
                 {showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
                 <XAxis 
                   dataKey="name" 
-                  tick={{ fontSize: 10 }}
-                  className="text-muted-foreground"
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={{ stroke: 'hsl(var(--border))' }}
+                  axisLine={{ stroke: 'hsl(var(--border))' }}
                   interval={displayData.length > 15 ? Math.floor(displayData.length / 10) : 0}
                   angle={displayData.length > 10 ? -45 : 0}
                   textAnchor={displayData.length > 10 ? "end" : "middle"}
                   height={displayData.length > 10 ? 60 : 30}
                 />
-                <YAxis tick={{ fontSize: 11 }} className="text-muted-foreground" />
+                <YAxis 
+                  tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={{ stroke: 'hsl(var(--border))' }}
+                  axisLine={{ stroke: 'hsl(var(--border))' }}
+                />
                 <Tooltip 
                   contentStyle={{ 
                     backgroundColor: 'hsl(var(--card))', 
@@ -523,13 +528,19 @@ export function BuilderWidgetRenderer({
                 {showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
                 <XAxis 
                   dataKey="name" 
-                  tick={{ fontSize: 10 }}
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={{ stroke: 'hsl(var(--border))' }}
+                  axisLine={{ stroke: 'hsl(var(--border))' }}
                   interval={displayData.length > 15 ? Math.floor(displayData.length / 10) : 0}
                   angle={displayData.length > 10 ? -45 : 0}
                   textAnchor={displayData.length > 10 ? "end" : "middle"}
                   height={displayData.length > 10 ? 60 : 30}
                 />
-                <YAxis tick={{ fontSize: 11 }} />
+                <YAxis 
+                  tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={{ stroke: 'hsl(var(--border))' }}
+                  axisLine={{ stroke: 'hsl(var(--border))' }}
+                />
                 <Tooltip 
                   contentStyle={{ 
                     backgroundColor: 'hsl(var(--card))', 
@@ -581,13 +592,19 @@ export function BuilderWidgetRenderer({
                 {showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
                 <XAxis 
                   dataKey="name" 
-                  tick={{ fontSize: 10 }}
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={{ stroke: 'hsl(var(--border))' }}
+                  axisLine={{ stroke: 'hsl(var(--border))' }}
                   interval={displayData.length > 15 ? Math.floor(displayData.length / 10) : 0}
                   angle={displayData.length > 10 ? -45 : 0}
                   textAnchor={displayData.length > 10 ? "end" : "middle"}
                   height={displayData.length > 10 ? 60 : 30}
                 />
-                <YAxis tick={{ fontSize: 11 }} />
+                <YAxis 
+                  tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={{ stroke: 'hsl(var(--border))' }}
+                  axisLine={{ stroke: 'hsl(var(--border))' }}
+                />
                 <Tooltip 
                   contentStyle={{ 
                     backgroundColor: 'hsl(var(--card))', 
@@ -657,14 +674,25 @@ export function BuilderWidgetRenderer({
                     ))}
                   </Pie>
                   <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px',
-                      fontSize: '11px',
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const item = payload[0].payload;
+                        const percentage = chartDataTotal > 0 ? ((item.value / chartDataTotal) * 100).toFixed(1) : '0';
+                        return (
+                          <div className="bg-card border border-border rounded-lg shadow-lg p-3 z-50">
+                            <p className="font-bold text-sm text-foreground mb-1">{item.name}</p>
+                            <p className="text-lg font-bold text-primary">
+                              {item.value.toLocaleString('tr-TR')} {yAxisLabel}
+                            </p>
+                            <p className="text-md font-semibold" style={{ color: activeColors[0] }}>
+                              %{percentage}
+                            </p>
+                          </div>
+                        );
+                      }
+                      return null;
                     }}
                     wrapperStyle={{ zIndex: 100 }}
-                    formatter={(value: number) => [value.toLocaleString('tr-TR'), yAxisLabel]}
                   />
                 </RechartsPieChart>
               </ResponsiveContainer>

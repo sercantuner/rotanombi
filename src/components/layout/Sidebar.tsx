@@ -131,17 +131,19 @@ export function Sidebar({
           {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
         </Button>
 
-        {/* Logo */}
-        <div className={cn("border-b border-border", collapsed ? "p-3" : "p-6")}>
-          <div className="flex items-center gap-3">
-            <img 
-              src={rotanombiLogo} 
-              alt="RotanomBI" 
-              className={cn("w-auto", collapsed ? "h-6" : "h-8")}
-            />
-            {!collapsed && <p className="text-xs text-muted-foreground">Rapor Portalı</p>}
+        {/* Logo - collapsed iken tamamen gizle */}
+        {!collapsed && (
+          <div className="p-6 border-b border-border">
+            <div className="flex items-center gap-3">
+              <img 
+                src={rotanombiLogo} 
+                alt="RotanomBI" 
+                className="h-8 w-auto"
+              />
+              <p className="text-xs text-muted-foreground">Rapor Portalı</p>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Navigation */}
         <nav className={cn("flex-1 space-y-1 overflow-y-auto", collapsed ? "p-2" : "p-4")}>

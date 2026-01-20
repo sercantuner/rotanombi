@@ -171,9 +171,7 @@ export function ContainerRenderer({
       // Widget var ama detayları henüz yüklenmedi - skeleton göster
       if (slotWidget && !widgetDetail) {
         return (
-          <div key={slotIndex} className="min-h-[120px]">
-            <Skeleton className="h-full w-full min-h-[120px] rounded-xl" />
-          </div>
+          <Skeleton key={slotIndex} className="h-full w-full min-h-[120px] rounded-xl" />
         );
       }
 
@@ -182,9 +180,9 @@ export function ContainerRenderer({
         const widgetSettings = slotWidget.settings as ContainerWidgetSettings | null;
         const widgetFilters = widgetSettings?.filters;
 
-        // Widget var, render et - CSS izolasyonu için isolate class
+        // Widget var, render et - CSS izolasyonu için isolate class, h-full eklendi
         return (
-          <div key={slotIndex} className="relative group min-h-[120px] isolate">
+          <div key={slotIndex} className="relative group h-full min-h-[120px] isolate">
             <DynamicWidgetRenderer
               widgetId={widgetDetail.widget_key}
               data={widgetData}
@@ -290,7 +288,9 @@ export function ContainerRenderer({
             </div>
           )}
           <div className={cn('grid gap-4 items-stretch', template.gridClass)}>
-            {renderSlots()}
+            {renderSlots().map((slot, idx) => (
+              <div key={idx} className="h-full">{slot}</div>
+            ))}
           </div>
         </CardContent>
       </Card>

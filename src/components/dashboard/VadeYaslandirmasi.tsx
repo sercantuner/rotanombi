@@ -34,14 +34,14 @@ export function VadeYaslandirmasi({ yaslandirma, isLoading }: Props) {
       // Mevcut günlük görünüm
       const data = [
         { name: '90+ Gün', value: yaslandirma.vade90Plus, key: 'vade90Plus', type: 'gecmis', color: 'hsl(var(--destructive))' },
-        { name: '61-90', value: yaslandirma.vade90, key: 'vade90', type: 'gecmis', color: 'hsl(0 65% 50%)' },
-        { name: '31-60', value: yaslandirma.vade60, key: 'vade60', type: 'gecmis', color: 'hsl(25 95% 53%)' },
-        { name: '1-30', value: yaslandirma.vade30, key: 'vade30', type: 'gecmis', color: 'hsl(38 92% 50%)' },
+        { name: '61-90', value: yaslandirma.vade90, key: 'vade90', type: 'gecmis', color: 'hsl(var(--chart-2))' },
+        { name: '31-60', value: yaslandirma.vade60, key: 'vade60', type: 'gecmis', color: 'hsl(var(--chart-3))' },
+        { name: '1-30', value: yaslandirma.vade30, key: 'vade30', type: 'gecmis', color: 'hsl(var(--chart-4))' },
         { name: 'BUGÜN', value: yaslandirma.guncel, key: 'guncel', type: 'guncel', color: 'hsl(var(--primary))' },
-        { name: '-30', value: yaslandirma.gelecek30, key: 'gelecek30', type: 'gelecek', color: 'hsl(142 76% 46%)' },
-        { name: '-60', value: yaslandirma.gelecek60, key: 'gelecek60', type: 'gelecek', color: 'hsl(142 72% 40%)' },
-        { name: '-90', value: yaslandirma.gelecek90, key: 'gelecek90', type: 'gelecek', color: 'hsl(142 68% 34%)' },
-        { name: '-90+', value: yaslandirma.gelecek90Plus, key: 'gelecek90Plus', type: 'gelecek', color: 'hsl(142 65% 28%)' },
+        { name: '-30', value: yaslandirma.gelecek30, key: 'gelecek30', type: 'gelecek', color: 'hsl(var(--success))' },
+        { name: '-60', value: yaslandirma.gelecek60, key: 'gelecek60', type: 'gelecek', color: 'hsl(var(--chart-1))' },
+        { name: '-90', value: yaslandirma.gelecek90, key: 'gelecek90', type: 'gelecek', color: 'hsl(var(--accent))' },
+        { name: '-90+', value: yaslandirma.gelecek90Plus, key: 'gelecek90Plus', type: 'gelecek', color: 'hsl(var(--muted-foreground))' },
       ];
       const toplam = data.reduce((acc, item) => acc + item.value, 0);
       const gecmis = yaslandirma.vade90Plus + yaslandirma.vade90 + yaslandirma.vade60 + yaslandirma.vade30;
@@ -62,21 +62,21 @@ export function VadeYaslandirmasi({ yaslandirma, isLoading }: Props) {
           value: yaslandirma.vade90 * 0.5 + yaslandirma.vade60 * 0.5, 
           key: 'hafta3', 
           type: 'gecmis', 
-          color: 'hsl(0 65% 50%)' 
+          color: 'hsl(var(--chart-2))' 
         },
         { 
           name: '2 Hafta', 
           value: yaslandirma.vade60 * 0.5 + yaslandirma.vade30 * 0.5, 
           key: 'hafta2', 
           type: 'gecmis', 
-          color: 'hsl(25 95% 53%)' 
+          color: 'hsl(var(--chart-3))' 
         },
         { 
           name: '1 Hafta', 
           value: yaslandirma.vade30 * 0.5, 
           key: 'hafta1', 
           type: 'gecmis', 
-          color: 'hsl(38 92% 50%)' 
+          color: 'hsl(var(--chart-4))' 
         },
         { 
           name: 'BU HAFTA', 
@@ -90,28 +90,28 @@ export function VadeYaslandirmasi({ yaslandirma, isLoading }: Props) {
           value: yaslandirma.gelecek30 * 0.5, 
           key: 'gelecek1', 
           type: 'gelecek', 
-          color: 'hsl(142 76% 46%)' 
+          color: 'hsl(var(--success))' 
         },
         { 
           name: '+2 Hafta', 
           value: yaslandirma.gelecek30 * 0.5 + yaslandirma.gelecek60 * 0.5, 
           key: 'gelecek2', 
           type: 'gelecek', 
-          color: 'hsl(142 72% 40%)' 
+          color: 'hsl(var(--chart-1))' 
         },
         { 
           name: '+3 Hafta', 
           value: yaslandirma.gelecek60 * 0.5 + yaslandirma.gelecek90 * 0.5, 
           key: 'gelecek3', 
           type: 'gelecek', 
-          color: 'hsl(142 68% 34%)' 
+          color: 'hsl(var(--accent))' 
         },
         { 
           name: '+4+ Hafta', 
           value: yaslandirma.gelecek90 * 0.5 + yaslandirma.gelecek90Plus, 
           key: 'gelecek4plus', 
           type: 'gelecek', 
-          color: 'hsl(142 65% 28%)' 
+          color: 'hsl(var(--muted-foreground))' 
         },
       ];
       const toplam = data.reduce((acc, item) => acc + item.value, 0);
@@ -133,14 +133,14 @@ export function VadeYaslandirmasi({ yaslandirma, isLoading }: Props) {
           value: yaslandirma.vade90 + yaslandirma.vade60, 
           key: 'ay2', 
           type: 'gecmis', 
-          color: 'hsl(25 95% 53%)' 
+          color: 'hsl(var(--chart-3))' 
         },
         { 
           name: '1 Ay', 
           value: yaslandirma.vade30, 
           key: 'ay1', 
           type: 'gecmis', 
-          color: 'hsl(38 92% 50%)' 
+          color: 'hsl(var(--chart-4))' 
         },
         { 
           name: 'BU AY', 
@@ -154,21 +154,21 @@ export function VadeYaslandirmasi({ yaslandirma, isLoading }: Props) {
           value: yaslandirma.gelecek30, 
           key: 'gelecekay1', 
           type: 'gelecek', 
-          color: 'hsl(142 76% 46%)' 
+          color: 'hsl(var(--success))' 
         },
         { 
           name: '+2 Ay', 
           value: yaslandirma.gelecek60 + yaslandirma.gelecek90, 
           key: 'gelecekay2', 
           type: 'gelecek', 
-          color: 'hsl(142 72% 40%)' 
+          color: 'hsl(var(--chart-1))' 
         },
         { 
           name: '+3+ Ay', 
           value: yaslandirma.gelecek90Plus, 
           key: 'gelecekay3plus', 
           type: 'gelecek', 
-          color: 'hsl(142 65% 28%)' 
+          color: 'hsl(var(--muted-foreground))' 
         },
       ];
       const toplam = data.reduce((acc, item) => acc + item.value, 0);

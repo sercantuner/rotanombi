@@ -109,7 +109,7 @@ export function FilterableStatCard({
 
   return (
     <>
-      <div className="stat-card animate-slide-up group relative h-full flex flex-col overflow-hidden">
+      <div className="stat-card animate-slide-up group relative h-full min-h-0 flex flex-col overflow-hidden">
         {/* Control Buttons - Sadece düzenleme modunda görünür */}
         <div className={cn(
           'absolute top-2 right-2 flex items-center gap-1 z-10 transition-opacity',
