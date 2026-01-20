@@ -420,47 +420,36 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
         
         // Her sorguyu sırayla çalıştır
         for (const query of config.multiQuery.queries) {
-          // Önce veri kaynağı cache'ini kontrol et
+          // 1) DataSourceId varsa: SADECE cache'ten oku (DIA çağrısı yok)
           if (query.dataSourceId) {
-            const cachedSourceData = getDataSourceData(query.dataSourceId);
+            const { data: cachedSourceData, isStale } = getDataSourceDataWithStale(query.dataSourceId);
+
             if (cachedSourceData) {
-              console.log(`[MultiQuery] Cache HIT for dataSource: ${query.dataSourceId}`);
+              console.log(
+                `[MultiQuery] Cache HIT for dataSource: ${query.dataSourceId} (${cachedSourceData.length} kayıt)${isStale ? ' [STALE]' : ''}`
+              );
               queryResults[query.id] = cachedSourceData;
               incrementCacheHit();
               continue;
             }
-          }
-          
-          // Cache'de yoksa API çağrısı yap (kuyruklu)
-          const response = await queuedDiaFetch(
-            `${SUPABASE_URL}/functions/v1/dia-api-test`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session.access_token}`,
-              },
-              body: JSON.stringify({
-                module: query.module,
-                method: query.method,
-                ...(query.parameters.limit && query.parameters.limit > 0 && { limit: query.parameters.limit }),
-                filters: query.parameters.filters,
-                selectedColumns: query.parameters.selectedcolumns,
-                sorts: query.parameters.sorts,
-                returnAllData: true,
-              }),
-            },
-            1 // priority
-          );
-          const result = await response.json();
-          if (result.success) {
-            queryResults[query.id] = result.sampleData || [];
-            
-            // Eğer dataSourceId varsa cache'e kaydet
-            if (query.dataSourceId) {
-              setDataSourceData(query.dataSourceId, queryResults[query.id]);
+
+            // DataSourceLoader yüklerken bekle
+            if (isDataSourceLoading(query.dataSourceId)) {
+              console.log(`[MultiQuery] DataSource ${query.dataSourceId} loading, waiting...`);
+              setIsLoading(true);
+              return;
             }
+
+            // Cache yok + yüklenmiyor => DIA çağrısı YAPMA
+            console.warn(`[MultiQuery] DataSource ${query.dataSourceId} not in cache - returning empty (no DIA call)`);
+            queryResults[query.id] = [];
+            incrementCacheMiss();
+            continue;
           }
+
+          // 2) DataSourceId yok => DIA çağrısı YAPMA
+          console.warn(`[MultiQuery] Query '${query.id}' has no dataSourceId - returning empty (no DIA call)`);
+          queryResults[query.id] = [];
           incrementCacheMiss();
         }
         
@@ -499,61 +488,18 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
           }
         } else {
           // 2. Veri kaynağı ID yok - Eski genel cache mantığı (geriye uyumluluk)
+          // ÖNEMLİ: Kontör tasarrufu için burada cache MISS durumunda DIA çağrısı yapmıyoruz.
           const cacheKey = generateCacheKey(config.diaApi.module, config.diaApi.method, config.diaApi.parameters);
-          
-          // Genel cache kontrolü
+
           const cachedResult = getCachedData(cacheKey);
           if (cachedResult && cachedResult.sampleData) {
             console.log(`[Widget Cache] HIT - ${cacheKey}: ${cachedResult.sampleData.length} kayıt`);
             fetchedData = cachedResult.sampleData;
             incrementCacheHit();
           } else {
-            // Cache miss - API çağrısı yap
-            console.log(`[Widget Cache] MISS - ${cacheKey} - Fetching...`);
+            console.warn(`[Widget Cache] MISS - ${cacheKey} (no DIA call) - widget will show empty`);
             incrementCacheMiss();
-            
-            const diaApiLimit = config.diaApi.parameters.limit;
-            
-            const response = await queuedDiaFetch(
-              `${SUPABASE_URL}/functions/v1/dia-api-test`,
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${session.access_token}`,
-                },
-                body: JSON.stringify({
-                  module: config.diaApi.module,
-                  method: config.diaApi.method,
-                  ...(diaApiLimit && diaApiLimit > 0 && { limit: diaApiLimit }),
-                  filters: config.diaApi.parameters.filters,
-                  selectedColumns: Array.isArray(config.diaApi.parameters.selectedcolumns) 
-                    ? config.diaApi.parameters.selectedcolumns 
-                    : typeof config.diaApi.parameters.selectedcolumns === 'string'
-                      ? config.diaApi.parameters.selectedcolumns.split(',').map((c: string) => c.trim())
-                      : undefined,
-                  sorts: config.diaApi.parameters.sorts,
-                  orderby: config.diaApi.parameters.orderby,
-                  returnAllData: true,
-                }),
-              },
-              0 // priority (lower for generic cache requests)
-            );
-
-            const result = await response.json();
-            if (!result.success) {
-              // DIA API hataları için özel mesajlar
-              const errorMsg = result.error || 'API hatası';
-              console.warn(`[Widget] Cache key ${cacheKey} hatası:`, errorMsg);
-              
-              // Boş veri ile devam et, ancak hatayı kaydet
-              fetchedData = [];
-              setError(getDiaErrorMessage(errorMsg));
-            } else {
-              fetchedData = result.sampleData || [];
-              // Sonucu cache'e kaydet
-              setCachedData(cacheKey, result, 5 * 60 * 1000);
-            }
+            fetchedData = [];
           }
         }
       }
