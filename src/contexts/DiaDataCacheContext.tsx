@@ -21,7 +21,11 @@ interface DiaDataCacheContextType {
   setCachedData: (cacheKey: string, data: any, ttl?: number) => void;
   invalidateCache: (pattern?: string) => void;
   
-  // Hazır veri havuzları (Dashboard'dan gelen)
+  // Veri kaynağı bazlı cache (YENİ)
+  getDataSourceData: (dataSourceId: string) => any[] | null;
+  setDataSourceData: (dataSourceId: string, data: any[], ttl?: number) => void;
+  
+  // Hazır veri havuzları (Dashboard'dan gelen) - LEGACY, kaldırılacak
   sharedData: {
     cariListesi: any[] | null;
     vadeBakiye: any[] | null;
@@ -144,6 +148,18 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
     }, 10 * 60 * 1000); // 10 dakika TTL
   }, [setCachedData]);
 
+  // Veri kaynağı bazlı cache metodları (YENİ)
+  const getDataSourceData = useCallback((dataSourceId: string): any[] | null => {
+    const cacheKey = `datasource_${dataSourceId}`;
+    const cached = getCachedData(cacheKey);
+    return cached && Array.isArray(cached) ? cached : null;
+  }, [getCachedData]);
+
+  const setDataSourceData = useCallback((dataSourceId: string, data: any[], ttl: number = 5 * 60 * 1000) => {
+    const cacheKey = `datasource_${dataSourceId}`;
+    setCachedData(cacheKey, data, ttl);
+  }, [setCachedData]);
+
   // İstatistik güncellemeleri
   const incrementCacheHit = useCallback(() => {
     setStats(prev => ({
@@ -165,12 +181,14 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
     getCachedData,
     setCachedData,
     invalidateCache,
+    getDataSourceData,
+    setDataSourceData,
     sharedData,
     setSharedData,
     stats,
     incrementCacheHit,
     incrementCacheMiss,
-  }), [getCachedData, setCachedData, invalidateCache, sharedData, setSharedData, stats, incrementCacheHit, incrementCacheMiss]);
+  }), [getCachedData, setCachedData, invalidateCache, getDataSourceData, setDataSourceData, sharedData, setSharedData, stats, incrementCacheHit, incrementCacheMiss]);
 
   return (
     <DiaDataCacheContext.Provider value={value}>
@@ -187,6 +205,8 @@ export function useDiaDataCache(): DiaDataCacheContextType {
       getCachedData: () => null,
       setCachedData: () => {},
       invalidateCache: () => {},
+      getDataSourceData: () => null,
+      setDataSourceData: () => {},
       sharedData: { cariListesi: null, vadeBakiye: null },
       setSharedData: () => {},
       stats: { totalQueries: 0, cacheHits: 0, cacheMisses: 0 },

@@ -6,6 +6,7 @@ import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
 import { useDiaDataCache } from '@/contexts/DiaDataCacheContext';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
 import { supabase } from '@/integrations/supabase/client';
 import { diaGetGenelRapor, diaGetFinansRapor, getDiaConnectionInfo, DiaConnectionInfo } from '@/lib/diaClient';
 import type { DiaGenelRapor, DiaFinansRapor, VadeYaslandirma, DiaCari } from '@/lib/diaClient';
@@ -13,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DiaQueryStats } from '@/components/dashboard/DiaQueryStats';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Plug, RefreshCw, Clock, Timer, Edit, Check } from 'lucide-react';
+import { Plug, RefreshCw, Clock, Timer, Edit, Check, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 function DashboardContent() {
@@ -36,6 +37,13 @@ function DashboardContent() {
   // Widget düzenleme modu
   const [isWidgetEditMode, setIsWidgetEditMode] = useState(false);
 
+  // Merkezi veri kaynağı loader - Sayfadaki tüm widget'ların veri kaynaklarını yükler
+  const { 
+    isLoading: dataSourcesLoading, 
+    loadedSources, 
+    refresh: refreshDataSources,
+    getSourceData 
+  } = useDataSourceLoader(dashboardPageId);
   // Dashboard sayfası ID'sini al veya oluştur
   useEffect(() => {
     const getOrCreateDashboardPage = async () => {
@@ -276,6 +284,18 @@ function DashboardContent() {
               <span className="px-2 py-0.5 rounded-full bg-success/20 text-success text-xs font-medium">
                 DIA Bağlı
               </span>
+              {/* Veri kaynakları durumu */}
+              {loadedSources.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-xs font-medium flex items-center gap-1">
+                  <Database className="w-3 h-3" />
+                  {loadedSources.length} kaynak
+                </span>
+              )}
+              {dataSourcesLoading && (
+                <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium animate-pulse">
+                  Yükleniyor...
+                </span>
+              )}
               {/* Sorgu istatistikleri */}
               <DiaQueryStats />
             </div>
@@ -348,7 +368,7 @@ function DashboardContent() {
           <ContainerBasedDashboard
             pageId={dashboardPageId}
             widgetData={widgetData}
-            isLoading={isLoading}
+            isLoading={isLoading || dataSourcesLoading}
             isWidgetEditMode={isWidgetEditMode}
           />
         ) : (

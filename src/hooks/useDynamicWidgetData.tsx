@@ -365,10 +365,12 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Cache context
+  // Cache context - Artık veri kaynağı bazlı cache kullanıyoruz
   const { 
     getCachedData, 
     setCachedData, 
+    getDataSourceData,
+    setDataSourceData,
     sharedData, 
     incrementCacheHit, 
     incrementCacheMiss 
@@ -398,6 +400,18 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
         
         // Her sorguyu sırayla çalıştır
         for (const query of config.multiQuery.queries) {
+          // Önce veri kaynağı cache'ini kontrol et
+          if (query.dataSourceId) {
+            const cachedSourceData = getDataSourceData(query.dataSourceId);
+            if (cachedSourceData) {
+              console.log(`[MultiQuery] Cache HIT for dataSource: ${query.dataSourceId}`);
+              queryResults[query.id] = cachedSourceData;
+              incrementCacheHit();
+              continue;
+            }
+          }
+          
+          // Cache'de yoksa API çağrısı yap
           const response = await fetch(`${SUPABASE_URL}/functions/v1/dia-api-test`, {
             method: 'POST',
             headers: {
@@ -411,13 +425,19 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
               filters: query.parameters.filters,
               selectedColumns: query.parameters.selectedcolumns,
               sorts: query.parameters.sorts,
-              returnAllData: true, // Tüm veriyi al
+              returnAllData: true,
             }),
           });
           const result = await response.json();
           if (result.success) {
             queryResults[query.id] = result.sampleData || [];
+            
+            // Eğer dataSourceId varsa cache'e kaydet
+            if (query.dataSourceId) {
+              setDataSourceData(query.dataSourceId, queryResults[query.id]);
+            }
           }
+          incrementCacheMiss();
         }
         
         // Birleştirmeleri uygula
@@ -429,18 +449,50 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
           fetchedData = applyMerge(fetchedData, rightData, merge);
         }
       } else {
-        // Tekli sorgu - Önce cache'e bak
-        const cacheKey = generateCacheKey(config.diaApi.module, config.diaApi.method, config.diaApi.parameters);
+        // Tekli sorgu - ÖNCE CACHE'E BAK (Merkezi Mimari)
         
-        // Özel durum: carikart_listele için sharedData'yı kontrol et
-        const isCariListele = config.diaApi.method === 'carikart_listele' || 
-                              config.diaApi.method === 'scf_carikart_listele';
-        
-        if (isCariListele && sharedData.cariListesi && sharedData.cariListesi.length > 0) {
-          console.log(`[Widget Cache] HIT - Shared cari listesi kullanılıyor: ${sharedData.cariListesi.length} kayıt`);
-          fetchedData = sharedData.cariListesi;
-          incrementCacheHit();
+        // 1. Veri kaynağı ID'si varsa, onun cache'ine bak
+        if (config.dataSourceId) {
+          const cachedSourceData = getDataSourceData(config.dataSourceId);
+          if (cachedSourceData) {
+            console.log(`[Widget] Cache HIT - DataSource ${config.dataSourceId}: ${cachedSourceData.length} kayıt`);
+            fetchedData = cachedSourceData;
+            incrementCacheHit();
+          } else {
+            // Cache'de yok - API çağrısı yap ve cache'e kaydet
+            console.log(`[Widget] Cache MISS - DataSource ${config.dataSourceId} - Fetching...`);
+            incrementCacheMiss();
+            
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/dia-api-test`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify({
+                module: config.diaApi.module,
+                method: config.diaApi.method,
+                ...(config.diaApi.parameters.limit && config.diaApi.parameters.limit > 0 && { limit: config.diaApi.parameters.limit }),
+                filters: config.diaApi.parameters.filters,
+                selectedColumns: config.diaApi.parameters.selectedcolumns,
+                sorts: config.diaApi.parameters.sorts,
+                returnAllData: true,
+              }),
+            });
+
+            const result = await response.json();
+            if (!result.success) {
+              throw new Error(result.error || 'API hatası');
+            }
+            fetchedData = result.sampleData || [];
+            
+            // Veri kaynağı cache'ine kaydet
+            setDataSourceData(config.dataSourceId, fetchedData, 5 * 60 * 1000);
+          }
         } else {
+          // 2. Veri kaynağı ID yok - Eski genel cache mantığı
+          const cacheKey = generateCacheKey(config.diaApi.module, config.diaApi.method, config.diaApi.parameters);
+          
           // Genel cache kontrolü
           const cachedResult = getCachedData(cacheKey);
           if (cachedResult && cachedResult.sampleData) {
@@ -454,13 +506,6 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
             
             const diaApiLimit = config.diaApi.parameters.limit;
             
-            // Data source'dan period_config al (varsa)
-            let periodConfigToSend = undefined;
-            if (config.dataSourceId) {
-              // TODO: Data source'u cache'den veya başka yerden al
-              // Şimdilik config üzerinden geçiyoruz
-            }
-            
             const response = await fetch(`${SUPABASE_URL}/functions/v1/dia-api-test`, {
               method: 'POST',
               headers: {
@@ -470,7 +515,6 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
               body: JSON.stringify({
                 module: config.diaApi.module,
                 method: config.diaApi.method,
-                // Limit: 0 veya undefined ise gönderme (limitsiz), pozitif ise gönder
                 ...(diaApiLimit && diaApiLimit > 0 && { limit: diaApiLimit }),
                 filters: config.diaApi.parameters.filters,
                 selectedColumns: Array.isArray(config.diaApi.parameters.selectedcolumns) 
@@ -480,9 +524,7 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
                     : undefined,
                 sorts: config.diaApi.parameters.sorts,
                 orderby: config.diaApi.parameters.orderby,
-                returnAllData: true, // Tüm veriyi al
-                // Period config (eğer config üzerinde varsa)
-                periodConfig: periodConfigToSend,
+                returnAllData: true,
               }),
             });
 
