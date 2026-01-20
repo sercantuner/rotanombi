@@ -966,6 +966,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                 dataSourceId={selectedDataSourceId}
                 fieldWells={fieldWells}
                 chartSettings={chartSettings}
+                dateFilterConfig={dateFilterConfig}
                 onNameChange={setWidgetName}
                 onIconChange={setWidgetIcon}
               />
