@@ -95,6 +95,78 @@ export type Database = {
           },
         ]
       }
+      data_sources: {
+        Row: {
+          auto_refresh: boolean | null
+          cache_ttl: number | null
+          created_at: string | null
+          description: string | null
+          filters: Json | null
+          id: string
+          is_active: boolean | null
+          is_shared: boolean | null
+          last_fetched_at: string | null
+          last_fields: Json | null
+          last_record_count: number | null
+          limit_count: number | null
+          method: string
+          module: string
+          name: string
+          refresh_schedule: string | null
+          selected_columns: string[] | null
+          slug: string
+          sorts: Json | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          auto_refresh?: boolean | null
+          cache_ttl?: number | null
+          created_at?: string | null
+          description?: string | null
+          filters?: Json | null
+          id?: string
+          is_active?: boolean | null
+          is_shared?: boolean | null
+          last_fetched_at?: string | null
+          last_fields?: Json | null
+          last_record_count?: number | null
+          limit_count?: number | null
+          method: string
+          module: string
+          name: string
+          refresh_schedule?: string | null
+          selected_columns?: string[] | null
+          slug: string
+          sorts?: Json | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          auto_refresh?: boolean | null
+          cache_ttl?: number | null
+          created_at?: string | null
+          description?: string | null
+          filters?: Json | null
+          id?: string
+          is_active?: boolean | null
+          is_shared?: boolean | null
+          last_fetched_at?: string | null
+          last_fields?: Json | null
+          last_record_count?: number | null
+          limit_count?: number | null
+          method?: string
+          module?: string
+          name?: string
+          refresh_schedule?: string | null
+          selected_columns?: string[] | null
+          slug?: string
+          sorts?: Json | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           category: string | null

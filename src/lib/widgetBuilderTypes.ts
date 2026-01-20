@@ -292,6 +292,10 @@ export interface SpecialChartConfig {
 }
 
 export interface WidgetBuilderConfig {
+  // Merkezi veri kaynağı referansı (opsiyonel - varsa diaApi yerine kullanılır)
+  dataSourceId?: string;
+  dataSourceSlug?: string;
+  
   diaApi: DiaApiConfig;
   
   // Çoklu sorgu (yeni)
@@ -299,6 +303,9 @@ export interface WidgetBuilderConfig {
   
   // Hesaplama alanları (yeni)
   calculatedFields?: CalculatedField[];
+  
+  // Tarih filtreleme (yeni)
+  dateFilter?: DateFilterConfig;
   
   visualization: {
     type: ChartType;
@@ -400,3 +407,61 @@ export const FILTER_TYPES = [
   { id: 'range', name: 'Aralık', description: 'Sayısal aralık' },
   { id: 'date-range', name: 'Tarih Aralığı', description: 'Başlangıç-bitiş tarihi' },
 ];
+
+// ============= TARİH FİLTRELEME SİSTEMİ =============
+
+// Tarih periyotları
+export type DatePeriod = 
+  | 'all'          // Tüm zamanlar
+  | 'today'        // Bugün
+  | 'yesterday'    // Dün
+  | 'this_week'    // Bu hafta
+  | 'last_week'    // Geçen hafta
+  | 'this_month'   // Bu ay
+  | 'last_month'   // Geçen ay
+  | 'this_quarter' // Bu çeyrek
+  | 'last_quarter' // Geçen çeyrek
+  | 'this_year'    // Bu yıl
+  | 'last_year'    // Geçen yıl
+  | 'last_7_days'  // Son 7 gün
+  | 'last_30_days' // Son 30 gün
+  | 'last_90_days' // Son 90 gün
+  | 'custom';      // Özel aralık
+
+export const DATE_PERIODS: { id: DatePeriod; name: string; icon: string }[] = [
+  { id: 'all', name: 'Tüm Zamanlar', icon: 'Infinity' },
+  { id: 'today', name: 'Bugün', icon: 'Calendar' },
+  { id: 'yesterday', name: 'Dün', icon: 'CalendarMinus' },
+  { id: 'this_week', name: 'Bu Hafta', icon: 'CalendarDays' },
+  { id: 'last_week', name: 'Geçen Hafta', icon: 'CalendarDays' },
+  { id: 'last_7_days', name: 'Son 7 Gün', icon: 'CalendarDays' },
+  { id: 'this_month', name: 'Bu Ay', icon: 'CalendarRange' },
+  { id: 'last_month', name: 'Geçen Ay', icon: 'CalendarRange' },
+  { id: 'last_30_days', name: 'Son 30 Gün', icon: 'CalendarRange' },
+  { id: 'last_90_days', name: 'Son 90 Gün', icon: 'CalendarRange' },
+  { id: 'this_quarter', name: 'Bu Çeyrek', icon: 'CalendarClock' },
+  { id: 'last_quarter', name: 'Geçen Çeyrek', icon: 'CalendarClock' },
+  { id: 'this_year', name: 'Bu Yıl', icon: 'CalendarCheck' },
+  { id: 'last_year', name: 'Geçen Yıl', icon: 'CalendarCheck' },
+  { id: 'custom', name: 'Özel Aralık', icon: 'CalendarSearch' },
+];
+
+// Tarih filtre konfigürasyonu
+export interface DateFilterConfig {
+  enabled: boolean;
+  dateField: string;            // Filtrelenecek tarih alanı
+  defaultPeriod: DatePeriod;
+  allowedPeriods?: DatePeriod[]; // Hangi periyotlar gösterilsin
+  showInWidget: boolean;        // Widget üzerinde seçici göster
+  customStartDate?: string;     // Özel aralık için başlangıç
+  customEndDate?: string;       // Özel aralık için bitiş
+}
+
+// ============= MERKEZİ VERİ KAYNAĞI =============
+
+// Veri kaynağı referansı
+export interface DataSourceReference {
+  id: string;                   // data_sources.id
+  slug: string;                 // data_sources.slug
+  name: string;                 // Görüntülenen ad
+}
