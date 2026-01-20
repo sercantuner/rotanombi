@@ -1,6 +1,8 @@
 // PostFetchFilterBuilder - Çekilen veri üzerinde filtreleme bileşeni (Dinamik Değer Seçici ile)
 
 import React, { useMemo, useState } from 'react';
+import { format } from 'date-fns';
+import { tr } from 'date-fns/locale';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +12,9 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Plus, Trash2, Filter, Info, ChevronDown, Search, X } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import { Slider } from '@/components/ui/slider';
+import { Plus, Trash2, Filter, Info, ChevronDown, Search, X, CalendarIcon, Hash } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PostFetchFilter, FilterOperator, FILTER_OPERATORS } from '@/lib/widgetBuilderTypes';
 
@@ -35,6 +39,44 @@ const getOperatorConfig = (op: FilterOperator) => {
   };
 };
 
+// Alan tipini tespit et
+type FieldType = 'text' | 'number' | 'date' | 'boolean';
+
+const detectFieldType = (data: any[], field: string): FieldType => {
+  if (!data || !field || data.length === 0) return 'text';
+  
+  // İlk 10 değere bak
+  const sampleValues = data.slice(0, 10).map(row => row[field]).filter(v => v !== null && v !== undefined && v !== '');
+  if (sampleValues.length === 0) return 'text';
+  
+  // Tarih kontrolü - çeşitli formatlar
+  const datePatterns = [
+    /^\d{4}-\d{2}-\d{2}/, // 2024-01-15
+    /^\d{2}\.\d{2}\.\d{4}/, // 15.01.2024
+    /^\d{2}\/\d{2}\/\d{4}/, // 15/01/2024
+  ];
+  
+  const allDates = sampleValues.every(v => {
+    const str = String(v);
+    return datePatterns.some(p => p.test(str)) || !isNaN(Date.parse(str));
+  });
+  if (allDates) return 'date';
+  
+  // Sayı kontrolü
+  const allNumbers = sampleValues.every(v => {
+    const num = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^\d.-]/g, ''));
+    return !isNaN(num) && isFinite(num);
+  });
+  if (allNumbers) return 'number';
+  
+  // Boolean kontrolü
+  const boolValues = ['true', 'false', '1', '0', 'evet', 'hayır', 'e', 'h'];
+  const allBools = sampleValues.every(v => boolValues.includes(String(v).toLowerCase()));
+  if (allBools) return 'boolean';
+  
+  return 'text';
+};
+
 // Benzersiz değerler hesaplama
 const getUniqueValues = (data: any[], field: string, maxCount = 50): string[] => {
   if (!data || !field) return [];
@@ -48,7 +90,158 @@ const getUniqueValues = (data: any[], field: string, maxCount = 50): string[] =>
   return unique.slice(0, maxCount);
 };
 
-// Dinamik Değer Seçici Bileşeni
+// Sayısal min/max hesaplama
+const getNumericRange = (data: any[], field: string): { min: number; max: number } | null => {
+  if (!data || !field) return null;
+  
+  const numbers = data
+    .map(row => row[field])
+    .filter(v => v !== null && v !== undefined)
+    .map(v => typeof v === 'number' ? v : parseFloat(String(v).replace(/[^\d.-]/g, '')))
+    .filter(n => !isNaN(n) && isFinite(n));
+  
+  if (numbers.length === 0) return null;
+  
+  return {
+    min: Math.min(...numbers),
+    max: Math.max(...numbers),
+  };
+};
+
+// Tarih Seçici Bileşeni
+interface DateValueSelectorProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}
+
+function DateValueSelector({ value, onChange, placeholder }: DateValueSelectorProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const dateValue = useMemo(() => {
+    if (!value) return undefined;
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? undefined : parsed;
+  }, [value]);
+  
+  const handleSelect = (date: Date | undefined) => {
+    if (date) {
+      onChange(format(date, 'yyyy-MM-dd'));
+    } else {
+      onChange('');
+    }
+    setIsOpen(false);
+  };
+  
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className={cn(
+            "h-9 w-full justify-start text-left font-normal",
+            !value && "text-muted-foreground"
+          )}
+        >
+          <CalendarIcon className="mr-2 h-4 w-4" />
+          {dateValue ? format(dateValue, 'dd MMM yyyy', { locale: tr }) : placeholder || 'Tarih seçin'}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={dateValue}
+          onSelect={handleSelect}
+          initialFocus
+          className="p-3 pointer-events-auto"
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Sayısal Aralık Seçici (Slider)
+interface NumericRangeSelectorProps {
+  value: string;
+  value2?: string;
+  onChange: (value: string, value2?: string) => void;
+  range: { min: number; max: number };
+  operator: FilterOperator;
+}
+
+function NumericRangeSelector({ value, value2, onChange, range, operator }: NumericRangeSelectorProps) {
+  const isBetween = operator === 'between';
+  
+  const currentValue = useMemo(() => {
+    const v1 = parseFloat(value) || range.min;
+    const v2 = parseFloat(value2 || '') || range.max;
+    return isBetween ? [v1, v2] : [v1];
+  }, [value, value2, range, isBetween]);
+  
+  const handleSliderChange = (values: number[]) => {
+    if (isBetween && values.length === 2) {
+      onChange(values[0].toString(), values[1].toString());
+    } else if (values.length >= 1) {
+      onChange(values[0].toString());
+    }
+  };
+  
+  const formatNumber = (num: number) => {
+    if (Math.abs(num) >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M';
+    } else if (Math.abs(num) >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toLocaleString('tr-TR');
+  };
+  
+  return (
+    <div className="space-y-2 w-full">
+      <div className="flex items-center gap-2">
+        <Hash className="h-4 w-4 text-muted-foreground" />
+        <Slider
+          value={currentValue}
+          min={range.min}
+          max={range.max}
+          step={(range.max - range.min) / 100}
+          onValueChange={handleSliderChange}
+          className="flex-1"
+        />
+      </div>
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>{formatNumber(range.min)}</span>
+        <span className="font-medium text-foreground">
+          {isBetween 
+            ? `${formatNumber(currentValue[0])} - ${formatNumber(currentValue[1] || range.max)}`
+            : formatNumber(currentValue[0])
+          }
+        </span>
+        <span>{formatNumber(range.max)}</span>
+      </div>
+      {/* Manuel giriş */}
+      <div className="flex gap-2">
+        <Input
+          type="number"
+          className="h-7 text-xs"
+          placeholder="Min"
+          value={value}
+          onChange={(e) => onChange(e.target.value, value2)}
+        />
+        {isBetween && (
+          <Input
+            type="number"
+            className="h-7 text-xs"
+            placeholder="Max"
+            value={value2 || ''}
+            onChange={(e) => onChange(value, e.target.value)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Dinamik Değer Seçici Bileşeni (Metin için)
 interface DynamicValueSelectorProps {
   field: string;
   value: string;
@@ -97,7 +290,7 @@ function DynamicValueSelector({ field, value, onChange, operator, sampleData, pl
     setSearchTerm('');
   };
   
-  // Eğer benzersiz değer yoksa veya çok fazla ise (50+), manuel giriş göster
+  // Eğer benzersiz değer yoksa, manuel giriş göster
   if (uniqueValues.length === 0) {
     return (
       <Input
@@ -199,6 +392,74 @@ function DynamicValueSelector({ field, value, onChange, operator, sampleData, pl
   );
 }
 
+// Akıllı Değer Girişi - Tip'e göre uygun bileşeni seçer
+interface SmartValueInputProps {
+  field: string;
+  value: string;
+  value2?: string;
+  onChange: (value: string, value2?: string) => void;
+  operator: FilterOperator;
+  sampleData?: any[];
+  requiresSecondValue?: boolean;
+}
+
+function SmartValueInput({ field, value, value2, onChange, operator, sampleData, requiresSecondValue }: SmartValueInputProps) {
+  const fieldType = useMemo(() => detectFieldType(sampleData || [], field), [sampleData, field]);
+  const numericRange = useMemo(() => getNumericRange(sampleData || [], field), [sampleData, field]);
+  
+  // Tarih alanları için DatePicker
+  if (fieldType === 'date') {
+    if (requiresSecondValue) {
+      return (
+        <div className="flex gap-2 w-full">
+          <DateValueSelector
+            value={value}
+            onChange={(v) => onChange(v, value2)}
+            placeholder="Başlangıç"
+          />
+          <DateValueSelector
+            value={value2 || ''}
+            onChange={(v) => onChange(value, v)}
+            placeholder="Bitiş"
+          />
+        </div>
+      );
+    }
+    return (
+      <DateValueSelector
+        value={value}
+        onChange={(v) => onChange(v)}
+        placeholder="Tarih seçin"
+      />
+    );
+  }
+  
+  // Sayısal alanlar için Slider (range varsa ve between/karşılaştırma operatörleri için)
+  if (fieldType === 'number' && numericRange && ['>', '<', '>=', '<=', 'between'].includes(operator)) {
+    return (
+      <NumericRangeSelector
+        value={value}
+        value2={value2}
+        onChange={onChange}
+        range={numericRange}
+        operator={operator}
+      />
+    );
+  }
+  
+  // Metin alanları için dinamik seçici
+  return (
+    <DynamicValueSelector
+      field={field}
+      value={value}
+      onChange={(v) => onChange(v)}
+      operator={operator}
+      sampleData={sampleData}
+      placeholder={operator === 'IN' || operator === 'NOT IN' ? 'Değerler seçin' : 'Değer seçin'}
+    />
+  );
+}
+
 export function PostFetchFilterBuilder({ filters, onChange, availableFields, sampleData }: PostFetchFilterBuilderProps) {
   const addFilter = () => {
     onChange([...filters, {
@@ -222,6 +483,17 @@ export function PostFetchFilterBuilder({ filters, onChange, availableFields, sam
     return getOperatorConfig(op);
   };
 
+  // Alan tipi bilgisi
+  const getFieldTypeLabel = (field: string): string => {
+    const type = detectFieldType(sampleData || [], field);
+    switch (type) {
+      case 'date': return '📅';
+      case 'number': return '🔢';
+      case 'boolean': return '☑️';
+      default: return '📝';
+    }
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -242,7 +514,7 @@ export function PostFetchFilterBuilder({ filters, onChange, availableFields, sam
             </p>
             {sampleData && sampleData.length > 0 && (
               <p className="text-xs text-green-600 mt-2">
-                ✓ {sampleData.length} örnek kayıt mevcut - değer önerileri aktif
+                ✓ {sampleData.length} örnek kayıt mevcut - akıllı değer önerileri aktif
               </p>
             )}
           </div>
@@ -279,14 +551,19 @@ export function PostFetchFilterBuilder({ filters, onChange, availableFields, sam
                   <Label className="text-xs text-muted-foreground">Alan</Label>
                   <Select
                     value={filter.field}
-                    onValueChange={(v) => updateFilter(filter.id, { field: v, value: '' })}
+                    onValueChange={(v) => updateFilter(filter.id, { field: v, value: '', value2: '' })}
                   >
                     <SelectTrigger className="h-9">
                       <SelectValue placeholder="Alan seçin" />
                     </SelectTrigger>
                     <SelectContent>
                       {availableFields.map(field => (
-                        <SelectItem key={field} value={field}>{field}</SelectItem>
+                        <SelectItem key={field} value={field}>
+                          <span className="flex items-center gap-2">
+                            <span>{getFieldTypeLabel(field)}</span>
+                            <span>{field}</span>
+                          </span>
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -297,7 +574,7 @@ export function PostFetchFilterBuilder({ filters, onChange, availableFields, sam
                   <Label className="text-xs text-muted-foreground">Operatör</Label>
                   <Select
                     value={filter.operator}
-                    onValueChange={(v: FilterOperator) => updateFilter(filter.id, { operator: v, value2: '' })}
+                    onValueChange={(v: FilterOperator) => updateFilter(filter.id, { operator: v, value: '', value2: '' })}
                   >
                     <SelectTrigger className="h-9">
                       <SelectValue />
@@ -312,32 +589,20 @@ export function PostFetchFilterBuilder({ filters, onChange, availableFields, sam
                   </Select>
                 </div>
 
-                {/* Değer girişi - Dinamik Seçici */}
+                {/* Akıllı Değer Girişi */}
                 {opConfig.requiresValue && (
-                  <div className={cn("space-y-1", opConfig.requiresSecondValue ? "w-28" : "flex-1")}>
+                  <div className={cn("space-y-1", opConfig.requiresSecondValue ? "flex-1" : "flex-1")}>
                     <Label className="text-xs text-muted-foreground">
-                      {opConfig.requiresSecondValue ? 'Min' : 'Değer'}
+                      Değer
                     </Label>
-                    <DynamicValueSelector
+                    <SmartValueInput
                       field={filter.field}
                       value={filter.value}
-                      onChange={(val) => updateFilter(filter.id, { value: val })}
+                      value2={filter.value2}
+                      onChange={(v, v2) => updateFilter(filter.id, { value: v, value2: v2 })}
                       operator={filter.operator}
                       sampleData={sampleData}
-                      placeholder={filter.operator === 'IN' || filter.operator === 'NOT IN' ? 'Değerler seçin' : 'Değer seçin'}
-                    />
-                  </div>
-                )}
-
-                {/* İkinci değer (between için) */}
-                {opConfig.requiresSecondValue && (
-                  <div className="w-28 space-y-1">
-                    <Label className="text-xs text-muted-foreground">Max</Label>
-                    <Input
-                      className="h-9"
-                      placeholder="Max"
-                      value={filter.value2 || ''}
-                      onChange={(e) => updateFilter(filter.id, { value2: e.target.value })}
+                      requiresSecondValue={opConfig.requiresSecondValue}
                     />
                   </div>
                 )}

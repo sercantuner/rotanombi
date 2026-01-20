@@ -163,6 +163,16 @@ export function DataSourceManager() {
           ? ` (${periodConfig.historicalCount} dönem tarandı)` 
           : '';
         toast.success(`API testi başarılı! ${result.recordCount} kayıt bulundu${periodInfo}.`);
+        
+        // Eğer mevcut bir kaynak düzenleniyorsa, sampleData'yı kaydet
+        if (editingSourceId && result.sampleData) {
+          await updateLastFetch(
+            editingSourceId,
+            result.recordCount || 0,
+            result.sampleFields || [],
+            result.sampleData
+          );
+        }
       } else {
         toast.error(`API hatası: ${result.error}`);
       }
