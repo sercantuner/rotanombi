@@ -377,8 +377,8 @@ export function DataSourceManager() {
       
       {/* Form Dialog */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>
               {editingSourceId ? 'Veri Kaynağı Düzenle' : 'Yeni Veri Kaynağı'}
             </DialogTitle>
@@ -387,7 +387,7 @@ export function DataSourceManager() {
             </DialogDescription>
           </DialogHeader>
           
-          <ScrollArea className="flex-1 pr-4" style={{ maxHeight: 'calc(90vh - 200px)' }}>
+          <ScrollArea className="flex-1 -mx-6 px-6" style={{ maxHeight: 'calc(90vh - 180px)' }}>
             <div className="space-y-6">
               {/* Temel Bilgiler */}
               <div className="space-y-4">
@@ -554,46 +554,58 @@ export function DataSourceManager() {
                   </div>
                 </div>
                 
-                <Button onClick={handleTest} disabled={isTesting} className="w-full">
-                  <Play className="h-4 w-4 mr-2" />
-                  {isTesting ? 'Test Ediliyor...' : 'API Testi Yap'}
+                <Button onClick={handleTest} disabled={isTesting} variant="secondary" className="w-full">
+                  {isTesting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Test Ediliyor...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4 mr-2" />
+                      API Testi Yap
+                    </>
+                  )}
                 </Button>
                 
                 {/* Test Sonucu */}
                 {testResult && (
                   <Card className={cn(
+                    "overflow-hidden",
                     testResult.success 
                       ? 'border-green-500/50 bg-green-500/5' 
                       : 'border-destructive/50 bg-destructive/5'
                   )}>
-                    <CardContent className="pt-4">
+                    <CardContent className="pt-4 pb-3">
                       {testResult.success ? (
                         <div className="space-y-3">
                           <div className="flex items-center gap-2">
-                            <CheckCircle className="h-5 w-5 text-green-600" />
+                            <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
                             <p className="text-sm font-medium text-green-600">
                               {testResult.recordCount} kayıt bulundu
                             </p>
                           </div>
-                          {testResult.sampleFields && (
-                            <div className="flex flex-wrap gap-1">
-                              {testResult.sampleFields.slice(0, 15).map(field => (
-                                <Badge key={field} variant="outline" className="text-xs">
-                                  {field}
-                                </Badge>
-                              ))}
-                              {testResult.sampleFields.length > 15 && (
-                                <Badge variant="secondary" className="text-xs">
-                                  +{testResult.sampleFields.length - 15} alan
-                                </Badge>
-                              )}
+                          {testResult.sampleFields && testResult.sampleFields.length > 0 && (
+                            <div className="max-h-24 overflow-y-auto">
+                              <div className="flex flex-wrap gap-1">
+                                {testResult.sampleFields.slice(0, 20).map(field => (
+                                  <Badge key={field} variant="outline" className="text-xs truncate max-w-[120px]">
+                                    {field}
+                                  </Badge>
+                                ))}
+                                {testResult.sampleFields.length > 20 && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    +{testResult.sampleFields.length - 20} alan
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2">
-                          <XCircle className="h-5 w-5 text-destructive" />
-                          <p className="text-sm text-destructive">{testResult.error}</p>
+                        <div className="flex items-start gap-2">
+                          <XCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                          <p className="text-sm text-destructive break-words">{testResult.error}</p>
                         </div>
                       )}
                     </CardContent>
