@@ -134,7 +134,8 @@ function SortableContainer({
   isDragMode, 
   widgetData, 
   isLoading,
-  isWidgetEditMode
+  isWidgetEditMode,
+  pageId
 }: { 
   container: PageContainer; 
   onDelete: () => void; 
@@ -142,6 +143,7 @@ function SortableContainer({
   widgetData?: any;
   isLoading?: boolean;
   isWidgetEditMode?: boolean;
+  pageId?: string;
 }) {
   const {
     attributes,
@@ -183,6 +185,7 @@ function SortableContainer({
           widgetData={widgetData}
           isLoading={isLoading}
           isWidgetEditMode={isWidgetEditMode}
+          pageId={pageId}
         />
       </div>
     </div>
@@ -335,6 +338,7 @@ export function ContainerBasedDashboard({ pageId, widgetData = {}, isLoading = f
                 widgetData={widgetData}
                 isLoading={isLoading}
                 isWidgetEditMode={isWidgetEditMode}
+                pageId={pageId}
               />
             ))}
           </div>
