@@ -77,15 +77,15 @@ export function PivotConfigBuilder({ config, onChange, availableFields, numericF
             {/* Sütun Alanı */}
             <div className="space-y-2">
               <Label>Sütun Alanı</Label>
-              <Select
-                value={config.columnField}
-                onValueChange={(v) => updateConfig({ columnField: v })}
+            <Select
+                value={config.columnField || '__none__'}
+                onValueChange={(v) => updateConfig({ columnField: v === '__none__' ? '' : v })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Sütun alanı seçin" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Sütun yok</SelectItem>
+              <SelectContent>
+                  <SelectItem value="__none__">Sütun yok</SelectItem>
                   {availableFields.map(field => (
                     <SelectItem key={field} value={field}>{field}</SelectItem>
                   ))}
