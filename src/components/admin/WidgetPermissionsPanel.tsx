@@ -40,7 +40,11 @@ const categoryColors: Record<string, string> = {
   cari: 'bg-purple-500/10 text-purple-500',
 };
 
-export function WidgetPermissionsPanel() {
+interface WidgetPermissionsPanelProps {
+  teamMembersOnly?: boolean; // Sadece kendi takım üyelerini göster
+}
+
+export function WidgetPermissionsPanel({ teamMembersOnly = true }: WidgetPermissionsPanelProps) {
   const { user } = useAuth();
   const { widgets, isLoading: widgetsLoading } = useWidgets();
   
@@ -52,23 +56,50 @@ export function WidgetPermissionsPanel() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Kullanıcıları yükle
+  // Kullanıcıları yükle (sadece kendi takım üyeleri)
   useEffect(() => {
     const loadUsers = async () => {
+      if (!user) return;
+      
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, user_id, email, display_name')
-          .neq('user_id', user?.id || '');
-        
-        if (error) throw error;
-        setUsers(data || []);
+        if (teamMembersOnly) {
+          // Önce takım üyelerini al
+          const { data: teamData, error: teamError } = await supabase
+            .from('user_teams')
+            .select('member_id')
+            .eq('admin_id', user.id);
+          
+          if (teamError) throw teamError;
+          
+          const memberIds = teamData?.map(t => t.member_id) || [];
+          
+          if (memberIds.length > 0) {
+            const { data: profilesData, error: profilesError } = await supabase
+              .from('profiles')
+              .select('id, user_id, email, display_name')
+              .in('user_id', memberIds);
+            
+            if (profilesError) throw profilesError;
+            setUsers(profilesData || []);
+          } else {
+            setUsers([]);
+          }
+        } else {
+          // Tüm kullanıcıları göster (super admin için)
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('id, user_id, email, display_name')
+            .neq('user_id', user.id);
+          
+          if (error) throw error;
+          setUsers(data || []);
+        }
       } catch (error) {
         console.error('Error loading users:', error);
       }
     };
     loadUsers();
-  }, [user]);
+  }, [user, teamMembersOnly]);
 
   // Seçili kullanıcının izinlerini yükle
   useEffect(() => {

@@ -14,7 +14,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Users, UserPlus, Trash2, Shield, User, Loader2 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Users, UserPlus, Trash2, Shield, User, Loader2, LayoutGrid } from 'lucide-react';
+import { WidgetPermissionsPanel } from '@/components/admin/WidgetPermissionsPanel';
 
 interface TeamMember {
   id: string;
@@ -224,7 +226,7 @@ export function TeamManagementPage() {
       />
 
       <main className="flex-1 p-6 overflow-auto">
-        <div className="max-w-4xl mx-auto space-y-6">
+        <div className="max-w-5xl mx-auto space-y-6">
           {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
@@ -242,147 +244,178 @@ export function TeamManagementPage() {
             </Card>
           </div>
 
-          {/* Team Members Table */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Takım Üyeleri</CardTitle>
-                <CardDescription>
-                  Şirketinize bağlı kullanıcılar
-                </CardDescription>
-              </div>
-              <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <UserPlus className="w-4 h-4 mr-2" />
-                    Kullanıcı Ekle
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Yeni Kullanıcı Oluştur</DialogTitle>
-                    <DialogDescription>
-                      Şirketinize yeni bir kullanıcı ekleyin. Bu kullanıcı sizin widget'larınızı ve veri kaynaklarınızı görebilir ancak DIA bağlantı ayarlarını değiştiremez.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="displayName">İsim</Label>
-                      <Input
-                        id="displayName"
-                        placeholder="Kullanıcı adı"
-                        value={newUserDisplayName}
-                        onChange={(e) => setNewUserDisplayName(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="kullanici@sirket.com"
-                        value={newUserEmail}
-                        onChange={(e) => setNewUserEmail(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="password">Şifre</Label>
-                      <Input
-                        id="password"
-                        type="password"
-                        placeholder="••••••••"
-                        value={newUserPassword}
-                        onChange={(e) => setNewUserPassword(e.target.value)}
-                      />
-                    </div>
+          {/* Tabs for Team Members and Widget Permissions */}
+          <Tabs defaultValue="members" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="members" className="flex items-center gap-2">
+                <Users className="w-4 h-4" />
+                Takım Üyeleri
+              </TabsTrigger>
+              <TabsTrigger value="permissions" className="flex items-center gap-2">
+                <LayoutGrid className="w-4 h-4" />
+                Widget İzinleri
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="members">
+              {/* Team Members Table */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Takım Üyeleri</CardTitle>
+                    <CardDescription>
+                      Şirketinize bağlı kullanıcılar
+                    </CardDescription>
                   </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowAddDialog(false)}>
-                      İptal
-                    </Button>
-                    <Button onClick={handleCreateUser} disabled={isCreating}>
-                      {isCreating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                      Oluştur
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : teamMembers.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>Henüz takım üyeniz yok</p>
-                  <p className="text-sm">Yeni kullanıcı ekleyerek başlayın</p>
-                </div>
+                  <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+                    <DialogTrigger asChild>
+                      <Button>
+                        <UserPlus className="w-4 h-4 mr-2" />
+                        Kullanıcı Ekle
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Yeni Kullanıcı Oluştur</DialogTitle>
+                        <DialogDescription>
+                          Şirketinize yeni bir kullanıcı ekleyin. Bu kullanıcı sizin izin verdiğiniz widget'ları görebilir ancak DIA bağlantı ayarlarını değiştiremez.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="displayName">İsim</Label>
+                          <Input
+                            id="displayName"
+                            placeholder="Kullanıcı adı"
+                            value={newUserDisplayName}
+                            onChange={(e) => setNewUserDisplayName(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="email">Email</Label>
+                          <Input
+                            id="email"
+                            type="email"
+                            placeholder="kullanici@sirket.com"
+                            value={newUserEmail}
+                            onChange={(e) => setNewUserEmail(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="password">Şifre</Label>
+                          <Input
+                            id="password"
+                            type="password"
+                            placeholder="••••••••"
+                            value={newUserPassword}
+                            onChange={(e) => setNewUserPassword(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+                          İptal
+                        </Button>
+                        <Button onClick={handleCreateUser} disabled={isCreating}>
+                          {isCreating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                          Oluştur
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : teamMembers.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>Henüz takım üyeniz yok</p>
+                      <p className="text-sm">Yeni kullanıcı ekleyerek başlayın</p>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Kullanıcı</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Durum</TableHead>
+                          <TableHead>Eklenme Tarihi</TableHead>
+                          <TableHead className="w-[100px]">İşlemler</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {teamMembers.map((member) => (
+                          <TableRow key={member.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                  <User className="w-4 h-4 text-primary" />
+                                </div>
+                                <span className="font-medium">{member.display_name}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>{member.email}</TableCell>
+                            <TableCell>
+                              <Badge variant="secondary">
+                                Takım Üyesi
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {new Date(member.created_at).toLocaleDateString('tr-TR')}
+                            </TableCell>
+                            <TableCell>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Kullanıcıyı Çıkar</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      {member.display_name} kullanıcısını takımdan çıkarmak istediğinize emin misiniz? Bu işlem geri alınamaz.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>İptal</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => handleRemoveFromTeam(member.user_id)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Çıkar
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="permissions">
+              {teamMembers.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12">
+                    <div className="text-center text-muted-foreground">
+                      <LayoutGrid className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>Widget izinleri ayarlamak için önce takım üyesi ekleyin</p>
+                    </div>
+                  </CardContent>
+                </Card>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Kullanıcı</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Durum</TableHead>
-                      <TableHead>Eklenme Tarihi</TableHead>
-                      <TableHead className="w-[100px]">İşlemler</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {teamMembers.map((member) => (
-                      <TableRow key={member.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                              <User className="w-4 h-4 text-primary" />
-                            </div>
-                            <span className="font-medium">{member.display_name}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>{member.email}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">
-                            Takım Üyesi
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {new Date(member.created_at).toLocaleDateString('tr-TR')}
-                        </TableCell>
-                        <TableCell>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Kullanıcıyı Çıkar</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  {member.display_name} kullanıcısını takımdan çıkarmak istediğinize emin misiniz? Bu işlem geri alınamaz.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>İptal</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleRemoveFromTeam(member.user_id)}
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                >
-                                  Çıkar
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <WidgetPermissionsPanel teamMembersOnly={true} />
               )}
-            </CardContent>
-          </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
     </div>

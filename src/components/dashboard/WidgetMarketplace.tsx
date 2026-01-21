@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useWidgets } from '@/hooks/useWidgets';
+import { useWidgetPermissions } from '@/hooks/useWidgetPermissions';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
 import { Widget, WidgetCategory, PAGE_CATEGORIES, WIDGET_TYPES, WIDGET_SIZES } from '@/lib/widgetTypes';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -55,6 +56,7 @@ export function WidgetMarketplace({
   hideTrigger = false 
 }: WidgetMarketplaceProps) {
   const { widgets, isLoading } = useWidgets();
+  const { filterAccessibleWidgets, canAddWidget } = useWidgetPermissions();
   const { getPageLayout, addWidgetToPage } = useUserSettings();
   
   const [internalOpen, setInternalOpen] = useState(false);
@@ -70,11 +72,17 @@ export function WidgetMarketplace({
   const currentLayout = getPageLayout(currentPage);
   const currentWidgetKeys = currentLayout.widgets.map(w => w.id);
 
-  // Kullanılabilir widget'ları filtrele (sayfada olmayanlar)
+  // Kullanılabilir widget'ları filtrele (izin verilmiş ve sayfada olmayanlar)
   const availableWidgets = useMemo(() => {
-    return widgets.filter(w => {
+    // Önce izin verilen widget'ları al
+    const accessibleWidgets = filterAccessibleWidgets(widgets);
+    
+    return accessibleWidgets.filter(w => {
       // Aktif olmalı ve sayfada olmamalı
       if (!w.is_active || currentWidgetKeys.includes(w.widget_key)) return false;
+      
+      // Ekleme izni kontrolü
+      if (!canAddWidget(w.id)) return false;
       
       // Arama filtresi
       const matchesSearch = w.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -85,7 +93,7 @@ export function WidgetMarketplace({
       
       return matchesSearch && matchesCategory;
     });
-  }, [widgets, currentWidgetKeys, searchTerm, selectedCategory]);
+  }, [widgets, filterAccessibleWidgets, canAddWidget, currentWidgetKeys, searchTerm, selectedCategory]);
 
   // Kategoriye göre grupla
   const groupedWidgets = useMemo(() => {
