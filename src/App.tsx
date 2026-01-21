@@ -10,6 +10,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { SettingsPage } from "@/pages/SettingsPage";
+import { TeamManagementPage } from "@/pages/TeamManagementPage";
 import AdminPage from "@/pages/AdminPage";
 import SuperAdminPage from "@/pages/SuperAdminPage";
 import { DynamicPage } from "@/components/pages/DynamicPage";
@@ -35,6 +36,7 @@ const App = () => (
                 <Route path="/ayarlar" element={<AppLayout><SettingsPage /></AppLayout>} />
                 <Route path="/admin" element={<AppLayout><AdminPage /></AppLayout>} />
                 <Route path="/super-admin" element={<AppLayout><SuperAdminPage /></AppLayout>} />
+                <Route path="/takim" element={<AppLayout><TeamManagementPage /></AppLayout>} />
                 
                 {/* Dynamic user pages */}
                 <Route path="/page/:pageSlug" element={<AppLayout><DynamicPage /></AppLayout>} />

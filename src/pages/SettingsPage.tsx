@@ -33,6 +33,7 @@ export function SettingsPage() {
   const [isTesting, setIsTesting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [isTeamAdmin, setIsTeamAdmin] = useState(true); // Default true until loaded
   
   // Profile state
   const [profile, setProfile] = useState({
@@ -60,10 +61,11 @@ export function SettingsPage() {
     refreshInterval: 5,
   });
 
+  // Tabs - DIA tab only visible for team admins
   const tabs = [
     { id: 'genel', label: 'Genel', icon: User },
     { id: 'demo', label: 'Demo Modu', icon: FlaskConical },
-    { id: 'dia', label: 'DIA Bağlantısı', icon: Plug },
+    ...(isTeamAdmin ? [{ id: 'dia', label: 'DIA Bağlantısı', icon: Plug }] : []),
     { id: 'sunucu', label: 'Bağlantı', icon: Server },
     { id: 'bildirimler', label: 'Bildirimler', icon: Bell },
     { id: 'guvenlik', label: 'Güvenlik', icon: Shield },
@@ -91,14 +93,19 @@ export function SettingsPage() {
             donemKodu: profileData.donem_kodu || '',
           });
 
-          // Load DIA connection info - TÜM bilgileri oku
-          setDiaConnection(prev => ({
-            ...prev,
-            sunucuAdi: profileData.dia_sunucu_adi || '',
-            apiKey: profileData.dia_api_key || '',
-            wsKullanici: profileData.dia_ws_kullanici || '',
-            wsSifre: profileData.dia_ws_sifre || '',
-          }));
+          // Check if user is team admin
+          setIsTeamAdmin(profileData.is_team_admin ?? true);
+
+          // Load DIA connection info - TÜM bilgileri oku (sadece team admin için)
+          if (profileData.is_team_admin) {
+            setDiaConnection(prev => ({
+              ...prev,
+              sunucuAdi: profileData.dia_sunucu_adi || '',
+              apiKey: profileData.dia_api_key || '',
+              wsKullanici: profileData.dia_ws_kullanici || '',
+              wsSifre: profileData.dia_ws_sifre || '',
+            }));
+          }
         }
 
         // Check DIA connection status
