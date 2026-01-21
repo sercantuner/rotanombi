@@ -1,6 +1,6 @@
 // CalculatedFieldBuilder - Görsel hesaplama alanı oluşturucu
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { CalculatedField, CalculationExpression, MathOperator, MATH_OPERATORS, MATH_FUNCTIONS, CALCULATION_TEMPLATES, FORMAT_OPTIONS } from '@/lib/widgetBuilderTypes';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Trash2, Calculator, Variable, Hash, Sparkles, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { CompactSearchableFieldSelect } from './SearchableFieldSelect';
 
 interface CalculatedFieldBuilderProps {
   calculatedFields: CalculatedField[];
@@ -181,19 +182,15 @@ function CalculatedFieldEditor({
       <div className="space-y-3">
         <Label className="text-xs font-medium">Formül</Label>
         <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/50 rounded-lg border">
-          {/* Sol Alan */}
-          <Select value={leftField} onValueChange={(v) => { setLeftField(v); updateExpression(v, operator, useConstant ? constantValue : rightField, useConstant); }}>
-            <SelectTrigger className="w-[140px] h-8 text-sm bg-background">
-              <SelectValue placeholder="Alan seç" />
-            </SelectTrigger>
-            <SelectContent>
-              {numericFields.length > 0 ? numericFields.map(f => (
-                <SelectItem key={f} value={f}>{f}</SelectItem>
-              )) : availableFields.map(f => (
-                <SelectItem key={f} value={f}>{f}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Sol Alan - Aranabilir */}
+          <CompactSearchableFieldSelect
+            value={leftField}
+            onValueChange={(v) => { setLeftField(v === '__none__' ? '' : v); updateExpression(v === '__none__' ? '' : v, operator, useConstant ? constantValue : rightField, useConstant); }}
+            fields={numericFields.length > 0 ? numericFields : availableFields}
+            fieldTypes={fieldTypes}
+            placeholder="Alan seç"
+            className="w-[140px]"
+          />
           
           {/* Operatör */}
           <div className="flex gap-1">
@@ -245,18 +242,14 @@ function CalculatedFieldEditor({
               placeholder="100"
             />
           ) : (
-            <Select value={rightField} onValueChange={(v) => { setRightField(v); updateExpression(leftField, operator, v, false); }}>
-              <SelectTrigger className="w-[140px] h-8 text-sm bg-background">
-                <SelectValue placeholder="Alan seç" />
-              </SelectTrigger>
-              <SelectContent>
-                {numericFields.length > 0 ? numericFields.map(f => (
-                  <SelectItem key={f} value={f}>{f}</SelectItem>
-                )) : availableFields.map(f => (
-                  <SelectItem key={f} value={f}>{f}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CompactSearchableFieldSelect
+              value={rightField}
+              onValueChange={(v) => { setRightField(v === '__none__' ? '' : v); updateExpression(leftField, operator, v === '__none__' ? '' : v, false); }}
+              fields={numericFields.length > 0 ? numericFields : availableFields}
+              fieldTypes={fieldTypes}
+              placeholder="Alan seç"
+              className="w-[140px]"
+            />
           )}
         </div>
         

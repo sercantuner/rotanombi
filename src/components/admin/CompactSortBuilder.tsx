@@ -1,6 +1,6 @@
 // CompactSortBuilder - Collapsible ve kompakt sıralama arayüzü
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { DiaApiSort, SortType, SORT_TYPES } from '@/lib/widgetBuilderTypes';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -8,14 +8,16 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Plus, Trash2, ArrowUpDown, ChevronDown, ChevronRight } from 'lucide-react';
+import { CompactSearchableFieldSelect } from './SearchableFieldSelect';
 
 interface CompactSortBuilderProps {
   sorts: DiaApiSort[];
   onChange: (sorts: DiaApiSort[]) => void;
   availableFields: string[];
+  fieldTypes?: Record<string, string>;
 }
 
-export function CompactSortBuilder({ sorts, onChange, availableFields }: CompactSortBuilderProps) {
+export function CompactSortBuilder({ sorts, onChange, availableFields, fieldTypes = {} }: CompactSortBuilderProps) {
   const [isOpen, setIsOpen] = useState(sorts.length > 0);
 
   const addSort = () => {
@@ -68,28 +70,15 @@ export function CompactSortBuilder({ sorts, onChange, availableFields }: Compact
                   {index + 1}
                 </Badge>
 
-                {/* Alan */}
-                <Select value={sort.field} onValueChange={(v) => updateSort(index, 'field', v)}>
-                  <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-                    <SelectValue placeholder="Alan..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableFields.length > 0 ? (
-                      availableFields.map(field => (
-                        <SelectItem key={field} value={field} className="text-xs">{field}</SelectItem>
-                      ))
-                    ) : (
-                      <div className="p-2">
-                        <Input
-                          placeholder="Alan adı..."
-                          className="h-6 text-xs"
-                          value={sort.field}
-                          onChange={(e) => updateSort(index, 'field', e.target.value)}
-                        />
-                      </div>
-                    )}
-                  </SelectContent>
-                </Select>
+                {/* Alan - Aranabilir Select */}
+                <CompactSearchableFieldSelect
+                  value={sort.field}
+                  onValueChange={(v) => updateSort(index, 'field', v === '__none__' ? '' : v)}
+                  fields={availableFields}
+                  fieldTypes={fieldTypes}
+                  placeholder="Alan..."
+                  className="flex-1 min-w-0"
+                />
 
                 {/* Tip */}
                 <Select value={sort.sorttype} onValueChange={(v) => updateSort(index, 'sorttype', v as SortType)}>

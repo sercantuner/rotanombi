@@ -1,6 +1,6 @@
 // CompactColumnSelector - Collapsible ve kompakt kolon seçici
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Columns, Search, CheckSquare, Square, ChevronDown, ChevronRight, X, Maximize2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getFieldTypeIcon } from './SearchableFieldSelect';
 
 interface CompactColumnSelectorProps {
   availableFields: string[];
@@ -21,9 +22,14 @@ export function CompactColumnSelector({ availableFields, selectedColumns, onChan
   const [isOpen, setIsOpen] = useState(selectedColumns.length > 0);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredFields = availableFields.filter(field =>
-    field.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // A-Z sıralı ve filtrelenmiş alanlar
+  const filteredFields = useMemo(() => {
+    return [...availableFields]
+      .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase(), 'tr'))
+      .filter(field =>
+        field.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+  }, [availableFields, searchTerm]);
 
   const toggleColumn = (field: string) => {
     if (selectedColumns.includes(field)) {
@@ -145,6 +151,7 @@ export function CompactColumnSelector({ availableFields, selectedColumns, onChan
                         onCheckedChange={() => toggleColumn(field)}
                         className="h-3 w-3"
                       />
+                      {getFieldTypeIcon(fieldTypes?.[field])}
                       <span className="truncate flex-1">{field}</span>
                     </label>
                   );

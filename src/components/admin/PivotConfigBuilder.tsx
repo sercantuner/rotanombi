@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { LayoutGrid, Info } from 'lucide-react';
 import { AggregationType, AGGREGATION_TYPES, PivotConfig } from '@/lib/widgetBuilderTypes';
+import { SearchableFieldSelect } from './SearchableFieldSelect';
 
 // Re-export for convenience
 export type { PivotConfig };
@@ -16,6 +17,7 @@ interface PivotConfigBuilderProps {
   onChange: (config: PivotConfig) => void;
   availableFields: string[];
   numericFields: string[];
+  fieldTypes?: Record<string, string>;
 }
 
 // Varsayılan değerlerle birleştirilmiş config
@@ -26,7 +28,7 @@ const getConfigWithDefaults = (config: PivotConfig): Required<Pick<PivotConfig, 
   showGrandTotal: config.showGrandTotal ?? true,
 });
 
-export function PivotConfigBuilder({ config, onChange, availableFields, numericFields }: PivotConfigBuilderProps) {
+export function PivotConfigBuilder({ config, onChange, availableFields, numericFields, fieldTypes = {} }: PivotConfigBuilderProps) {
   const safeConfig = getConfigWithDefaults(config);
   const updateConfig = (updates: Partial<PivotConfig>) => {
     onChange({ ...config, ...updates });
@@ -56,19 +58,15 @@ export function PivotConfigBuilder({ config, onChange, availableFields, numericF
             {/* Satır Alanları */}
             <div className="space-y-2">
               <Label>Satır Alanları (Gruplandırma)</Label>
-              <Select
+              <SearchableFieldSelect
                 value={config.rowFields[0] || ''}
-                onValueChange={(v) => updateConfig({ rowFields: [v] })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Ana satır alanı seçin" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableFields.map(field => (
-                    <SelectItem key={field} value={field}>{field}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onValueChange={(v) => updateConfig({ rowFields: v && v !== '__none__' ? [v] : [] })}
+                fields={availableFields}
+                fieldTypes={fieldTypes}
+                placeholder="Ana satır alanı seçin"
+                showNoneOption
+                noneLabel="Seçim yok"
+              />
               <p className="text-xs text-muted-foreground">
                 Pivot tablonun satırlarında gruplandırılacak alan
               </p>
@@ -77,20 +75,15 @@ export function PivotConfigBuilder({ config, onChange, availableFields, numericF
             {/* Sütun Alanı */}
             <div className="space-y-2">
               <Label>Sütun Alanı</Label>
-            <Select
+              <SearchableFieldSelect
                 value={config.columnField || '__none__'}
                 onValueChange={(v) => updateConfig({ columnField: v === '__none__' ? '' : v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Sütun alanı seçin" />
-                </SelectTrigger>
-              <SelectContent>
-                  <SelectItem value="__none__">Sütun yok</SelectItem>
-                  {availableFields.map(field => (
-                    <SelectItem key={field} value={field}>{field}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                fields={availableFields}
+                fieldTypes={fieldTypes}
+                placeholder="Sütun alanı seçin"
+                showNoneOption
+                noneLabel="Sütun yok"
+              />
               <p className="text-xs text-muted-foreground">
                 Her benzersiz değer için ayrı sütun oluşturulur
               </p>
@@ -100,19 +93,13 @@ export function PivotConfigBuilder({ config, onChange, availableFields, numericF
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Değer Alanı</Label>
-                <Select
+                <SearchableFieldSelect
                   value={config.valueField}
-                  onValueChange={(v) => updateConfig({ valueField: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Değer alanı seçin" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {numericFields.map(field => (
-                      <SelectItem key={field} value={field}>{field}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onValueChange={(v) => updateConfig({ valueField: v === '__none__' ? '' : v })}
+                  fields={numericFields}
+                  fieldTypes={fieldTypes}
+                  placeholder="Değer alanı seçin"
+                />
               </div>
 
               <div className="space-y-2">

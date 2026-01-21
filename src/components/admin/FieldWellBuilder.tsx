@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { ChartType, AggregationType } from '@/lib/widgetBuilderTypes';
 import { FieldWellItem, FieldWellItemData } from './FieldWellItem';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { getFieldTypeIcon } from './SearchableFieldSelect';
 
 export interface FieldWellsConfig {
   xAxis?: FieldWellItemData;
@@ -38,15 +39,8 @@ interface FieldWellBuilderProps {
   className?: string;
 }
 
-// Alan tipi ikonu
-const getFieldIcon = (type?: string) => {
-  switch (type) {
-    case 'number': return <Hash className="h-3.5 w-3.5" />;
-    case 'date': return <Calendar className="h-3.5 w-3.5" />;
-    case 'boolean': return <ToggleLeft className="h-3.5 w-3.5" />;
-    default: return <Type className="h-3.5 w-3.5" />;
-  }
-};
+// Yerel alan tipi ikonu (legacy uyumluluk) - SearchableFieldSelect'teki ile aynı
+const getFieldIcon = (type?: string) => getFieldTypeIcon(type);
 
 // Grafik tipine göre kuyu yapılandırması
 const getWellsForChartType = (chartType: ChartType) => {
@@ -127,11 +121,13 @@ export function FieldWellBuilder({
     return types;
   }, [sampleData, availableFields, fieldTypes]);
 
-  // Filtrelenmiş alanlar
+  // Filtrelenmiş ve A-Z sıralı alanlar
   const filteredFields = useMemo(() => {
-    return availableFields.filter(field => 
-      field.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    return [...availableFields]
+      .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase(), 'tr'))
+      .filter(field => 
+        field.toLowerCase().includes(searchTerm.toLowerCase())
+      );
   }, [availableFields, searchTerm]);
 
   // Kuyu yapılandırması
