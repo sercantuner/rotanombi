@@ -8,6 +8,7 @@ interface DiaProfile {
   firmaKodu: string | null;
   firmaAdi: string | null;
   donemKodu: string | null;
+  donemYili: string | null;
   isConfigured: boolean;
 }
 
@@ -18,6 +19,7 @@ export function useDiaProfile() {
     firmaKodu: null,
     firmaAdi: null,
     donemKodu: null,
+    donemYili: null,
     isConfigured: false,
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -25,7 +27,7 @@ export function useDiaProfile() {
   useEffect(() => {
     async function fetchProfile() {
       if (!user) {
-        setProfile({ sunucuAdi: null, firmaKodu: null, firmaAdi: null, donemKodu: null, isConfigured: false });
+        setProfile({ sunucuAdi: null, firmaKodu: null, firmaAdi: null, donemKodu: null, donemYili: null, isConfigured: false });
         setIsLoading(false);
         return;
       }
@@ -33,7 +35,7 @@ export function useDiaProfile() {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('dia_sunucu_adi, firma_kodu, firma_adi, donem_kodu')
+          .select('dia_sunucu_adi, firma_kodu, firma_adi, donem_kodu, donem_yili')
           .eq('user_id', user.id)
           .single();
 
@@ -44,6 +46,7 @@ export function useDiaProfile() {
           firmaKodu: data?.firma_kodu || null,
           firmaAdi: data?.firma_adi || null,
           donemKodu: data?.donem_kodu || null,
+          donemYili: data?.donem_yili || null,
           isConfigured: !!data?.dia_sunucu_adi,
         });
       } catch (error) {
