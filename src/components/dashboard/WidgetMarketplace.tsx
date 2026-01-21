@@ -1,6 +1,6 @@
 // Widget Marketplace - Kullanıcıların widget ekleyebileceği arayüz
 
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useWidgets } from '@/hooks/useWidgets';
 import { useWidgetPermissions } from '@/hooks/useWidgetPermissions';
 import { useUserSettings } from '@/contexts/UserSettingsContext';

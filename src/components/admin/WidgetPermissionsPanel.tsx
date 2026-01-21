@@ -1,6 +1,6 @@
 // Widget Yetkilendirme Paneli - Kullanıcılara widget bazlı yetki atama
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWidgets } from '@/hooks/useWidgets';
