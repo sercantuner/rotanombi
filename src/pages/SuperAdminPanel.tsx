@@ -32,8 +32,19 @@ import { cn } from '@/lib/utils';
 const SuperAdminWidgetManager = React.lazy(() => import('@/components/admin/SuperAdminWidgetManager'));
 const DataSourceManager = React.lazy(() => import('@/components/admin/DataSourceManager').then(m => ({ default: m.DataSourceManager })));
 
-interface UserProfile extends ImpersonatedProfile {
-  roles?: { role: string }[];
+// UserProfile, ImpersonatedProfile'ın bir parçasını kullanır - sadece gösterim için gerekli alanlar
+interface UserProfile {
+  user_id: string;
+  email: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  license_type: string | null;
+  license_expires_at: string | null;
+  is_team_admin: boolean | null;
+  dia_sunucu_adi: string | null;
+  firma_adi: string | null;
+  donem_yili: string | null;
+  roles?: { role: string; user_id: string }[];
 }
 
 export default function SuperAdminPanel() {
