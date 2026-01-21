@@ -1,8 +1,9 @@
 // DiaDataCacheContext - DIA API sonuçlarını önbelleğe alma
 // GLOBAL cache: Tüm sayfalar arası paylaşılan veri havuzu
 // Aynı sorgu bir kez yapılır, tüm sayfalarda kullanılır
+// KULLANICI İZOLASYONU: Kullanıcı değiştiğinde cache otomatik temizlenir
 
-import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode, useRef, useEffect } from 'react';
 
 interface CacheEntry {
   data: any;
@@ -61,6 +62,10 @@ interface DiaDataCacheContextType {
   incrementCacheHit: () => void;
   incrementCacheMiss: () => void;
   recordApiCall: () => void; // Gerçek API çağrısı yapıldığında çağrılır
+  
+  // Kullanıcı değişikliğinde cache temizleme
+  clearAllCache: () => void;
+  currentUserId: string | null;
 }
 
 const DiaDataCacheContext = createContext<DiaDataCacheContextType | null>(null);
@@ -90,15 +95,19 @@ export const SHARED_CACHE_KEYS = {
 
 interface DiaDataCacheProviderProps {
   children: ReactNode;
+  userId?: string | null; // Auth'tan gelen kullanıcı ID'si
 }
 
-export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
+export function DiaDataCacheProvider({ children, userId }: DiaDataCacheProviderProps) {
   const [cache, setCache] = useState<Map<string, CacheEntry>>(new Map());
   const [loadingDataSources, setLoadingDataSources] = useState<Set<string>>(new Set());
   
   // GLOBAL: Hangi veri kaynakları bu oturumda zaten sorgulandı?
   // Bu sayede sayfa geçişlerinde aynı sorgu tekrar yapılmaz
   const fetchedDataSourcesRef = useRef<Set<string>>(new Set());
+  
+  // Kullanıcı değişikliği takibi için
+  const previousUserIdRef = useRef<string | null>(null);
   
   const [isPageDataReady, setPageDataReady] = useState(false);
   const [sharedData, setSharedDataState] = useState<{
@@ -116,6 +125,44 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
     realApiCalls: 0,
     lastApiCallTime: null,
   });
+
+  // TÜM CACHE'İ TEMİZLE - Kullanıcı değişikliğinde çağrılır
+  const clearAllCache = useCallback(() => {
+    console.log('[DiaCache] 🧹 Clearing ALL cache - user isolation');
+    setCache(new Map());
+    fetchedDataSourcesRef.current.clear();
+    setSharedDataState({ cariListesi: null, vadeBakiye: null });
+    setPageDataReady(false);
+    setStats({
+      totalQueries: 0,
+      cacheHits: 0,
+      cacheMisses: 0,
+      realApiCalls: 0,
+      lastApiCallTime: null,
+    });
+  }, []);
+
+  // KULLANICI DEĞİŞİKLİĞİNİ İZLE - Farklı kullanıcı = farklı veri
+  useEffect(() => {
+    const prevId = previousUserIdRef.current;
+    const currentId = userId || null;
+    
+    // İlk mount'ta veya aynı kullanıcı ise temizleme yapma
+    if (prevId === null && currentId !== null) {
+      // İlk giriş - temizleme gerekli değil
+      console.log(`[DiaCache] 👤 User logged in: ${currentId}`);
+    } else if (prevId !== null && currentId === null) {
+      // Çıkış yapıldı - cache temizle
+      console.log(`[DiaCache] 👤 User logged out - clearing cache`);
+      clearAllCache();
+    } else if (prevId !== null && currentId !== null && prevId !== currentId) {
+      // Farklı kullanıcı giriş yaptı - cache temizle (KRİTİK!)
+      console.log(`[DiaCache] 👤 User changed: ${prevId} -> ${currentId} - CLEARING CACHE for data isolation`);
+      clearAllCache();
+    }
+    
+    previousUserIdRef.current = currentId;
+  }, [userId, clearAllCache]);
 
   // Cache'den veri al (stale check ile)
   const getCachedDataWithStale = useCallback((cacheKey: string): { data: any | null; isStale: boolean } => {
@@ -340,6 +387,8 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
     incrementCacheHit,
     incrementCacheMiss,
     recordApiCall,
+    clearAllCache,
+    currentUserId: userId || null,
   }), [
     getCachedData, getCachedDataWithStale, setCachedData, invalidateCache, 
     getDataSourceData, getDataSourceDataWithStale, setDataSourceData, 
@@ -347,7 +396,8 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
     isDataSourceFetched, markDataSourceFetched, getFetchedDataSources, clearFetchedRegistry,
     isPageDataReady, setPageDataReady,
     sharedData, setSharedData, isDiaConnected, setDiaConnected,
-    stats, resetStats, incrementCacheHit, incrementCacheMiss, recordApiCall
+    stats, resetStats, incrementCacheHit, incrementCacheMiss, recordApiCall,
+    clearAllCache, userId
   ]);
 
   return (
@@ -386,6 +436,8 @@ export function useDiaDataCache(): DiaDataCacheContextType {
       incrementCacheHit: () => {},
       incrementCacheMiss: () => {},
       recordApiCall: () => {},
+      clearAllCache: () => {},
+      currentUserId: null,
     };
   }
   return context;
