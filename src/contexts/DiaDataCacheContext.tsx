@@ -66,6 +66,9 @@ interface DiaDataCacheContextType {
   // Kullanıcı değişikliğinde cache temizleme
   clearAllCache: () => void;
   currentUserId: string | null;
+  
+  // Impersonation desteği - Super Admin başka kullanıcı gibi veri çekebilir
+  targetUserId: string | null;
 }
 
 const DiaDataCacheContext = createContext<DiaDataCacheContextType | null>(null);
@@ -389,6 +392,7 @@ export function DiaDataCacheProvider({ children, userId }: DiaDataCacheProviderP
     recordApiCall,
     clearAllCache,
     currentUserId: userId || null,
+    targetUserId: userId || null, // Impersonation için - normal kullanımda currentUserId ile aynı
   }), [
     getCachedData, getCachedDataWithStale, setCachedData, invalidateCache, 
     getDataSourceData, getDataSourceDataWithStale, setDataSourceData, 
@@ -438,6 +442,7 @@ export function useDiaDataCache(): DiaDataCacheContextType {
       recordApiCall: () => {},
       clearAllCache: () => {},
       currentUserId: null,
+      targetUserId: null,
     };
   }
   return context;
