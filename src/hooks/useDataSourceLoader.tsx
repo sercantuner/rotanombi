@@ -45,8 +45,8 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
   const [loadProgress, setLoadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [sourceDataMap, setSourceDataMap] = useState<Map<string, any[]>>(new Map());
+  const [hasInitialized, setHasInitialized] = useState(false); // Sayfa yenileme tespiti için
   const loadingRef = useRef(false);
-  const pageInitializedRef = useRef<string | null>(null);
   
   const { dataSources, getDataSourceById, updateLastFetch } = useDataSources();
   const { 
@@ -68,16 +68,29 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
 
   // Sayfadaki widget'ların kullandığı veri kaynaklarını bul
   const findUsedDataSources = useCallback(async (): Promise<string[]> => {
-    if (!pageId) return [];
+    if (!pageId) {
+      console.log('[DataSourceLoader] No pageId, returning empty sources');
+      return [];
+    }
 
     try {
+      console.log(`[DataSourceLoader] Finding data sources for page: ${pageId}`);
+      
       // Sayfadaki tüm container'ları ve widget'ları çek
       const { data: containers, error: containerError } = await supabase
         .from('page_containers')
         .select('id')
         .eq('page_id', pageId);
 
-      if (containerError || !containers?.length) return [];
+      if (containerError) {
+        console.error('[DataSourceLoader] Container fetch error:', containerError);
+        return [];
+      }
+      
+      if (!containers?.length) {
+        console.log('[DataSourceLoader] No containers found for page');
+        return [];
+      }
 
       const containerIds = containers.map(c => c.id);
 
@@ -87,7 +100,15 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
         .select('widget_id')
         .in('container_id', containerIds);
 
-      if (widgetsError || !containerWidgets?.length) return [];
+      if (widgetsError) {
+        console.error('[DataSourceLoader] Widgets fetch error:', widgetsError);
+        return [];
+      }
+      
+      if (!containerWidgets?.length) {
+        console.log('[DataSourceLoader] No widgets found in containers');
+        return [];
+      }
 
       const widgetIds = containerWidgets.map(cw => cw.widget_id);
 
@@ -97,7 +118,15 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
         .select('id, builder_config')
         .in('id', widgetIds);
 
-      if (dbError || !widgets?.length) return [];
+      if (dbError) {
+        console.error('[DataSourceLoader] Widget config fetch error:', dbError);
+        return [];
+      }
+      
+      if (!widgets?.length) {
+        console.log('[DataSourceLoader] No widget configs found');
+        return [];
+      }
 
       // Benzersiz dataSourceId'leri topla
       const usedSourceIds = new Set<string>();
@@ -109,9 +138,12 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
         }
       }
 
+      console.log(`[DataSourceLoader] Found ${usedSourceIds.size} unique data sources:`, 
+        Array.from(usedSourceIds));
+
       return Array.from(usedSourceIds);
     } catch (err) {
-      console.error('Error finding used data sources:', err);
+      console.error('[DataSourceLoader] Error finding used data sources:', err);
       return [];
     }
   }, [pageId]);
@@ -254,7 +286,6 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
         setIsInitialLoad(false);
         setPageDataReady(true);
         loadingRef.current = false;
-        pageInitializedRef.current = pageId;
         return;
       }
 
@@ -305,7 +336,6 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
         setIsInitialLoad(false);
         setPageDataReady(true);
         loadingRef.current = false;
-        pageInitializedRef.current = pageId;
         return;
       }
 
@@ -338,11 +368,10 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       
       // Sayfa hazır
       setPageDataReady(true);
-      pageInitializedRef.current = pageId;
     } catch (err) {
       console.error('[DataSourceLoader] Error:', err);
       setError(err instanceof Error ? err.message : 'Veri kaynakları yüklenemedi');
-      if (!pageInitializedRef.current) {
+      if (!hasInitialized) {
         toast.error('Veri kaynakları yüklenirken hata oluştu');
       }
     } finally {
@@ -351,7 +380,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       loadingRef.current = false;
     }
   }, [pageId, findUsedDataSources, getDataSourceById, loadDataSource, setPageDataReady, 
-      isDataSourceFetched, getDataSourceData, clearFetchedRegistry, incrementCacheHit]);
+      isDataSourceFetched, getDataSourceData, clearFetchedRegistry, incrementCacheHit, hasInitialized]);
 
   // Veri kaynağı verisini al (önce local, sonra global cache)
   const getSourceData = useCallback((dataSourceId: string): any[] | null => {
@@ -366,14 +395,23 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     return null;
   }, [sourceDataMap, getDataSourceData]);
 
-  // Sayfa değiştiğinde veri kaynaklarını kontrol et ve eksikleri yükle
+  // pageId değiştiğinde hasInitialized'ı sıfırla
   useEffect(() => {
-    // Sayfa değiştiğinde veya ilk yüklemede
-    if (pageId && dataSources.length > 0 && pageInitializedRef.current !== pageId) {
-      console.log(`[DataSourceLoader] Page changed to ${pageId} - checking for missing sources`);
+    if (pageId) {
+      console.log(`[DataSourceLoader] Page ID changed to ${pageId}, resetting initialization`);
+      setHasInitialized(false);
+    }
+  }, [pageId]);
+
+  // Sayfa değiştiğinde veya ilk yüklemede veri kaynaklarını kontrol et ve eksikleri yükle
+  useEffect(() => {
+    // pageId hazır VE dataSources yüklendi VE henüz başlatılmadı VE yükleme devam etmiyor
+    if (pageId && dataSources.length > 0 && !hasInitialized && !loadingRef.current) {
+      console.log(`[DataSourceLoader] Initial load for page ${pageId} (${dataSources.length} sources available)`);
+      setHasInitialized(true);
       loadAllDataSources();
     }
-  }, [pageId, dataSources.length, loadAllDataSources]);
+  }, [pageId, dataSources.length, hasInitialized, loadAllDataSources]);
 
   // Manuel refresh (force) - TÜM verileri yeniden çeker
   const refresh = useCallback(async () => {
