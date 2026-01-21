@@ -212,11 +212,23 @@ export function DiaDataCacheProvider({ children }: DiaDataCacheProviderProps) {
   }, [setCachedData]);
 
   // Veri kaynağı bazlı cache metodları
+  // FIX: TTL kontrolü güçlendirildi - tamamen expired veriyi döndürme
   const getDataSourceData = useCallback((dataSourceId: string): any[] | null => {
     const cacheKey = `datasource_${dataSourceId}`;
-    const cached = getCachedData(cacheKey);
-    return cached && Array.isArray(cached) ? cached : null;
-  }, [getCachedData]);
+    const entry = cache.get(cacheKey);
+    
+    if (!entry) return null;
+    
+    // TTL tamamen aşıldıysa null döndür (stale-while-revalidate yerine strict kontrol)
+    const age = Date.now() - entry.timestamp;
+    if (age > entry.ttl) {
+      console.log(`[Cache] EXPIRED: ${cacheKey} (age: ${Math.round(age/1000)}s, ttl: ${Math.round(entry.ttl/1000)}s)`);
+      return null;
+    }
+    
+    const data = entry.data;
+    return data && Array.isArray(data) ? data : null;
+  }, [cache]);
 
   const getDataSourceDataWithStale = useCallback((dataSourceId: string): { data: any[] | null; isStale: boolean } => {
     const cacheKey = `datasource_${dataSourceId}`;
