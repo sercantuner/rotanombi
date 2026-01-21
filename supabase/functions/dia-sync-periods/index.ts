@@ -66,12 +66,12 @@ serve(async (req) => {
     const payload = {
       sis_firma_getir: {
         session_id: session.sessionId,
-        firma_kodu: session.firmaKodu.toString(),
+        firma_kodu: session.firmaKodu, // Integer olarak gönder
         params: ""
       }
     };
 
-    console.log("Calling sis_firma_getir for periods:", { sunucu: session.sunucuAdi, firma: session.firmaKodu });
+    console.log("Calling sis_firma_getir for periods:", { sunucu: session.sunucuAdi, firma: session.firmaKodu, payload });
 
     const diaResponse = await fetch(diaUrl, {
       method: "POST",
