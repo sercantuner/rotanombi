@@ -1,6 +1,6 @@
 // Widget Permissions Hook - Widget yetkilendirme yönetimi
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { WidgetPermission } from '@/lib/pageTypes';
