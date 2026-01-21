@@ -22,6 +22,8 @@ interface TestApiRequest {
   rawPayload?: string; // JSON string
   returnAllData?: boolean; // Tüm veriyi döndür (widget renderer için)
   returnAllSampleData?: boolean; // Filtre önerileri için tüm veriyi döndür (sampleData olarak)
+  // Impersonation için - super admin başka kullanıcının verisini çekebilir
+  targetUserId?: string;
   // Dönem loop için
   periodConfig?: {
     enabled: boolean;
@@ -195,8 +197,30 @@ serve(async (req) => {
       rawPayload = '',
       returnAllData = false, // Tüm veriyi döndür (widget renderer için)
       returnAllSampleData = false, // Filtre önerileri için tüm veriyi sampleData olarak döndür
+      targetUserId, // Impersonation için - super admin başka kullanıcının verisini çekebilir
       periodConfig, // Dönem loop yapılandırması
     } = body;
+    
+    // Hedef kullanıcı ID'sini belirle - impersonation varsa targetUserId, yoksa authenticated user
+    const effectiveUserId = targetUserId || user.id;
+    
+    // Super admin kontrolü - sadece super admin başka kullanıcının verisine erişebilir
+    if (targetUserId && targetUserId !== user.id) {
+      const { data: roleCheck } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'super_admin')
+        .single();
+      
+      if (!roleCheck) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Bu işlem için Super Admin yetkisi gerekli" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      console.log(`[Impersonation] Super admin ${user.id} accessing data for user ${targetUserId}`);
+    }
     
     // DIA uyumlu operatör dönüşümü
     // DIA kuralları:
@@ -254,8 +278,8 @@ serve(async (req) => {
       });
     }
 
-    // DIA session al
-    const diaResult = await getDiaSession(supabase, user.id);
+    // DIA session al - impersonation varsa hedef kullanıcının session'ını al
+    const diaResult = await getDiaSession(supabase, effectiveUserId);
     
     if (!diaResult.success || !diaResult.session) {
       return new Response(

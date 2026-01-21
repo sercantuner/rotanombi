@@ -71,6 +71,8 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     incrementCacheHit, 
     incrementCacheMiss,
     recordApiCall,
+    // Impersonation için hedef kullanıcı ID'si
+    targetUserId,
   } = useDiaDataCache();
 
   // Sayfadaki widget'ların kullandığı veri kaynaklarını bul
@@ -216,6 +218,8 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
             sorts: dataSource.sorts,
             returnAllData: true,
             periodConfig: dataSource.period_config,
+            // Impersonation için - super admin başka kullanıcının verisini çekebilir
+            ...(targetUserId && { targetUserId }),
           }),
         },
         2 // High priority for data source loading
@@ -257,7 +261,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     } finally {
       setDataSourceLoading(dataSource.id, false);
     }
-  }, [setDataSourceLoading, recordApiCall, setDataSourceData, markDataSourceFetched, updateLastFetch]);
+  }, [setDataSourceLoading, recordApiCall, setDataSourceData, markDataSourceFetched, updateLastFetch, targetUserId]);
 
 
   // Sayfa için veri kaynaklarını yükle - SADECE EKSİK OLANLARI
