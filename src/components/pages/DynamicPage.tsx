@@ -44,6 +44,7 @@ export function DynamicPage() {
     isLoading: dataSourcesLoading,
     isInitialLoad: dataSourcesInitialLoad,
     loadedSources,
+    currentSourceName,
     totalSources,
     loadProgress,
     refresh: refreshDataSources,
@@ -124,7 +125,7 @@ export function DynamicPage() {
   }
 
   // İlk yüklemede loading screen göster
-  const showLoadingScreen = dataSourcesInitialLoad && totalSources > 0;
+  const showLoadingScreen = dataSourcesInitialLoad && totalSources > 0 && loadedSources.length < totalSources;
 
   return (
     <DashboardFilterProvider>
@@ -133,8 +134,9 @@ export function DynamicPage() {
         {showLoadingScreen && (
           <DashboardLoadingScreen
             progress={loadProgress}
-            loadedSources={loadedSources.length}
+            loadedSources={loadedSources}
             totalSources={totalSources}
+            currentSourceName={currentSourceName}
           />
         )}
         

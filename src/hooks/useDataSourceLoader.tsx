@@ -14,10 +14,16 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 // Varsayılan TTL: 10 dakika
 const DEFAULT_TTL = 10 * 60 * 1000;
 
+interface LoadedSourceInfo {
+  id: string;
+  name: string;
+}
+
 interface DataSourceLoaderResult {
   isLoading: boolean;
   isInitialLoad: boolean;
-  loadedSources: string[];
+  loadedSources: LoadedSourceInfo[];
+  currentSourceName: string | null;
   totalSources: number;
   loadProgress: number; // 0-100
   error: string | null;
@@ -40,7 +46,8 @@ interface WidgetWithDataSource {
 export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResult {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [loadedSources, setLoadedSources] = useState<string[]>([]);
+  const [loadedSources, setLoadedSources] = useState<LoadedSourceInfo[]>([]);
+  const [currentSourceName, setCurrentSourceName] = useState<string | null>(null);
   const [totalSources, setTotalSources] = useState(0);
   const [loadProgress, setLoadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -315,13 +322,14 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
 
       // Zaten sorgulanmış olanları hemen yükle
       const newDataMap = new Map<string, any[]>();
-      const successfulIds: string[] = [];
+      const successfulSources: LoadedSourceInfo[] = [];
       
       for (const sourceId of alreadyFetched) {
         const data = getDataSourceData(sourceId);
+        const ds = getDataSourceById(sourceId);
         if (data) {
           newDataMap.set(sourceId, data);
-          successfulIds.push(sourceId);
+          successfulSources.push({ id: sourceId, name: ds?.name || sourceId });
           incrementCacheHit();
         }
       }
@@ -330,7 +338,8 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       if (needToFetch.length === 0) {
         console.log('[DataSourceLoader] All sources already cached from previous pages!');
         setSourceDataMap(newDataMap);
-        setLoadedSources(successfulIds);
+        setLoadedSources(successfulSources);
+        setCurrentSourceName(null);
         setLoadProgress(100);
         setIsLoading(false);
         setIsInitialLoad(false);
@@ -349,22 +358,26 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
           continue;
         }
         
+        // Aktif kaynak ismini güncelle
+        setCurrentSourceName(dataSource.name);
+        
         const data = await loadDataSource(dataSource, session.access_token, forceRefresh);
         
         if (data) {
           newDataMap.set(sourceId, data);
-          successfulIds.push(sourceId);
+          successfulSources.push({ id: sourceId, name: dataSource.name });
         }
         
         // Progress güncelle
         const progress = Math.round(((i + 1) / needToFetch.length) * 100);
         setLoadProgress(progress);
-        setLoadedSources([...successfulIds]);
+        setLoadedSources([...successfulSources]);
       }
 
       setSourceDataMap(newDataMap);
+      setCurrentSourceName(null);
       
-      console.log(`[DataSourceLoader] Page ready: ${successfulIds.length} sources loaded`);
+      console.log(`[DataSourceLoader] Page ready: ${successfulSources.length} sources loaded`);
       
       // Sayfa hazır
       setPageDataReady(true);
@@ -465,11 +478,12 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     isLoading,
     isInitialLoad,
     loadedSources,
+    currentSourceName,
     totalSources,
     loadProgress,
     error,
     refresh,
     getSourceData,
-    loadSingleDataSource, // Yeni export
+    loadSingleDataSource,
   };
 }

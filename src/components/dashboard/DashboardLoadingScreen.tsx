@@ -1,15 +1,20 @@
 // DashboardLoadingScreen - Sayfa yüklenirken gösterilen loading ekranı
 
-import React from 'react';
-import { CheckCircle2, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CheckCircle2, Loader2, Database } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 
+interface LoadedSourceInfo {
+  id: string;
+  name: string;
+}
+
 interface DashboardLoadingScreenProps {
   progress: number;
-  loadedSources: number;
+  loadedSources: LoadedSourceInfo[];
   totalSources: number;
-  currentSourceName?: string;
+  currentSourceName: string | null;
 }
 
 // Dikey bar chart animasyonu
@@ -30,12 +35,78 @@ function BarChartAnimation() {
   );
 }
 
+// Tek kaynak gösterimi - animasyonlu geçiş
+function SourceDisplay({ 
+  currentSourceName, 
+  lastLoadedSource 
+}: { 
+  currentSourceName: string | null;
+  lastLoadedSource: LoadedSourceInfo | null;
+}) {
+  const [displayedSource, setDisplayedSource] = useState<{name: string; status: 'loading' | 'loaded'} | null>(null);
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  useEffect(() => {
+    if (currentSourceName) {
+      // Yeni kaynak yüklenmeye başladı
+      setIsAnimating(true);
+      setTimeout(() => {
+        setDisplayedSource({ name: currentSourceName, status: 'loading' });
+        setIsAnimating(false);
+      }, 150);
+    } else if (lastLoadedSource) {
+      // Son kaynak yüklendi, kısa süre göster ve kaybet
+      setDisplayedSource({ name: lastLoadedSource.name, status: 'loaded' });
+      setTimeout(() => {
+        setIsAnimating(true);
+        setTimeout(() => {
+          setDisplayedSource(null);
+          setIsAnimating(false);
+        }, 150);
+      }, 500);
+    }
+  }, [currentSourceName, lastLoadedSource?.id]);
+
+  if (!displayedSource) {
+    return (
+      <div className="h-10 flex items-center justify-center">
+        <span className="text-sm text-muted-foreground">Hazırlanıyor...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div 
+      className={cn(
+        "h-10 flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-all duration-150",
+        displayedSource.status === 'loading' 
+          ? "bg-primary/10 text-primary" 
+          : "bg-green-500/10 text-green-600 dark:text-green-400",
+        isAnimating && "opacity-0 scale-95"
+      )}
+    >
+      {displayedSource.status === 'loading' ? (
+        <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+      ) : (
+        <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+      )}
+      <span className="text-sm font-medium truncate max-w-[200px]">
+        {displayedSource.name}
+      </span>
+    </div>
+  );
+}
+
 export function DashboardLoadingScreen({
   progress,
   loadedSources,
   totalSources,
   currentSourceName,
 }: DashboardLoadingScreenProps) {
+  const lastLoadedSource = loadedSources.length > 0 
+    ? loadedSources[loadedSources.length - 1] 
+    : null;
+
   return (
     <div className="fixed inset-0 bg-background/95 backdrop-blur-sm z-50 flex items-center justify-center">
       <div className="w-full max-w-md mx-auto px-6">
@@ -57,39 +128,36 @@ export function DashboardLoadingScreen({
           <div className="space-y-2">
             <Progress value={progress} className="h-2" />
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{loadedSources} / {totalSources} kaynak</span>
+              <span>{loadedSources.length} / {totalSources} kaynak</span>
               <span>%{progress}</span>
             </div>
           </div>
 
-          {/* Source List */}
-          {totalSources > 0 && (
-            <div className="text-left bg-muted/50 rounded-lg p-4 space-y-2 max-h-40 overflow-y-auto">
-              {Array.from({ length: totalSources }).map((_, index) => {
-                const isLoaded = index < loadedSources;
-                const isLoading = index === loadedSources;
-                
-                return (
-                  <div 
-                    key={index}
-                    className={cn(
-                      "flex items-center gap-2 text-sm transition-all",
-                      isLoaded && "text-green-600 dark:text-green-400",
-                      isLoading && "text-primary",
-                      !isLoaded && !isLoading && "text-muted-foreground"
-                    )}
-                  >
-                    {isLoaded ? (
-                      <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
-                    ) : isLoading ? (
-                      <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin" />
-                    ) : (
-                      <div className="h-4 w-4 rounded-full border flex-shrink-0" />
-                    )}
-                    <span>Veri Kaynağı {index + 1}</span>
-                  </div>
-                );
-              })}
+          {/* Dynamic Source Display - Tek satır, animasyonlu */}
+          <div className="flex justify-center">
+            <SourceDisplay 
+              currentSourceName={currentSourceName} 
+              lastLoadedSource={lastLoadedSource}
+            />
+          </div>
+
+          {/* Loaded Sources Summary */}
+          {loadedSources.length > 0 && (
+            <div className="flex flex-wrap justify-center gap-2">
+              {loadedSources.slice(-3).map((source) => (
+                <span 
+                  key={source.id}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 text-xs"
+                >
+                  <CheckCircle2 className="h-3 w-3" />
+                  {source.name}
+                </span>
+              ))}
+              {loadedSources.length > 3 && (
+                <span className="inline-flex items-center px-2 py-1 rounded-full bg-muted text-muted-foreground text-xs">
+                  +{loadedSources.length - 3} daha
+                </span>
+              )}
             </div>
           )}
 
