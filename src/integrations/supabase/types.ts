@@ -394,6 +394,7 @@ export type Database = {
           dia_ws_sifre: string | null
           display_name: string | null
           donem_kodu: string | null
+          donem_yili: string | null
           email: string | null
           firma_adi: string | null
           firma_kodu: string | null
@@ -415,6 +416,7 @@ export type Database = {
           dia_ws_sifre?: string | null
           display_name?: string | null
           donem_kodu?: string | null
+          donem_yili?: string | null
           email?: string | null
           firma_adi?: string | null
           firma_kodu?: string | null
@@ -436,6 +438,7 @@ export type Database = {
           dia_ws_sifre?: string | null
           display_name?: string | null
           donem_kodu?: string | null
+          donem_yili?: string | null
           email?: string | null
           firma_adi?: string | null
           firma_kodu?: string | null

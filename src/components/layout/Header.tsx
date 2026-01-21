@@ -21,7 +21,7 @@ export function Header({ title, subtitle, onRefresh, isRefreshing, currentPage, 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [commandOpen, setCommandOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
-  const { sunucuAdi, firmaKodu, firmaAdi, donemKodu, isConfigured } = useDiaProfile();
+  const { sunucuAdi, firmaAdi, donemYili, isConfigured } = useDiaProfile();
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -42,11 +42,11 @@ export function Header({ title, subtitle, onRefresh, isRefreshing, currentPage, 
           <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/10 border border-primary/20">
             <Server className="w-3.5 h-3.5 text-primary" />
             <span className="text-xs font-medium text-primary">{sunucuAdi}</span>
-            {(firmaAdi || firmaKodu) && (
-              <span className="text-xs text-primary/70">/ {firmaAdi || `Firma ${firmaKodu}`}</span>
+            {firmaAdi && (
+              <span className="text-xs text-primary/70">/ {firmaAdi}</span>
             )}
-            {donemKodu && (
-              <span className="text-xs text-primary/60">/ {donemKodu}</span>
+            {donemYili && (
+              <span className="text-xs text-primary/60">/ {donemYili}</span>
             )}
           </div>
         )}

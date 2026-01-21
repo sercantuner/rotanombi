@@ -199,9 +199,11 @@ serve(async (req) => {
 
     // Determine active period - prefer ontanimli='t', else by date, else highest
     let activePeriod: number | null = null;
+    let activePeriodData: PeriodInfo | null = null;
     const defaultPeriod = periods.find(p => p.is_default);
     if (defaultPeriod) {
       activePeriod = defaultPeriod.period_no;
+      activePeriodData = defaultPeriod;
     } else {
       const today = new Date();
       for (const period of periods) {
@@ -210,13 +212,24 @@ serve(async (req) => {
           const endDate = new Date(period.end_date);
           if (today >= startDate && today <= endDate) {
             activePeriod = period.period_no;
+            activePeriodData = period;
             break;
           }
         }
       }
       if (activePeriod === null && periods.length > 0) {
-        activePeriod = Math.max(...periods.map(p => p.period_no));
+        const maxPeriod = periods.reduce((max, p) => p.period_no > max.period_no ? p : max, periods[0]);
+        activePeriod = maxPeriod.period_no;
+        activePeriodData = maxPeriod;
       }
+    }
+
+    // Calculate period year string (e.g., "2024" or "2024-2025")
+    let donemYili: string | null = null;
+    if (activePeriodData?.start_date && activePeriodData?.end_date) {
+      const startYear = activePeriodData.start_date.substring(0, 4);
+      const endYear = activePeriodData.end_date.substring(0, 4);
+      donemYili = startYear === endYear ? startYear : `${startYear}-${endYear}`;
     }
 
     // Upsert periods
@@ -281,6 +294,9 @@ serve(async (req) => {
     }
     if (firmaAdi) {
       profileUpdate.firma_adi = firmaAdi;
+    }
+    if (donemYili) {
+      profileUpdate.donem_yili = donemYili;
     }
     if (Object.keys(profileUpdate).length > 0) {
       await supabase
