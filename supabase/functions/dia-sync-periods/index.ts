@@ -50,50 +50,75 @@ serve(async (req) => {
       );
     }
 
-    // Get DIA session
-    const sessionResult = await getDiaSession(supabase, user.id);
-    if (!sessionResult.success || !sessionResult.session) {
-      return new Response(
-        JSON.stringify({ success: false, error: sessionResult.error || "DIA oturumu alınamadı" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const userId = user.id;
+
+    // Helper function to make DIA request with session recovery
+    async function makeDiaRequest(retryCount = 0): Promise<{ success: boolean; data?: any; error?: string }> {
+      // Get DIA session (will auto-login if needed)
+      const sessionResult = await getDiaSession(supabase, userId);
+      if (!sessionResult.success || !sessionResult.session) {
+        return { success: false, error: sessionResult.error || "DIA oturumu alınamadı" };
+      }
+
+      const { session } = sessionResult;
+      const diaUrl = `https://${session.sunucuAdi}.ws.dia.com.tr/api/v3/sis/json`;
+
+      const payload = {
+        sis_firma_getir: {
+          session_id: session.sessionId,
+          firma_kodu: session.firmaKodu,
+          params: ""
+        }
+      };
+
+      console.log("Calling sis_firma_getir for periods:", { sunucu: session.sunucuAdi, firma: session.firmaKodu, retry: retryCount });
+
+      const diaResponse = await fetch(diaUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const diaData = await diaResponse.json();
+      console.log("DIA Response:", JSON.stringify(diaData).substring(0, 500));
+
+      // Check for INVALID_SESSION and retry
+      if (diaData?.code === "401" || diaData?.msg === "INVALID_SESSION") {
+        if (retryCount < 1) {
+          console.log("Session invalid, clearing and retrying...");
+          // Clear session to force re-login
+          await supabase
+            .from("profiles")
+            .update({ dia_session_id: null, dia_session_expires: null })
+            .eq("user_id", userId);
+          
+          return makeDiaRequest(retryCount + 1);
+        }
+        return { success: false, error: "DIA oturumu yenilenemedi" };
+      }
+
+      const result = diaData?.sis_firma_getir?.result;
+      if (!result || result.code !== 200) {
+        return { success: false, error: "DIA'dan dönem bilgisi alınamadı", data: diaData };
+      }
+
+      return { success: true, data: { result, session } };
     }
 
-    const { session } = sessionResult;
-    const diaUrl = `https://${session.sunucuAdi}.ws.dia.com.tr/api/v3/sis/json`;
-
-    // Call sis_firma_getir to get period info
-    const payload = {
-      sis_firma_getir: {
-        session_id: session.sessionId,
-        firma_kodu: session.firmaKodu, // Integer olarak gönder
-        params: ""
-      }
-    };
-
-    console.log("Calling sis_firma_getir for periods:", { sunucu: session.sunucuAdi, firma: session.firmaKodu, payload });
-
-    const diaResponse = await fetch(diaUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const diaData = await diaResponse.json();
-    console.log("DIA Response:", JSON.stringify(diaData).substring(0, 500));
-
-    // Parse response - look for period info in result
-    const result = diaData?.sis_firma_getir?.result;
-    if (!result || result.code !== 200) {
+    // Make the request with retry support
+    const requestResult = await makeDiaRequest();
+    if (!requestResult.success) {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: "DIA'dan dönem bilgisi alınamadı",
-          rawResponse: diaData 
+          error: requestResult.error,
+          rawResponse: requestResult.data 
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const { result, session } = requestResult.data;
 
     // Extract periods from msg - structure depends on DIA response
     // Common structure: msg contains firma info with donemler array
