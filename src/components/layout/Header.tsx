@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Search, RefreshCw, Sun, Moon } from 'lucide-react';
+import { Search, RefreshCw, Sun, Moon, Server } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { useDiaProfile } from '@/hooks/useDiaProfile';
 import { WidgetPicker } from '@/components/dashboard/WidgetPicker';
 import { CommandPalette } from '@/components/layout/CommandPalette';
 import { NotificationCenter } from '@/components/layout/NotificationCenter';
@@ -20,6 +21,7 @@ export function Header({ title, subtitle, onRefresh, isRefreshing, currentPage, 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [commandOpen, setCommandOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const { sunucuAdi, firmaKodu, isConfigured } = useDiaProfile();
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -28,10 +30,23 @@ export function Header({ title, subtitle, onRefresh, isRefreshing, currentPage, 
 
   return (
     <header className="h-16 glass-card border-b border-border flex items-center justify-between px-6">
-      {/* Left: Title */}
-      <div>
-        <h2 className="text-xl font-bold">{title}</h2>
-        {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+      {/* Left: Title + DIA Server Info */}
+      <div className="flex items-center gap-4">
+        <div>
+          <h2 className="text-xl font-bold">{title}</h2>
+          {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+        </div>
+        
+        {/* DIA Server Badge */}
+        {isConfigured && sunucuAdi && (
+          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/10 border border-primary/20">
+            <Server className="w-3.5 h-3.5 text-primary" />
+            <span className="text-xs font-medium text-primary">{sunucuAdi}</span>
+            {firmaKodu && (
+              <span className="text-xs text-primary/70">/ Firma {firmaKodu}</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Right: Actions */}
