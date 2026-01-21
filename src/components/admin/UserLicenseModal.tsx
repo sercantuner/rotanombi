@@ -18,12 +18,21 @@ import { tr } from 'date-fns/locale';
 import { CalendarIcon, Loader2, Shield, Crown } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { ImpersonatedProfile } from '@/contexts/ImpersonationContext';
+// Basit kullanıcı profili - modal için gerekli alanlar
+interface SimpleUserProfile {
+  user_id: string;
+  email: string | null;
+  display_name: string | null;
+  firma_adi?: string | null;
+  license_type: string | null;
+  license_expires_at: string | null;
+  roles?: { role: string; user_id?: string }[];
+}
 
 interface UserLicenseModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  user: ImpersonatedProfile & { roles?: { role: string }[] };
+  user: SimpleUserProfile;
   onSave: () => void;
 }
 
