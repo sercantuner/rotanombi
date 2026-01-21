@@ -173,6 +173,48 @@ export type Database = {
         }
         Relationships: []
       }
+      firma_periods: {
+        Row: {
+          created_at: string
+          end_date: string | null
+          fetched_at: string | null
+          firma_kodu: string
+          id: string
+          is_current: boolean | null
+          period_name: string | null
+          period_no: number
+          start_date: string | null
+          sunucu_adi: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          end_date?: string | null
+          fetched_at?: string | null
+          firma_kodu: string
+          id?: string
+          is_current?: boolean | null
+          period_name?: string | null
+          period_no: number
+          start_date?: string | null
+          sunucu_adi: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          end_date?: string | null
+          fetched_at?: string | null
+          firma_kodu?: string
+          id?: string
+          is_current?: boolean | null
+          period_name?: string | null
+          period_no?: number
+          start_date?: string | null
+          sunucu_adi?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           category: string | null
