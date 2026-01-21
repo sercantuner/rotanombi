@@ -47,7 +47,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
   const loadingRef = useRef(false);
   const pageInitializedRef = useRef<string | null>(null);
   
-  const { dataSources, getDataSourceById } = useDataSources();
+  const { dataSources, getDataSourceById, updateLastFetch } = useDataSources();
   const { 
     getCachedData,
     getDataSourceData,
@@ -121,20 +121,23 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     accessToken: string,
     forceRefresh: boolean = false
   ): Promise<any[] | null> => {
-    // 1. Zaten global registry'de varsa (başka sayfada sorgulandı) - cache'den al
+    // 1. Zaten global registry'de VE cache'de veri varsa - cache'den al
     if (!forceRefresh && isDataSourceFetched(dataSource.id)) {
       const cachedData = getDataSourceData(dataSource.id);
-      if (cachedData) {
+      // FIX: Cache'de gerçekten veri var mı kontrol et
+      if (cachedData && cachedData.length > 0) {
         console.log(`[DataSourceLoader] GLOBAL HIT: ${dataSource.name} (${cachedData.length} kayıt) - başka sayfada zaten yüklendi`);
         incrementCacheHit();
         return cachedData;
       }
+      // Registry'de var ama cache boş - yeniden fetch gerekli
+      console.log(`[DataSourceLoader] STALE REGISTRY: ${dataSource.name} - registry'de var ama cache boş, yeniden yükleniyor`);
     }
     
     // 2. Cache kontrolü (stale-while-revalidate)
     const { data: cachedData, isStale } = getDataSourceDataWithStale(dataSource.id);
     
-    if (cachedData && !forceRefresh) {
+    if (cachedData && cachedData.length > 0 && !forceRefresh) {
       console.log(`[DataSourceLoader] Cache HIT: ${dataSource.name} (${cachedData.length} kayıt)${isStale ? ' [STALE]' : ''}`);
       incrementCacheHit();
       // Stale olsa bile API çağrısı yapmıyoruz - kontör tasarrufu
@@ -197,6 +200,16 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       // GLOBAL registry'e ekle - bu oturumda bir daha sorgulanmasın
       markDataSourceFetched(dataSource.id);
       
+      // FIX: Veritabanında last_fetched_at'ı güncelle
+      try {
+        const fields = data.length > 0 ? Object.keys(data[0]) : [];
+        await updateLastFetch(dataSource.id, data.length, fields, data.slice(0, 100));
+        console.log(`[DataSourceLoader] DB Updated: ${dataSource.name} last_fetched_at`);
+      } catch (dbError) {
+        console.warn(`[DataSourceLoader] DB update failed for ${dataSource.name}:`, dbError);
+        // DB güncellemesi başarısız olsa bile veri yüklemeyi etkilemesin
+      }
+      
       return data;
     } catch (err) {
       console.error(`[DataSourceLoader] Fetch error for ${dataSource.name}:`, err);
@@ -243,15 +256,27 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
         return;
       }
 
-      // Zaten sorgulanmış olanları ve eksik olanları ayır
-      const alreadyFetched = usedSourceIds.filter(id => isDataSourceFetched(id) && getDataSourceData(id));
+      // FIX: Zaten sorgulanmış VE cache'de gerçekten veri olanları ayır
+      const alreadyFetched = usedSourceIds.filter(id => {
+        const inRegistry = isDataSourceFetched(id);
+        const cachedData = getDataSourceData(id);
+        // Registry'de var VE cache'de gerçekten veri var mı?
+        return inRegistry && cachedData && cachedData.length > 0;
+      });
+      
+      // FIX: Registry'de olsa bile cache boşsa yeniden fetch et
       const needToFetch = forceRefresh 
         ? usedSourceIds 
-        : usedSourceIds.filter(id => !isDataSourceFetched(id) || !getDataSourceData(id));
+        : usedSourceIds.filter(id => {
+            const inRegistry = isDataSourceFetched(id);
+            const cachedData = getDataSourceData(id);
+            // Registry'de yok VEYA cache boş/geçersiz
+            return !inRegistry || !cachedData || cachedData.length === 0;
+          });
 
       console.log(`[DataSourceLoader] Page needs ${usedSourceIds.length} sources:`);
-      console.log(`  - Already fetched (from other pages): ${alreadyFetched.length}`);
-      console.log(`  - Need to fetch: ${needToFetch.length}`);
+      console.log(`  - Already fetched (with valid cache): ${alreadyFetched.length}`);
+      console.log(`  - Need to fetch (missing or empty cache): ${needToFetch.length}`);
 
       setTotalSources(needToFetch.length || 1); // En az 1 göster progress için
 
