@@ -1,7 +1,7 @@
 // DashboardLoadingScreen - Sayfa yüklenirken gösterilen loading ekranı
 
 import React from 'react';
-import { Loader2, Database, CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 
@@ -10,6 +10,24 @@ interface DashboardLoadingScreenProps {
   loadedSources: number;
   totalSources: number;
   currentSourceName?: string;
+}
+
+// Dikey bar chart animasyonu
+function BarChartAnimation() {
+  return (
+    <div className="flex items-end justify-center gap-1 h-16">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div
+          key={i}
+          className="w-3 bg-primary rounded-t-sm animate-bar-bounce"
+          style={{
+            animationDelay: `${i * 0.15}s`,
+            height: '100%',
+          }}
+        />
+      ))}
+    </div>
+  );
 }
 
 export function DashboardLoadingScreen({
@@ -22,12 +40,9 @@ export function DashboardLoadingScreen({
     <div className="fixed inset-0 bg-background/95 backdrop-blur-sm z-50 flex items-center justify-center">
       <div className="w-full max-w-md mx-auto px-6">
         <div className="text-center space-y-6">
-          {/* Logo/Icon */}
+          {/* Bar Chart Animation */}
           <div className="flex justify-center">
-            <div className="relative">
-              <Database className="h-16 w-16 text-primary/20" />
-              <Loader2 className="h-8 w-8 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-spin" />
-            </div>
+            <BarChartAnimation />
           </div>
 
           {/* Title */}
