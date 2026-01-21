@@ -23,6 +23,7 @@ interface DataSourceLoaderResult {
   error: string | null;
   refresh: () => Promise<void>;
   getSourceData: (dataSourceId: string) => any[] | null;
+  loadSingleDataSource: (dataSourceId: string) => Promise<any[] | null>; // Tek veri kaynağı yükleme
 }
 
 interface WidgetWithDataSource {
@@ -151,8 +152,8 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     return loadDataSourceFromApi(dataSource, accessToken);
   }, [getDataSourceData, getDataSourceDataWithStale, isDataSourceFetched, incrementCacheHit, incrementCacheMiss]);
 
-  // API'den veri çek (helper)
-  const loadDataSourceFromApi = async (
+  // API'den veri çek (helper) - useCallback ile sarmalandı
+  const loadDataSourceFromApi = useCallback(async (
     dataSource: DataSource,
     accessToken: string
   ): Promise<any[] | null> => {
@@ -217,7 +218,8 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     } finally {
       setDataSourceLoading(dataSource.id, false);
     }
-  };
+  }, [setDataSourceLoading, recordApiCall, setDataSourceData, markDataSourceFetched, updateLastFetch]);
+
 
   // Sayfa için veri kaynaklarını yükle - SADECE EKSİK OLANLARI
   const loadAllDataSources = useCallback(async (forceRefresh: boolean = false) => {
@@ -379,6 +381,48 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     await loadAllDataSources(true);
   }, [loadAllDataSources]);
 
+  // TEK VERİ KAYNAĞINI YÜKLE - Widget ekleme sonrası kullanım için
+  const loadSingleDataSource = useCallback(async (dataSourceId: string): Promise<any[] | null> => {
+    // Önce cache'de var mı bak
+    const cachedData = getDataSourceData(dataSourceId);
+    if (cachedData && cachedData.length > 0) {
+      console.log(`[DataSourceLoader] Single source HIT: ${dataSourceId} (${cachedData.length} kayıt)`);
+      return cachedData;
+    }
+    
+    // Cache'de yok, API'den çek
+    const dataSource = getDataSourceById(dataSourceId);
+    if (!dataSource) {
+      console.warn(`[DataSourceLoader] Data source not found: ${dataSourceId}`);
+      return null;
+    }
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        console.error('[DataSourceLoader] No session for single source load');
+        return null;
+      }
+      
+      console.log(`[DataSourceLoader] Loading single source: ${dataSource.name}`);
+      const data = await loadDataSourceFromApi(dataSource, session.access_token);
+      
+      // Local map'e de ekle
+      if (data) {
+        setSourceDataMap(prev => {
+          const next = new Map(prev);
+          next.set(dataSourceId, data);
+          return next;
+        });
+      }
+      
+      return data;
+    } catch (err) {
+      console.error(`[DataSourceLoader] Single source load error:`, err);
+      return null;
+    }
+  }, [getDataSourceData, getDataSourceById, loadDataSourceFromApi]);
+
   return {
     isLoading,
     isInitialLoad,
@@ -388,5 +432,6 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     error,
     refresh,
     getSourceData,
+    loadSingleDataSource, // Yeni export
   };
 }

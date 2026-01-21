@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useContainerWidgets } from '@/hooks/useUserPages';
+import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
 import { PageContainer, CONTAINER_TEMPLATES, ContainerType } from '@/lib/pageTypes';
 import { Widget } from '@/lib/widgetTypes';
 import { WidgetSlotPicker } from './WidgetSlotPicker';
@@ -27,6 +28,7 @@ interface ContainerRendererProps {
   widgetData?: any;
   isLoading?: boolean;
   isWidgetEditMode?: boolean;
+  pageId?: string | null; // Sayfa ID'si - veri kaynağı yüklemesi için
 }
 
 export function ContainerRenderer({ 
@@ -35,9 +37,11 @@ export function ContainerRenderer({
   isDragMode = false,
   widgetData = {},
   isLoading = false,
-  isWidgetEditMode = false
+  isWidgetEditMode = false,
+  pageId = null
 }: ContainerRendererProps) {
   const { widgets: containerWidgets, addWidget, removeWidget, refreshWidgets } = useContainerWidgets(container.id);
+  const { loadSingleDataSource } = useDataSourceLoader(pageId);
   const [widgetPickerOpen, setWidgetPickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<number>(0);
@@ -113,6 +117,13 @@ export function ContainerRenderer({
     await addWidget(widget.id, selectedSlot);
     refreshWidgets();
     toast.success(`${widget.name} eklendi`);
+    
+    // Widget'ın veri kaynağını hemen yükle (varsa)
+    const builderConfig = widget.builder_config as any;
+    if (builderConfig?.dataSourceId) {
+      console.log(`[ContainerRenderer] Loading data source for new widget: ${builderConfig.dataSourceId}`);
+      loadSingleDataSource(builderConfig.dataSourceId);
+    }
   };
 
   const handleRemoveWidget = async (containerWidgetId: string, widgetName?: string) => {

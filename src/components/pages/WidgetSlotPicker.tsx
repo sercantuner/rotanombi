@@ -150,8 +150,8 @@ export function WidgetSlotPicker({ open, onOpenChange, onSelectWidget, slotIndex
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh]">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <LayoutGrid className="h-5 w-5" />
             Widget Seç - Slot {slotIndex + 1}
@@ -162,9 +162,9 @@ export function WidgetSlotPicker({ open, onOpenChange, onSelectWidget, slotIndex
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-4 flex-1 min-h-0 overflow-hidden">
           {/* Sol taraf - Filtreler ve Liste */}
-          <div className="col-span-2 space-y-4">
+          <div className="col-span-2 flex flex-col min-h-0 overflow-hidden space-y-4">
             {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -223,7 +223,7 @@ export function WidgetSlotPicker({ open, onOpenChange, onSelectWidget, slotIndex
             </div>
 
             {/* Widget Grid */}
-            <ScrollArea className="h-[350px] pr-4">
+            <ScrollArea className="flex-1 min-h-0 pr-4">
               {isLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -297,8 +297,8 @@ export function WidgetSlotPicker({ open, onOpenChange, onSelectWidget, slotIndex
           </div>
 
           {/* Sağ taraf - Önizleme */}
-          <div className="border-l pl-4">
-            <h4 className="text-sm font-medium mb-3">Önizleme</h4>
+          <div className="border-l pl-4 overflow-auto">
+            <h4 className="text-sm font-medium mb-3 sticky top-0 bg-background pb-2">Önizleme</h4>
             {hoveredWidget ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-2">

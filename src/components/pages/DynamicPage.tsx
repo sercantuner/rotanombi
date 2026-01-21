@@ -182,6 +182,7 @@ export function DynamicPage() {
                   onDelete={() => deleteContainer(container.id)}
                   widgetData={{}}
                   isLoading={dataSourcesLoading}
+                  pageId={page?.id}
                 />
               ))}
 
