@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-export type AppRole = 'admin' | 'user' | 'viewer';
+export type AppRole = 'super_admin' | 'admin' | 'user' | 'viewer';
 
 export interface UserRole {
   id: string;
@@ -39,7 +39,8 @@ export function usePermissions() {
   const [permissions, setPermissions] = useState<UserPermission[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const isAdmin = roles.some(r => r.role === 'admin');
+  const isSuperAdmin = roles.some(r => r.role === 'super_admin');
+  const isAdmin = isSuperAdmin || roles.some(r => r.role === 'admin');
   const isViewer = roles.some(r => r.role === 'viewer') && !isAdmin;
 
   const fetchRolesAndPermissions = useCallback(async () => {
@@ -289,6 +290,7 @@ export function usePermissions() {
     roles,
     permissions,
     loading,
+    isSuperAdmin,
     isAdmin,
     isViewer,
     hasPermission,

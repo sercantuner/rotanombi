@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/hooks/useTheme";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { UserSettingsProvider } from "@/contexts/UserSettingsContext";
 import { DiaDataCacheProvider } from "@/contexts/DiaDataCacheContext";
+import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
@@ -13,6 +14,7 @@ import { SettingsPage } from "@/pages/SettingsPage";
 import { TeamManagementPage } from "@/pages/TeamManagementPage";
 import AdminPage from "@/pages/AdminPage";
 import SuperAdminPage from "@/pages/SuperAdminPage";
+import SuperAdminPanel from "@/pages/SuperAdminPanel";
 import { DynamicPage } from "@/components/pages/DynamicPage";
 import NotFound from "./pages/NotFound";
 
@@ -23,7 +25,9 @@ function AppWithCache({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   return (
     <DiaDataCacheProvider userId={user?.id}>
-      {children}
+      <ImpersonationProvider>
+        {children}
+      </ImpersonationProvider>
     </DiaDataCacheProvider>
   );
 }
@@ -46,6 +50,7 @@ const App = () => (
                   <Route path="/ayarlar" element={<AppLayout><SettingsPage /></AppLayout>} />
                   <Route path="/admin" element={<AppLayout><AdminPage /></AppLayout>} />
                   <Route path="/super-admin" element={<AppLayout><SuperAdminPage /></AppLayout>} />
+                  <Route path="/super-admin-panel" element={<AppLayout><SuperAdminPanel /></AppLayout>} />
                   <Route path="/takim" element={<AppLayout><TeamManagementPage /></AppLayout>} />
                   
                   {/* Dynamic user pages */}
