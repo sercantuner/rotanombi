@@ -3,17 +3,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { usePermissions } from '@/hooks/usePermissions';
 import { WidgetPermission } from '@/lib/pageTypes';
 import { Widget } from '@/lib/widgetTypes';
 
 export function useWidgetPermissions() {
   const { user } = useAuth();
-  const { isAdmin } = usePermissions();
   const [permissions, setPermissions] = useState<WidgetPermission[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isTeamAdmin, setIsTeamAdmin] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  // İzinleri yükle
+  // Kullanıcı rollerini ve izinlerini yükle
   const loadPermissions = useCallback(async () => {
     if (!user) {
       setPermissions([]);
@@ -22,6 +22,35 @@ export function useWidgetPermissions() {
     }
 
     try {
+      // Kullanıcının admin rolü var mı kontrol et
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .maybeSingle();
+      
+      const userIsAdmin = !!roleData;
+      setIsAdmin(userIsAdmin);
+
+      // Kullanıcının team admin olup olmadığını kontrol et
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('is_team_admin')
+        .eq('user_id', user.id)
+        .single();
+      
+      const userIsTeamAdmin = profileData?.is_team_admin ?? true;
+      setIsTeamAdmin(userIsTeamAdmin);
+
+      // Eğer admin veya team admin ise tüm widget'ları görebilir
+      if (userIsAdmin || userIsTeamAdmin) {
+        setPermissions([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Takım üyesi ise widget permissions tablosundan izinleri al
       const { data, error } = await supabase
         .from('widget_permissions')
         .select('*')
@@ -42,30 +71,31 @@ export function useWidgetPermissions() {
 
   // Widget'a erişim kontrolü
   const canViewWidget = useCallback((widgetId: string): boolean => {
-    // Admin her şeyi görebilir
-    if (isAdmin) return true;
+    // Admin veya şirket yöneticisi her şeyi görebilir
+    if (isAdmin || isTeamAdmin) return true;
     
-    // İzin listesinde var mı?
+    // Takım üyesi için izin listesinde var mı?
     const permission = permissions.find(p => p.widget_id === widgetId);
     return permission?.can_view ?? false;
-  }, [isAdmin, permissions]);
+  }, [isAdmin, isTeamAdmin, permissions]);
 
   // Widget ekleme izni kontrolü
   const canAddWidget = useCallback((widgetId: string): boolean => {
-    // Admin her şeyi ekleyebilir
-    if (isAdmin) return true;
+    // Admin veya şirket yöneticisi her şeyi ekleyebilir
+    if (isAdmin || isTeamAdmin) return true;
     
-    // İzin listesinde var mı?
+    // Takım üyesi için izin listesinde var mı?
     const permission = permissions.find(p => p.widget_id === widgetId);
     return permission?.can_add ?? false;
-  }, [isAdmin, permissions]);
+  }, [isAdmin, isTeamAdmin, permissions]);
 
   // Erişilebilir widget'ları filtrele
   const filterAccessibleWidgets = useCallback((widgets: Widget[]): Widget[] => {
-    if (isAdmin) return widgets;
+    // Admin veya şirket yöneticisi tümünü görebilir
+    if (isAdmin || isTeamAdmin) return widgets;
     
     return widgets.filter(widget => canViewWidget(widget.id));
-  }, [isAdmin, canViewWidget]);
+  }, [isAdmin, isTeamAdmin, canViewWidget]);
 
   return {
     permissions,
@@ -75,5 +105,6 @@ export function useWidgetPermissions() {
     filterAccessibleWidgets,
     refreshPermissions: loadPermissions,
     isAdmin,
+    isTeamAdmin,
   };
 }
