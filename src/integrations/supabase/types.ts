@@ -269,6 +269,7 @@ export type Database = {
           firma_kodu: string | null
           id: string
           is_demo_account: boolean | null
+          is_team_admin: boolean | null
           updated_at: string
           use_mock_data: boolean | null
           user_id: string
@@ -288,6 +289,7 @@ export type Database = {
           firma_kodu?: string | null
           id?: string
           is_demo_account?: boolean | null
+          is_team_admin?: boolean | null
           updated_at?: string
           use_mock_data?: boolean | null
           user_id: string
@@ -307,6 +309,7 @@ export type Database = {
           firma_kodu?: string | null
           id?: string
           is_demo_account?: boolean | null
+          is_team_admin?: boolean | null
           updated_at?: string
           use_mock_data?: boolean | null
           user_id?: string
@@ -638,6 +641,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_team_members: { Args: { _admin_id: string }; Returns: string[] }
+      get_user_team_admin: { Args: { _user_id: string }; Returns: string }
       has_module_permission: {
         Args: { _module: string; _permission?: string; _user_id: string }
         Returns: boolean
@@ -650,6 +655,11 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_team_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_team_member: {
+        Args: { _admin_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "user" | "viewer"
