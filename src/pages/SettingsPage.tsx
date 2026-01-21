@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { diaTestConnection, getDiaConnectionInfo } from '@/lib/diaClient';
+import { useFirmaPeriods } from '@/hooks/useFirmaPeriods';
 import { toast } from 'sonner';
 import { 
   User, 
@@ -21,8 +22,17 @@ import {
   Eye,
   EyeOff,
   Plug,
-  FlaskConical
+  FlaskConical,
+  Calendar,
+  Download
 } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export function SettingsPage() {
   const { user } = useAuth();
@@ -34,6 +44,16 @@ export function SettingsPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [isTeamAdmin, setIsTeamAdmin] = useState(true); // Default true until loaded
+  
+  // Firma periods hook
+  const { 
+    periods, 
+    isLoading: isPeriodsLoading, 
+    isSyncing, 
+    syncPeriods, 
+    selectPeriod,
+    hasNoPeriods 
+  } = useFirmaPeriods();
   
   // Profile state
   const [profile, setProfile] = useState({
@@ -536,17 +556,83 @@ export function SettingsPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-muted-foreground mb-2">
-                        Dönem Kodu
+                        Aktif Dönem
                       </label>
-                      <input
-                        type="text"
-                        value={profile.donemKodu}
-                        onChange={(e) => setProfile({ ...profile, donemKodu: e.target.value })}
-                        className="input-field"
-                        placeholder="0"
-                      />
+                      {periods.length > 0 ? (
+                        <Select
+                          value={profile.donemKodu}
+                          onValueChange={async (value) => {
+                            setProfile({ ...profile, donemKodu: value });
+                            await selectPeriod(parseInt(value));
+                          }}
+                        >
+                          <SelectTrigger className="input-field">
+                            <SelectValue placeholder="Dönem seçin" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {periods.map((period) => (
+                              <SelectItem key={period.id} value={period.period_no.toString()}>
+                                <div className="flex items-center gap-2">
+                                  <span>{period.period_name || `Dönem ${period.period_no}`}</span>
+                                  {period.is_current && (
+                                    <span className="text-xs bg-success/20 text-success px-1.5 py-0.5 rounded">
+                                      Aktif
+                                    </span>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <input
+                          type="text"
+                          value={profile.donemKodu}
+                          onChange={(e) => setProfile({ ...profile, donemKodu: e.target.value })}
+                          className="input-field"
+                          placeholder="0"
+                        />
+                      )}
                     </div>
                   </div>
+
+                  {/* Period Sync Section */}
+                  {diaConnection.connected && (
+                    <div className="p-4 rounded-lg bg-secondary/50">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium flex items-center gap-2">
+                            <Calendar className="w-4 h-4 text-primary" />
+                            Dönem Bilgileri
+                          </p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {periods.length > 0 
+                              ? `${periods.length} dönem yüklü` 
+                              : 'Dönemler henüz senkronize edilmedi'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            const result = await syncPeriods();
+                            if (result.success) {
+                              toast.success(`${result.periods?.length || 0} dönem senkronize edildi`);
+                            } else {
+                              toast.error(result.error || 'Senkronizasyon başarısız');
+                            }
+                          }}
+                          disabled={isSyncing}
+                          className="btn-secondary flex items-center gap-2 text-sm"
+                        >
+                          {isSyncing ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Download className="w-4 h-4" />
+                          )}
+                          Dönemleri Güncelle
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex gap-3 pt-4">
                     <button
