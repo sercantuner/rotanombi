@@ -18,7 +18,8 @@ import {
   ChevronRight,
   ChevronDown,
   Plug,
-  Users
+  Users,
+  Crown
 } from 'lucide-react';
 import rotanombiLogo from '@/assets/rotanombi-logo.png';
 import * as LucideIcons from 'lucide-react';
@@ -39,20 +40,27 @@ interface SidebarProps {
   onToggle?: () => void;
 }
 
-// Sabit menü öğeleri (rapor sayfaları kaldırıldı)
+// Sabit menü öğeleri
 const staticNavItems: NavItem[] = [
   { path: '/ayarlar', label: 'Ayarlar', icon: Settings },
-  { path: '/takim', label: 'Takım Yönetimi', icon: Users, adminOnly: false }, // Sadece team admin'ler görebilir (UI'da kontrol)
+  { path: '/takim', label: 'Takım Yönetimi', icon: Users, adminOnly: false },
   { path: '/admin', label: 'Kullanıcı Yönetimi', icon: Shield, adminOnly: true },
-  { path: '/super-admin', label: 'Widget Yönetimi', icon: Boxes, adminOnly: true },
 ];
+
+// Super admin menü öğesi
+const superAdminItem: NavItem = { 
+  path: '/super-admin-panel', 
+  label: 'Sistem Yönetimi', 
+  icon: Crown, 
+  adminOnly: true 
+};
 
 export function Sidebar({ 
   collapsed = false, 
   onToggle
 }: SidebarProps) {
   const { user, logout } = useAuth();
-  const { isAdmin } = usePermissions();
+  const { isAdmin, isSuperAdmin } = usePermissions();
   const { pages, createPage } = useUserPages();
   const { isDiaConnected } = useDiaDataCache();
   const location = useLocation();

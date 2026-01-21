@@ -401,6 +401,8 @@ export type Database = {
           id: string
           is_demo_account: boolean | null
           is_team_admin: boolean | null
+          license_expires_at: string | null
+          license_type: string | null
           updated_at: string
           use_mock_data: boolean | null
           user_id: string
@@ -423,6 +425,8 @@ export type Database = {
           id?: string
           is_demo_account?: boolean | null
           is_team_admin?: boolean | null
+          license_expires_at?: string | null
+          license_type?: string | null
           updated_at?: string
           use_mock_data?: boolean | null
           user_id: string
@@ -445,6 +449,8 @@ export type Database = {
           id?: string
           is_demo_account?: boolean | null
           is_team_admin?: boolean | null
+          license_expires_at?: string | null
+          license_type?: string | null
           updated_at?: string
           use_mock_data?: boolean | null
           user_id?: string
@@ -790,6 +796,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       is_team_admin: { Args: { _user_id: string }; Returns: boolean }
       is_team_member: {
         Args: { _admin_id: string; _user_id: string }
@@ -797,7 +804,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "user" | "viewer"
+      app_role: "admin" | "user" | "viewer" | "super_admin"
       container_type:
         | "kpi_row_5"
         | "kpi_row_4"
@@ -938,7 +945,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "user", "viewer"],
+      app_role: ["admin", "user", "viewer", "super_admin"],
       container_type: [
         "kpi_row_5",
         "kpi_row_4",
