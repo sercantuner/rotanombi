@@ -19,6 +19,7 @@ interface SyncResult {
   periods?: PeriodInfo[];
   activePeriod?: number;
   error?: string;
+  rawResponse?: unknown;
 }
 
 serve(async (req) => {
@@ -52,8 +53,22 @@ serve(async (req) => {
 
     const userId = user.id;
 
+    function compactRawResponse(payload: any) {
+      if (!payload || typeof payload !== 'object') return payload;
+      const obj = payload as Record<string, any>;
+      return {
+        keys: Object.keys(obj),
+        code: obj.code,
+        msg: obj.msg,
+        // DIA bazı cevaplarda büyük result döndürüyor; tümünü geri dönmeyelim
+        resultKeys: obj.result && typeof obj.result === 'object' ? Object.keys(obj.result) : undefined,
+      };
+    }
+
     // Helper function to make DIA request with session recovery
-    async function makeDiaRequest(retryCount = 0): Promise<{ success: boolean; data?: any; error?: string }> {
+    async function makeDiaRequest(
+      retryCount = 0,
+    ): Promise<{ success: boolean; data?: any; error?: string; raw?: any }> {
       // Get DIA session (will auto-login if needed)
       const sessionResult = await getDiaSession(supabase, userId);
       if (!sessionResult.success || !sessionResult.session) {
@@ -97,12 +112,24 @@ serve(async (req) => {
         return { success: false, error: "DIA oturumu yenilenemedi" };
       }
 
-      const result = diaData?.sis_firma_getir?.result;
-      if (!result || result.code !== 200) {
-        return { success: false, error: "DIA'dan dönem bilgisi alınamadı", data: diaData };
+      // Normalize response shapes:
+      // 1) { sis_firma_getir: { result: { code: 200, msg: ... } } }
+      // 2) { code: "200", result: { ... } }  --> msg := result
+      const normalizedResult =
+        diaData?.sis_firma_getir?.result ??
+        (diaData?.code && diaData?.result
+          ? { code: Number(diaData.code), msg: diaData.result }
+          : null);
+
+      if (!normalizedResult || normalizedResult.code !== 200) {
+        return {
+          success: false,
+          error: "DIA'dan dönem bilgisi alınamadı",
+          raw: compactRawResponse(diaData),
+        };
       }
 
-      return { success: true, data: { result, session } };
+      return { success: true, data: { result: normalizedResult, session } };
     }
 
     // Make the request with retry support
@@ -112,9 +139,10 @@ serve(async (req) => {
         JSON.stringify({ 
           success: false, 
           error: requestResult.error,
-          rawResponse: requestResult.data 
+          rawResponse: requestResult.raw 
         }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        // UI tarafında "Edge function returned 400" hatası ve blank-screen olmaması için 200 dönüyoruz
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -153,6 +181,19 @@ serve(async (req) => {
           end_date: d.bitis_tarih || d.bitis || null,
         }));
       }
+    }
+
+    // Eğer dönem listesi yoksa, hata vermek yerine boş liste dönelim.
+    // (Bazı DIA kurulumlarında sis_firma_getir dönemleri dönmeyebilir.)
+    if (!Array.isArray(periods) || periods.length === 0) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Dönem listesi yanıt içinde bulunamadı (sis_firma_getir).",
+          rawResponse: compactRawResponse({ code: 200, result: msg }),
+        } satisfies SyncResult),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     console.log("Parsed periods:", periods);
@@ -207,7 +248,7 @@ serve(async (req) => {
       await supabase
         .from("profiles")
         .update({ donem_kodu: activePeriod.toString() })
-        .eq("user_id", user.id);
+        .eq("user_id", userId);
     }
 
     const response: SyncResult = {
