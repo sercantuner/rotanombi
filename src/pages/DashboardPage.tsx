@@ -32,6 +32,7 @@ function DashboardContent() {
     isLoading: dataSourcesLoading,
     isInitialLoad: dataSourcesInitialLoad,
     loadedSources,
+    currentSourceName,
     totalSources,
     loadProgress,
     refresh: refreshDataSources,
@@ -210,8 +211,9 @@ function DashboardContent() {
       {showLoadingScreen && (
         <DashboardLoadingScreen
           progress={loadProgress}
-          loadedSources={loadedSources.length}
+          loadedSources={loadedSources}
           totalSources={totalSources}
+          currentSourceName={currentSourceName}
         />
       )}
       <Header 
