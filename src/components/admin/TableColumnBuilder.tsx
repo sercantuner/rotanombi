@@ -1,6 +1,6 @@
 // TableColumnBuilder - Tablo/Liste/Pivot için kolon yapılandırma bileşeni
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, GripVertical, Table, Columns, Info } from 'lucide-react';
 import { TableConfig } from '@/lib/widgetBuilderTypes';
 import { cn } from '@/lib/utils';
+import { SearchableFieldSelect } from './SearchableFieldSelect';
 
 export interface TableColumn {
   field: string;
@@ -26,6 +27,7 @@ interface TableColumnBuilderProps {
   onChange: (columns: TableColumn[]) => void;
   availableFields: string[];
   visualizationType: 'table' | 'list' | 'pivot';
+  fieldTypes?: Record<string, string>;
 }
 
 const FORMAT_OPTIONS = [
@@ -45,7 +47,7 @@ const ALIGN_OPTIONS = [
 
 const generateId = () => `col_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-export function TableColumnBuilder({ columns, onChange, availableFields, visualizationType }: TableColumnBuilderProps) {
+export function TableColumnBuilder({ columns, onChange, availableFields, visualizationType, fieldTypes = {} }: TableColumnBuilderProps) {
   const addColumn = () => {
     const nextField = availableFields.find(f => !columns.some(c => c.field === f)) || availableFields[0] || '';
     onChange([...columns, {
@@ -147,22 +149,17 @@ export function TableColumnBuilder({ columns, onChange, availableFields, visuali
               </Button>
             </div>
 
-            {/* Alan seçimi */}
+            {/* Alan seçimi - Aranabilir */}
             <div className="flex-1 space-y-1">
               <Label className="text-xs text-muted-foreground">Alan</Label>
-              <Select
+              <SearchableFieldSelect
                 value={column.field}
-                onValueChange={(v) => updateColumn(index, { field: v, header: v })}
-              >
-                <SelectTrigger className="h-8">
-                  <SelectValue placeholder="Alan seçin" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableFields.map(field => (
-                    <SelectItem key={field} value={field}>{field}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onValueChange={(v) => updateColumn(index, { field: v === '__none__' ? '' : v, header: v === '__none__' ? '' : v })}
+                fields={availableFields}
+                fieldTypes={fieldTypes}
+                placeholder="Alan seçin"
+                triggerClassName="h-8"
+              />
             </div>
 
             {/* Başlık */}

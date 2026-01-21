@@ -17,6 +17,7 @@ import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Trash2, Filter, ChevronDown, ChevronRight, CalendarIcon, Hash, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { CompactSearchableFieldSelect, getFieldTypeIcon } from './SearchableFieldSelect';
 
 // DIA API'nin desteklediği operatörler
 // NOT: "contains" operatör göndermezse DIA "içeren" gibi çalışır
@@ -405,33 +406,15 @@ export function CompactFilterBuilder({ filters, onChange, availableFields, field
           ) : (
             filters.map((filter, index) => (
               <div key={index} className="flex items-start gap-1.5 text-xs">
-                {/* Alan */}
-                <Select value={filter.field} onValueChange={(v) => updateFilter(index, 'field', v)}>
-                  <SelectTrigger className="h-7 text-xs w-[130px] shrink-0">
-                    <SelectValue placeholder="Alan..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableFields.length > 0 ? (
-                      availableFields.map(field => (
-                        <SelectItem key={field} value={field} className="text-xs">
-                          <span className="flex items-center gap-1">
-                            <span className="text-[10px]">{getFieldTypeIndicator(sampleData, field)}</span>
-                            {field}
-                          </span>
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <div className="p-2">
-                        <Input
-                          placeholder="Alan adı..."
-                          className="h-6 text-xs"
-                          value={filter.field}
-                          onChange={(e) => updateFilter(index, 'field', e.target.value)}
-                        />
-                      </div>
-                    )}
-                  </SelectContent>
-                </Select>
+                {/* Alan - Aranabilir Select */}
+                <CompactSearchableFieldSelect
+                  value={filter.field}
+                  onValueChange={(v) => updateFilter(index, 'field', v === '__none__' ? '' : v)}
+                  fields={availableFields}
+                  fieldTypes={fieldTypes}
+                  placeholder="Alan..."
+                  className="w-[130px] shrink-0"
+                />
 
                 {/* Operatör */}
                 <Select value={filter.operator || 'contains'} onValueChange={(v) => updateFilter(index, 'operator', v as FilterOperator)}>

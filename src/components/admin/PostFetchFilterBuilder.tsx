@@ -17,6 +17,7 @@ import { Slider } from '@/components/ui/slider';
 import { Plus, Trash2, Filter, Info, ChevronDown, Search, X, CalendarIcon, Hash } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PostFetchFilter, FilterOperator, FILTER_OPERATORS } from '@/lib/widgetBuilderTypes';
+import { SearchableFieldSelect } from './SearchableFieldSelect';
 
 // Re-export for convenience
 export type { PostFetchFilter };
@@ -546,27 +547,19 @@ export function PostFetchFilterBuilder({ filters, onChange, availableFields, sam
               )}
               
               <div className="flex items-start gap-2 p-3 bg-muted/30 rounded-lg border">
-                {/* Alan seçimi */}
+                {/* Alan seçimi - Aranabilir */}
                 <div className="flex-1 space-y-1">
                   <Label className="text-xs text-muted-foreground">Alan</Label>
-                  <Select
+                  <SearchableFieldSelect
                     value={filter.field}
-                    onValueChange={(v) => updateFilter(filter.id, { field: v, value: '', value2: '' })}
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Alan seçin" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableFields.map(field => (
-                        <SelectItem key={field} value={field}>
-                          <span className="flex items-center gap-2">
-                            <span>{getFieldTypeLabel(field)}</span>
-                            <span>{field}</span>
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onValueChange={(v) => updateFilter(filter.id, { field: v === '__none__' ? '' : v, value: '', value2: '' })}
+                    fields={availableFields}
+                    fieldTypes={Object.fromEntries(
+                      availableFields.map(f => [f, detectFieldType(sampleData || [], f)])
+                    )}
+                    placeholder="Alan seçin"
+                    triggerClassName="h-9"
+                  />
                 </div>
 
                 {/* Operatör seçimi */}

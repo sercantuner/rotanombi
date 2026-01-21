@@ -1,7 +1,7 @@
 // MultiQueryBuilder - Çoklu sorgu ve birleştirme yapılandırma
 // Veri Kaynağı (Data Source) seçimi ile çalışır, API test mantığı kaldırıldı
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   DiaApiQuery, 
   QueryMerge, 
@@ -29,6 +29,7 @@ import {
 import * as LucideIcons from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { CompactSearchableFieldSelect } from './SearchableFieldSelect';
 
 interface MultiQueryBuilderProps {
   multiQuery: MultiQueryConfig | null;
@@ -362,18 +363,15 @@ function MergeEditor({
           </SelectContent>
         </Select>
         
-        {/* Sol Alan */}
+        {/* Sol Alan - Aranabilir */}
         {!isUnion && (
-          <Select value={merge.leftField} onValueChange={(v) => onChange({ ...merge, leftField: v })}>
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder="Alan" />
-            </SelectTrigger>
-            <SelectContent>
-              {leftFields.map(f => (
-                <SelectItem key={f} value={f}>{f}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <CompactSearchableFieldSelect
+            value={merge.leftField}
+            onValueChange={(v) => onChange({ ...merge, leftField: v === '__none__' ? '' : v })}
+            fields={leftFields}
+            placeholder="Alan"
+            className="h-8"
+          />
         )}
         
         {/* Birleştirme Tipi */}
@@ -393,18 +391,15 @@ function MergeEditor({
           </SelectContent>
         </Select>
         
-        {/* Sağ Alan */}
+        {/* Sağ Alan - Aranabilir */}
         {!isUnion && (
-          <Select value={merge.rightField} onValueChange={(v) => onChange({ ...merge, rightField: v })}>
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder="Alan" />
-            </SelectTrigger>
-            <SelectContent>
-              {rightFields.map(f => (
-                <SelectItem key={f} value={f}>{f}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <CompactSearchableFieldSelect
+            value={merge.rightField}
+            onValueChange={(v) => onChange({ ...merge, rightField: v === '__none__' ? '' : v })}
+            fields={rightFields}
+            placeholder="Alan"
+            className="h-8"
+          />
         )}
         
         {/* Sağ Sorgu */}
