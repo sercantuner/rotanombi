@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Mail, Lock, Loader2, UserPlus } from 'lucide-react';
+import { Mail, Lock, Loader2, UserPlus, Crown } from 'lucide-react';
 import rotanombiLogo from '@/assets/rotanombi-logo.png';
 import rotaLogoDark from '@/assets/rota-logo-dark.svg';
 import loginBg from '@/assets/login-bg.jpg';
@@ -193,7 +193,7 @@ export function LoginPage() {
           </form>
 
           {/* Toggle Mode */}
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center space-y-3">
             <button
               type="button"
               onClick={() => {
@@ -207,6 +207,18 @@ export function LoginPage() {
                 ? 'Zaten hesabınız var mı? Giriş yapın' 
                 : 'Hesabınız yok mu? Kayıt olun'}
             </button>
+            
+            {/* Super Admin Login Hint */}
+            <div className="pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => navigate('/super-admin-panel')}
+                className="text-xs text-slate-400 hover:text-primary transition-colors flex items-center justify-center gap-1 mx-auto"
+              >
+                <Crown className="w-3 h-3" />
+                Sistem Yöneticisi Girişi
+              </button>
+            </div>
           </div>
 
           {/* Footer */}
