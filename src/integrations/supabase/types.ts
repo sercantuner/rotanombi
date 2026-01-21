@@ -173,6 +173,45 @@ export type Database = {
         }
         Relationships: []
       }
+      firma_branches: {
+        Row: {
+          branch_code: string
+          branch_key: number
+          branch_name: string | null
+          created_at: string
+          fetched_at: string | null
+          firma_kodu: string
+          id: string
+          is_active: boolean | null
+          sunucu_adi: string
+          updated_at: string
+        }
+        Insert: {
+          branch_code: string
+          branch_key: number
+          branch_name?: string | null
+          created_at?: string
+          fetched_at?: string | null
+          firma_kodu: string
+          id?: string
+          is_active?: boolean | null
+          sunucu_adi: string
+          updated_at?: string
+        }
+        Update: {
+          branch_code?: string
+          branch_key?: number
+          branch_name?: string | null
+          created_at?: string
+          fetched_at?: string | null
+          firma_kodu?: string
+          id?: string
+          is_active?: boolean | null
+          sunucu_adi?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       firma_periods: {
         Row: {
           created_at: string
@@ -212,6 +251,54 @@ export type Database = {
           start_date?: string | null
           sunucu_adi?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      firma_warehouses: {
+        Row: {
+          branch_key: number
+          can_operate: boolean | null
+          can_view_movement: boolean | null
+          can_view_quantity: boolean | null
+          created_at: string
+          fetched_at: string | null
+          firma_kodu: string
+          id: string
+          sunucu_adi: string
+          updated_at: string
+          warehouse_code: string
+          warehouse_key: number
+          warehouse_name: string | null
+        }
+        Insert: {
+          branch_key: number
+          can_operate?: boolean | null
+          can_view_movement?: boolean | null
+          can_view_quantity?: boolean | null
+          created_at?: string
+          fetched_at?: string | null
+          firma_kodu: string
+          id?: string
+          sunucu_adi: string
+          updated_at?: string
+          warehouse_code: string
+          warehouse_key: number
+          warehouse_name?: string | null
+        }
+        Update: {
+          branch_key?: number
+          can_operate?: boolean | null
+          can_view_movement?: boolean | null
+          can_view_quantity?: boolean | null
+          created_at?: string
+          fetched_at?: string | null
+          firma_kodu?: string
+          id?: string
+          sunucu_adi?: string
+          updated_at?: string
+          warehouse_code?: string
+          warehouse_key?: number
+          warehouse_name?: string | null
         }
         Relationships: []
       }

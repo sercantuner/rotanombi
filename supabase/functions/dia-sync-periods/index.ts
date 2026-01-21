@@ -12,11 +12,30 @@ interface PeriodInfo {
   period_name: string;
   start_date: string | null;
   end_date: string | null;
+  is_default: boolean;
+}
+
+interface BranchInfo {
+  branch_key: number;
+  branch_code: string;
+  branch_name: string;
+}
+
+interface WarehouseInfo {
+  branch_key: number;
+  warehouse_key: number;
+  warehouse_code: string;
+  warehouse_name: string;
+  can_view_movement: boolean;
+  can_operate: boolean;
+  can_view_quantity: boolean;
 }
 
 interface SyncResult {
   success: boolean;
   periods?: PeriodInfo[];
+  branches?: BranchInfo[];
+  warehouses?: WarehouseInfo[];
   activePeriod?: number;
   error?: string;
   rawResponse?: unknown;
@@ -53,18 +72,6 @@ serve(async (req) => {
 
     const userId = user.id;
 
-    function compactRawResponse(payload: any) {
-      if (!payload || typeof payload !== 'object') return payload;
-      const obj = payload as Record<string, any>;
-      return {
-        keys: Object.keys(obj),
-        code: obj.code,
-        msg: obj.msg,
-        // DIA bazı cevaplarda büyük result döndürüyor; tümünü geri dönmeyelim
-        resultKeys: obj.result && typeof obj.result === 'object' ? Object.keys(obj.result) : undefined,
-      };
-    }
-
     // Helper function to make DIA request with session recovery
     async function makeDiaRequest(
       retryCount = 0,
@@ -78,15 +85,14 @@ serve(async (req) => {
       const { session } = sessionResult;
       const diaUrl = `https://${session.sunucuAdi}.ws.dia.com.tr/api/v3/sis/json`;
 
+      // Yeni metod: sis_yetkili_firma_donem_sube_depo
       const payload = {
-        sis_firma_getir: {
+        sis_yetkili_firma_donem_sube_depo: {
           session_id: session.sessionId,
-          firma_kodu: session.firmaKodu,
-          params: ""
         }
       };
 
-      console.log("Calling sis_firma_getir for periods:", { sunucu: session.sunucuAdi, firma: session.firmaKodu, retry: retryCount });
+      console.log("Calling sis_yetkili_firma_donem_sube_depo:", { sunucu: session.sunucuAdi, retry: retryCount });
 
       const diaResponse = await fetch(diaUrl, {
         method: "POST",
@@ -95,13 +101,12 @@ serve(async (req) => {
       });
 
       const diaData = await diaResponse.json();
-      console.log("DIA Response:", JSON.stringify(diaData).substring(0, 500));
+      console.log("DIA Response code:", diaData?.code, "result length:", Array.isArray(diaData?.result) ? diaData.result.length : 'N/A');
 
       // Check for INVALID_SESSION and retry
       if (diaData?.code === "401" || diaData?.msg === "INVALID_SESSION") {
         if (retryCount < 1) {
           console.log("Session invalid, clearing and retrying...");
-          // Clear session to force re-login
           await supabase
             .from("profiles")
             .update({ dia_session_id: null, dia_session_expires: null })
@@ -112,24 +117,16 @@ serve(async (req) => {
         return { success: false, error: "DIA oturumu yenilenemedi" };
       }
 
-      // Normalize response shapes:
-      // 1) { sis_firma_getir: { result: { code: 200, msg: ... } } }
-      // 2) { code: "200", result: { ... } }  --> msg := result
-      const normalizedResult =
-        diaData?.sis_firma_getir?.result ??
-        (diaData?.code && diaData?.result
-          ? { code: Number(diaData.code), msg: diaData.result }
-          : null);
-
-      if (!normalizedResult || normalizedResult.code !== 200) {
+      // Check for success
+      if (diaData?.code !== "200" || !Array.isArray(diaData?.result)) {
         return {
           success: false,
-          error: "DIA'dan dönem bilgisi alınamadı",
-          raw: compactRawResponse(diaData),
+          error: "DIA'dan dönem/şube/depo bilgisi alınamadı",
+          raw: { code: diaData?.code, msg: diaData?.msg },
         };
       }
 
-      return { success: true, data: { result: normalizedResult, session } };
+      return { success: true, data: { result: diaData.result, session } };
     }
 
     // Make the request with retry support
@@ -141,89 +138,89 @@ serve(async (req) => {
           error: requestResult.error,
           rawResponse: requestResult.raw 
         }),
-        // UI tarafında "Edge function returned 400" hatası ve blank-screen olmaması için 200 dönüyoruz
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const { result, session } = requestResult.data;
+    const { result: firmaList, session } = requestResult.data;
+    const sunucuAdi = session.sunucuAdi;
+    const userFirmaKodu = session.firmaKodu;
 
-    // Extract periods from msg - structure depends on DIA response
-    // Common structure: msg contains firma info with donemler array
-    const msg = result.msg;
-    let periods: PeriodInfo[] = [];
+    // Kullanıcının bağlı olduğu firmayı bul
+    const targetFirma = firmaList.find((f: any) => f.firmakodu === userFirmaKodu);
     
-    // Try to find periods in the response
-    // DIA typically returns periods as an array with donem_no, donem_adi, baslangic_tarih, bitis_tarih
-    if (msg && Array.isArray(msg.donemler)) {
-      periods = msg.donemler.map((d: any) => ({
-        period_no: parseInt(d.donem_no || d.donem_kodu || d.level2 || "0"),
-        period_name: d.donem_adi || d.aciklama || `Dönem ${d.donem_no}`,
-        start_date: d.baslangic_tarih || d.baslangic || null,
-        end_date: d.bitis_tarih || d.bitis || null,
-      }));
-    } else if (msg && Array.isArray(msg)) {
-      // Alternative: msg itself might be the array
-      periods = msg.map((d: any) => ({
-        period_no: parseInt(d.donem_no || d.donem_kodu || d.level2 || "0"),
-        period_name: d.donem_adi || d.aciklama || `Dönem ${d.donem_no}`,
-        start_date: d.baslangic_tarih || d.baslangic || null,
-        end_date: d.bitis_tarih || d.bitis || null,
-      }));
-    } else if (msg && typeof msg === 'object') {
-      // Check if periods are nested in firma object
-      const firmaData = msg.firma || msg;
-      if (firmaData.donemler && Array.isArray(firmaData.donemler)) {
-        periods = firmaData.donemler.map((d: any) => ({
-          period_no: parseInt(d.donem_no || d.donem_kodu || d.level2 || "0"),
-          period_name: d.donem_adi || d.aciklama || `Dönem ${d.donem_no}`,
-          start_date: d.baslangic_tarih || d.baslangic || null,
-          end_date: d.bitis_tarih || d.bitis || null,
-        }));
-      }
-    }
-
-    // Eğer dönem listesi yoksa, hata vermek yerine boş liste dönelim.
-    // (Bazı DIA kurulumlarında sis_firma_getir dönemleri dönmeyebilir.)
-    if (!Array.isArray(periods) || periods.length === 0) {
+    if (!targetFirma) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Dönem listesi yanıt içinde bulunamadı (sis_firma_getir).",
-          rawResponse: compactRawResponse({ code: 200, result: msg }),
-        } satisfies SyncResult),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          error: `Firma kodu ${userFirmaKodu} listede bulunamadı`,
+          rawResponse: { firmaKodlari: firmaList.map((f: any) => f.firmakodu) },
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log("Parsed periods:", periods);
+    const firmaKodu = targetFirma.firmakodu.toString();
 
-    // Determine active period based on today's date
-    const today = new Date();
-    let activePeriod: number | null = null;
+    // Parse periods
+    const periods: PeriodInfo[] = (targetFirma.donemler || []).map((d: any) => ({
+      period_no: d.donemkodu,
+      period_name: d.gorunendonemkodu || `Dönem ${d.donemkodu}`,
+      start_date: d.baslangictarihi || null,
+      end_date: d.bitistarihi || null,
+      is_default: d.ontanimli === 't',
+    }));
 
-    for (const period of periods) {
-      if (period.start_date && period.end_date) {
-        const startDate = new Date(period.start_date);
-        const endDate = new Date(period.end_date);
-        if (today >= startDate && today <= endDate) {
-          activePeriod = period.period_no;
-          break;
-        }
+    // Parse branches
+    const branches: BranchInfo[] = (targetFirma.subeler || []).map((s: any) => ({
+      branch_key: s._key,
+      branch_code: s.subekodu,
+      branch_name: s.subeadi,
+    }));
+
+    // Parse warehouses
+    const warehouses: WarehouseInfo[] = [];
+    for (const sube of targetFirma.subeler || []) {
+      for (const depo of sube.depolar || []) {
+        warehouses.push({
+          branch_key: sube._key,
+          warehouse_key: depo._key,
+          warehouse_code: depo.depokodu,
+          warehouse_name: depo.depoadi,
+          can_view_movement: depo.hareket_gorebilme ?? true,
+          can_operate: depo.islem_yapabilme ?? true,
+          can_view_quantity: depo.miktar_gorebilme ?? true,
+        });
       }
     }
 
-    // If no active period found by date, use the highest period number
-    if (activePeriod === null && periods.length > 0) {
-      activePeriod = Math.max(...periods.map(p => p.period_no));
+    console.log(`Parsed: ${periods.length} periods, ${branches.length} branches, ${warehouses.length} warehouses`);
+
+    // Determine active period - prefer ontanimli='t', else by date, else highest
+    let activePeriod: number | null = null;
+    const defaultPeriod = periods.find(p => p.is_default);
+    if (defaultPeriod) {
+      activePeriod = defaultPeriod.period_no;
+    } else {
+      const today = new Date();
+      for (const period of periods) {
+        if (period.start_date && period.end_date) {
+          const startDate = new Date(period.start_date);
+          const endDate = new Date(period.end_date);
+          if (today >= startDate && today <= endDate) {
+            activePeriod = period.period_no;
+            break;
+          }
+        }
+      }
+      if (activePeriod === null && periods.length > 0) {
+        activePeriod = Math.max(...periods.map(p => p.period_no));
+      }
     }
 
-    // Upsert periods to firma_periods table
-    const sunucuAdi = session.sunucuAdi;
-    const firmaKodu = session.firmaKodu.toString();
-
+    // Upsert periods
     for (const period of periods) {
-      const { error: upsertError } = await supabase
+      await supabase
         .from("firma_periods")
         .upsert({
           sunucu_adi: sunucuAdi,
@@ -237,10 +234,43 @@ serve(async (req) => {
         }, {
           onConflict: "sunucu_adi,firma_kodu,period_no"
         });
+    }
 
-      if (upsertError) {
-        console.error("Error upserting period:", upsertError);
-      }
+    // Upsert branches
+    for (const branch of branches) {
+      await supabase
+        .from("firma_branches")
+        .upsert({
+          sunucu_adi: sunucuAdi,
+          firma_kodu: firmaKodu,
+          branch_key: branch.branch_key,
+          branch_code: branch.branch_code,
+          branch_name: branch.branch_name,
+          is_active: true,
+          fetched_at: new Date().toISOString(),
+        }, {
+          onConflict: "sunucu_adi,firma_kodu,branch_key"
+        });
+    }
+
+    // Upsert warehouses
+    for (const wh of warehouses) {
+      await supabase
+        .from("firma_warehouses")
+        .upsert({
+          sunucu_adi: sunucuAdi,
+          firma_kodu: firmaKodu,
+          branch_key: wh.branch_key,
+          warehouse_key: wh.warehouse_key,
+          warehouse_code: wh.warehouse_code,
+          warehouse_name: wh.warehouse_name,
+          can_view_movement: wh.can_view_movement,
+          can_operate: wh.can_operate,
+          can_view_quantity: wh.can_view_quantity,
+          fetched_at: new Date().toISOString(),
+        }, {
+          onConflict: "sunucu_adi,firma_kodu,warehouse_key"
+        });
     }
 
     // Update user's profile with active period if determined
@@ -254,6 +284,8 @@ serve(async (req) => {
     const response: SyncResult = {
       success: true,
       periods,
+      branches,
+      warehouses,
       activePeriod: activePeriod || undefined,
     };
 
