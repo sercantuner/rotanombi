@@ -395,6 +395,7 @@ export type Database = {
           display_name: string | null
           donem_kodu: string | null
           email: string | null
+          firma_adi: string | null
           firma_kodu: string | null
           id: string
           is_demo_account: boolean | null
@@ -415,6 +416,7 @@ export type Database = {
           display_name?: string | null
           donem_kodu?: string | null
           email?: string | null
+          firma_adi?: string | null
           firma_kodu?: string | null
           id?: string
           is_demo_account?: boolean | null
@@ -435,6 +437,7 @@ export type Database = {
           display_name?: string | null
           donem_kodu?: string | null
           email?: string | null
+          firma_adi?: string | null
           firma_kodu?: string | null
           id?: string
           is_demo_account?: boolean | null

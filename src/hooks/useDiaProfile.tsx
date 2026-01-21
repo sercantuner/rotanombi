@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 interface DiaProfile {
   sunucuAdi: string | null;
   firmaKodu: string | null;
+  firmaAdi: string | null;
   donemKodu: string | null;
   isConfigured: boolean;
 }
@@ -15,6 +16,7 @@ export function useDiaProfile() {
   const [profile, setProfile] = useState<DiaProfile>({
     sunucuAdi: null,
     firmaKodu: null,
+    firmaAdi: null,
     donemKodu: null,
     isConfigured: false,
   });
@@ -23,7 +25,7 @@ export function useDiaProfile() {
   useEffect(() => {
     async function fetchProfile() {
       if (!user) {
-        setProfile({ sunucuAdi: null, firmaKodu: null, donemKodu: null, isConfigured: false });
+        setProfile({ sunucuAdi: null, firmaKodu: null, firmaAdi: null, donemKodu: null, isConfigured: false });
         setIsLoading(false);
         return;
       }
@@ -31,7 +33,7 @@ export function useDiaProfile() {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('dia_sunucu_adi, firma_kodu, donem_kodu')
+          .select('dia_sunucu_adi, firma_kodu, firma_adi, donem_kodu')
           .eq('user_id', user.id)
           .single();
 
@@ -40,6 +42,7 @@ export function useDiaProfile() {
         setProfile({
           sunucuAdi: data?.dia_sunucu_adi || null,
           firmaKodu: data?.firma_kodu || null,
+          firmaAdi: data?.firma_adi || null,
           donemKodu: data?.donem_kodu || null,
           isConfigured: !!data?.dia_sunucu_adi,
         });

@@ -161,6 +161,7 @@ serve(async (req) => {
     }
 
     const firmaKodu = targetFirma.firmakodu.toString();
+    const firmaAdi = targetFirma.firmaadi || null;
 
     // Parse periods
     const periods: PeriodInfo[] = (targetFirma.donemler || []).map((d: any) => ({
@@ -273,11 +274,18 @@ serve(async (req) => {
         });
     }
 
-    // Update user's profile with active period if determined
+    // Update user's profile with active period and firma name
+    const profileUpdate: Record<string, any> = {};
     if (activePeriod !== null) {
+      profileUpdate.donem_kodu = activePeriod.toString();
+    }
+    if (firmaAdi) {
+      profileUpdate.firma_adi = firmaAdi;
+    }
+    if (Object.keys(profileUpdate).length > 0) {
       await supabase
         .from("profiles")
-        .update({ donem_kodu: activePeriod.toString() })
+        .update(profileUpdate)
         .eq("user_id", userId);
     }
 
