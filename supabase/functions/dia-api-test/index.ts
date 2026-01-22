@@ -200,6 +200,14 @@ serve(async (req) => {
       targetUserId, // Impersonation için - super admin başka kullanıcının verisini çekebilir
       periodConfig, // Dönem loop yapılandırması
     } = body;
+
+    // returnAllData/returnAllSampleData istenip limit verilmezse,
+    // büyük liste servisleri DIA tarafında CancelledError ile iptal olabiliyor.
+    // Bu yüzden güvenli bir üst limit uygula.
+    const SAFE_DEFAULT_LIMIT = 1000;
+    const wantsAllData = returnAllData || returnAllSampleData;
+    const hasValidLimit = typeof limit === 'number' && limit > 0;
+    const effectiveLimit = hasValidLimit ? limit : (wantsAllData ? SAFE_DEFAULT_LIMIT : undefined);
     
     // Hedef kullanıcı ID'sini belirle - impersonation varsa targetUserId, yoksa authenticated user
     const effectiveUserId = targetUserId || user.id;
@@ -341,8 +349,8 @@ serve(async (req) => {
           session_id: sessionId,
           firma_kodu: firmaKodu,
           donem_kodu: donemKodu,
-          // Limit sadece belirtilmişse gönder, yoksa DIA API kendi varsayılanını kullanır
-          ...(limit !== undefined && limit > 0 && { limit }),
+          // Limit sadece belirtilmişse gönder, yoksa (returnAll* isteklerinde) güvenli limit uygula
+          ...(effectiveLimit !== undefined && { limit: effectiveLimit }),
           offset: 0,
         }
       };
