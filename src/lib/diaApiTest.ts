@@ -21,6 +21,8 @@ export interface DiaApiTestRequest {
   selectedColumns?: string[];
   sorts?: { field: string; sorttype: string }[];
   orderby?: string;
+  // Impersonation için - super admin başka kullanıcının verisini çekebilir
+  targetUserId?: string;
   // Raw mode için yeni alanlar
   rawMode?: boolean;
   rawPayload?: string;
