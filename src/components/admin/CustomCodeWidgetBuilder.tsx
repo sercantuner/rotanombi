@@ -1336,7 +1336,7 @@ Kullanıcı isteği: ${aiPrompt}`;
                       value={aiPrompt}
                       onChange={(e) => setAiPrompt(e.target.value)}
                       placeholder="Örnek: Vade yaşlandırma grafiği oluştur. X ekseninde vade dilimleri (90+ gün, 60-90, 30-60, 0-30, bugün, gelecek) Y ekseninde toplam bakiye göster. Vadesi geçmişleri kırmızı tonlarında, gelecekleri yeşil tonlarında renklendir."
-                      className="min-h-[120px] resize-none"
+                      className="min-h-[120px] resize-y"
                     />
                   </div>
 
@@ -1430,7 +1430,7 @@ Kullanıcı isteği: ${aiPrompt}`;
                   <Textarea
                     value={customCode}
                     onChange={(e) => setCustomCode(e.target.value)}
-                    className="flex-1 font-mono text-xs resize-none min-h-[200px]"
+                    className="flex-1 font-mono text-xs resize-y min-h-[300px]"
                     placeholder="Widget kodunuzu buraya yazın..."
                   />
                   
@@ -1471,7 +1471,7 @@ Kullanıcı isteği: ${aiPrompt}`;
                     
                     {/* Input alanı */}
                     <div className="flex gap-2">
-                      <Input 
+                      <Textarea 
                         value={chatInput} 
                         onChange={(e) => setChatInput(e.target.value)}
                         onKeyDown={(e) => {
@@ -1482,6 +1482,7 @@ Kullanıcı isteği: ${aiPrompt}`;
                         }}
                         placeholder="Renkleri değiştir, grafiği düzenle..."
                         disabled={isChatLoading}
+                        className="min-h-[60px] resize-y"
                       />
                       <Button 
                         size="sm" 
