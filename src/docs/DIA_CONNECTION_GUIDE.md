@@ -1,23 +1,27 @@
-# DIA ERP Bağlantı Sistemi - Teknik Dokümantasyon
+# DIA ERP Bağlantı ve Veri Yönetim Sistemi - Teknik Dokümantasyon (Master Reference v8)
 
-Bu dokümantasyon, DIA ERP sistemine bağlantı, oturum yönetimi, veri çekme ve önbellekleme stratejilerini açıklar.
+Bu dokümantasyon, DIA ERP sistemine bağlantı, oturum yönetimi, veri okuma (listeleme), veri manipülasyonu (CRUD), detaylı veritabanı model yapısı, sistem tanımları ve raporlama servislerini "Uçtan Uca" açıklar.
+
+**Ana Kaynaklar:**
+- [DIA Web Servis API Dokümantasyonu](https://wshelp.dia.com.tr/v3/tr/api/fonks/session.html)
+- [DIA Veritabanı Modelleri Ana Sayfası](https://wshelp.dia.com.tr/v3/tr/model/)
 
 ---
 
 ## 1. Mimari Genel Bakış
 
-### Bileşenler
+### 1.1 Bileşenler
 
 | Bileşen | Konum | Görev |
 |---------|-------|-------|
 | `dia-login` | Edge Function | İlk giriş ve bağlantı kurma |
-| `dia-api-test` | Edge Function | Veri sorgulama (ana endpoint) |
+| `dia-api-test` | Edge Function | Veri sorgulama ve veri manipülasyonu (CRUD) |
 | `dia-sync-periods` | Edge Function | Dönem senkronizasyonu |
 | `diaAutoLogin.ts` | Shared (_shared/) | Otomatik oturum yenileme |
 | `diaRequestQueue.ts` | Frontend (lib/) | İstek kuyruğu yönetimi |
-| `DiaDataCacheContext` | Frontend (contexts/) | Veri önbellekleme |
+| `DiaDataCacheContext` | Frontend (contexts/) | Veri önbellekleme (Sadece okuma için) |
 
-### Veri Akışı
+### 1.2 Veri Akışı
 
 ```
 [Widget] → [useDataSourceLoader] → [diaRequestQueue] → [dia-api-test Edge Function]
@@ -35,23 +39,27 @@ Bu dokümantasyon, DIA ERP sistemine bağlantı, oturum yönetimi, veri çekme v
 
 ## 2. Oturum Yönetimi
 
-### İlk Giriş (dia-login)
+**Kaynak:** [Session (Oturum) & API Key](https://wshelp.dia.com.tr/v3/tr/api/fonks/session.html)
+
+### 2.1 İlk Giriş (dia-login)
 
 **Endpoint:** `supabase/functions/dia-login/index.ts`
 
 **İstek formatı:**
-```typescript
+```json
 {
-  sunucuAdi: string,      // örn: "demo"
-  apiKey: string,         // DIA API anahtarı
-  wsKullanici: string,    // Web servis kullanıcısı
-  wsSifre: string,        // Web servis şifresi
-  firmaKodu?: number,     // Varsayılan: 1
-  donemKodu?: number      // Varsayılan: 0 (güncel)
+  "sunucuAdi": "demo",
+  "apiKey": "DIA_API_KEY",
+  "wsKullanici": "ws_user",
+  "wsSifre": "ws_pass",
+  "firmaKodu": 1,
+  "donemKodu": 0
 }
 ```
 
-**DIA API isteği:**
+**DIA API isteği mantığı:**
+`sis/json` servisine login metodu ile istek atılır. Başarılı yanıtta dönen `session_id` veritabanına kaydedilir.
+
 ```typescript
 const diaUrl = `https://${sunucuAdi}.ws.dia.com.tr/api/v3/sis/json`;
 
@@ -73,11 +81,15 @@ const loginPayload = {
 { "code": "200", "msg": "session_id_here", "warnings": [] }
 ```
 
-### Otomatik Oturum Yenileme (diaAutoLogin)
+### 2.2 Otomatik Oturum Yenileme (diaAutoLogin)
 
 **Konum:** `supabase/functions/_shared/diaAutoLogin.ts`
 
 **Mantık:**
+- Oturum süresinin bitmesine 2 dakika (buffer) kala sistem oturumu "geçersiz" sayar.
+- Geçerli bir oturum yoksa `performAutoLogin()` fonksiyonu veritabanındaki şifreli bilgilerle yeni bir oturum açar.
+- `INVALID_SESSION` hatası alınırsa veritabanındaki session temizlenir ve istek 1 kez tekrar denenir (Retry).
+
 ```typescript
 const bufferMs = 2 * 60 * 1000; // 2 dakika buffer
 const sessionValid = profile.dia_session_id && 
@@ -85,125 +97,104 @@ const sessionValid = profile.dia_session_id &&
   new Date(profile.dia_session_expires).getTime() > Date.now() + bufferMs;
 
 if (sessionValid) {
-  // Mevcut oturumu kullan
   return { success: true, session: existingSession };
 } else {
-  // Otomatik yeniden giriş yap
   return await performAutoLogin();
-}
-```
-
-### Oturum Kurtarma
-
-**INVALID_SESSION hatası alındığında:**
-1. Veritabanındaki oturum bilgilerini temizle
-2. Otomatik yeniden giriş yap
-3. İsteği tekrar dene (1 kez)
-
-```typescript
-if (diaData.hata?.kod === "INVALID_SESSION") {
-  await supabase.from("profiles").update({
-    dia_session_id: null,
-    dia_session_expires: null,
-  }).eq("user_id", userId);
-  
-  // Retry logic...
 }
 ```
 
 ---
 
-## 3. Veri Çekme (dia-api-test)
+## 3. Gelişmiş Veri Çekme (Listeleme API Detayları)
 
-### Endpoint Yapısı
+**Kaynak:** [Listeleme Servisleri](https://wshelp.dia.com.tr/v3/tr/api/fonks/listele.html)
 
-```
-https://{sunucu}.ws.dia.com.tr/api/v3/{modul}/json
-```
+DIA Listeleme servisleri (`_listele`), standart bir JSON yapısı kullanır. Bu yapı SQL sorgusuna benzer.
 
-**Modüller:**
-- `sis` - Sistem (login, dönem listesi)
-- `scf` - Stok/Cari/Fatura
-- `bcs` - Banka/Cari/Stok
-- `fat` - Fatura
+### 3.1 İstek Formatı (Full Payload)
 
-### İstek Formatı
-
-```typescript
-interface DiaApiRequest {
-  dataSource: string;      // örn: "scf.cari_listele"
-  module?: string;         // örn: "scf" (otomatik parse edilir)
-  method?: string;         // örn: "cari_listele"
-  filters?: DiaFilter[];
-  sortBy?: SortConfig[];
-  columns?: string[];
-  limit?: number;
-  offset?: number;
-  periodConfig?: PeriodConfig;
-  targetUserId?: string;   // Impersonation için
+```json
+{
+  "scf_cari_listele": {
+    "session_id": "SESSION_ID",
+    "firma_kodu": 1,
+    "donem_kodu": 1,
+    "filters": [
+      { "field": "bakiye", "operator": ">", "value": "1000" },
+      { "field": "cari_unvan", "operator": "*", "value": "LTD" }
+    ],
+    "sorts": [
+      { "field": "bakiye", "sorttype": "DESC" }
+    ],
+    "params": {
+      "cross_companys": [1, 2], 
+      "cross_periods": [1, 2]
+    },
+    "limit": 100,
+    "offset": 0
+  }
 }
 ```
 
-### Filtre Mapping
+### 3.2 Filtre Operatörleri (filters)
 
-**Frontend → DIA operatör dönüşümü:**
+**Kaynak:** [Filtreleme (filters)](https://wshelp.dia.com.tr/v3/tr/api/fonks/listele.html#filters)
 
-```typescript
-const operatorMap: Record<string, string> = {
-  "equals": "",
-  "not_equals": "!",
-  "contains": "*",
-  "not_contains": "!",
-  "starts_with": "",
-  "ends_with": "",
-  "greater_than": ">",
-  "less_than": "<",
-  "greater_equal": ">=",
-  "less_equal": "<=",
-  "is_null": "",
-  "is_not_null": "!",
-};
-```
+Frontend tarafındaki okunabilir operatörler DIA operatörlerine şu şekilde çevrilmelidir:
 
-**Filtre payload oluşturma:**
-```typescript
-// Frontend filter
-{ field: "bakiye", operator: "greater_than", value: 1000 }
+| Frontend Key | DIA Operatör | SQL Karşılığı | Açıklama |
+|--------------|--------------|---------------|----------|
+| `equals` | `""` (Boş String) | `=` | Tam eşitlik |
+| `not_equals` | `!` | `<>` | Eşit değil |
+| `contains` | `*` | `LIKE %...%` | İçerir |
+| `starts_with` | `...%` | `LIKE ...%` | İle başlar (Value sonuna % eklenir) |
+| `greater_than` | `>` | `>` | Büyüktür |
+| `less_than` | `<` | `<` | Küçüktür |
+| `greater_equal` | `>=` | `>=` | Büyük Eşittir |
+| `less_equal` | `<=` | `<=` | Küçük Eşittir |
+| `is_null` | `NULL` | `IS NULL` | Boş değerler |
+| `is_not_null` | `!NULL` | `IS NOT NULL` | Dolu değerler |
 
-// DIA payload
-{ "bakiye>": 1000 }
-```
+### 3.3 Sıralama (sorts)
 
-### Kritik Kurallar
+**Kaynak:** [Sıralama (sorts)](https://wshelp.dia.com.tr/v3/tr/api/fonks/listele.html#sorts)
 
-1. **firma_kodu her zaman integer olmalı:**
-```typescript
-firma_kodu: parseInt(session.firmaKodu) || 1
-```
+Verinin hangi alana göre sıralanacağını belirler.
+- `field`: Modeldeki alan adı (Örn: tarih, fisno).
+- `sorttype`: `ASC` (Artan) veya `DESC` (Azalan).
 
-2. **Metot adında modül prefix'i kullanılmamalı:**
-```typescript
-// YANLIŞ
-{ "scf_cari_listele": { ... } }
+### 3.4 Sayfalama (limit ve offset)
 
-// DOĞRU
-{ "cari_listele": { ... } }
-```
+**Kaynak:** [Limit ve Offset](https://wshelp.dia.com.tr/v3/tr/api/fonks/listele.html#limit-offset)
 
-3. **Modül URL'de belirtilmeli:**
-```typescript
-const url = `https://${sunucu}.ws.dia.com.tr/api/v3/scf/json`;
-```
+- `limit`: Bir seferde çekilecek kayıt sayısı.
+  - `0`: Limitsiz (Tüm veriyi çeker - **Dikkat:** Büyük tablolarda timeout'a neden olabilir).
+  - Varsayılan genelde 10 veya 100'dür.
+- `offset`: Kaçıncı kayıttan başlanacağı. (SQL OFFSET).
+  - Sayfa 1: `limit: 50, offset: 0`
+  - Sayfa 2: `limit: 50, offset: 50`
+
+### 3.5 Çapraz Sorgular (params)
+
+**Kaynak:** [Ek Parametreler (params)](https://wshelp.dia.com.tr/v3/tr/api/fonks/listele.html#params)
+
+DIA'nın en güçlü özelliklerinden biri, tek sorguda birden fazla firma veya dönemden veri çekebilmesidir.
+- `cross_companys: [1, 2, 5]` → 1, 2 ve 5 nolu firmaların verilerini birleştirip getirir.
+- `cross_periods: [1, 2]` → 1 ve 2 nolu dönemlerin verilerini birleştirir.
+
+**Dikkat:** Çapraz sorgularda dönen verinin hangi firmaya ait olduğunu anlamak için `_level1` (Firma Kodu) ve `_level2` (Dönem Kodu) alanlarına bakılır.
 
 ---
 
 ## 4. Dönem Loop Mekanizması
 
-### Kullanım Senaryosu
+### 4.1 Kullanım Senaryosu
 
-Geçmiş yıllara sarkan veriler için (örn: son 3 yılın nakit akışı)
+Geçmiş yıllara sarkan veriler için (örn: son 3 yılın ciro raporu) kullanılır.
 
-### PeriodConfig Yapısı
+### 4.2 Mantık
+
+`PeriodConfig` aktifse, sistem `dia-sync-periods` ile mevcut dönemleri çeker. İstenen yıl sayısı kadar geriye giderek her dönem için ayrı sorgu atar ve sonuçları birleştirir (merge).
 
 ```typescript
 interface PeriodConfig {
@@ -213,31 +204,19 @@ interface PeriodConfig {
 }
 ```
 
-### Uygulama
-
-```typescript
-if (periodConfig?.enabled && periodConfig.historicalCount > 0) {
-  // Mevcut dönemden geriye doğru dönemleri al
-  const periods = await fetchAvailablePeriods(supabase, userId);
-  
-  for (const period of periods.slice(0, periodConfig.historicalCount)) {
-    const result = await fetchDataForPeriod(period);
-    // Her kayda dönem bilgisi ekle
-    result.forEach(row => row._fetched_period = period.donem_adi);
-    allResults.push(...result);
-  }
-}
-```
-
 ---
 
-## 5. Önbellekleme Stratejisi
+## 5. Önbellekleme Stratejisi (Sadece Okuma)
 
 ### DiaDataCacheContext
 
 **Konum:** `src/contexts/DiaDataCacheContext.tsx`
 
-**Cache yapısı:**
+- **TTL (Yaşam Süresi):** 10 dakika.
+- **Cache Key:** Veri kaynağı, kullanıcı ID'si ve filtrelerin kombinasyonundan oluşur.
+- **Stale:** TTL'in %80'ine gelindiğinde veri "bayat" işaretlenir, arka planda yenilenir.
+- **Temizleme:** Kullanıcı değiştiğinde veya açıkça `invalidate` çağrıldığında temizlenir.
+
 ```typescript
 interface CacheEntry {
   data: any[];
@@ -245,58 +224,25 @@ interface CacheEntry {
   isStale: boolean;
 }
 
-interface DiaDataCache {
-  [cacheKey: string]: CacheEntry;
-}
-```
-
-### TTL ve Stale Mantığı
-
-```typescript
 const CACHE_TTL = 10 * 60 * 1000;        // 10 dakika
 const STALE_THRESHOLD = 0.8;              // TTL'nin %80'i
 
-const isExpired = Date.now() - entry.timestamp > CACHE_TTL;
-const isStale = Date.now() - entry.timestamp > CACHE_TTL * STALE_THRESHOLD;
-```
-
-### Cache Key Oluşturma
-
-```typescript
-const cacheKey = `${dataSource}_${userId}_${JSON.stringify(filters)}_${JSON.stringify(sortBy)}`;
-```
-
-### Kullanıcı Değişiminde Cache Temizleme
-
-```typescript
-useEffect(() => {
-  if (userId !== previousUserId) {
-    // Farklı firmanın verilerini göstermeyi engelle
-    clearCache();
-    clearSharedData();
-    clearFetchRegistry();
-  }
-}, [userId]);
+const cacheKey = `${dataSource}_${userId}_${JSON.stringify(filters)}`;
 ```
 
 ---
 
 ## 6. İstek Kuyruğu (Request Queue)
 
-### Konum
+**Konum:** `src/lib/diaRequestQueue.ts`
 
-`src/lib/diaRequestQueue.ts`
-
-### Özellikler
-
-```typescript
-const MAX_CONCURRENT = 2;      // Maksimum eşzamanlı istek
-const RATE_LIMIT_PAUSE = 30000; // 429 hatasında bekleme süresi
-```
-
-### Rate Limiting Yönetimi
+- **Concurrency:** Aynı anda en fazla 2 istek işlenir.
+- **Rate Limit (429):** DIA sunucusundan 429 hatası gelirse kuyruk 30 saniye duraklatılır.
 
 ```typescript
+const MAX_CONCURRENT = 2;
+const RATE_LIMIT_PAUSE = 30000;
+
 if (response.status === 429) {
   queue.pause();
   setTimeout(() => queue.resume(), RATE_LIMIT_PAUSE);
@@ -305,13 +251,277 @@ if (response.status === 429) {
 
 ---
 
-## 7. Impersonation (Kullanıcı Görüntüleme)
+## 7. Veri Manipülasyonu (CRUD - Ekleme, Güncelleme, Silme)
 
-### Kullanım
+**Kaynak:** [Ekleme, Güncelleme, Silme](https://wshelp.dia.com.tr/v3/tr/api/fonks/crud.html)
+
+### 7.1 Temel Kurallar
+
+- **Metot Ekleri:** `_ekle`, `_guncelle`, `_sil`.
+- **Zarf Yapısı:** Veriler `kart` objesi içinde gönderilir.
+- **Primary Key:** Güncellemede `_key` alanı zorunludur.
+- **Foreign Key:** İlişkiler `_key_` prefix'i ile kurulur.
+
+### 7.2 Deep Insert (İç İçe Ekleme)
+
+**Kaynak:** [Bağlantılı Alt Modeller](https://wshelp.dia.com.tr/v3/tr/api/fonks/crud.html#deep-insert)
+
+Fatura gibi Master-Detail yapıdaki kayıtları eklerken, kalemleri ayrı bir istek olarak atmanıza gerek yoktur. `m_kalemler` dizisi içinde detayları gönderdiğinizde DIA transaction bütünlüğünü sağlar.
+
+```json
+{
+  "scf_fatura_ekle": {
+    "kart": {
+      "tarih": "2024-05-28",
+      "fisno": "SF0001",
+      "_key_scf_carikart": { "carikodu": "120.01" },
+      "m_kalemler": [
+        { "_key_scf_stokkart": {"stokkodu": "URUN A"}, "miktar": 1, "fiyat": 100 },
+        { "_key_scf_stokkart": {"stokkodu": "URUN B"}, "miktar": 2, "fiyat": 50 }
+      ]
+    }
+  }
+}
+```
+
+---
+
+## 8. DIA Veri Tabanı Modelleri ve İlişkisel Yapı
+
+**Model Ana Sayfası:** [DİA Model Dokümantasyonu](https://wshelp.dia.com.tr/v3/tr/model/)
+
+DIA veritabanı, klasik SQL tabloları yerine JSON tabanlı nesne-ilişkisel (Object-Relational) bir yapı gibi davranır.
+
+### 8.1 Temel Anahtar İlişkisi (_key ve Foreign Keys)
+
+- **`_key` (Primary Key):** Integer64. Her kaydın benzersiz kimliğidir.
+- **`_key_[model_adi]` (Foreign Key):** Başka bir modele referans.
+  - **Okuma:** `{ "_key": "...", "unvan": "..." }` şeklinde obje döner.
+  - **Yazma:** `"_key_sis_sube": "HASH_ID"` (ID ile) veya `"_key_sis_sube": { "subekodu": "01" }` (Match ile) gönderilir.
+
+### 8.2 Standart Model Alanları
+
+| Alan Adı | Veri Tipi | Açıklama |
+|----------|-----------|----------|
+| `_level1` | Integer32 | Firma Kodu |
+| `_level2` | Integer32 | Dönem Kodu |
+| `_key` | Integer64 | Tekil Anahtar |
+| `_cdate` | DateTime | Oluşturma Tarihi |
+| `_date` | DateTime | Son İşlem Tarihi |
+| `_owner` | Integer64 | Oluşturan Kullanıcı |
+| `_user` | Integer64 | Son İşlem Yapan |
+
+### 8.3 Önemli Modeller ve Detayları
+
+#### 8.3.1 Cari Hesap Fişi (scf_carihesap_fisi)
+
+**Model Detayı:** [ScfCarihesapFisiModel](https://wshelp.dia.com.tr/v3/tr/model/scf/carihesap_fisi.html)
+
+- Nakit, Dekont, Virman işlemleri.
+- `fisno`, `tarih`, `turu`, `borc`, `alacak`, `_key_scf_carikart`.
+- `_key_scf_fatura`: Eğer fatura kaynaklıysa faturanın ID'si buradadır.
+
+#### 8.3.2 Fatura Modeli (scf_fatura)
+
+**Model Detayı:** [ScfFaturaModel](https://wshelp.dia.com.tr/v3/tr/model/scf/fatura.html)
+
+- Satış/Alım faturaları.
+- **Header:** `turu` (1:Alım, 2:Perakende, 3:Toptan), `toplam_tutar`, `kdv_tutari`.
+- **Lines (m_kalemler):** `scf_fatura_kalemi` listesi.
+
+#### 8.3.3 Stok Kartı Modeli (scf_stokkart)
+
+**Model Detayı:** [ScfStokkartModel](https://wshelp.dia.com.tr/v3/tr/model/scf/stokkart.html)
+
+- **Sanal Alanlar (Sadece Okuma):** `mevcut`, `bakiye`, `depo_mevcutlari`. Bunlar insert/update'te gönderilmez.
+- **Zorunlu:** `stokkod`, `aciklama`, `birim`.
+
+---
+
+## 9. Kritik Sistem (SIS) Modelleri
+
+Tüm modüllerin referans aldığı temel tanımlar `sis` modülündedir.
+
+### 9.1 Şube (sis_sube)
+
+**Model Detayı:** [SisSubeModel](https://wshelp.dia.com.tr/v3/tr/model/sis/sube.html)
+
+- Her işlem bir şubeye bağlıdır.
+- **Kullanım:** `_key_sis_sube`
+- **Alanlar:** `subekodu`, `subeadi`, `adres1`, `adres2`.
+
+### 9.2 Depo (sis_depo)
+
+**Model Detayı:** [SisDepoModel](https://wshelp.dia.com.tr/v3/tr/model/sis/depo.html)
+
+- Stok hareketlerinin gerçekleştiği yerler.
+- **Kullanım:** `_key_sis_depo`
+- **Alanlar:** `depokodu`, `depoadi`, `_key_sis_sube` (Hangi şubeye bağlı).
+
+### 9.3 Döviz (sis_doviz)
+
+**Model Detayı:** [SisDovizModel](https://wshelp.dia.com.tr/v3/tr/model/sis/doviz.html)
+
+- Para birimleri.
+- **Kullanım:** `_key_sis_doviz`
+- **Değerler:** Genellikle ID'leri sabittir ama `sis_doviz_listele` ile çekilmesi önerilir. "TL", "USD", "EUR".
+
+### 9.4 Özel Kodlar (sis_ozelkod)
+
+**Model Detayı:** [SisOzelkodModel](https://wshelp.dia.com.tr/v3/tr/model/sis/ozelkod.html)
+
+- Kartlarda kullanılan gruplama kodları (Örn: Cari Grubu, Stok Markası).
+- **Kullanım:** `_key_sis_ozelkod1`, `_key_sis_ozelkod2`...
+- **Alanlar:** `kod`, `aciklama`, `tur` (Hangi modüle ait olduğu).
+
+---
+
+## 10. Dosya ve Resim İşlemleri
+
+DIA'da resimler ve dosyalar genellikle Base64 formatında veya binary stream olarak yönetilir.
+
+### 10.1 Stok Resmi Ekleme
+
+**İlgili Örnek:** [Stok Karta Resim Eklenmesi](https://wshelp.dia.com.tr/v3/tr/api/fonks/crud.html#file-upload)
+
+`scf_stokkart_resim` modeli kullanılır veya `scf_stokkart_resim_ekle` servisi çağrılır.
+
+```json
+{
+  "scf_stokkart_resim_ekle": {
+    "kart": {
+      "_key_scf_stokkart": { "stokkodu": "URUN01" },
+      "resim_data": "BASE64_STRING_HERE...",
+      "resim_adi": "urun.jpg",
+      "varsayilan": "t"
+    }
+  }
+}
+```
+
+---
+
+## 11. Hata Yönetimi ve Troubleshooting
+
+**Kaynak:** [Hata Takibi](https://wshelp.dia.com.tr/v3/tr/api/fonks/errors.html)
+
+| Hata Kodu | Açıklama | Olası Sebep | Çözüm |
+|-----------|----------|-------------|-------|
+| `INVALID_SESSION` | Oturum geçersiz | Oturum süresi dolmuş. | Sistem otomatik retry yapar. |
+| `404 Not Found` | Metot bulunamadı | Yanlış metot adı. | dataSource adını kontrol et (modul.metot). |
+| `429 Too Many Requests` | Rate limit | Çok fazla istek. | Request Queue 30sn bekler. |
+| `500` | Veri hatası | Eksik veri/Yanlış tip. | Zorunlu alanları ve veri tiplerini kontrol et. |
+
+### Debug Loglama
+
+```typescript
+console.error(`[DIA API] ${method} failed:`, {
+  error: errorMessage,
+  userId,
+  dataSource,
+  timestamp: new Date().toISOString()
+});
+```
+
+---
+
+## 12. Veritabanı Şeması (profiles Tablosu)
+
+Supabase `profiles` tablosu:
+
+```sql
+dia_sunucu_adi    TEXT,
+dia_api_key       TEXT,
+dia_ws_kullanici  TEXT,
+dia_ws_sifre      TEXT,
+dia_session_id    TEXT,
+dia_session_expires TIMESTAMPTZ,
+firma_kodu        TEXT,
+donem_kodu        TEXT
+```
+
+---
+
+## 13. Sabit Tanımlar ve Enum Değerleri (Lookups)
+
+Aşağıdaki kodlar integer olarak saklanır ancak arayüzde metin karşılıkları vardır.
+
+### 13.1 Fatura Türleri (scf_fatura.turu)
+
+| Kod | Açıklama |
+|-----|----------|
+| 1 | Alım Faturası |
+| 2 | Perakende Satış Faturası |
+| 3 | Toptan Satış Faturası |
+| 4 | Alım İade Faturası |
+| 5 | Perakende Satış İade Faturası |
+| 6 | Toptan Satış İade Faturası |
+| 11 | Müstahsil Makbuzu |
+
+### 13.2 Cari Hesap Fiş Türleri (scf_carihesap_fisi.turu)
+
+- `NT` (Nakit Tahsilat)
+- `NÖ` (Nakit Ödeme)
+- `BD` (Borç Dekontu)
+- `AD` (Alacak Dekontu)
+
+### 13.3 E-Fatura Tipleri (efa_fatura_tipi)
+
+**Kaynak:** [E-Fatura Modülü](https://wshelp.dia.com.tr/v3/tr/model/efa/)
+
+String gönderilmelidir: `SATIS`, `IADE`, `TEVKIFAT`, `ISTISNA`, `OZELMATRAH`.
+
+### 13.4 Çek/Senet Pozisyonları (bcs_cek.pozisyon)
+
+**Kaynak:** [Banka-Çek-Senet Modülü](https://wshelp.dia.com.tr/v3/tr/model/bcs/)
+
+| Kod | Açıklama |
+|-----|----------|
+| 1 | Portföyde |
+| 2 | Ciro Edildi |
+| 3 | Tahsil Edildi |
+| 4 | Teminata Verildi |
+| 7 | Ödendi |
+| 8 | Karşılıksız |
+
+---
+
+## 14. Raporlama Servisi (rpr Modülü)
+
+**Kaynak:** [Web service ile raporlar nasıl alınır?](https://wshelp.dia.com.tr/v3/tr/api/fonks/report.html)
+
+### 14.1 Rapor Çalıştırma
+
+Listeleme servisleri ham veri dönerken, `rpr` servisleri işlenmiş (PDF/Excel) çıktı üretir.
+
+```json
+{
+  "rpr_rapor_calistir": {
+    "rapor_kodu": "RPR_001", 
+    "tur": "pdf",
+    "params": { "bastar": "2024-01-01", "bittar": "2024-12-31" }
+  }
+}
+```
+
+### 14.2 Rapor Sonucu
+
+Base64 formatında dosya verisi döner. Frontend'de `atob()` ile çözülüp Blob'a çevrilmelidir.
+
+```typescript
+const byteCharacters = atob(base64Data);
+// ... Blob dönüşümü ve download işlemi
+```
+
+---
+
+## 15. Impersonation (Kullanıcı Görüntüleme)
+
+### 15.1 Kullanım
 
 Super Admin, başka bir kullanıcının verilerini görüntüleyebilir.
 
-### Güvenlik Kontrolü
+### 15.2 Güvenlik Kontrolü
 
 ```typescript
 // Edge function içinde
@@ -331,10 +541,9 @@ if (targetUserId && targetUserId !== user.id) {
 const effectiveUserId = targetUserId || user.id;
 ```
 
-### Context Yapısı
+### 15.3 Context Yapısı
 
 ```typescript
-// ImpersonationContext
 interface ImpersonatedProfile {
   user_id: string;
   dia_sunucu_adi: string | null;
@@ -350,51 +559,56 @@ interface ImpersonatedProfile {
 
 ---
 
-## 8. Hata Yönetimi
+## 16. Uygulama İçi Kullanım Örnekleri
 
-### Hata Tipleri
-
-| Kod | Açıklama | Aksiyon |
-|-----|----------|---------|
-| `INVALID_SESSION` | Oturum süresi dolmuş | Otomatik yeniden giriş |
-| `INVALID_PARAMETER` | Parametre hatası | Kullanıcıya bildir |
-| `404` | Metot bulunamadı | Metot adını kontrol et |
-| `429` | Rate limit | Kuyruk duraklat |
-| `502` | DIA sunucu hatası | Retry veya kullanıcıya bildir |
-
-### Hata Loglama
+### 16.1 Cari Listesi Çekme
 
 ```typescript
-console.error(`[DIA API] ${method} failed:`, {
-  error: errorMessage,
-  userId,
-  dataSource,
-  timestamp: new Date().toISOString()
+const response = await supabase.functions.invoke('dia-api-test', {
+  body: {
+    dataSource: 'scf.carikart_listele',
+    filters: [
+      { field: 'bakiye', operator: 'greater_than', value: 0 }
+    ],
+    sortBy: [{ field: 'bakiye', direction: 'DESC' }],
+    limit: 100
+  }
+});
+```
+
+### 16.2 Dönem Bazlı Satış Raporu
+
+```typescript
+const response = await supabase.functions.invoke('dia-api-test', {
+  body: {
+    dataSource: 'scf.fatura_listele',
+    filters: [
+      { field: 'turu', operator: 'equals', value: 3 }
+    ],
+    periodConfig: {
+      enabled: true,
+      historicalCount: 3,
+      mergeResults: true
+    }
+  }
+});
+```
+
+### 16.3 Impersonation ile Veri Çekme
+
+```typescript
+const response = await supabase.functions.invoke('dia-api-test', {
+  body: {
+    dataSource: 'scf.carikart_listele',
+    targetUserId: 'other-user-uuid',
+    limit: 50
+  }
 });
 ```
 
 ---
 
-## 9. Veritabanı Şeması
-
-### profiles Tablosu (DIA alanları)
-
-```sql
-dia_sunucu_adi    TEXT,     -- örn: "demo"
-dia_api_key       TEXT,     -- API anahtarı
-dia_ws_kullanici  TEXT,     -- Web servis kullanıcısı
-dia_ws_sifre      TEXT,     -- Web servis şifresi (şifreli saklanmalı)
-dia_session_id    TEXT,     -- Aktif oturum ID
-dia_session_expires TIMESTAMPTZ, -- Oturum bitiş zamanı
-firma_kodu        TEXT,     -- Seçili firma
-firma_adi         TEXT,     -- Firma adı
-donem_kodu        TEXT,     -- Seçili dönem
-donem_yili        TEXT      -- Dönem yılı
-```
-
----
-
-## 10. Kontör Optimizasyonu
+## 17. Kontör Optimizasyonu
 
 DIA web servisi kontör harcayan bir sistemdir. Optimizasyon için:
 
@@ -403,114 +617,66 @@ DIA web servisi kontör harcayan bir sistemdir. Optimizasyon için:
 3. **Lazy loading** - Görünür widget'lar öncelikli
 4. **Stale-while-revalidate** - Eski veriyi göster, arka planda güncelle
 5. **Dönem bazlı sorgulama** - Sadece gerekli dönemleri çek
+6. **Merkezi Veri Kaynakları** - Aynı sorguyu kullanan widget'lar tek bir cache'den beslenir
 
 ---
 
-## 11. Edge Function Dosya Yapısı
+## 18. Dosya Yapısı Özeti
+
+### Edge Functions
 
 ```
 supabase/functions/
 ├── _shared/
-│   └── diaAutoLogin.ts      # Paylaşılan oturum yönetimi
+│   └── diaAutoLogin.ts          # Otomatik oturum yenileme
 ├── dia-login/
-│   └── index.ts             # İlk giriş endpoint'i
+│   └── index.ts                 # İlk giriş
 ├── dia-api-test/
-│   └── index.ts             # Ana veri çekme endpoint'i
+│   └── index.ts                 # Ana veri servisi (CRUD)
 ├── dia-sync-periods/
-│   └── index.ts             # Dönem senkronizasyonu
+│   └── index.ts                 # Dönem senkronizasyonu
 ├── dia-genel-rapor/
-│   └── index.ts             # Genel raporlar
-├── dia-satis-rapor/
-│   └── index.ts             # Satış raporları
-└── dia-finans-rapor/
-    └── index.ts             # Finans raporları
+│   └── index.ts                 # Genel cari raporu
+├── dia-finans-rapor/
+│   └── index.ts                 # Finans raporu
+└── dia-satis-rapor/
+    └── index.ts                 # Satış raporu
 ```
 
----
-
-## 12. Frontend Dosya Yapısı
+### Frontend
 
 ```
 src/
 ├── contexts/
-│   ├── DiaDataCacheContext.tsx    # Veri önbellekleme
-│   └── ImpersonationContext.tsx   # Kullanıcı görüntüleme
+│   ├── DiaDataCacheContext.tsx  # Veri önbellekleme
+│   └── ImpersonationContext.tsx # Kullanıcı görüntüleme
 ├── hooks/
-│   ├── useDataSourceLoader.tsx    # Veri kaynağı yükleme
-│   ├── useDynamicWidgetData.tsx   # Widget veri hook'u
-│   └── useDiaProfile.tsx          # Profil yönetimi
-└── lib/
-    ├── diaRequestQueue.ts         # İstek kuyruğu
-    ├── diaClient.ts               # DIA istemci yardımcıları
-    └── filterUtils.ts             # Filtre dönüşümleri
+│   ├── useDiaProfile.tsx        # DIA profil bilgileri
+│   ├── useDynamicWidgetData.tsx # Widget veri çekimi
+│   ├── useDataSourceLoader.tsx  # Merkezi veri yükleme
+│   └── useFirmaPeriods.tsx      # Dönem yönetimi
+├── lib/
+│   ├── diaClient.ts             # DIA istemci fonksiyonları
+│   ├── diaRequestQueue.ts       # İstek kuyruğu
+│   └── filterUtils.ts           # Filtre dönüşümleri
+└── docs/
+    └── DIA_CONNECTION_GUIDE.md  # Bu dokümantasyon
 ```
 
 ---
 
-## 13. Örnek Kullanım Senaryoları
+## Kritik Uyarılar
 
-### Senaryo 1: Cari Listesi Çekme
+⚠️ **Ekleme işlemlerinde `_key` göndermemeye dikkat edin.**
 
-```typescript
-// Widget Builder config
-{
-  dataSource: "scf.cari_listele",
-  filters: [
-    { field: "bakiye", operator: "not_equals", value: 0 }
-  ],
-  columns: ["cari_kod", "cari_unvan", "bakiye"],
-  limit: 100
-}
-```
+⚠️ **Güncelleme işlemlerinde ise `_key` göndermeyi unutmayın.**
 
-### Senaryo 2: Dönemsel Satış Raporu
+⚠️ **`firma_kodu` her zaman integer olarak gönderilmelidir.**
 
-```typescript
-// Son 3 yılın satış verileri
-{
-  dataSource: "scf.fatura_listele",
-  filters: [
-    { field: "fatura_tipi", operator: "equals", value: "S" }
-  ],
-  periodConfig: {
-    enabled: true,
-    historicalCount: 3,
-    mergeResults: true
-  }
-}
-```
+⚠️ **Metot adlarında modül prefix'i (`scf_`) kullanılmamalıdır.**
 
-### Senaryo 3: Impersonation ile Veri Çekme
-
-```typescript
-// Super Admin olarak başka kullanıcının verilerini gör
-const { data } = await supabase.functions.invoke('dia-api-test', {
-  body: {
-    dataSource: "scf.cari_listele",
-    targetUserId: "target-user-uuid"
-  }
-});
-```
+⚠️ **Otomatik/sürekli DIA API sorguları yapılmamalıdır - yalnızca kullanıcı eylemi veya yapılandırılmış tetikleyici ile çağrılmalıdır.**
 
 ---
 
-## 14. Troubleshooting
-
-### Sık Karşılaşılan Hatalar
-
-| Hata | Olası Sebep | Çözüm |
-|------|-------------|-------|
-| 404 Not Found | Yanlış metot adı | Modül prefix'i kaldır |
-| INVALID_SESSION | Oturum süresi dolmuş | Otomatik retry devrede |
-| firma_kodu hatası | String gönderilmiş | parseInt() kullan |
-| Boş veri | Yanlış dönem | periodConfig kontrol et |
-| Rate limit | Çok fazla istek | Queue otomatik bekler |
-
-### Debug Logları
-
-```typescript
-// Console'da DIA isteklerini izle
-console.log('[DIA Request]', { dataSource, filters, timestamp });
-console.log('[DIA Response]', { recordCount, duration });
-console.log('[DIA Cache]', { hit: true, key: cacheKey });
-```
+*Son Güncelleme: 2026-01-22 | DIA Web Servisleri v3*
