@@ -5,6 +5,7 @@ import { WidgetBuilderConfig, AggregationType, DatePeriod } from '@/lib/widgetBu
 import { useDynamicWidgetData } from '@/hooks/useDynamicWidgetData';
 import { DrillDownModal } from './DrillDownModal';
 import { WidgetDateFilter, getDateRangeForPeriod } from './WidgetDateFilter';
+import { WidgetFeedbackButton } from './WidgetFeedbackButton';
 import { StatCard } from './StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -334,14 +335,17 @@ export function BuilderWidgetRenderer({
           <span className="truncate">{widgetName}</span>
           <MousePointerClick className="h-3 w-3 text-muted-foreground flex-shrink-0" />
         </CardTitle>
-        {showDateFilter && (
-          <WidgetDateFilter
-            config={dateFilterConfig!}
-            currentPeriod={selectedDatePeriod}
-            onPeriodChange={handleDatePeriodChange}
-            compact
-          />
-        )}
+        <div className="flex items-center gap-1">
+          <WidgetFeedbackButton widgetId={widgetId} widgetName={widgetName} />
+          {showDateFilter && (
+            <WidgetDateFilter
+              config={dateFilterConfig!}
+              currentPeriod={selectedDatePeriod}
+              onPeriodChange={handleDatePeriodChange}
+              compact
+            />
+          )}
+        </div>
       </div>
     </CardHeader>
   );
