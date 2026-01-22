@@ -155,7 +155,7 @@ export function FilterableStatCard({
 
         <div className="flex items-stretch justify-between flex-1 min-w-0">
           <div className="flex-1 min-w-0 pr-2 flex flex-col justify-center">
-            <p className="metric-label mb-1 line-clamp-2">{title}</p>
+            <p className="metric-label mb-1 line-clamp-2 min-h-[2.5rem]">{title}</p>
             <p className={cn(
               'metric-value truncate',
               variantStyles[variant],

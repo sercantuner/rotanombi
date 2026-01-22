@@ -45,7 +45,7 @@ export function StatCard({
     <div className="stat-card animate-slide-up">
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <p className="metric-label mb-1">{title}</p>
+          <p className="metric-label mb-1 line-clamp-2 min-h-[2.5rem]">{title}</p>
           <p className={`metric-value ${variantStyles[variant]}`}>{value}</p>
           {subtitle && (
             <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
