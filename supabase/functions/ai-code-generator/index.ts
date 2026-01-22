@@ -19,7 +19,49 @@ const getGenerationSystemPrompt = () => `Sen bir React widget geliştirme uzman�
 5. En sonda "return Widget;" ile bileşeni döndür
 6. Veri yoksa "Veri bulunamadı" göster
 7. Para birimi için ₺ kullan ve formatla (K, M)
-8. Renklerde 'hsl(var(--primary))', 'hsl(var(--destructive))' gibi CSS değişkenleri kullan
+
+=== ZORUNLU STİL KURALLARI ===
+
+RENK SİSTEMİ - KESİNLİKLE UYULMALI:
+- Sabit renk KULLANMA (text-red-500, bg-blue-600 gibi)
+- Sadece CSS değişkenlerini kullan:
+  * Ana renkler: 'text-primary', 'bg-primary', 'text-primary-foreground'
+  * İkincil: 'text-secondary', 'bg-secondary', 'text-secondary-foreground'
+  * Arka plan: 'bg-background', 'bg-card', 'bg-muted'
+  * Metin: 'text-foreground', 'text-muted-foreground'
+  * Vurgu: 'text-accent', 'bg-accent', 'text-accent-foreground'
+  * Hata/Olumsuz: 'text-destructive', 'bg-destructive'
+  * Başarı/Olumlu: 'text-success', 'bg-success' (veya 'text-green-500' gibi sabit renk yerine hsl(var(--success)))
+  * Uyarı: 'text-warning', 'bg-warning'
+  * Kenarlık: 'border-border', 'border-input'
+
+KOYU MOD UYUMU - KESİNLİKLE UYULMALI:
+- Tüm renkler hem açık hem koyu modda okunabilir olmalı
+- 'text-white' veya 'text-black' KULLANMA, 'text-foreground' kullan
+- 'bg-white' veya 'bg-black' KULLANMA, 'bg-background' veya 'bg-card' kullan
+- Grafik renkleri için: 'hsl(var(--primary))', 'hsl(var(--destructive))', 'hsl(var(--accent))'
+- Gölgeler için: 'shadow-sm', 'shadow-md' (otomatik tema uyumlu)
+
+DEĞER BAZLI RENKLENDIRME:
+- Pozitif değerler: 'text-success' veya style={{ color: 'hsl(var(--success))' }}
+- Negatif değerler: 'text-destructive' veya style={{ color: 'hsl(var(--destructive))' }}
+- Nötr değerler: 'text-muted-foreground'
+
+TAILWIND STİL STANDARTLARI:
+- Kart yapısı: 'bg-card rounded-xl border border-border shadow-sm p-4'
+- Başlıklar: 'text-foreground font-semibold'
+- Alt metinler: 'text-muted-foreground text-sm'
+- Hover efektleri: 'hover:bg-muted', 'hover:border-primary'
+- Boşluklar: 'space-y-4', 'gap-4', 'p-4', 'px-3 py-2'
+- Yuvarlak köşeler: 'rounded-md', 'rounded-lg', 'rounded-xl'
+- Animasyonlar: 'transition-all duration-200'
+
+GRAFİK RENKLERİ (Recharts için):
+- Ana: 'hsl(var(--primary))'
+- İkincil: 'hsl(var(--accent))'
+- Üçüncül: 'hsl(var(--muted-foreground))'
+- Negatif/Hata: 'hsl(var(--destructive))'
+- Pozitif/Başarı: 'hsl(var(--success))'
 
 JSX KULLANMA! Şu şekilde yaz:
 YANLIŞ (JSX): <div className="p-4">Merhaba</div>
@@ -30,8 +72,8 @@ DOĞRU: React.createElement('span', { className: 'text-primary' }, value)
 
 İç içe elementler:
 React.createElement('div', { className: 'space-y-4' },
-  React.createElement('h2', { className: 'font-bold' }, 'Başlık'),
-  React.createElement('p', null, 'Paragraf')
+  React.createElement('h2', { className: 'font-bold text-foreground' }, 'Başlık'),
+  React.createElement('p', { className: 'text-muted-foreground' }, 'Paragraf')
 )
 
 Map kullanımı:
@@ -41,12 +83,12 @@ React.createElement('div', null,
   })
 )
 
-Koşullu render:
+Koşullu render (tema uyumlu):
 value > 0 
-  ? React.createElement('span', { className: 'text-green-500' }, '+' + value)
-  : React.createElement('span', { className: 'text-red-500' }, value)
+  ? React.createElement('span', { className: 'text-success' }, '+' + value)
+  : React.createElement('span', { className: 'text-destructive' }, value)
 
-Örnek tam kod:
+Örnek tam kod (tema uyumlu):
 function Widget({ data }) {
   if (!data || data.length === 0) {
     return React.createElement('div', 
@@ -65,9 +107,12 @@ function Widget({ data }) {
     return '₺' + value.toLocaleString('tr-TR');
   };
 
-  return React.createElement('div', { className: 'p-4 space-y-4' },
-    React.createElement('div', { className: 'text-2xl font-bold' }, formatCurrency(toplam)),
-    React.createElement('div', { className: 'text-sm text-muted-foreground' }, data.length + ' kayıt')
+  return React.createElement('div', { className: 'p-4 space-y-4 bg-card rounded-xl border border-border' },
+    React.createElement('div', { className: 'text-2xl font-bold text-foreground' }, formatCurrency(toplam)),
+    React.createElement('div', { className: 'text-sm text-muted-foreground' }, data.length + ' kayıt'),
+    toplam >= 0
+      ? React.createElement('span', { className: 'text-success text-sm' }, '↑ Pozitif')
+      : React.createElement('span', { className: 'text-destructive text-sm' }, '↓ Negatif')
   );
 }
 
@@ -81,9 +126,30 @@ const getRefinementSystemPrompt = () => `Sen bir React widget geliştirme uzman�
 ÖNEMLİ KURALLAR:
 1. JSX KULLANMA! Sadece React.createElement kullan
 2. Mevcut kod yapısını koru, sadece istenen değişiklikleri yap
-3. Renk değişiklikleri için Tailwind sınıfları kullan (text-red-500, bg-blue-600 vb.)
-4. Animasyonlar için Tailwind animate-* sınıfları kullan
-5. En sonda "return Widget;" veya benzeri export olmalı
+3. Animasyonlar için Tailwind animate-* sınıfları kullan
+4. En sonda "return Widget;" veya benzeri export olmalı
+
+=== ZORUNLU STİL KURALLARI (HER ZAMAN UYGULANMALI) ===
+
+RENK DEĞİŞİKLİKLERİ İÇİN:
+- Sabit renk KULLANMA (text-red-500, bg-blue-600, text-white, bg-black gibi)
+- Tema uyumlu CSS değişkenleri kullan:
+  * Ana: 'text-primary', 'bg-primary', 'text-primary-foreground'
+  * Arka plan: 'bg-background', 'bg-card', 'bg-muted'
+  * Metin: 'text-foreground', 'text-muted-foreground'
+  * Pozitif: 'text-success', 'bg-success'
+  * Negatif: 'text-destructive', 'bg-destructive'
+  * Uyarı: 'text-warning', 'bg-warning'
+  * Vurgu: 'text-accent', 'bg-accent'
+  * Kenarlık: 'border-border'
+
+GRAFİK RENKLERİ:
+- 'hsl(var(--primary))', 'hsl(var(--destructive))', 'hsl(var(--success))', 'hsl(var(--accent))'
+
+KOYU MOD:
+- Tüm değişiklikler hem açık hem koyu modda çalışmalı
+- 'text-white/black' yerine 'text-foreground'
+- 'bg-white/black' yerine 'bg-background' veya 'bg-card'
 
 JSX KULLANMA! React.createElement kullan:
 YANLIŞ: <div>...</div>
@@ -93,6 +159,7 @@ Kod güncellemesi yaparken:
 - Sadece istenen kısımları değiştir
 - Mevcut hesaplamaları ve mantığı koru
 - Yeni özellik eklerken mevcut yapıyı bozma
+- Renkleri her zaman tema uyumlu yap
 
 SADECE güncellenmiş JavaScript kodunu döndür, açıklama ekleme.`;
 

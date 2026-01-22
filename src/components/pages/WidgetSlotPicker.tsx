@@ -1,6 +1,6 @@
 // Widget Slot Seçici - Konteyner içindeki slota widget atama
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,8 +11,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useWidgets } from '@/hooks/useWidgets';
 import { useWidgetPermissions } from '@/hooks/useWidgetPermissions';
 import { Widget, PAGE_CATEGORIES, WIDGET_TYPES } from '@/lib/widgetTypes';
-import { Search, LayoutGrid, Plus, BarChart3, PieChart, TrendingUp, List, Table, Wallet } from 'lucide-react';
+import { Search, LayoutGrid, Plus, BarChart3, PieChart, TrendingUp, List, Table, Wallet, Star } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface WidgetSlotPickerProps {
   open: boolean;
@@ -106,6 +107,13 @@ function WidgetPreview({ widget }: { widget: Widget }) {
   );
 }
 
+// Widget değerlendirme verileri tipi
+interface WidgetRating {
+  widget_id: string;
+  avg_rating: number;
+  rating_count: number;
+}
+
 export function WidgetSlotPicker({ open, onOpenChange, onSelectWidget, slotIndex }: WidgetSlotPickerProps) {
   const { widgets, isLoading } = useWidgets();
   const { filterAccessibleWidgets, isAdmin } = useWidgetPermissions();
@@ -114,22 +122,76 @@ export function WidgetSlotPicker({ open, onOpenChange, onSelectWidget, slotIndex
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [hoveredWidget, setHoveredWidget] = useState<Widget | null>(null);
+  const [widgetRatings, setWidgetRatings] = useState<Map<string, WidgetRating>>(new Map());
+
+  // Widget değerlendirmelerini çek
+  useEffect(() => {
+    const fetchRatings = async () => {
+      const { data, error } = await supabase
+        .from('widget_feedback')
+        .select('widget_id, rating')
+        .not('rating', 'is', null);
+      
+      if (error) {
+        console.error('Rating fetch error:', error);
+        return;
+      }
+
+      // Widget bazında ortalama hesapla
+      const ratingsMap = new Map<string, WidgetRating>();
+      const grouped: Record<string, number[]> = {};
+      
+      (data || []).forEach((f: any) => {
+        if (!grouped[f.widget_id]) grouped[f.widget_id] = [];
+        grouped[f.widget_id].push(f.rating);
+      });
+
+      Object.entries(grouped).forEach(([widgetId, ratings]) => {
+        const avg = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+        ratingsMap.set(widgetId, {
+          widget_id: widgetId,
+          avg_rating: avg,
+          rating_count: ratings.length
+        });
+      });
+
+      setWidgetRatings(ratingsMap);
+    };
+
+    if (open) {
+      fetchRatings();
+    }
+  }, [open]);
 
   // Erişilebilir widget'ları filtrele
   const accessibleWidgets = useMemo(() => {
     return filterAccessibleWidgets(widgets.filter(w => w.is_active));
   }, [widgets, filterAccessibleWidgets]);
 
-  // Arama ve kategori/tip filtresi
+  // Arama ve kategori/tip filtresi + değerlendirmeye göre sıralama
   const filteredWidgets = useMemo(() => {
-    return accessibleWidgets.filter(widget => {
+    const filtered = accessibleWidgets.filter(widget => {
       const matchesSearch = widget.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            (widget.description || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = selectedCategory === 'all' || widget.category === selectedCategory;
       const matchesType = selectedType === 'all' || widget.type === selectedType;
       return matchesSearch && matchesCategory && matchesType;
     });
-  }, [accessibleWidgets, searchTerm, selectedCategory, selectedType]);
+
+    // Değerlendirmeye göre sırala (yüksek puan üstte)
+    return filtered.sort((a, b) => {
+      const ratingA = widgetRatings.get(a.id);
+      const ratingB = widgetRatings.get(b.id);
+      
+      // Önce değerlendirmesi olanları üste al
+      if (ratingA && !ratingB) return -1;
+      if (!ratingA && ratingB) return 1;
+      if (!ratingA && !ratingB) return 0;
+      
+      // Her ikisinin de değerlendirmesi varsa ortalamaya göre sırala
+      return (ratingB?.avg_rating || 0) - (ratingA?.avg_rating || 0);
+    });
+  }, [accessibleWidgets, searchTerm, selectedCategory, selectedType, widgetRatings]);
 
   // Tip sayıları
   const typeCounts = useMemo(() => {
@@ -241,6 +303,7 @@ export function WidgetSlotPicker({ open, onOpenChange, onSelectWidget, slotIndex
                   {filteredWidgets.map((widget) => {
                     const Icon = (LucideIcons as any)[widget.icon || 'LayoutGrid'] || LucideIcons.LayoutGrid;
                     const TypeIcon = typeIcons[widget.type] || LayoutGrid;
+                    const rating = widgetRatings.get(widget.id);
                     
                     return (
                       <Card
@@ -260,7 +323,7 @@ export function WidgetSlotPicker({ open, onOpenChange, onSelectWidget, slotIndex
                               </div>
                               <div>
                                 <CardTitle className="text-sm font-medium leading-tight">{widget.name}</CardTitle>
-                                <div className="flex items-center gap-1 mt-1">
+                                <div className="flex items-center gap-1 mt-1 flex-wrap">
                                   <Badge 
                                     variant="secondary" 
                                     className={`text-[10px] px-1.5 py-0 ${categoryColors[widget.category] || ''}`}
@@ -271,6 +334,17 @@ export function WidgetSlotPicker({ open, onOpenChange, onSelectWidget, slotIndex
                                     <TypeIcon className="h-2.5 w-2.5" />
                                     {WIDGET_TYPES.find(t => t.id === widget.type)?.name}
                                   </Badge>
+                                  {/* Değerlendirme badge'i */}
+                                  {rating && (
+                                    <Badge 
+                                      variant="secondary" 
+                                      className="text-[10px] px-1.5 py-0 flex items-center gap-0.5 bg-warning/10 text-warning border-warning/20"
+                                    >
+                                      <Star className="h-2.5 w-2.5 fill-current" />
+                                      {rating.avg_rating.toFixed(1)}
+                                      <span className="text-muted-foreground">({rating.rating_count})</span>
+                                    </Badge>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -312,6 +386,28 @@ export function WidgetSlotPicker({ open, onOpenChange, onSelectWidget, slotIndex
                 <WidgetPreview widget={hoveredWidget} />
                 
                 <div className="space-y-2 text-xs">
+                  {/* Değerlendirme bilgisi */}
+                  {(() => {
+                    const rating = widgetRatings.get(hoveredWidget.id);
+                    if (rating) {
+                      return (
+                        <div className="flex justify-between items-center bg-warning/10 rounded-md px-2 py-1.5 border border-warning/20">
+                          <span className="text-muted-foreground">Değerlendirme:</span>
+                          <div className="flex items-center gap-1">
+                            {[1, 2, 3, 4, 5].map(star => (
+                              <Star 
+                                key={star} 
+                                className={`h-3 w-3 ${star <= Math.round(rating.avg_rating) ? 'text-warning fill-warning' : 'text-muted-foreground/30'}`} 
+                              />
+                            ))}
+                            <span className="ml-1 font-medium">{rating.avg_rating.toFixed(1)}</span>
+                            <span className="text-muted-foreground">({rating.rating_count} oy)</span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Kategori:</span>
                     <Badge variant="secondary" className={`text-[10px] ${categoryColors[hoveredWidget.category] || ''}`}>
