@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { Mail, Lock, Loader2, UserPlus, Crown } from 'lucide-react';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Mail, Lock, Loader2, UserPlus, Crown, ArrowLeft, Shield } from 'lucide-react';
 import rotanombiLogo from '@/assets/rotanombi-logo.png';
 import rotaLogoDark from '@/assets/rota-logo-dark.svg';
 import loginBg from '@/assets/login-bg.jpg';
@@ -10,14 +10,19 @@ export function LoginPage() {
   const { login, register, isLoading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  
+  // Super Admin modu kontrolü
+  const isSuperAdminMode = searchParams.get('mode') === 'super-admin';
   
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated && !isLoading) {
-      const from = location.state?.from?.pathname || '/dashboard';
+      const from = isSuperAdminMode ? '/super-admin-panel' : (location.state?.from?.pathname || '/dashboard');
       navigate(from, { replace: true });
     }
-  }, [isAuthenticated, isLoading, navigate, location]);
+  }, [isAuthenticated, isLoading, navigate, location, isSuperAdminMode]);
+
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
@@ -47,12 +52,152 @@ export function LoginPage() {
         setError(result.error || 'Giriş başarısız');
       } else {
         // Successful login - navigate to intended page
-        const from = location.state?.from?.pathname || '/dashboard';
+        const from = isSuperAdminMode ? '/super-admin-panel' : (location.state?.from?.pathname || '/dashboard');
         navigate(from, { replace: true });
       }
     }
   };
 
+  // Super Admin modu için özel tasarım
+  if (isSuperAdminMode) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
+        {/* Animated background pattern */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-amber-600/10 rounded-full blur-3xl animate-pulse delay-1000" />
+        </div>
+        
+        <div className="relative w-full max-w-md">
+          {/* Back button */}
+          <button
+            onClick={() => navigate('/login')}
+            className="absolute -top-12 left-0 flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Normal Giriş
+          </button>
+
+          {/* Super Admin Card */}
+          <div className="bg-slate-800/50 backdrop-blur-xl border border-amber-500/20 rounded-2xl p-8 shadow-2xl">
+            {/* Header with badge */}
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-amber-500 to-amber-600 mb-4 shadow-lg shadow-amber-500/25">
+                <Shield className="w-8 h-8 text-white" />
+              </div>
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <Crown className="w-5 h-5 text-amber-500" />
+                <span className="text-xs font-medium text-amber-500 uppercase tracking-wider">
+                  Sistem Yöneticisi
+                </span>
+                <Crown className="w-5 h-5 text-amber-500" />
+              </div>
+              <h1 className="text-2xl font-bold text-white mb-2">
+                Yönetici Girişi
+              </h1>
+              <p className="text-slate-400 text-sm">
+                Bu alan yetkili sistem yöneticileri içindir
+              </p>
+            </div>
+
+            {/* Login Form */}
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  E-posta
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full h-12 pl-11 pr-4 rounded-xl border border-slate-600 bg-slate-700/50 text-white placeholder:text-slate-500 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition-all"
+                    placeholder="admin@example.com"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Şifre
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                  <input
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full h-12 pl-11 pr-4 rounded-xl border border-slate-600 bg-slate-700/50 text-white placeholder:text-slate-500 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition-all"
+                    placeholder="••••••••"
+                    required
+                    minLength={6}
+                  />
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {error && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                  {error}
+                </div>
+              )}
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full h-12 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-medium hover:from-amber-600 hover:to-amber-700 focus:ring-2 focus:ring-amber-500/50 focus:ring-offset-2 focus:ring-offset-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Doğrulanıyor...
+                  </>
+                ) : (
+                  <>
+                    <Shield className="w-5 h-5" />
+                    Yönetici Olarak Giriş Yap
+                  </>
+                )}
+              </button>
+            </form>
+
+            {/* Security Notice */}
+            <div className="mt-6 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+              <p className="text-xs text-amber-400/80 text-center">
+                🔒 Bu giriş noktası izlenmektedir. Yetkisiz erişim girişimleri kayıt altına alınır.
+              </p>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex flex-col items-center gap-3 mt-8">
+            <a 
+              href="https://www.rotayazilim.net" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="opacity-40 hover:opacity-70 transition-opacity"
+            >
+              <img 
+                src={rotaLogoDark} 
+                alt="Rota Yazılım" 
+                className="h-5 w-auto invert"
+              />
+            </a>
+            <p className="text-center text-xs text-slate-500">
+              © 2024 Rota Yazılım • RotanomBI v3.0
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Normal login sayfası
   return (
     <div className="min-h-screen flex">
       {/* Sol taraf - BI Görseli */}
@@ -212,8 +357,8 @@ export function LoginPage() {
             <div className="pt-2 border-t border-slate-200">
               <button
                 type="button"
-                onClick={() => navigate('/super-admin-panel')}
-                className="text-xs text-slate-400 hover:text-primary transition-colors flex items-center justify-center gap-1 mx-auto"
+                onClick={() => navigate('/login?mode=super-admin')}
+                className="text-xs text-slate-400 hover:text-amber-600 transition-colors flex items-center justify-center gap-1 mx-auto"
               >
                 <Crown className="w-3 h-3" />
                 Sistem Yöneticisi Girişi
