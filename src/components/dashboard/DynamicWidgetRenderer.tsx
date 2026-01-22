@@ -15,11 +15,7 @@ import { AranacakMusteriler } from './AranacakMusteriler';
 import { KritikStokUyarilari } from './KritikStokUyarilari';
 import { VadeYaslandirmasi } from './VadeYaslandirmasi';
 import { BankaHesaplari } from './BankaHesaplari';
-import { OzelKodDonutChart } from './OzelKodDonutChart';
-import { SektorDagilimi } from './SektorDagilimi';
-import { KaynakDagilimi } from './KaynakDagilimi';
-import { LokasyonDagilimi } from './LokasyonDagilimi';
-import { CariDonusumTrend } from './CariDonusumTrend';
+// Legacy chart imports removed - now using BuilderWidgetRenderer
 import { SatisElemaniPerformans } from './SatisElemaniPerformans';
 import { TopCustomers } from './TopCustomers';
 import { CariListesi } from '@/components/customers/CariListesi';
@@ -441,52 +437,9 @@ export function DynamicWidgetRenderer({
           />
         );
       
-      // Bu grafik widget'ları artık BuilderWidgetRenderer ile render edilmeli
-      // Legacy fallback - sadece dbWidget olmadan çağrılırsa kullanılır
-      case 'grafik_ozelkod_dagilimi':
-        console.warn('grafik_ozelkod_dagilimi: Legacy render kullanıldı - dbWidget ile BuilderWidgetRenderer kullanılmalı');
-        return (
-          <OzelKodDonutChart
-            cariler={getFilteredCariler()}
-            isLoading={isLoading}
-          />
-        );
-      
-      case 'grafik_sektor_dagilimi':
-        console.warn('grafik_sektor_dagilimi: Legacy render kullanıldı - dbWidget ile BuilderWidgetRenderer kullanılmalı');
-        return (
-          <SektorDagilimi
-            cariler={getFilteredCariler()}
-            isLoading={isLoading}
-          />
-        );
-      
-      case 'grafik_kaynak_dagilimi':
-        console.warn('grafik_kaynak_dagilimi: Legacy render kullanıldı - dbWidget ile BuilderWidgetRenderer kullanılmalı');
-        return (
-          <KaynakDagilimi
-            cariler={getFilteredCariler()}
-            isLoading={isLoading}
-          />
-        );
-      
-      case 'grafik_lokasyon_dagilimi':
-        console.warn('grafik_lokasyon_dagilimi: Legacy render kullanıldı - dbWidget ile BuilderWidgetRenderer kullanılmalı');
-        return (
-          <LokasyonDagilimi
-            cariler={getFilteredCariler()}
-            isLoading={isLoading}
-          />
-        );
-      
-      case 'grafik_cari_donusum_trend':
-        console.warn('grafik_cari_donusum_trend: Legacy render kullanıldı - dbWidget ile BuilderWidgetRenderer kullanılmalı');
-        return (
-          <CariDonusumTrend
-            cariler={getFilteredCariler()}
-            isLoading={isLoading}
-          />
-        );
+      // Legacy chart widgets removed - now using BuilderWidgetRenderer
+      // grafik_ozelkod_dagilimi, grafik_sektor_dagilimi, grafik_kaynak_dagilimi,
+      // grafik_lokasyon_dagilimi, grafik_cari_donusum_trend now render via BuilderWidgetRenderer
 
       // ========== CARİ LİSTE WIDGETS ==========
       case 'liste_cari':
