@@ -135,26 +135,41 @@ export function useWidgetFeedbackAdmin() {
   const fetchFeedbacks = useCallback(async (statusFilter?: string) => {
     setLoading(true);
     try {
+      // Önce feedback'leri çek
       let query = supabase
         .from('widget_feedback')
-        .select(`
-          *,
-          widgets:widget_id (name),
-          profiles:user_id (email, display_name)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (statusFilter && statusFilter !== 'all') {
         query = query.eq('status', statusFilter);
       }
 
-      const { data, error } = await query;
+      const { data: feedbackData, error: feedbackError } = await query;
 
-      if (error) throw error;
+      if (feedbackError) throw feedbackError;
+
+      if (!feedbackData || feedbackData.length === 0) {
+        setFeedbacks([]);
+        setLoading(false);
+        return;
+      }
+
+      // Widget ve profile bilgilerini ayrı çek
+      const widgetIds = [...new Set(feedbackData.map(f => f.widget_id))];
+      const userIds = [...new Set(feedbackData.map(f => f.user_id))];
+
+      const [widgetsRes, profilesRes] = await Promise.all([
+        supabase.from('widgets').select('id, name').in('id', widgetIds),
+        supabase.from('profiles').select('user_id, email, display_name').in('user_id', userIds)
+      ]);
+
+      const widgetsMap = new Map((widgetsRes.data || []).map(w => [w.id, w.name]));
+      const profilesMap = new Map((profilesRes.data || []).map(p => [p.user_id, p]));
 
       // Okunmamış mesaj sayısını hesapla
-      const feedbacksWithUnread = await Promise.all(
-        (data || []).map(async (f: any) => {
+      const feedbacksWithDetails = await Promise.all(
+        feedbackData.map(async (f: any) => {
           const { count } = await supabase
             .from('widget_feedback_messages')
             .select('*', { count: 'exact', head: true })
@@ -162,17 +177,19 @@ export function useWidgetFeedbackAdmin() {
             .eq('is_admin', false)
             .eq('is_read', false);
 
+          const profile = profilesMap.get(f.user_id);
+
           return {
             ...f,
-            widget_name: f.widgets?.name,
-            user_email: f.profiles?.email,
-            user_display_name: f.profiles?.display_name,
+            widget_name: widgetsMap.get(f.widget_id) || 'Bilinmeyen Widget',
+            user_email: profile?.email || 'Bilinmeyen',
+            user_display_name: profile?.display_name,
             unread_count: count || 0,
           };
         })
       );
 
-      setFeedbacks(feedbacksWithUnread);
+      setFeedbacks(feedbacksWithDetails);
     } catch (error) {
       console.error('Fetch feedbacks error:', error);
       toast.error('Feedback listesi yüklenemedi');

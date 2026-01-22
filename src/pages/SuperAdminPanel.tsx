@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useImpersonation, ImpersonatedProfile } from '@/contexts/ImpersonationContext';
+import { useTheme } from '@/hooks/useTheme';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Crown, 
@@ -16,7 +17,9 @@ import {
   Search,
   AlertCircle,
   Layers,
-  MessageSquare
+  MessageSquare,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,6 +57,7 @@ interface UserProfile {
 export default function SuperAdminPanel() {
   const { isSuperAdmin, loading: permLoading } = usePermissions();
   const { impersonatedUserId, impersonatedProfile, startImpersonation, stopImpersonation, isImpersonating } = useImpersonation();
+  const { theme, toggleTheme } = useTheme();
   
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -332,7 +336,7 @@ export default function SuperAdminPanel() {
 
         {/* Tab Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-          <div className="border-b border-border px-4">
+          <div className="border-b border-border px-4 flex items-center justify-between">
             <TabsList className="h-12">
               <TabsTrigger value="users" className="gap-2">
                 <Users className="w-4 h-4" />
@@ -355,6 +359,20 @@ export default function SuperAdminPanel() {
                 Geri Bildirimler
               </TabsTrigger>
             </TabsList>
+            
+            {/* Theme Toggle */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              className="h-9 w-9"
+            >
+              {theme === 'dark' ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
+            </Button>
           </div>
 
           <div className="flex-1 overflow-auto">
