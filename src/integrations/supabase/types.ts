@@ -661,6 +661,85 @@ export type Database = {
         }
         Relationships: []
       }
+      widget_feedback: {
+        Row: {
+          created_at: string
+          id: string
+          rating: number | null
+          status: string | null
+          suggestion: string | null
+          updated_at: string
+          user_id: string
+          widget_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          rating?: number | null
+          status?: string | null
+          suggestion?: string | null
+          updated_at?: string
+          user_id: string
+          widget_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          rating?: number | null
+          status?: string | null
+          suggestion?: string | null
+          updated_at?: string
+          user_id?: string
+          widget_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "widget_feedback_widget_id_fkey"
+            columns: ["widget_id"]
+            isOneToOne: false
+            referencedRelation: "widgets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      widget_feedback_messages: {
+        Row: {
+          created_at: string
+          feedback_id: string
+          id: string
+          is_admin: boolean | null
+          is_read: boolean | null
+          message: string
+          sender_id: string
+        }
+        Insert: {
+          created_at?: string
+          feedback_id: string
+          id?: string
+          is_admin?: boolean | null
+          is_read?: boolean | null
+          message: string
+          sender_id: string
+        }
+        Update: {
+          created_at?: string
+          feedback_id?: string
+          id?: string
+          is_admin?: boolean | null
+          is_read?: boolean | null
+          message?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "widget_feedback_messages_feedback_id_fkey"
+            columns: ["feedback_id"]
+            isOneToOne: false
+            referencedRelation: "widget_feedback"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       widget_permissions: {
         Row: {
           can_add: boolean | null

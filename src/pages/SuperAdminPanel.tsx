@@ -15,7 +15,8 @@ import {
   ChevronRight,
   Search,
   AlertCircle,
-  Layers
+  Layers,
+  MessageSquare
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +34,7 @@ import { cn } from '@/lib/utils';
 const SuperAdminWidgetManager = React.lazy(() => import('@/components/admin/SuperAdminWidgetManager'));
 const DataSourceManager = React.lazy(() => import('@/components/admin/DataSourceManager').then(m => ({ default: m.DataSourceManager })));
 const CategoryManager = React.lazy(() => import('@/components/admin/CategoryManager').then(m => ({ default: m.CategoryManager })));
+const FeedbackManager = React.lazy(() => import('@/components/admin/FeedbackManager').then(m => ({ default: m.FeedbackManager })));
 
 // UserProfile, ImpersonatedProfile'ın bir parçasını kullanır - sadece gösterim için gerekli alanlar
 interface UserProfile {
@@ -348,6 +350,10 @@ export default function SuperAdminPanel() {
                 <Database className="w-4 h-4" />
                 Veri Kaynakları
               </TabsTrigger>
+              <TabsTrigger value="feedback" className="gap-2">
+                <MessageSquare className="w-4 h-4" />
+                Geri Bildirimler
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -384,6 +390,12 @@ export default function SuperAdminPanel() {
             <TabsContent value="datasources" className="h-full m-0 p-6">
               <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
                 <DataSourceManager />
+              </React.Suspense>
+            </TabsContent>
+
+            <TabsContent value="feedback" className="h-full m-0 p-6">
+              <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+                <FeedbackManager />
               </React.Suspense>
             </TabsContent>
           </div>

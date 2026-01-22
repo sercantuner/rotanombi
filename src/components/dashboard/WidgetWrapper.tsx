@@ -12,11 +12,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { WidgetSettingsModal } from './WidgetSettingsModal';
+import { WidgetFeedbackButton } from './WidgetFeedbackButton';
 import { getWidgetById, WidgetCategory, getPageCategories } from '@/lib/widgetRegistry';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
 
 interface WidgetWrapperProps {
   widgetId: string;
+  widgetDbId?: string; // Veritabanındaki UUID (feedback için)
+  widgetName?: string;
   currentPage: WidgetCategory;
   children: React.ReactNode;
   className?: string;
@@ -25,6 +28,8 @@ interface WidgetWrapperProps {
 
 export function WidgetWrapper({ 
   widgetId, 
+  widgetDbId,
+  widgetName,
   currentPage, 
   children, 
   className = '',
@@ -66,6 +71,14 @@ export function WidgetWrapper({
               <Filter className="w-3 h-3" />
               Filtreli
             </span>
+          )}
+
+          {/* Feedback button */}
+          {widgetDbId && (
+            <WidgetFeedbackButton 
+              widgetId={widgetDbId} 
+              widgetName={widgetName || widget?.name || 'Widget'} 
+            />
           )}
 
           {/* Settings button */}

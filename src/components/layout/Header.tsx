@@ -5,6 +5,7 @@ import { useDiaProfile } from '@/hooks/useDiaProfile';
 import { WidgetPicker } from '@/components/dashboard/WidgetPicker';
 import { CommandPalette } from '@/components/layout/CommandPalette';
 import { NotificationCenter } from '@/components/layout/NotificationCenter';
+import { UserFeedbackPanel } from '@/components/dashboard/UserFeedbackPanel';
 import type { WidgetCategory } from '@/lib/widgetRegistry';
 
 interface HeaderProps {
@@ -99,6 +100,9 @@ export function Header({ title, subtitle, onRefresh, isRefreshing, currentPage, 
             <Moon className="w-5 h-5 text-primary" />
           )}
         </button>
+
+        {/* User Feedback Panel */}
+        <UserFeedbackPanel />
 
         {/* Notifications */}
         <NotificationCenter />
