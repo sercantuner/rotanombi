@@ -34,6 +34,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useImpersonation } from '@/contexts/ImpersonationContext';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
@@ -315,6 +316,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   const { createWidget, updateWidget, isLoading: isSaving } = useWidgetAdmin();
   const { activeDataSources, getDataSourceById } = useDataSources();
   const { user } = useAuth();
+  const { impersonatedUserId, isImpersonating } = useImpersonation();
   
   // Widget temel bilgileri
   const [widgetKey, setWidgetKey] = useState('custom_widget_' + Date.now());
@@ -525,13 +527,13 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
     try {
       const response = await supabase.functions.invoke('dia-api-test', {
         body: {
-          user_id: user.id,
           module: dataSource.module,
           method: dataSource.method,
           filters: dataSource.filters || [],
           sorts: dataSource.sorts || [],
-          selectedcolumns: dataSource.selected_columns || [],
+          selectedColumns: dataSource.selected_columns || [],
           limit: Math.min(dataSource.limit_count || 100, 100),
+          ...(isImpersonating && impersonatedUserId ? { targetUserId: impersonatedUserId } : {}),
         },
       });
 

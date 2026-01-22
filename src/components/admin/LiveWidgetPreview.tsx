@@ -29,6 +29,7 @@ import {
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { LegendPosition } from '@/lib/widgetBuilderTypes';
+import { useImpersonation } from '@/contexts/ImpersonationContext';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -770,6 +771,7 @@ export function LiveWidgetPreview({
   onNameChange,
   onIconChange,
 }: LiveWidgetPreviewProps) {
+  const { impersonatedUserId, isImpersonating } = useImpersonation();
   const [rawData, setRawData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -851,6 +853,7 @@ export function LiveWidgetPreview({
           selectedColumns: config.diaApi.parameters.selectedcolumns,
           sorts: config.diaApi.parameters.sorts,
           returnAllData: true,
+          ...(isImpersonating && impersonatedUserId ? { targetUserId: impersonatedUserId } : {}),
         }),
       });
 
