@@ -257,29 +257,33 @@ export function ContainerRenderer({
                 {localContainer.title || template.name}
               </CardTitle>
             </div>
-            <div className="flex items-center gap-1">
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-7 w-7"
-                onClick={() => setSettingsOpen(true)}
-              >
-                <Settings className="h-3 w-3" />
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-7 w-7 text-destructive hover:text-destructive"
-                onClick={onDelete}
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </div>
+            {/* Ayar ve silme butonları sadece drag modda görünür */}
+            {isDragMode && (
+              <div className="flex items-center gap-1">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-7 w-7"
+                  onClick={() => setSettingsOpen(true)}
+                >
+                  <Settings className="h-3 w-3" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-7 w-7 text-destructive hover:text-destructive"
+                  onClick={onDelete}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
           </CardHeader>
         )}
         <CardContent className={cn(isCompact ? 'p-2' : 'p-4', showTitle ? 'pt-0' : '')}>
-          {!showTitle && (
-            <div className="absolute top-2 right-2 flex items-center gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+          {/* Başlık kapalıyken ayar/sil butonları - sadece drag modda görünür */}
+          {!showTitle && isDragMode && (
+            <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
               <Button 
                 variant="secondary" 
                 size="icon" 
