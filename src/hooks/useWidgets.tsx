@@ -119,13 +119,30 @@ export function useWidgetAdmin() {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
+  // Changelog kaydı oluştur
+  const logChange = async (widgetId: string, version: number, changeType: 'created' | 'updated', changeNotes?: string) => {
+    try {
+      await supabase
+        .from('widget_changelog')
+        .insert({
+          widget_id: widgetId,
+          version,
+          change_type: changeType,
+          change_notes: changeNotes || null,
+          changed_by: user?.id,
+        });
+    } catch (error) {
+      console.error('Error logging widget change:', error);
+    }
+  };
+
   // Widget oluştur
-  const createWidget = async (data: WidgetFormData): Promise<boolean> => {
+  const createWidget = async (data: WidgetFormData, changeNotes?: string): Promise<boolean> => {
     if (!user) return false;
     setIsLoading(true);
 
     try {
-      const { error } = await supabase
+      const { data: createdWidget, error } = await supabase
         .from('widgets')
         .insert({
           widget_key: data.widget_key,
@@ -146,9 +163,20 @@ export function useWidgetAdmin() {
           sort_order: data.sort_order,
           created_by: user.id,
           builder_config: data.builder_config ? data.builder_config as unknown as any : null,
-        } as any);
+          version: 1,
+          last_change_type: 'created',
+          change_notes: changeNotes || null,
+        } as any)
+        .select()
+        .single();
 
       if (error) throw error;
+      
+      // Changelog kaydı oluştur
+      if (createdWidget) {
+        await logChange(createdWidget.id, 1, 'created', changeNotes || `${data.name} widget'ı oluşturuldu`);
+      }
+      
       toast.success('Widget oluşturuldu');
       return true;
     } catch (err) {
@@ -161,14 +189,26 @@ export function useWidgetAdmin() {
   };
 
   // Widget güncelle
-  const updateWidget = async (id: string, data: Partial<WidgetFormData>): Promise<boolean> => {
+  const updateWidget = async (id: string, data: Partial<WidgetFormData>, changeNotes?: string): Promise<boolean> => {
     if (!user) return false;
     setIsLoading(true);
 
     try {
+      // Mevcut widget'ın versiyonunu al
+      const { data: currentWidget } = await supabase
+        .from('widgets')
+        .select('version, name')
+        .eq('id', id)
+        .single();
+
+      const newVersion = (currentWidget?.version || 1) + 1;
+
       const updateData: any = {
         ...data,
         updated_at: new Date().toISOString(),
+        version: newVersion,
+        last_change_type: 'updated',
+        change_notes: changeNotes || null,
       };
       
       const { error } = await supabase
@@ -177,6 +217,10 @@ export function useWidgetAdmin() {
         .eq('id', id);
 
       if (error) throw error;
+      
+      // Changelog kaydı oluştur
+      await logChange(id, newVersion, 'updated', changeNotes || `${currentWidget?.name || 'Widget'} güncellendi`);
+      
       toast.success('Widget güncellendi');
       return true;
     } catch (err) {

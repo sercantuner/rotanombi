@@ -622,6 +622,24 @@ export type Database = {
         }
         Relationships: []
       }
+      user_widget_seen: {
+        Row: {
+          id: string
+          last_seen_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          last_seen_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          last_seen_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       widget_categories: {
         Row: {
           color: string | null
@@ -660,6 +678,44 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      widget_changelog: {
+        Row: {
+          change_notes: string | null
+          change_type: string
+          changed_by: string | null
+          created_at: string
+          id: string
+          version: number
+          widget_id: string
+        }
+        Insert: {
+          change_notes?: string | null
+          change_type: string
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          version: number
+          widget_id: string
+        }
+        Update: {
+          change_notes?: string | null
+          change_type?: string
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          version?: number
+          widget_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "widget_changelog_widget_id_fkey"
+            columns: ["widget_id"]
+            isOneToOne: false
+            referencedRelation: "widgets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       widget_feedback: {
         Row: {
@@ -783,6 +839,7 @@ export type Database = {
           available_filters: Json | null
           builder_config: Json | null
           category: string
+          change_notes: string | null
           created_at: string
           created_by: string | null
           data_source: string
@@ -796,18 +853,21 @@ export type Database = {
           id: string
           is_active: boolean
           is_default: boolean | null
+          last_change_type: string | null
           min_height: string | null
           name: string
           size: string
           sort_order: number | null
           type: string
           updated_at: string
+          version: number | null
           widget_key: string
         }
         Insert: {
           available_filters?: Json | null
           builder_config?: Json | null
           category?: string
+          change_notes?: string | null
           created_at?: string
           created_by?: string | null
           data_source?: string
@@ -821,18 +881,21 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_default?: boolean | null
+          last_change_type?: string | null
           min_height?: string | null
           name: string
           size?: string
           sort_order?: number | null
           type?: string
           updated_at?: string
+          version?: number | null
           widget_key: string
         }
         Update: {
           available_filters?: Json | null
           builder_config?: Json | null
           category?: string
+          change_notes?: string | null
           created_at?: string
           created_by?: string | null
           data_source?: string
@@ -846,12 +909,14 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_default?: boolean | null
+          last_change_type?: string | null
           min_height?: string | null
           name?: string
           size?: string
           sort_order?: number | null
           type?: string
           updated_at?: string
+          version?: number | null
           widget_key?: string
         }
         Relationships: []
