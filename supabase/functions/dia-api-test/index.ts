@@ -368,7 +368,8 @@ serve(async (req) => {
     }
 
     // DIA API çağrısını retry mekanizmasıyla yap
-    const userId = user!.id;
+    // CRITICAL: effectiveUserId kullanılmalı - impersonation durumunda hedef kullanıcının ID'si
+    const targetUserIdForRetry = effectiveUserId;
     
     async function makeDiaRequest(currentPayload: Record<string, any>, currentUrl: string, retryCount = 0): Promise<any> {
       const response = await fetch(currentUrl, {
@@ -390,19 +391,19 @@ serve(async (req) => {
         (typeof result.msg === 'string' && result.msg.includes('INVALID_SESSION'));
 
       if (isInvalidSession && retryCount === 0) {
-        console.log(`INVALID_SESSION detected for user ${userId}, clearing session and retrying...`);
+        console.log(`INVALID_SESSION detected for user ${targetUserIdForRetry}, clearing session and retrying...`);
         
-        // Session'ı temizle
+        // Session'ı temizle - hedef kullanıcı için (impersonation durumunda)
         await supabase
           .from("profiles")
           .update({
             dia_session_id: null,
             dia_session_expires: null,
           })
-          .eq("user_id", userId);
+          .eq("user_id", targetUserIdForRetry);
 
-        // Yeni session al
-        const newDiaResult = await getDiaSession(supabase, userId);
+        // Yeni session al - hedef kullanıcı için
+        const newDiaResult = await getDiaSession(supabase, targetUserIdForRetry);
         
         if (!newDiaResult.success || !newDiaResult.session) {
           throw new Error(newDiaResult.error || "DIA yeniden bağlantı başarısız");
@@ -416,7 +417,7 @@ serve(async (req) => {
           currentPayload[methodKey].session_id = newSessionId;
         }
 
-        console.log(`Retrying DIA API call with new session for user ${userId}`);
+        console.log(`Retrying DIA API call with new session for user ${targetUserIdForRetry}`);
         return makeDiaRequest(currentPayload, currentUrl, retryCount + 1);
       }
 
