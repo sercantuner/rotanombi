@@ -14,7 +14,8 @@ import {
   Database,
   ChevronRight,
   Search,
-  AlertCircle
+  AlertCircle,
+  Layers
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +32,7 @@ import { cn } from '@/lib/utils';
 // Lazy import widget management components
 const SuperAdminWidgetManager = React.lazy(() => import('@/components/admin/SuperAdminWidgetManager'));
 const DataSourceManager = React.lazy(() => import('@/components/admin/DataSourceManager').then(m => ({ default: m.DataSourceManager })));
+const CategoryManager = React.lazy(() => import('@/components/admin/CategoryManager').then(m => ({ default: m.CategoryManager })));
 
 // UserProfile, ImpersonatedProfile'ın bir parçasını kullanır - sadece gösterim için gerekli alanlar
 interface UserProfile {
@@ -338,6 +340,10 @@ export default function SuperAdminPanel() {
                 <Boxes className="w-4 h-4" />
                 Widget Yönetimi
               </TabsTrigger>
+              <TabsTrigger value="categories" className="gap-2">
+                <Layers className="w-4 h-4" />
+                Kategoriler
+              </TabsTrigger>
               <TabsTrigger value="datasources" className="gap-2">
                 <Database className="w-4 h-4" />
                 Veri Kaynakları
@@ -366,6 +372,12 @@ export default function SuperAdminPanel() {
             <TabsContent value="widgets" className="h-full m-0 p-6">
               <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
                 <SuperAdminWidgetManager />
+              </React.Suspense>
+            </TabsContent>
+
+            <TabsContent value="categories" className="h-full m-0 p-6">
+              <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+                <CategoryManager />
               </React.Suspense>
             </TabsContent>
 
