@@ -24,7 +24,7 @@ const widgetSearchItems: SearchItem[] = WIDGET_REGISTRY.map(widget => ({
   icon: widget.type === 'kpi' ? 'BarChart3' : widget.type === 'chart' ? 'PieChart' : 'List',
 }));
 
-// Sayfa arama öğeleri
+// Sayfa arama öğeleri (artık dinamik sayfalar kullanıldığından sadece ana sayfalar)
 const pageSearchItems: SearchItem[] = [
   {
     id: 'page_dashboard',
@@ -37,36 +37,6 @@ const pageSearchItems: SearchItem[] = [
     icon: 'LayoutDashboard',
   },
   {
-    id: 'page_satis',
-    type: 'page',
-    title: 'Satış Raporu',
-    description: 'Satış performansı, marka dağılımı ve satış elemanı analizi',
-    keywords: ['satış', 'sales', 'rapor', 'marka', 'performans'],
-    path: '/satis',
-    category: 'sayfa',
-    icon: 'ShoppingCart',
-  },
-  {
-    id: 'page_finans',
-    type: 'page',
-    title: 'Finans',
-    description: 'Finansal raporlar, alacak/borç takibi ve nakit akışı',
-    keywords: ['finans', 'alacak', 'borç', 'nakit', 'vade'],
-    path: '/finans',
-    category: 'sayfa',
-    icon: 'Wallet',
-  },
-  {
-    id: 'page_cari',
-    type: 'page',
-    title: 'Cari Hesaplar',
-    description: 'Müşteri ve tedarikçi cari hesap yönetimi',
-    keywords: ['cari', 'müşteri', 'tedarikçi', 'hesap', 'customer'],
-    path: '/cari',
-    category: 'sayfa',
-    icon: 'Users',
-  },
-  {
     id: 'page_ayarlar',
     type: 'page',
     title: 'Ayarlar',
@@ -75,6 +45,16 @@ const pageSearchItems: SearchItem[] = [
     path: '/ayarlar',
     category: 'sayfa',
     icon: 'Settings',
+  },
+  {
+    id: 'page_takim',
+    type: 'page',
+    title: 'Takım Yönetimi',
+    description: 'Takım üyelerini ve yetkilerini yönet',
+    keywords: ['takım', 'team', 'üye', 'yönetim'],
+    path: '/takim',
+    category: 'sayfa',
+    icon: 'Users',
   },
 ];
 

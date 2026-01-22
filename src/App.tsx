@@ -13,7 +13,6 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { TeamManagementPage } from "@/pages/TeamManagementPage";
 import AdminPage from "@/pages/AdminPage";
-import SuperAdminPage from "@/pages/SuperAdminPage";
 import SuperAdminPanel from "@/pages/SuperAdminPanel";
 import { DynamicPage } from "@/components/pages/DynamicPage";
 import NotFound from "./pages/NotFound";
@@ -49,7 +48,7 @@ const App = () => (
                   <Route path="/dashboard" element={<AppLayout><DashboardPage /></AppLayout>} />
                   <Route path="/ayarlar" element={<AppLayout><SettingsPage /></AppLayout>} />
                   <Route path="/admin" element={<AppLayout><AdminPage /></AppLayout>} />
-                  <Route path="/super-admin" element={<AppLayout><SuperAdminPage /></AppLayout>} />
+                  <Route path="/super-admin" element={<Navigate to="/super-admin-panel" replace />} />
                   <Route path="/super-admin-panel" element={<AppLayout><SuperAdminPanel /></AppLayout>} />
                   <Route path="/takim" element={<AppLayout><TeamManagementPage /></AppLayout>} />
                   
