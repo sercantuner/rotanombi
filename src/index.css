@@ -168,7 +168,7 @@
   }
 
   .stat-card {
-    @apply glass-card rounded-xl p-5 transition-all duration-300;
+    @apply glass-card rounded-xl transition-all duration-300;
   }
 
   .stat-card:hover {
@@ -228,11 +228,11 @@
   }
 
   .metric-value {
-    @apply text-3xl font-bold tracking-tight;
+    @apply font-bold tracking-tight;
   }
 
   .metric-label {
-    @apply text-sm text-muted-foreground font-medium;
+    @apply text-muted-foreground font-medium;
   }
 
   .badge {

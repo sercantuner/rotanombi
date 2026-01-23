@@ -217,109 +217,113 @@ export function VadeYaslandirmasi({ yaslandirma, isLoading }: Props) {
 
   if (isLoading) {
     return (
-      <div className="glass-card rounded-xl p-6 animate-slide-up">
-        <div className="flex items-center justify-between mb-6">
+      <div className="glass-card rounded-xl p-3 md:p-6 animate-slide-up">
+        <div className="flex items-center justify-between mb-3 md:mb-6">
           <div>
-            <h3 className="text-lg font-semibold">Nakit Akış Projeksiyonu</h3>
-            <p className="text-sm text-muted-foreground">Yükleniyor...</p>
+            <h3 className="text-sm md:text-lg font-semibold">Nakit Akış Projeksiyonu</h3>
+            <p className="text-xs md:text-sm text-muted-foreground">Yükleniyor...</p>
           </div>
         </div>
-        <div className="h-64 bg-secondary/50 rounded-lg animate-pulse" />
+        <div className="h-40 md:h-56 bg-secondary/50 rounded-lg animate-pulse" />
       </div>
     );
   }
 
   return (
-    <div className="glass-card rounded-xl p-6 animate-slide-up">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-lg font-semibold">Nakit Akış Projeksiyonu (FIFO)</h3>
-          <p className="text-sm text-muted-foreground">
-            Vade yaşlandırma analizi - Toplam: <span className="font-semibold text-primary">{formatCurrency(toplam)}</span>
+    <div className="glass-card rounded-xl p-3 md:p-6 animate-slide-up">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3 md:mb-4">
+        <div className="min-w-0">
+          <h3 className="text-sm md:text-lg font-semibold truncate">Nakit Akış Projeksiyonu (FIFO)</h3>
+          <p className="text-xs md:text-sm text-muted-foreground">
+            Toplam: <span className="font-semibold text-primary">{formatCurrency(toplam)}</span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
           {/* Periyot Seçici */}
-          <div className="flex items-center bg-secondary/50 rounded-lg p-1">
+          <div className="flex items-center bg-secondary/50 rounded-lg p-0.5 md:p-1">
             <button
               onClick={() => setPeriyot('gunluk')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`px-2 md:px-3 py-1 md:py-1.5 text-[10px] md:text-xs font-medium rounded-md transition-colors ${
                 periyot === 'gunluk' 
                   ? 'bg-primary text-primary-foreground' 
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Günlük
+              Gün
             </button>
             <button
               onClick={() => setPeriyot('haftalik')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`px-2 md:px-3 py-1 md:py-1.5 text-[10px] md:text-xs font-medium rounded-md transition-colors ${
                 periyot === 'haftalik' 
                   ? 'bg-primary text-primary-foreground' 
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Haftalık
+              Hafta
             </button>
             <button
               onClick={() => setPeriyot('aylik')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`px-2 md:px-3 py-1 md:py-1.5 text-[10px] md:text-xs font-medium rounded-md transition-colors ${
                 periyot === 'aylik' 
                   ? 'bg-primary text-primary-foreground' 
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Aylık
+              Ay
             </button>
           </div>
-          <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center">
-            <Calendar className="w-5 h-5 text-warning" />
+          <div className="w-7 h-7 md:w-10 md:h-10 rounded-lg bg-warning/10 flex items-center justify-center">
+            <Calendar className="w-4 h-4 md:w-5 md:h-5 text-warning" />
           </div>
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center justify-center gap-6 mb-4 text-xs">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-sm bg-destructive" />
-          <span className="text-muted-foreground">Vadesi Geçmiş: <span className="font-semibold text-foreground">{formatCurrency(gecmisToplam)}</span></span>
+      {/* Legend - Mobilde daha kompakt */}
+      <div className="flex flex-wrap items-center justify-center gap-2 md:gap-6 mb-2 md:mb-4 text-[10px] md:text-xs">
+        <div className="flex items-center gap-1 md:gap-2">
+          <div className="w-2 h-2 md:w-3 md:h-3 rounded-sm bg-destructive" />
+          <span className="text-muted-foreground">Geçmiş: <span className="font-semibold text-foreground">{formatCurrency(gecmisToplam)}</span></span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-sm bg-primary" />
+        <div className="flex items-center gap-1 md:gap-2">
+          <div className="w-2 h-2 md:w-3 md:h-3 rounded-sm bg-primary" />
           <span className="text-muted-foreground">Güncel: <span className="font-semibold text-foreground">{formatCurrency(chartData.find(d => d.type === 'guncel')?.value || 0)}</span></span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-sm bg-success" />
-          <span className="text-muted-foreground">Gelecek Vade: <span className="font-semibold text-foreground">{formatCurrency(gelecekToplam)}</span></span>
+        <div className="flex items-center gap-1 md:gap-2">
+          <div className="w-2 h-2 md:w-3 md:h-3 rounded-sm bg-success" />
+          <span className="text-muted-foreground">Gelecek: <span className="font-semibold text-foreground">{formatCurrency(gelecekToplam)}</span></span>
         </div>
       </div>
 
-      {/* Bar Chart */}
-      <div className="h-64">
+      {/* Bar Chart - Mobilde daha kısa */}
+      <div className="h-40 md:h-56">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart 
             data={chartData} 
-            margin={{ top: 20, right: 20, left: 20, bottom: 5 }}
+            margin={{ top: 10, right: 5, left: 0, bottom: 5 }}
           >
             <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
             <XAxis 
               dataKey="name" 
-              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }}
               tickLine={false}
               axisLine={{ stroke: 'hsl(var(--border))' }}
+              interval={0}
+              angle={-35}
+              textAnchor="end"
+              height={40}
             />
             <YAxis 
               tickFormatter={(value) => formatCurrency(value)}
-              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }}
               tickLine={false}
               axisLine={{ stroke: 'hsl(var(--border))' }}
-              width={70}
+              width={45}
             />
             <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--muted)/0.2)' }} />
             <ReferenceLine x={guncelLabel} stroke="hsl(var(--primary))" strokeDasharray="3 3" />
             <Bar 
               dataKey="value" 
-              radius={[4, 4, 0, 0]}
+              radius={[3, 3, 0, 0]}
               cursor="pointer"
               onClick={(data) => handleBarClick(data)}
             >
@@ -339,28 +343,28 @@ export function VadeYaslandirmasi({ yaslandirma, isLoading }: Props) {
 
       {/* Selected filter indicator */}
       {filters.vadeDilimi && (
-        <div className="mt-4 flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/30">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Seçili Vade Dilimi:</span>
-            <span className="text-sm font-bold text-primary">
+        <div className="mt-2 md:mt-4 flex items-center justify-between p-2 md:p-3 rounded-lg bg-primary/10 border border-primary/30">
+          <div className="flex items-center gap-1 md:gap-2">
+            <span className="text-xs md:text-sm font-medium">Seçili:</span>
+            <span className="text-xs md:text-sm font-bold text-primary">
               {chartData.find(d => d.key === filters.vadeDilimi)?.name || filters.vadeDilimi}
             </span>
           </div>
           <button 
             onClick={() => setFilter('vadeDilimi', null)}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="text-[10px] md:text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Temizle
           </button>
         </div>
       )}
 
-      {/* Vadesi geçmiş uyarı */}
+      {/* Vadesi geçmiş uyarı - Mobilde daha kompakt */}
       {(yaslandirma.vade90Plus > 0) && (
-        <div className="mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0" />
-          <p className="text-sm text-destructive">
-            <span className="font-semibold">{formatFullCurrency(yaslandirma.vade90Plus)}</span> tutarında 90 günü aşmış alacak bulunmaktadır.
+        <div className="mt-2 md:mt-4 p-2 md:p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-2 md:gap-3">
+          <AlertTriangle className="w-4 h-4 md:w-5 md:h-5 text-destructive flex-shrink-0" />
+          <p className="text-xs md:text-sm text-destructive">
+            <span className="font-semibold">{formatFullCurrency(yaslandirma.vade90Plus)}</span> 90+ gün geçmiş
           </p>
         </div>
       )}
