@@ -1177,32 +1177,34 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
             {/* KOD GÖRÜNTÜLEME */}
             <TabsContent value="code" className="m-0 space-y-4">
               <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center justify-between">
+                <CardHeader className="pb-2 md:pb-3">
+                  <CardTitle className="text-sm md:text-base flex flex-col md:flex-row md:items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <Code className="h-5 w-5 text-primary" />
-                      Üretilen Kod
+                      <Code className="h-4 w-4 md:h-5 md:w-5 text-primary" />
+                      <span>Üretilen Kod</span>
                     </div>
-                    <Button size="sm" variant="outline" onClick={copyGeneratedCode}>
+                    <Button size="sm" variant="outline" onClick={copyGeneratedCode} className="h-7 text-xs self-start md:self-auto">
                       {codeCopied ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
                       {codeCopied ? 'Kopyalandı' : 'Kopyala'}
                     </Button>
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-xs md:text-sm">
                     Bu yapılandırmadan üretilen React kodu. Özelleştirmek için "Hardcode Widget" moduna geçebilirsiniz.
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-2 md:p-6 pt-0">
                   <div className="relative">
-                    <pre className="p-4 bg-muted/50 rounded-lg border text-xs font-mono overflow-auto max-h-[400px] whitespace-pre-wrap">
-                      {generateBuilderCode()}
-                    </pre>
+                    <ScrollArea className="max-h-[35vh] md:max-h-[400px] border rounded-lg">
+                      <pre className="p-2 md:p-4 bg-muted/50 text-[10px] md:text-xs font-mono whitespace-pre-wrap break-all">
+                        {generateBuilderCode()}
+                      </pre>
+                    </ScrollArea>
                   </div>
                   
-                  <div className="mt-4 p-3 bg-primary/5 rounded-lg border border-primary/20">
-                    <p className="text-sm text-muted-foreground">
+                  <div className="mt-3 md:mt-4 p-2 md:p-3 bg-primary/5 rounded-lg border border-primary/20">
+                    <p className="text-[10px] md:text-sm text-muted-foreground">
                       <strong className="text-foreground">İpucu:</strong> Bu kodu kopyalayıp "Hardcode Widget Builder" ile daha detaylı özelleştirmeler yapabilirsiniz.
-                      Hardcode modunda AI desteği ile kodu geliştirebilir veya manuel değişiklikler yapabilirsiniz.
+                      <span className="hidden md:inline"> Hardcode modunda AI desteği ile kodu geliştirebilir veya manuel değişiklikler yapabilirsiniz.</span>
                     </p>
                   </div>
                 </CardContent>

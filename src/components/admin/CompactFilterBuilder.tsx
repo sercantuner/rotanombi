@@ -115,9 +115,9 @@ function CompactNumericSelector({ value, onChange, range }: CompactNumericSelect
   };
   
   return (
-    <div className="flex-1 space-y-1 min-w-[120px]">
+    <div className="flex-1 space-y-1 min-w-[100px] md:min-w-[120px]">
       <div className="flex items-center gap-1">
-        <Hash className="h-3 w-3 text-muted-foreground" />
+        <Hash className="h-3 w-3 text-muted-foreground flex-shrink-0" />
         <Slider
           value={currentValue}
           min={range.min}
@@ -127,14 +127,14 @@ function CompactNumericSelector({ value, onChange, range }: CompactNumericSelect
           className="flex-1"
         />
       </div>
-      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+      <div className="flex items-center justify-between text-[9px] md:text-[10px] text-muted-foreground">
         <span>{formatNumber(range.min)}</span>
         <span className="font-medium text-foreground">{formatNumber(currentValue[0])}</span>
         <span>{formatNumber(range.max)}</span>
       </div>
       <Input
         type="number"
-        className="h-6 text-xs"
+        className="h-6 text-[10px] md:text-xs"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Değer"
@@ -405,7 +405,7 @@ export function CompactFilterBuilder({ filters, onChange, availableFields, field
             </p>
           ) : (
             filters.map((filter, index) => (
-              <div key={index} className="flex items-start gap-1.5 text-xs">
+              <div key={index} className="flex flex-col md:flex-row md:items-start gap-1.5 text-xs p-2 md:p-0 bg-muted/30 md:bg-transparent rounded-lg md:rounded-none">
                 {/* Alan - Aranabilir Select */}
                 <CompactSearchableFieldSelect
                   value={filter.field}
@@ -413,36 +413,40 @@ export function CompactFilterBuilder({ filters, onChange, availableFields, field
                   fields={availableFields}
                   fieldTypes={fieldTypes}
                   placeholder="Alan..."
-                  className="w-[130px] shrink-0"
+                  className="w-full md:w-[130px] md:shrink-0"
                 />
 
-                {/* Operatör */}
-                <Select value={filter.operator || 'contains'} onValueChange={(v) => updateFilter(index, 'operator', v as FilterOperator)}>
-                  <SelectTrigger className="h-7 text-xs w-[100px] shrink-0">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DIA_FILTER_OPERATORS.map(op => (
-                      <SelectItem key={op.id} value={op.id} className="text-xs">
-                        <span title={op.description}>{op.label}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {/* Operatör ve Değer - mobilde yan yana */}
+                <div className="flex items-center gap-1.5 w-full md:w-auto">
+                  <Select value={filter.operator || 'contains'} onValueChange={(v) => updateFilter(index, 'operator', v as FilterOperator)}>
+                    <SelectTrigger className="h-7 text-[10px] md:text-xs w-[90px] md:w-[100px] shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DIA_FILTER_OPERATORS.map(op => (
+                        <SelectItem key={op.id} value={op.id} className="text-xs">
+                          <span title={op.description}>{op.label}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
-                {/* Akıllı Değer Girişi */}
-                <SmartValueInput
-                  field={filter.field}
-                  value={filter.value}
-                  onChange={(v) => updateFilter(index, 'value', v)}
-                  operator={filter.operator as FilterOperator}
-                  sampleData={sampleData}
-                />
+                  {/* Akıllı Değer Girişi */}
+                  <div className="flex-1 min-w-0">
+                    <SmartValueInput
+                      field={filter.field}
+                      value={filter.value}
+                      onChange={(v) => updateFilter(index, 'value', v)}
+                      operator={filter.operator as FilterOperator}
+                      sampleData={sampleData}
+                    />
+                  </div>
 
-                {/* Sil */}
-                <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => removeFilter(index)}>
-                  <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-                </Button>
+                  {/* Sil */}
+                  <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => removeFilter(index)}>
+                    <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                  </Button>
+                </div>
               </div>
             ))
           )}

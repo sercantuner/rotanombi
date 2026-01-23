@@ -1279,47 +1279,52 @@ Kullanıcı isteği: ${aiPrompt}`;
               </div>
 
               {/* JSON Veri Sekmesi */}
-              <TabsContent value="datasource" className="flex-1 p-4 m-0">
+              <TabsContent value="datasource" className="flex-1 p-2 md:p-4 m-0">
                 <div className="h-full flex flex-col">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-4">
+                  {/* Mobilde stack, masaüstünde row */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4 mb-3">
+                    {/* Kayıt sayısı ve slider */}
+                    <div className="flex flex-wrap items-center gap-2 md:gap-4">
                       {isMultiQueryMode && multiQuery?.queries?.length ? (
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="bg-primary/10">
+                        <div className="flex flex-wrap items-center gap-1 md:gap-2">
+                          <Badge variant="secondary" className="bg-primary/10 text-xs">
                             <Layers className="h-3 w-3 mr-1" />
                             {multiQuery.queries.length} sorgu
                           </Badge>
                           {multiQuery.queries.map(q => (
-                            <Badge key={q.id} variant="outline" className="text-xs">
+                            <Badge key={q.id} variant="outline" className="text-[10px] md:text-xs">
                               {q.name}: {mergedQueryData[q.id]?.length || 0}
                             </Badge>
                           ))}
                         </div>
                       ) : (
-                        <Badge variant="secondary">{sampleData.length} kayıt</Badge>
+                        <Badge variant="secondary" className="text-xs">{sampleData.length} kayıt</Badge>
                       )}
-                      {isLoadingData && <Loader2 className="h-4 w-4 animate-spin" />}
-                      
-                      {/* Slider kontrolü - tek kaynak modu */}
-                      {!isMultiQueryMode && sampleData.length > 0 && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">Göster:</span>
-                          <Slider
-                            value={[jsonPreviewCount]}
-                            onValueChange={([val]) => setJsonPreviewCount(val)}
-                            min={5}
-                            max={Math.min(100, sampleData.length)}
-                            step={5}
-                            className="w-24"
-                          />
-                          <span className="text-xs font-mono w-6 text-center">{jsonPreviewCount}</span>
-                        </div>
-                      )}
+                      {isLoadingData && <Loader2 className="h-3 w-3 md:h-4 md:w-4 animate-spin" />}
                     </div>
-                    <div className="flex items-center gap-2">
+                    
+                    {/* Slider kontrolü - tek kaynak modu - mobilde tam genişlik */}
+                    {!isMultiQueryMode && sampleData.length > 0 && (
+                      <div className="flex items-center gap-2 w-full md:w-auto">
+                        <span className="text-[10px] md:text-xs text-muted-foreground whitespace-nowrap">Göster:</span>
+                        <Slider
+                          value={[jsonPreviewCount]}
+                          onValueChange={([val]) => setJsonPreviewCount(val)}
+                          min={5}
+                          max={Math.min(100, sampleData.length)}
+                          step={5}
+                          className="flex-1 md:w-32"
+                        />
+                        <span className="text-[10px] md:text-xs font-mono w-6 text-center">{jsonPreviewCount}</span>
+                      </div>
+                    )}
+                    
+                    {/* Butonlar */}
+                    <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
                       <Button 
                         size="sm" 
                         variant="outline" 
+                        className="h-7 text-xs px-2 md:px-3"
                         onClick={() => {
                           const jsonData = isMultiQueryMode ? getMultiQueryJsonData() : sampleData;
                           navigator.clipboard.writeText(JSON.stringify(jsonData, null, 2));
@@ -1327,12 +1332,13 @@ Kullanıcı isteği: ${aiPrompt}`;
                         }} 
                         disabled={!isMultiQueryMode && sampleData.length === 0}
                       >
-                        <Copy className="h-3 w-3 mr-1" />
-                        Kopyala
+                        <Copy className="h-3 w-3 md:mr-1" />
+                        <span className="hidden md:inline">Kopyala</span>
                       </Button>
                       <Button 
                         size="sm" 
                         variant="outline" 
+                        className="h-7 text-xs px-2 md:px-3"
                         onClick={() => {
                           const jsonData = isMultiQueryMode ? getMultiQueryJsonData() : sampleData;
                           const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
@@ -1348,14 +1354,14 @@ Kullanıcı isteği: ${aiPrompt}`;
                         }} 
                         disabled={!isMultiQueryMode && sampleData.length === 0}
                       >
-                        <Download className="h-3 w-3 mr-1" />
-                        İndir
+                        <Download className="h-3 w-3 md:mr-1" />
+                        <span className="hidden md:inline">İndir</span>
                       </Button>
                     </div>
                   </div>
                   
-                  <ScrollArea className="flex-1 border rounded-lg">
-                    <pre className="p-4 text-xs font-mono whitespace-pre-wrap">
+                  <ScrollArea className="flex-1 border rounded-lg max-h-[40vh] md:max-h-none">
+                    <pre className="p-2 md:p-4 text-[10px] md:text-xs font-mono whitespace-pre-wrap break-all">
                       {isMultiQueryMode && multiQuery?.queries?.length ? (
                         JSON.stringify(getMultiQueryJsonData(), null, 2)
                       ) : sampleData.length > 0 ? (
