@@ -191,17 +191,17 @@ export default function SuperAdminPanel() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]">
-      {/* Sol Panel - Kullanıcı Listesi (sadece users tabında) */}
+    <div className="flex flex-col md:flex-row h-[calc(100vh-4rem)]">
+      {/* Sol Panel - Kullanıcı Listesi (Desktop: sidebar, Mobile: full width when users tab selected and not impersonating) */}
       {activeTab === 'users' && (
         <div className={cn(
-          "border-r border-border bg-card transition-all duration-300",
-          isImpersonating ? "w-80" : "w-96"
+          "border-b md:border-b-0 md:border-r border-border bg-card transition-all duration-300",
+          isImpersonating ? "hidden md:block md:w-80" : "w-full md:w-96"
         )}>
-          <div className="p-4 border-b border-border">
-            <div className="flex items-center gap-2 mb-4">
-              <Crown className="w-5 h-5 text-warning" />
-              <h2 className="font-semibold">Süper Admin Paneli</h2>
+          <div className="p-3 md:p-4 border-b border-border">
+            <div className="flex items-center gap-2 mb-3 md:mb-4">
+              <Crown className="w-4 h-4 md:w-5 md:h-5 text-warning" />
+              <h2 className="font-semibold text-sm md:text-base">Süper Admin Paneli</h2>
             </div>
             
             {/* Arama */}
@@ -217,7 +217,7 @@ export default function SuperAdminPanel() {
           </div>
 
           {/* Kullanıcı Listesi */}
-          <ScrollArea className="h-[calc(100vh-12rem)]">
+          <ScrollArea className="h-[50vh] md:h-[calc(100vh-12rem)]">
             <div className="p-2 space-y-1">
               {loading ? (
                 <div className="flex items-center justify-center py-8">
@@ -336,27 +336,32 @@ export default function SuperAdminPanel() {
 
         {/* Tab Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-          <div className="border-b border-border px-4 flex items-center justify-between">
-            <TabsList className="h-12">
-              <TabsTrigger value="users" className="gap-2">
-                <Users className="w-4 h-4" />
-                Kullanıcı İzleme
+          <div className="border-b border-border px-2 md:px-4 flex items-center justify-between overflow-x-auto">
+            <TabsList className="h-10 md:h-12 w-max md:w-auto gap-1">
+              <TabsTrigger value="users" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
+                <Users className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="hidden sm:inline">Kullanıcı İzleme</span>
+                <span className="sm:hidden">Kullanıcılar</span>
               </TabsTrigger>
-              <TabsTrigger value="widgets" className="gap-2">
-                <Boxes className="w-4 h-4" />
-                Widget Yönetimi
+              <TabsTrigger value="widgets" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
+                <Boxes className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="hidden sm:inline">Widget Yönetimi</span>
+                <span className="sm:hidden">Widget</span>
               </TabsTrigger>
-              <TabsTrigger value="categories" className="gap-2">
-                <Layers className="w-4 h-4" />
-                Kategoriler
+              <TabsTrigger value="categories" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
+                <Layers className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="hidden md:inline">Kategoriler</span>
+                <span className="md:hidden">Kat.</span>
               </TabsTrigger>
-              <TabsTrigger value="datasources" className="gap-2">
-                <Database className="w-4 h-4" />
-                Veri Kaynakları
+              <TabsTrigger value="datasources" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
+                <Database className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="hidden md:inline">Veri Kaynakları</span>
+                <span className="md:hidden">Veri</span>
               </TabsTrigger>
-              <TabsTrigger value="feedback" className="gap-2">
-                <MessageSquare className="w-4 h-4" />
-                Geri Bildirimler
+              <TabsTrigger value="feedback" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
+                <MessageSquare className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="hidden md:inline">Geri Bildirimler</span>
+                <span className="md:hidden">G.B.</span>
               </TabsTrigger>
             </TabsList>
             
@@ -365,7 +370,7 @@ export default function SuperAdminPanel() {
               variant="ghost"
               size="icon"
               onClick={toggleTheme}
-              className="h-9 w-9"
+              className="h-8 w-8 md:h-9 md:w-9 flex-shrink-0 ml-2"
             >
               {theme === 'dark' ? (
                 <Sun className="h-4 w-4" />

@@ -678,20 +678,20 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+      <DialogContent className="max-w-5xl w-[95vw] md:w-full h-[95vh] md:h-[90vh] flex flex-col overflow-hidden p-3 md:p-6">
+        <DialogHeader className="pb-2 md:pb-4">
+          <DialogTitle className="flex items-center gap-2 text-base md:text-lg">
             {isEditMode ? (
-              <Edit className="h-5 w-5 text-primary" />
+              <Edit className="h-4 w-4 md:h-5 md:w-5 text-primary" />
             ) : (
-              <Wand2 className="h-5 w-5 text-primary" />
+              <Wand2 className="h-4 w-4 md:h-5 md:w-5 text-primary" />
             )}
             {isEditMode ? 'Widget Düzenle' : 'Widget Builder'}
             {isEditMode && (
-              <Badge variant="secondary" className="ml-2">{editWidget?.name}</Badge>
+              <Badge variant="secondary" className="ml-2 text-xs">{editWidget?.name}</Badge>
             )}
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs md:text-sm hidden md:block">
             {isEditMode 
               ? 'Mevcut widget yapılandırmasını düzenleyin ve güncelleyin'
               : 'Merkezi veri kaynaklarından widget oluşturun'
@@ -700,7 +700,56 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className={cn("grid w-full", isEditMode ? "grid-cols-9" : "grid-cols-10")}>
+          {/* Mobile: Scrollable tabs */}
+          <div className="w-full overflow-x-auto md:hidden">
+            <TabsList className="inline-flex w-max gap-1 p-1">
+              {!isEditMode && (
+                <TabsTrigger value="templates" className="gap-1 text-xs px-2 py-1.5">
+                  <Sparkles className="h-3 w-3" />
+                  <span className="hidden xs:inline">Şablon</span>
+                </TabsTrigger>
+              )}
+              <TabsTrigger value="api" className="gap-1 text-xs px-2 py-1.5">
+                <Database className="h-3 w-3" />
+                Veri
+              </TabsTrigger>
+              <TabsTrigger value="merge" className="gap-1 text-xs px-2 py-1.5">
+                <Database className="h-3 w-3" />
+                Birleştir
+              </TabsTrigger>
+              <TabsTrigger value="calculation" className="gap-1 text-xs px-2 py-1.5">
+                <Calculator className="h-3 w-3" />
+                Hesap
+              </TabsTrigger>
+              <TabsTrigger value="filter" className="gap-1 text-xs px-2 py-1.5">
+                <Filter className="h-3 w-3" />
+                Filtre
+              </TabsTrigger>
+              <TabsTrigger value="date" className="gap-1 text-xs px-2 py-1.5">
+                <Calendar className="h-3 w-3" />
+                Tarih
+              </TabsTrigger>
+              <TabsTrigger value="visualization" className="gap-1 text-xs px-2 py-1.5">
+                <BarChart3 className="h-3 w-3" />
+                Görsel
+              </TabsTrigger>
+              <TabsTrigger value="settings" className="gap-1 text-xs px-2 py-1.5">
+                <Settings2 className="h-3 w-3" />
+                Ayar
+              </TabsTrigger>
+              <TabsTrigger value="code" className="gap-1 text-xs px-2 py-1.5">
+                <Code className="h-3 w-3" />
+                Kod
+              </TabsTrigger>
+              <TabsTrigger value="preview" className="gap-1 text-xs px-2 py-1.5">
+                <Eye className="h-3 w-3" />
+                Önizle
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          
+          {/* Desktop: Grid tabs */}
+          <TabsList className={cn("hidden md:grid w-full", isEditMode ? "grid-cols-9" : "grid-cols-10")}>
             {!isEditMode && (
               <TabsTrigger value="templates" className="gap-1 text-xs">
                 <Sparkles className="h-3.5 w-3.5" />
@@ -915,16 +964,16 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                       <CardDescription>Widget'ın nasıl görüntüleneceğini seçin</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-5 gap-2">
+                      <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2">
                         {CHART_TYPES.filter(ct => ['kpi', 'bar', 'line', 'area', 'pie', 'donut', 'table', 'list', 'pivot'].includes(ct.id)).map(type => (
                           <Button
                             key={type.id}
                             variant={config.visualization.type === type.id ? 'default' : 'outline'}
-                            className="h-auto py-3 flex-col gap-1"
+                            className="h-auto py-2 md:py-3 flex-col gap-1"
                             onClick={() => handleChartTypeChange(type.id)}
                           >
-                            <DynamicIcon iconName={type.icon} className="h-5 w-5" />
-                            <span className="text-xs">{type.name}</span>
+                            <DynamicIcon iconName={type.icon} className="h-4 w-4 md:h-5 md:w-5" />
+                            <span className="text-[10px] md:text-xs">{type.name}</span>
                           </Button>
                         ))}
                       </div>
