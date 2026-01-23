@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import { useDataSources, DataSource as DataSourceType } from '@/hooks/useDataSources';
-import { useWidgetAdmin } from '@/hooks/useWidgets';
+import { useWidgetAdmin, useWidgets } from '@/hooks/useWidgets';
 import { WidgetFormData, PAGE_CATEGORIES, WIDGET_SIZES } from '@/lib/widgetTypes';
 import { MultiQueryConfig } from '@/lib/widgetBuilderTypes';
 import { DataSourceSelector } from './DataSourceSelector';
@@ -313,6 +313,7 @@ interface ChatMessage {
 }
 
 export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWidget }: CustomCodeWidgetBuilderProps) {
+  const { widgets } = useWidgets();
   const { createWidget, updateWidget, isLoading: isSaving } = useWidgetAdmin();
   const { activeDataSources, getDataSourceById } = useDataSources();
   const { user } = useAuth();
@@ -356,6 +357,18 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   
   // Aktif sekme
   const [activeTab, setActiveTab] = useState('datasource');
+  
+  // Widget şablon seçimi
+  const [showWidgetTemplates, setShowWidgetTemplates] = useState(false);
+  
+  // Mevcut custom widget'ları şablon olarak listele
+  const customWidgetTemplates = useMemo(() => {
+    return (widgets || []).filter(w => 
+      w.builder_config && 
+      'customCode' in w.builder_config && 
+      w.id !== editingWidget?.id
+    );
+  }, [widgets, editingWidget]);
 
   // Düzenleme modunda widget verilerini yükle
   useEffect(() => {
@@ -1168,6 +1181,64 @@ Kullanıcı isteği: ${aiPrompt}`;
                     ))}
                   </div>
                 </div>
+                
+                {/* Mevcut Widget'lardan Şablon */}
+                {customWidgetTemplates.length > 0 && (
+                  <>
+                    <Separator />
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold flex items-center gap-2">
+                        <Layers className="h-4 w-4" />
+                        Widget Referansları
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        Mevcut widget'ların kodunu şablon olarak kullanın
+                      </p>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => setShowWidgetTemplates(!showWidgetTemplates)}
+                      >
+                        {showWidgetTemplates ? 'Gizle' : `${customWidgetTemplates.length} Widget Göster`}
+                      </Button>
+                      
+                      {showWidgetTemplates && (
+                        <div className="space-y-1 max-h-48 overflow-y-auto">
+                          {customWidgetTemplates.map(widget => (
+                            <Button
+                              key={widget.id}
+                              variant="ghost"
+                              size="sm"
+                              className="w-full justify-start text-left h-auto py-2"
+                              onClick={() => {
+                                const config = widget.builder_config as any;
+                                if (config?.customCode) {
+                                  setCustomCode(config.customCode);
+                                  toast.success(`"${widget.name}" kodu yüklendi`);
+                                  setActiveTab('code');
+                                }
+                              }}
+                            >
+                              <div className="flex flex-col items-start gap-0.5">
+                                <div className="flex items-center gap-2">
+                                  <DynamicIcon iconName={widget.icon || 'Code'} className="h-3 w-3" />
+                                  <span className="font-medium text-xs">{widget.name}</span>
+                                </div>
+                                {widget.description && (
+                                  <span className="text-[10px] text-muted-foreground truncate max-w-full">
+                                    {widget.description}
+                                  </span>
+                                )}
+                              </div>
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </ScrollArea>
           </div>

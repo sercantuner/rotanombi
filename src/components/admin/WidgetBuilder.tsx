@@ -50,7 +50,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { 
   Wand2, BarChart3, Settings2, Save, 
   Hash, TrendingUp, Activity, PieChart, Circle, Table, List, LayoutGrid, CheckCircle, Edit,
-  Database, Calculator, Sparkles, Calendar, Zap, Info, Filter, Eye, Layers
+  Database, Calculator, Sparkles, Calendar, Zap, Info, Filter, Eye, Layers, Code, Copy, Check
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -168,6 +168,10 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   // Power BI tarzı Field Wells ve Chart Settings
   const [fieldWells, setFieldWells] = useState<FieldWellsConfig>({});
   const [chartSettings, setChartSettings] = useState<ChartSettingsData>(getDefaultChartSettings());
+  
+  // Kod görüntüleme
+  const [generatedCode, setGeneratedCode] = useState('');
+  const [codeCopied, setCodeCopied] = useState(false);
   
   // Görselleştirme için kullanılabilir alanlar (veri kaynağından)
   const availableFieldsForVisualization = useMemo(() => {
@@ -449,6 +453,132 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
     }
   };
 
+  // Oluşturulan kodu üret (builder config'den)
+  const generateBuilderCode = () => {
+    const vizType = config.visualization.type;
+    const lines: string[] = [
+      '// Widget Builder tarafından üretilen yapılandırma',
+      '// Bu kodu özelleştirmek için "Hardcode Widget" moduna geçebilirsiniz',
+      '',
+      'function Widget({ data }) {',
+      '  if (!data || data.length === 0) {',
+      '    return React.createElement("div",',
+      '      { className: "flex items-center justify-center h-48 text-muted-foreground" },',
+      '      "Veri bulunamadı"',
+      '    );',
+      '  }',
+      '',
+    ];
+
+    if (vizType === 'kpi') {
+      const kpi = config.visualization.kpi;
+      lines.push(
+        `  // KPI: ${kpi?.valueField || 'N/A'} (${kpi?.aggregation || 'sum'})`,
+        `  var total = data.reduce(function(acc, item) {`,
+        `    return acc + (parseFloat(item['${kpi?.valueField}']) || 0);`,
+        `  }, 0);`,
+        '',
+        `  var formatValue = function(value) {`,
+        `    if (Math.abs(value) >= 1000000) return '₺' + (value / 1000000).toFixed(1) + 'M';`,
+        `    if (Math.abs(value) >= 1000) return '₺' + (value / 1000).toFixed(0) + 'K';`,
+        `    return '₺' + value.toLocaleString('tr-TR');`,
+        `  };`,
+        '',
+        `  return React.createElement('div', { className: 'p-4' },`,
+        `    React.createElement('div', { className: 'text-2xl font-bold text-primary' }, formatValue(total)),`,
+        `    React.createElement('div', { className: 'text-sm text-muted-foreground mt-1' }, data.length + ' kayıt')`,
+        `  );`,
+      );
+    } else if (['bar', 'line', 'area'].includes(vizType)) {
+      const xField = (fieldWells.xAxis?.[0]?.field) || xAxisField || 'kategori';
+      const yField = (fieldWells.yAxis?.[0]?.field) || yAxisField || 'deger';
+      lines.push(
+        `  // Chart: ${vizType} - X: ${xField}, Y: ${yField}`,
+        `  var chartData = data.slice(0, ${chartSettings.displayLimit || 10}).map(function(item) {`,
+        `    return {`,
+        `      name: item['${xField}'] || 'N/A',`,
+        `      value: parseFloat(item['${yField}']) || 0`,
+        `    };`,
+        `  });`,
+        '',
+        `  return React.createElement(ResponsiveContainer, { width: '100%', height: 300 },`,
+        `    React.createElement(${vizType === 'bar' ? 'BarChart' : vizType === 'line' ? 'LineChart' : 'AreaChart'}, { data: chartData },`,
+        `      React.createElement(CartesianGrid, { strokeDasharray: '3 3', className: 'stroke-border' }),`,
+        `      React.createElement(XAxis, { dataKey: 'name', className: 'text-xs fill-muted-foreground' }),`,
+        `      React.createElement(YAxis, { className: 'text-xs fill-muted-foreground' }),`,
+        `      React.createElement(Tooltip),`,
+        `      React.createElement(${vizType === 'bar' ? 'Bar' : vizType === 'line' ? 'Line' : 'Area'}, {`,
+        `        dataKey: 'value',`,
+        `        fill: 'hsl(var(--primary))',`,
+        `        stroke: 'hsl(var(--primary))'`,
+        `      })`,
+        `    )`,
+        `  );`,
+      );
+    } else if (['pie', 'donut'].includes(vizType)) {
+      const nameField = (fieldWells.xAxis?.[0]?.field) || xAxisField || 'kategori';
+      const valueField = (fieldWells.yAxis?.[0]?.field) || yAxisField || 'deger';
+      lines.push(
+        `  // Chart: ${vizType} - Name: ${nameField}, Value: ${valueField}`,
+        `  var COLORS = ['hsl(var(--primary))', 'hsl(var(--success))', 'hsl(var(--warning))', 'hsl(var(--destructive))'];`,
+        `  var chartData = data.slice(0, ${chartSettings.displayLimit || 10}).map(function(item) {`,
+        `    return {`,
+        `      name: item['${nameField}'] || 'N/A',`,
+        `      value: parseFloat(item['${valueField}']) || 0`,
+        `    };`,
+        `  });`,
+        '',
+        `  return React.createElement(ResponsiveContainer, { width: '100%', height: 300 },`,
+        `    React.createElement(PieChart, {},`,
+        `      React.createElement(Pie, {`,
+        `        data: chartData,`,
+        `        cx: '50%',`,
+        `        cy: '50%',`,
+        `        ${vizType === 'donut' ? "innerRadius: 60," : ""}`,
+        `        outerRadius: 100,`,
+        `        fill: 'hsl(var(--primary))',`,
+        `        dataKey: 'value'`,
+        `      },`,
+        `        chartData.map(function(entry, index) {`,
+        `          return React.createElement(Cell, { key: 'cell-' + index, fill: COLORS[index % COLORS.length] });`,
+        `        })`,
+        `      ),`,
+        `      React.createElement(Tooltip)`,
+        `    )`,
+        `  );`,
+      );
+    } else {
+      lines.push(
+        `  // Table/List: Basit tablo görünümü`,
+        `  return React.createElement('div', { className: 'overflow-auto max-h-64' },`,
+        `    React.createElement('table', { className: 'w-full text-sm' },`,
+        `      React.createElement('tbody', {},`,
+        `        data.slice(0, 10).map(function(item, idx) {`,
+        `          return React.createElement('tr', { key: idx, className: 'border-b border-border' },`,
+        `            Object.keys(item).slice(0, 3).map(function(key) {`,
+        `              return React.createElement('td', { key: key, className: 'p-2' }, String(item[key] || '-'));`,
+        `            })`,
+        `          );`,
+        `        })`,
+        `      )`,
+        `    )`,
+        `  );`,
+      );
+    }
+
+    lines.push('}', '', 'return Widget;');
+    return lines.join('\n');
+  };
+
+  // Kodu kopyala
+  const copyGeneratedCode = () => {
+    const code = generateBuilderCode();
+    navigator.clipboard.writeText(code);
+    setCodeCopied(true);
+    setTimeout(() => setCodeCopied(false), 2000);
+    toast.success('Kod kopyalandı');
+  };
+
   const handleSave = async () => {
     if (!widgetKey || !widgetName) {
       toast.error('Widget key ve adı zorunludur');
@@ -570,7 +700,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className={cn("grid w-full", isEditMode ? "grid-cols-8" : "grid-cols-9")}>
+          <TabsList className={cn("grid w-full", isEditMode ? "grid-cols-9" : "grid-cols-10")}>
             {!isEditMode && (
               <TabsTrigger value="templates" className="gap-1 text-xs">
                 <Sparkles className="h-3.5 w-3.5" />
@@ -604,6 +734,10 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
             <TabsTrigger value="settings" className="gap-1 text-xs">
               <Settings2 className="h-3.5 w-3.5" />
               Ayarlar
+            </TabsTrigger>
+            <TabsTrigger value="code" className="gap-1 text-xs">
+              <Code className="h-3.5 w-3.5" />
+              Kod
             </TabsTrigger>
             <TabsTrigger value="preview" className="gap-1 text-xs">
               <Eye className="h-3.5 w-3.5" />
@@ -986,6 +1120,41 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                       checked={isDefaultWidget}
                       onCheckedChange={setIsDefaultWidget}
                     />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* KOD GÖRÜNTÜLEME */}
+            <TabsContent value="code" className="m-0 space-y-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Code className="h-5 w-5 text-primary" />
+                      Üretilen Kod
+                    </div>
+                    <Button size="sm" variant="outline" onClick={copyGeneratedCode}>
+                      {codeCopied ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
+                      {codeCopied ? 'Kopyalandı' : 'Kopyala'}
+                    </Button>
+                  </CardTitle>
+                  <CardDescription>
+                    Bu yapılandırmadan üretilen React kodu. Özelleştirmek için "Hardcode Widget" moduna geçebilirsiniz.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="relative">
+                    <pre className="p-4 bg-muted/50 rounded-lg border text-xs font-mono overflow-auto max-h-[400px] whitespace-pre-wrap">
+                      {generateBuilderCode()}
+                    </pre>
+                  </div>
+                  
+                  <div className="mt-4 p-3 bg-primary/5 rounded-lg border border-primary/20">
+                    <p className="text-sm text-muted-foreground">
+                      <strong className="text-foreground">İpucu:</strong> Bu kodu kopyalayıp "Hardcode Widget Builder" ile daha detaylı özelleştirmeler yapabilirsiniz.
+                      Hardcode modunda AI desteği ile kodu geliştirebilir veya manuel değişiklikler yapabilirsiniz.
+                    </p>
                   </div>
                 </CardContent>
               </Card>
