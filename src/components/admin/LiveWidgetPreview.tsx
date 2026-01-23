@@ -1050,15 +1050,15 @@ export function LiveWidgetPreview({
 
   return (
     <Card className="border-2 border-primary/20">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
+      <CardHeader className="p-3 md:pb-3 md:p-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Eye className="h-5 w-5 text-primary" />
-            <CardTitle className="text-base">Canlı Önizleme</CardTitle>
+            <Eye className="h-4 w-4 md:h-5 md:w-5 text-primary" />
+            <CardTitle className="text-sm md:text-base">Canlı Önizleme</CardTitle>
           </div>
           <div className="flex items-center gap-2">
             {lastFetched && (
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="text-[10px] md:text-xs">
                 {recordCount} kayıt
               </Badge>
             )}
@@ -1066,63 +1066,64 @@ export function LiveWidgetPreview({
               size="sm" 
               onClick={fetchPreviewData} 
               disabled={isLoading}
-              className="gap-1.5"
+              className="gap-1.5 h-7 text-xs md:h-9 md:text-sm"
             >
               {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-3 w-3 md:h-4 md:w-4 animate-spin" />
               ) : (
-                <Play className="h-4 w-4" />
+                <Play className="h-3 w-3 md:h-4 md:w-4" />
               )}
-              {isLoading ? 'Yükleniyor...' : 'Veri Çek'}
+              <span className="hidden md:inline">{isLoading ? 'Yükleniyor...' : 'Veri Çek'}</span>
+              <span className="md:hidden">{isLoading ? 'Yükle...' : 'Çek'}</span>
             </Button>
           </div>
         </div>
-        <CardDescription className="text-xs">
+        <CardDescription className="text-[10px] md:text-xs hidden md:block">
           Gerçek verilerle widget'ın nasıl görüneceğini test edin
         </CardDescription>
       </CardHeader>
       
-      <CardContent>
+      <CardContent className="p-2 md:p-6 pt-0">
         {error ? (
-          <div className="flex items-center gap-2 text-destructive p-4 bg-destructive/10 rounded-lg">
-            <AlertCircle className="h-5 w-5 flex-shrink-0" />
-            <span className="text-sm">{error}</span>
+          <div className="flex items-center gap-2 text-destructive p-2 md:p-4 bg-destructive/10 rounded-lg">
+            <AlertCircle className="h-4 w-4 md:h-5 md:w-5 flex-shrink-0" />
+            <span className="text-xs md:text-sm">{error}</span>
           </div>
         ) : isLoading ? (
-          <div className="space-y-3">
-            <Skeleton className="h-8 w-full" />
-            <Skeleton className="h-40 w-full" />
+          <div className="space-y-2 md:space-y-3">
+            <Skeleton className="h-6 md:h-8 w-full" />
+            <Skeleton className="h-32 md:h-40 w-full" />
           </div>
         ) : !rawData.length ? (
-          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-            <RefreshCw className="h-10 w-10 mb-3 opacity-30" />
-            <p className="text-sm font-medium">Veri bekleniyor</p>
-            <p className="text-xs mt-1">"Veri Çek" butonuna tıklayarak gerçek veriyi yükleyin</p>
+          <div className="flex flex-col items-center justify-center py-4 md:py-8 text-muted-foreground">
+            <RefreshCw className="h-8 w-8 md:h-10 md:w-10 mb-2 md:mb-3 opacity-30" />
+            <p className="text-xs md:text-sm font-medium">Veri bekleniyor</p>
+            <p className="text-[10px] md:text-xs mt-1">"Veri Çek" butonuna tıklayarak gerçek veriyi yükleyin</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* Widget İsim ve İkon Düzenleme Alanı */}
-            <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+          <div className="space-y-2 md:space-y-4">
+            {/* Widget İsim ve İkon Düzenleme Alanı - Mobilde kompakt */}
+            <div className="flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-3 p-2 md:p-3 bg-muted/50 rounded-lg">
               {/* İkon Seçici */}
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-9 w-9 p-0">
-                    <DynamicIcon iconName={editableIcon || 'BarChart3'} className="h-5 w-5" />
+                  <Button variant="outline" size="sm" className="h-8 w-8 md:h-9 md:w-9 p-0 flex-shrink-0">
+                    <DynamicIcon iconName={editableIcon || 'BarChart3'} className="h-4 w-4 md:h-5 md:w-5" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-64 p-2" align="start">
-                  <Label className="text-xs text-muted-foreground mb-2 block">İkon Seç</Label>
+                <PopoverContent className="w-56 md:w-64 p-2" align="start">
+                  <Label className="text-[10px] md:text-xs text-muted-foreground mb-2 block">İkon Seç</Label>
                   <div className="grid grid-cols-6 gap-1">
                     {ICON_OPTIONS.map(icon => (
                       <Button
                         key={icon}
                         variant={editableIcon === icon ? 'default' : 'ghost'}
                         size="icon"
-                        className="h-8 w-8"
+                        className="h-6 w-6 md:h-8 md:w-8"
                         onClick={() => handleIconChange(icon)}
                         title={icon}
                       >
-                        <DynamicIcon iconName={icon} className="h-4 w-4" />
+                        <DynamicIcon iconName={icon} className="h-3 w-3 md:h-4 md:w-4" />
                       </Button>
                     ))}
                   </div>
@@ -1130,17 +1131,17 @@ export function LiveWidgetPreview({
               </Popover>
 
               {/* İsim Input */}
-              <div className="flex-1">
+              <div className="flex-1 w-full md:w-auto">
                 <Input
                   value={editableName}
                   onChange={(e) => handleNameChange(e.target.value)}
                   placeholder="Widget Adı"
-                  className="h-9 text-sm font-medium"
+                  className="h-8 md:h-9 text-xs md:text-sm font-medium"
                 />
               </div>
 
-              {/* Renk Paleti Göstergesi (Salt Okunur) */}
-              <div className="flex items-center gap-2 px-3 py-2 rounded border bg-muted/20">
+              {/* Renk Paleti Göstergesi - Mobilde gizle */}
+              <div className="hidden md:flex items-center gap-2 px-3 py-2 rounded border bg-muted/20">
                 <Palette className="h-4 w-4 text-muted-foreground" />
                 <div className="flex gap-0.5">
                   {COLOR_PALETTES[selectedPalette]?.colors.slice(0, 5).map((color, idx) => (
@@ -1157,61 +1158,63 @@ export function LiveWidgetPreview({
               </div>
             </div>
 
-            {/* İstatistikler ve Tarih Filtresi Bilgisi */}
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="text-xs">
-                Ham: {rawData.length} kayıt
+            {/* İstatistikler ve Tarih Filtresi Bilgisi - Mobilde kompakt */}
+            <div className="flex flex-wrap items-center gap-1 md:gap-2">
+              <Badge variant="secondary" className="text-[10px] md:text-xs">
+                Ham: {rawData.length}
               </Badge>
               {postFetchFilters.length > 0 && (
-                <Badge className="text-xs bg-green-600">
-                  Filtrelenmiş: {processedData.length} kayıt
+                <Badge className="text-[10px] md:text-xs bg-green-600">
+                  Filtre: {processedData.length}
                 </Badge>
               )}
               {calculatedFields.length > 0 && (
-                <Badge variant="outline" className="text-xs">
-                  +{calculatedFields.length} hesaplanan alan
+                <Badge variant="outline" className="text-[10px] md:text-xs">
+                  +{calculatedFields.length} hesap
                 </Badge>
               )}
               {/* Tarih Filtresi Durumu */}
               {dateFilterConfig?.enabled && dateFilterConfig.dateField && (
-                <Badge className="text-xs bg-blue-600 gap-1">
-                  <Calendar className="h-3 w-3" />
-                  {DATE_PERIODS.find(p => p.id === dateFilterConfig.defaultPeriod)?.name || dateFilterConfig.defaultPeriod}
-                  <span className="opacity-75">({dateFilterConfig.dateField})</span>
+                <Badge className="text-[10px] md:text-xs bg-blue-600 gap-1">
+                  <Calendar className="h-2.5 w-2.5 md:h-3 md:w-3" />
+                  <span className="hidden md:inline">{DATE_PERIODS.find(p => p.id === dateFilterConfig.defaultPeriod)?.name || dateFilterConfig.defaultPeriod}</span>
+                  <span className="md:hidden">{dateFilterConfig.defaultPeriod}</span>
                 </Badge>
               )}
               {/* X Ekseni Tarih Tespiti */}
               {isXAxisDate && !dateFilterConfig?.enabled && (
-                <Badge variant="outline" className="text-xs gap-1 text-blue-600 border-blue-500/30">
-                  <Calendar className="h-3 w-3" />
-                  Tarihsel Sıralama Aktif
+                <Badge variant="outline" className="text-[10px] md:text-xs gap-1 text-blue-600 border-blue-500/30">
+                  <Calendar className="h-2.5 w-2.5 md:h-3 md:w-3" />
+                  <span className="hidden md:inline">Tarihsel</span>
                 </Badge>
               )}
             </div>
 
-            {/* Görsel Tip Değiştirici */}
-            <div className="flex flex-wrap gap-1 p-2 bg-muted/50 rounded-lg">
-              <span className="text-xs text-muted-foreground mr-2 self-center">Görsel:</span>
-              {availableVizTypes.map(vt => {
-                const Icon = vt.icon;
-                return (
-                  <Button
-                    key={vt.id}
-                    variant={previewVizType === vt.id ? 'default' : 'ghost'}
-                    size="sm"
-                    className="h-7 px-2 text-xs gap-1"
-                    onClick={() => setPreviewVizType(vt.id)}
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    {vt.label}
-                  </Button>
-                );
-              })}
+            {/* Görsel Tip Değiştirici - Mobilde scroll */}
+            <div className="overflow-x-auto -mx-2 px-2 md:mx-0 md:px-0">
+              <div className="flex gap-1 p-1.5 md:p-2 bg-muted/50 rounded-lg min-w-max md:min-w-0 md:flex-wrap">
+                <span className="text-[10px] md:text-xs text-muted-foreground mr-1 md:mr-2 self-center whitespace-nowrap">Görsel:</span>
+                {availableVizTypes.map(vt => {
+                  const Icon = vt.icon;
+                  return (
+                    <Button
+                      key={vt.id}
+                      variant={previewVizType === vt.id ? 'default' : 'ghost'}
+                      size="sm"
+                      className="h-6 md:h-7 px-1.5 md:px-2 text-[10px] md:text-xs gap-0.5 md:gap-1"
+                      onClick={() => setPreviewVizType(vt.id)}
+                    >
+                      <Icon className="h-3 w-3 md:h-3.5 md:w-3.5" />
+                      <span className="hidden xs:inline">{vt.label}</span>
+                    </Button>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Grafik Ayarları Özeti (Salt Okunur - Görsel sekmesinden değiştirilir) */}
+            {/* Grafik Ayarları Özeti - Mobilde gizle */}
             {['bar', 'line', 'area', 'pie', 'donut'].includes(previewVizType) && (
-              <div className="flex flex-wrap items-center gap-2 p-2 bg-muted/20 rounded-lg text-xs text-muted-foreground">
+              <div className="hidden md:flex flex-wrap items-center gap-2 p-2 bg-muted/20 rounded-lg text-xs text-muted-foreground">
                 <Settings2 className="h-3.5 w-3.5" />
                 <span>Ayarlar:</span>
                 <Badge variant="outline" className="text-xs">
@@ -1248,15 +1251,15 @@ export function LiveWidgetPreview({
               </div>
             )}
 
-            <Separator />
+            <Separator className="hidden md:block" />
 
-            {/* Widget Önizleme */}
-            <div className="bg-card rounded-lg border p-4 min-h-[280px]">
-              {/* KPI */}
+            {/* Widget Önizleme - Mobilde daha kompakt */}
+            <div className="bg-card rounded-lg border p-2 md:p-4 min-h-[200px] md:min-h-[280px]">
+              {/* KPI - Mobilde kompakt */}
               {previewVizType === 'kpi' && visualizationData && (
-                <div className="text-center py-4">
-                  <DynamicIcon iconName={editableIcon || 'Hash'} className="h-12 w-12 mx-auto mb-4 text-primary" />
-                  <p className="text-5xl font-bold">
+                <div className="text-center py-2 md:py-4">
+                  <DynamicIcon iconName={editableIcon || 'Hash'} className="h-8 w-8 md:h-12 md:w-12 mx-auto mb-2 md:mb-4 text-primary" />
+                  <p className="text-3xl md:text-5xl font-bold">
                     {formatValue(
                       visualizationData.kpiData.value || 0,
                       visualizationData.kpiData.format,
@@ -1264,23 +1267,23 @@ export function LiveWidgetPreview({
                       visualizationData.kpiData.suffix
                     )}
                   </p>
-                  <p className="text-sm text-muted-foreground mt-3">
+                  <p className="text-xs md:text-sm text-muted-foreground mt-2 md:mt-3">
                     {editableName || 'KPI Widget'}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-[10px] md:text-xs text-muted-foreground mt-1">
                     {processedData.length} kayıt üzerinden hesaplandı
                   </p>
                 </div>
               )}
 
-              {/* Bar Chart */}
+              {/* Bar Chart - Mobilde kısa yükseklik */}
               {previewVizType === 'bar' && visualizationData?.chartData && (
                 <div>
-                  <p className="text-sm font-medium mb-3 flex items-center gap-2">
-                    <BarChart3 className="h-4 w-4" />
+                  <p className="text-xs md:text-sm font-medium mb-2 md:mb-3 flex items-center gap-2">
+                    <BarChart3 className="h-3 w-3 md:h-4 md:w-4" />
                     {editableName || 'Çubuk Grafik'}
                   </p>
-                  <ResponsiveContainer width="100%" height={240}>
+                  <ResponsiveContainer width="100%" height={180} className="md:!h-[240px]">
                     <BarChart data={visualizationData.chartData}>
                       {showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
                       <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={60} />
@@ -1329,17 +1332,17 @@ export function LiveWidgetPreview({
                 </div>
               )}
 
-              {/* Line Chart */}
+              {/* Line Chart - Mobilde kısa */}
               {previewVizType === 'line' && visualizationData?.chartData && (
                 <div>
-                  <p className="text-sm font-medium mb-3 flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4" />
+                  <p className="text-xs md:text-sm font-medium mb-2 md:mb-3 flex items-center gap-2">
+                    <TrendingUp className="h-3 w-3 md:h-4 md:w-4" />
                     {editableName || 'Çizgi Grafik'}
                   </p>
-                  <ResponsiveContainer width="100%" height={240}>
+                  <ResponsiveContainer width="100%" height={180} className="md:!h-[240px]">
                     <LineChart data={visualizationData.chartData}>
                       {showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />}
-                      <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={60} />
+                      <XAxis dataKey="name" tick={{ fontSize: 9 }} interval={0} angle={-45} textAnchor="end" height={50} />
                       <YAxis tick={{ fontSize: 10 }} />
                       <Tooltip 
                         contentStyle={{ 
