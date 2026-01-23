@@ -109,10 +109,10 @@ export function FilterableStatCard({
 
   return (
     <>
-      <div className="stat-card animate-slide-up group relative h-full flex flex-col overflow-hidden">
+      <div className="stat-card animate-slide-up group relative h-full flex flex-col overflow-hidden p-3 md:p-4">
         {/* Control Buttons - Sadece düzenleme modunda görünür */}
         <div className={cn(
-          'absolute top-2 right-2 flex items-center gap-1 z-10 transition-opacity',
+          'absolute top-1.5 right-1.5 md:top-2 md:right-2 flex items-center gap-1 z-10 transition-opacity',
           isWidgetEditMode ? 'opacity-100' : 'opacity-0 pointer-events-none'
         )}>
           {/* Settings Button */}
@@ -120,13 +120,13 @@ export function FilterableStatCard({
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 bg-background/60 backdrop-blur-sm hover:bg-background"
+              className="h-6 w-6 md:h-7 md:w-7 bg-background/60 backdrop-blur-sm hover:bg-background"
               onClick={(e) => {
                 e.stopPropagation();
                 setSettingsModalOpen(true);
               }}
             >
-              <Settings className="h-4 w-4" />
+              <Settings className="h-3 w-3 md:h-4 md:w-4" />
             </Button>
           )}
           
@@ -136,7 +136,7 @@ export function FilterableStatCard({
               variant="ghost"
               size="icon"
               className={cn(
-                'h-7 w-7 bg-background/60 backdrop-blur-sm hover:bg-background',
+                'h-6 w-6 md:h-7 md:w-7 bg-background/60 backdrop-blur-sm hover:bg-background',
                 hasActiveFilters && 'bg-primary/10 text-primary'
               )}
               onClick={(e) => {
@@ -145,26 +145,26 @@ export function FilterableStatCard({
               }}
             >
               {hasActiveFilters ? (
-                <FilterX className="h-4 w-4" />
+                <FilterX className="h-3 w-3 md:h-4 md:w-4" />
               ) : (
-                <Filter className="h-4 w-4" />
+                <Filter className="h-3 w-3 md:h-4 md:w-4" />
               )}
             </Button>
           )}
         </div>
 
-        <div className="flex items-stretch justify-between flex-1 min-w-0">
-          <div className="flex-1 min-w-0 pr-2 flex flex-col justify-center">
-            <p className="metric-label mb-1 line-clamp-2 min-h-[2.5rem]">{title}</p>
+        <div className="flex items-stretch justify-between flex-1 min-w-0 gap-2">
+          <div className="flex-1 min-w-0 flex flex-col justify-center">
+            <p className="metric-label mb-0.5 md:mb-1 line-clamp-2 min-h-[2rem] md:min-h-[2.5rem] text-xs md:text-sm">{title}</p>
             <p className={cn(
-              'metric-value truncate',
+              'metric-value truncate text-lg md:text-2xl',
               variantStyles[variant],
               fontSizeClasses[kpiSettings.fontSize]
             )}>
               {value}
             </p>
             {subtitle && kpiSettings.showSubtitle && (
-              <p className="text-xs text-muted-foreground mt-1 truncate">{subtitle}</p>
+              <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5 md:mt-1 truncate">{subtitle}</p>
             )}
           </div>
           {/* İkon - küçük ekranlarda gizlenir */}
@@ -173,23 +173,23 @@ export function FilterableStatCard({
               "p-2 md:p-3 rounded-lg bg-secondary flex-shrink-0 hidden sm:flex items-center justify-center self-center",
               variantStyles[variant]
             )}>
-              <Icon className="w-5 h-5 md:w-6 md:h-6" />
+              <Icon className="w-4 h-4 md:w-6 md:h-6" />
             </div>
           )}
         </div>
         
         {trendValue && kpiSettings.showTrend && (
-          <div className={`flex items-center gap-1 mt-3 text-sm ${trendColors[trend]}`}>
-            <TrendIcon className="w-4 h-4" />
+          <div className={`flex items-center gap-1 mt-2 md:mt-3 text-xs md:text-sm ${trendColors[trend]}`}>
+            <TrendIcon className="w-3 h-3 md:w-4 md:h-4" />
             <span>{trendValue}</span>
           </div>
         )}
 
         {/* Aktif filtre göstergesi */}
         {hasActiveFilters && (
-          <div className="absolute bottom-2 right-2 flex items-center gap-1 text-xs text-primary/70">
-            <Filter className="h-3 w-3" />
-            <span>Filtreli</span>
+          <div className="absolute bottom-1.5 right-1.5 md:bottom-2 md:right-2 flex items-center gap-1 text-[10px] md:text-xs text-primary/70">
+            <Filter className="h-2.5 w-2.5 md:h-3 md:w-3" />
+            <span className="hidden sm:inline">Filtreli</span>
           </div>
         )}
       </div>

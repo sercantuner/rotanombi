@@ -98,15 +98,15 @@ export function DonutChart({
   }
 
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-full h-full min-h-[150px]">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
             data={data}
             cx="50%"
             cy="50%"
-            innerRadius="60%"
-            outerRadius="85%"
+            innerRadius="55%"
+            outerRadius="80%"
             paddingAngle={2}
             dataKey="value"
             cursor={onSegmentClick ? 'pointer' : 'default'}
@@ -140,10 +140,10 @@ export function DonutChart({
           style={{ zIndex: 10 }}
         >
           {centerValue && (
-            <p className="text-lg font-bold text-foreground">{centerValue}</p>
+            <p className="text-sm md:text-lg font-bold text-foreground">{centerValue}</p>
           )}
           {centerLabel && (
-            <p className="text-xs text-muted-foreground">{centerLabel}</p>
+            <p className="text-[10px] md:text-xs text-muted-foreground">{centerLabel}</p>
           )}
         </div>
       )}
