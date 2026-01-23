@@ -56,7 +56,7 @@ export interface WidgetPermission {
   granted_at: string;
 }
 
-// Konteyner şablonları
+// Konteyner şablonları - Mobil responsive grid sınıfları
 export const CONTAINER_TEMPLATES: {
   id: ContainerType;
   name: string;
@@ -71,7 +71,7 @@ export const CONTAINER_TEMPLATES: {
     description: '5 adet KPI kartı yan yana',
     icon: 'LayoutGrid',
     slots: 5,
-    gridClass: 'grid-cols-5',
+    gridClass: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5',
   },
   {
     id: 'kpi_row_4',
@@ -79,7 +79,7 @@ export const CONTAINER_TEMPLATES: {
     description: '4 adet KPI kartı yan yana',
     icon: 'LayoutGrid',
     slots: 4,
-    gridClass: 'grid-cols-4',
+    gridClass: 'grid-cols-2 md:grid-cols-4',
   },
   {
     id: 'kpi_row_3',
@@ -87,7 +87,7 @@ export const CONTAINER_TEMPLATES: {
     description: '3 adet KPI kartı yan yana',
     icon: 'LayoutGrid',
     slots: 3,
-    gridClass: 'grid-cols-3',
+    gridClass: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3',
   },
   {
     id: 'chart_full',
@@ -103,7 +103,7 @@ export const CONTAINER_TEMPLATES: {
     description: '2 grafik yan yana',
     icon: 'PieChart',
     slots: 2,
-    gridClass: 'grid-cols-2',
+    gridClass: 'grid-cols-1 md:grid-cols-2',
   },
   {
     id: 'chart_third',
@@ -111,7 +111,7 @@ export const CONTAINER_TEMPLATES: {
     description: '3 grafik yan yana',
     icon: 'Activity',
     slots: 3,
-    gridClass: 'grid-cols-3',
+    gridClass: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
   },
   {
     id: 'info_cards_3',
@@ -119,7 +119,7 @@ export const CONTAINER_TEMPLATES: {
     description: '3 bilgi kartı yan yana',
     icon: 'CreditCard',
     slots: 3,
-    gridClass: 'grid-cols-3',
+    gridClass: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
   },
   {
     id: 'info_cards_2',
@@ -127,7 +127,7 @@ export const CONTAINER_TEMPLATES: {
     description: '2 bilgi kartı yan yana',
     icon: 'CreditCard',
     slots: 2,
-    gridClass: 'grid-cols-2',
+    gridClass: 'grid-cols-1 md:grid-cols-2',
   },
   {
     id: 'table_full',
@@ -144,6 +144,14 @@ export const CONTAINER_TEMPLATES: {
     icon: 'List',
     slots: 1,
     gridClass: 'grid-cols-1',
+  },
+  {
+    id: 'custom_grid',
+    name: 'Özel Grid',
+    description: 'Esnek 6 slot grid',
+    icon: 'Grid3x3',
+    slots: 6,
+    gridClass: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6',
   },
 ];
 

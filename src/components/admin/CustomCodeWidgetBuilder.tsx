@@ -978,20 +978,20 @@ Kullanıcı isteği: ${aiPrompt}`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl h-[90vh] flex flex-col p-0 gap-0">
-        <DialogHeader className="px-6 py-4 border-b">
-          <DialogTitle className="flex items-center gap-2">
-            <Code className="h-5 w-5 text-primary" />
+      <DialogContent className="max-w-6xl w-[95vw] md:w-full h-[95vh] md:h-[90vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-4 md:px-6 py-3 md:py-4 border-b">
+          <DialogTitle className="flex items-center gap-2 text-base md:text-lg">
+            <Code className="h-4 w-4 md:h-5 md:w-5 text-primary" />
             Custom Code Widget Builder
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs md:text-sm hidden md:block">
             Veri kaynağı seçin, kodu yazın ve önizleme yapın
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden flex">
-          {/* Sol Panel - Ayarlar */}
-          <div className="w-80 border-r flex flex-col">
+        <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+          {/* Sol Panel - Ayarlar (Mobile: collapsible, Desktop: fixed) */}
+          <div className="md:w-80 border-b md:border-b-0 md:border-r flex flex-col max-h-[30vh] md:max-h-none overflow-hidden">
             <ScrollArea className="flex-1">
               <div className="p-4 space-y-4">
                 {/* Widget Bilgileri */}
@@ -1060,7 +1060,7 @@ Kullanıcı isteği: ${aiPrompt}`;
                   {/* İkon Seçimi */}
                   <div className="space-y-2">
                     <Label>İkon</Label>
-                    <div className="grid grid-cols-8 gap-1 p-2 border rounded-lg max-h-32 overflow-y-auto">
+                    <div className="grid grid-cols-4 md:grid-cols-8 gap-1 p-2 border rounded-lg max-h-32 overflow-y-auto">
                       {AVAILABLE_ICONS.slice(0, 32).map(iconName => (
                         <button
                           key={iconName}
@@ -1246,30 +1246,37 @@ Kullanıcı isteği: ${aiPrompt}`;
           {/* Sağ Panel - Tabs */}
           <div className="flex-1 flex flex-col">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-              <TabsList className="w-full justify-start rounded-none border-b px-4">
-                <TabsTrigger value="datasource" className="gap-2">
-                  <FileJson className="h-4 w-4" />
-                  JSON Veri
-                </TabsTrigger>
-                {isMultiQueryMode && (
-                  <TabsTrigger value="multiquery" className="gap-2">
-                    <Link2 className="h-4 w-4" />
-                    Kaynak Birleştir
+              <div className="overflow-x-auto border-b">
+                <TabsList className="w-max md:w-full justify-start rounded-none px-2 md:px-4 gap-1">
+                  <TabsTrigger value="datasource" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
+                    <FileJson className="h-3 w-3 md:h-4 md:w-4" />
+                    <span className="hidden sm:inline">JSON Veri</span>
+                    <span className="sm:hidden">JSON</span>
                   </TabsTrigger>
-                )}
-                <TabsTrigger value="ai" className="gap-2">
-                  <Sparkles className="h-4 w-4" />
-                  AI Kod Üret
-                </TabsTrigger>
-                <TabsTrigger value="code" className="gap-2">
-                  <Code className="h-4 w-4" />
-                  Kod Editörü
-                </TabsTrigger>
-                <TabsTrigger value="preview" className="gap-2">
-                  <Eye className="h-4 w-4" />
-                  Önizleme
-                </TabsTrigger>
-              </TabsList>
+                  {isMultiQueryMode && (
+                    <TabsTrigger value="multiquery" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
+                      <Link2 className="h-3 w-3 md:h-4 md:w-4" />
+                      <span className="hidden sm:inline">Kaynak Birleştir</span>
+                      <span className="sm:hidden">Birleştir</span>
+                    </TabsTrigger>
+                  )}
+                  <TabsTrigger value="ai" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
+                    <Sparkles className="h-3 w-3 md:h-4 md:w-4" />
+                    <span className="hidden sm:inline">AI Kod Üret</span>
+                    <span className="sm:hidden">AI</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="code" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
+                    <Code className="h-3 w-3 md:h-4 md:w-4" />
+                    <span className="hidden sm:inline">Kod Editörü</span>
+                    <span className="sm:hidden">Kod</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="preview" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
+                    <Eye className="h-3 w-3 md:h-4 md:w-4" />
+                    <span className="hidden sm:inline">Önizleme</span>
+                    <span className="sm:hidden">Önizle</span>
+                  </TabsTrigger>
+                </TabsList>
+              </div>
 
               {/* JSON Veri Sekmesi */}
               <TabsContent value="datasource" className="flex-1 p-4 m-0">
