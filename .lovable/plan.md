@@ -1,265 +1,493 @@
 
-# CustomCodeWidgetBuilder Wizard Dönüşümü ve AI Token Limiti Artışı
+# Global Filtre Widget Sistemi ve Satış Personeli Yetkilendirmesi
 
 ## Genel Bakış
-Bu plan, AI kod üretimindeki karakter sınırını kaldırarak tamamlanmamış kod sorununu çözer ve CustomCodeWidgetBuilder bileşenini adım adım ilerleyen bir wizard (form) yapısına dönüştürür.
+
+Bu plan, tüm dashboard/sayfa widgetlarını etkileyen global filtre elemanları oluşturma, AI widget kurallarına filtre bilgisi ekleme ve DIA'daki satış elemanı/yetki kodu bazlı filtreleme desteğini kapsar.
 
 ---
 
-## Bölüm 1: AI Token Limitini Artırma
+## Bölüm 1: Mevcut Yapı Analizi
 
-### Sorun
-- Mevcut `max_tokens: 8000` sınırı karmaşık widgetlar için yetersiz kalıyor
-- Nakit Akış Projeksiyonu gibi büyük widgetlar yarıda kesiliyor ve syntax error veriyor
-
-### Çözüm
-
-**Dosya:** `supabase/functions/ai-code-generator/index.ts`
+### Mevcut Filtre Sistemi
 
 ```text
-Mevcut:   max_tokens: 8000
-Yeni:     max_tokens: 16000
+┌─────────────────────────────────────────────────────────────┐
+│  DashboardFilterContext (Mevcut)                            │
+├─────────────────────────────────────────────────────────────┤
+│  • cariTipi[], cariKartTipi[]                              │
+│  • ozelkod1[], ozelkod2[], ozelkod3[]                      │
+│  • sehir[], satisTemsilcisi[]                              │
+│  • vadeDilimi, durum, gorunumModu                          │
+│  • searchTerm                                              │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-Ayrıca AI system prompt'a şu talimat eklenecek:
+### Eksikler
+1. Filtreler sadece frontend'de uygulanıyor (post-fetch)
+2. DIA'ya gönderilen sorgulara otomatik eklenmiyor
+3. AI widget üretirken filtre bilgisi aktarılmıyor
+4. Sayfa bazlı özel filtreler tanımlanamıyor
+5. Kullanıcı bazlı zorunlu filtreler (satış personeli) yok
+
+---
+
+## Bölüm 2: Yeni Filtreleme Mimarisi
+
+### 2.1 Üç Katmanlı Filtre Sistemi
+
 ```text
-ÖNEMLİ: Kodu MUTLAKA tamamla. Yarıda bırakma!
-Son satır her zaman "return Widget;" olmalıdır.
+┌─────────────────────────────────────────────────────────────┐
+│  1. KULLANICI FİLTRELERİ (Zorunlu - Backend)               │
+│     DIA kullanıcısına bağlı otomatik filtreler              │
+│     Örn: satiselemani = "Ali Yılmaz" (değiştirilemez)      │
+├─────────────────────────────────────────────────────────────┤
+│  2. SAYFA FİLTRELERİ (Yapılandırılabilir)                  │
+│     Sayfa bazında tanımlanan filtre alanları                │
+│     Örn: Satış sayfası → tarih, müşteri, ürün grubu        │
+├─────────────────────────────────────────────────────────────┤
+│  3. KULLANICI SEÇİMİ (Dinamik)                              │
+│     Kullanıcının seçtiği anlık filtreler                    │
+│     Örn: "Bu ay", "Özel kod: VIP", "Şehir: İstanbul"       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 2.2 Filtre Akış Şeması
+
+```text
+┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│  Sayfa Açılır    │───▶│  PageFilterConfig│───▶│  FilterContext   │
+│                  │    │  Yüklenir        │    │  Güncellenir     │
+└──────────────────┘    └──────────────────┘    └──────────────────┘
+                                                        │
+                                                        ▼
+┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│  Widget Render   │◀───│  Data Loader     │◀───│  DIA API Call    │
+│  (Filtered Data) │    │  Applies Filters │    │  + User Filters  │
+└──────────────────┘    └──────────────────┘    └──────────────────┘
 ```
 
 ---
 
-## Bölüm 2: Wizard/Stepper Form Yapısı
+## Bölüm 3: Veritabanı Değişiklikleri
 
-### Mevcut Tab Yapısı → Wizard Adımları
+### 3.1 profiles Tablosuna Yeni Alanlar
 
-```text
-MEVCUT YAPIDA (Tabs):
-┌──────────────────────────────────────────────────┐
-│  [JSON] [Birleştir] [AI] [Kod] [Önizle]         │
-│  ─────────────────────────────────────           │
-│  Tüm sekmeler görünür, kullanıcı serbestçe      │
-│  geçiş yapabiliyor ama akış belirsiz            │
-└──────────────────────────────────────────────────┘
-
-YENİ WIZARD YAPISI:
-┌──────────────────────────────────────────────────┐
-│  ● Veri  ○ AI Üret  ○ Kod Düzenle  ○ Önizle     │
-│  ─────────────────────────────────────           │
-│  Adım 1 içeriği                                  │
-│                                                  │
-│         [◀ Geri]  [İleri ▶] [Kaydet]            │
-└──────────────────────────────────────────────────┘
+```sql
+-- Satış personeli için DIA'daki kullanıcı adı
+ALTER TABLE profiles ADD COLUMN dia_satis_elemani TEXT;
+-- Yetki kodu (DIA'daki yetki sistemi)
+ALTER TABLE profiles ADD COLUMN dia_yetki_kodu TEXT;
+-- Otomatik uygulanacak zorunlu filtreler (JSON)
+ALTER TABLE profiles ADD COLUMN dia_auto_filters JSONB DEFAULT '[]';
 ```
 
-### Wizard Adımları
+### 3.2 user_pages Tablosuna Filtre Konfigürasyonu
 
-| Adım | Başlık | İçerik | İleri Koşulu |
-|------|--------|--------|--------------|
-| 1 | **Veri Kaynağı** | Widget bilgileri + DataSource seçimi + JSON önizleme | Veri yüklenmeli |
-| 2 | **AI Kod Üret** | Prompt yazma, veri analizi, kod üretme | Kod üretilmeli VEYA atla |
-| 3 | **Kod Düzenle** | Kod editörü + AI chat ile iyileştirme | Kod hatasız olmalı |
-| 4 | **Önizle & Kaydet** | Canlı önizleme + Kaydet butonu | - |
+```sql
+-- Sayfa bazlı filtre yapılandırması
+ALTER TABLE user_pages ADD COLUMN filter_config JSONB DEFAULT NULL;
 
-### Tasarım Detayları
+-- Örnek filter_config:
+-- {
+--   "availableFilters": ["tarih", "satisTemsilcisi", "ozelkod2", "sehir"],
+--   "defaultFilters": { "tarih": "this_month" },
+--   "filterLayout": "horizontal" | "sidebar",
+--   "showFilterBar": true
+-- }
+```
 
-1. **Stepper Header**:
-   - Yatay adım göstergesi (numbered circles)
-   - Tamamlanan adımlar yeşil ✓ işareti
-   - Mevcut adım vurgulu
-   - Tıklanarak geri gidilebilir (sadece tamamlanan adımlara)
+### 3.3 Yeni Tablo: page_filter_presets
 
-2. **Navigasyon Butonları**:
-   - "Geri" butonu (ilk adımda gizli)
-   - "İleri" butonu (koşullar sağlanmazsa disabled)
-   - "Atla" seçeneği (AI adımında opsiyonel)
-   - "Kaydet" butonu (son adımda)
-
-3. **Adım İçerikleri**:
-   - Adım 1: Sol panel + JSON önizleme birleştirilmiş
-   - Adım 2: AI prompt + veri analizi + üret butonu
-   - Adım 3: Kod editörü + AI chat (büyük alan)
-   - Adım 4: Tam ekran önizleme + widget bilgileri özeti
+```sql
+CREATE TABLE public.page_filter_presets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  page_id UUID REFERENCES user_pages(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  filters JSONB NOT NULL,
+  is_default BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
 
 ---
 
-## Bölüm 3: State Yönetimi
+## Bölüm 4: Genişletilmiş DashboardFilterContext
 
-### Yeni State Değişkenleri
+### 4.1 Yeni Interface
 
 ```typescript
-const [currentStep, setCurrentStep] = useState(0);
-const [completedSteps, setCompletedSteps] = useState<number[]>([]);
-const [stepValidation, setStepValidation] = useState({
-  step1: false, // Veri yüklendi mi?
-  step2: true,  // AI opsiyonel, her zaman geçilebilir
-  step3: false, // Kod hatasız mı?
-  step4: true,  // Her zaman tamamlanabilir
-});
+interface ExtendedDashboardFilters extends DashboardFilters {
+  // Mevcut filtreler...
+  
+  // Yeni Global Filtreler
+  tarihAraligi: {
+    period: DatePeriod;
+    customStart?: string;
+    customEnd?: string;
+    field: string; // Hangi tarih alanına uygulanacak
+  } | null;
+  
+  depo: string[];           // Depo filtresi
+  sube: string[];           // Şube filtresi
+  urunGrubu: string[];      // Ürün grubu
+  marka: string[];          // Marka
+  kategori: string[];       // Kategori
+  
+  // DIA Zorunlu Filtreler (değiştirilemez)
+  _diaAutoFilters: DiaApiFilter[];
+}
+
+interface PageFilterConfig {
+  pageId: string;
+  availableFilters: FilterType[];
+  defaultFilters: Partial<ExtendedDashboardFilters>;
+  filterLayout: 'horizontal' | 'sidebar' | 'modal';
+  showFilterBar: boolean;
+  filterableFields: FilterableFieldConfig[];
+}
+
+interface FilterableFieldConfig {
+  field: string;
+  label: string;
+  type: 'select' | 'multiselect' | 'date' | 'daterange' | 'number' | 'text';
+  diaField: string; // DIA'daki alan adı
+  options?: { value: string; label: string }[];
+  loadOptionsFrom?: string; // DataSource ID
+}
 ```
 
-### İlerleme Mantığı
+### 4.2 Filtre Türleri
 
-```typescript
-const canProceed = (step: number) => {
-  switch(step) {
-    case 0: return sampleData.length > 0 || mergedQueryData.length > 0;
-    case 1: return true; // AI opsiyonel
-    case 2: return !codeError && customCode.trim().length > 0;
-    case 3: return true;
-    default: return false;
+| Filtre Tipi | UI Bileşeni | Kullanım |
+|-------------|-------------|----------|
+| `select` | Dropdown | Tek seçim |
+| `multiselect` | Checkbox grubu | Çoklu seçim |
+| `date` | DatePicker | Tek tarih |
+| `daterange` | DateRangePicker | Tarih aralığı |
+| `number` | Slider/Input | Sayı aralığı |
+| `text` | Input | Metin arama |
+| `toggle` | Switch | Açık/Kapalı |
+
+---
+
+## Bölüm 5: Filtre Widget Bileşenleri
+
+### 5.1 Ana Filtre Bileşenleri
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│  Yeni Bileşenler                                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  📁 src/components/filters/                                 │
+│  ├── GlobalFilterBar.tsx      (Üst bar)                    │
+│  ├── FilterSidebar.tsx        (Yan panel)                  │
+│  ├── FilterModal.tsx          (Popup modal)                │
+│  ├── FilterPresetSelector.tsx (Kayıtlı filtreler)          │
+│  ├── DateRangeFilter.tsx      (Tarih aralığı)              │
+│  ├── MultiSelectFilter.tsx    (Çoklu seçim)                │
+│  ├── NumberRangeFilter.tsx    (Sayı aralığı)               │
+│  └── SearchFilter.tsx         (Hızlı arama)                │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 5.2 GlobalFilterBar Tasarımı
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│  🔍 Ara...  │ 📅 Bu Ay ▼ │ 👤 Tüm Temsilciler ▼ │ 🏷️ +3 Filtre │ ✕ Temizle │
+└────────────────────────────────────────────────────────────────────────┘
+                    │                │
+                    ▼                ▼
+         ┌─────────────────┐  ┌─────────────────┐
+         │ [○] Bugün       │  │ [✓] Ali Yılmaz  │
+         │ [○] Bu Hafta    │  │ [✓] Mehmet Öz   │
+         │ [●] Bu Ay       │  │ [ ] Ayşe Demir  │
+         │ [○] Bu Yıl      │  │ [ ] Fatih Kara  │
+         │ [○] Özel...     │  └─────────────────┘
+         └─────────────────┘
+```
+
+### 5.3 FilterSidebar Tasarımı (Satış Takip Sayfası İçin)
+
+```text
+┌─────────────────────────────────────┐
+│  📊 Filtreler                   [x] │
+├─────────────────────────────────────┤
+│                                     │
+│  📅 Tarih Aralığı                   │
+│  ┌─────────────────────────────────┐│
+│  │ Bu Ay                      ▼  ││
+│  └─────────────────────────────────┘│
+│                                     │
+│  👤 Satış Temsilcisi                │
+│  ┌─────────────────────────────────┐│
+│  │ 🔒 Ali Yılmaz (Siz)           ││
+│  └─────────────────────────────────┘│
+│  (Değiştirilemez - DIA yetkiniz)    │
+│                                     │
+│  🏢 Müşteri Grubu                   │
+│  [ ] Altın Müşteriler               │
+│  [ ] VIP                            │
+│  [ ] Yeni Müşteriler                │
+│                                     │
+│  📦 Ürün Kategorisi                 │
+│  [Tümü                          ▼] │
+│                                     │
+│  💰 Tutar Aralığı                   │
+│  ₺0 ═══════●═══════ ₺100K          │
+│                                     │
+│  [Filtreleri Uygula]  [Sıfırla]     │
+└─────────────────────────────────────┘
+```
+
+---
+
+## Bölüm 6: AI Widget Kurallarına Filtre Bilgisi Ekleme
+
+### 6.1 Güncellenmiş AI System Prompt
+
+```text
+═══════════════════════════════════════════════════════════════════════════════
+🔍 GLOBAL FİLTRE SİSTEMİ
+───────────────────────────────────────────────────────────────────────────────
+
+Widget'a "filters" prop'u da geçilir. Bu prop aktif filtreleri içerir:
+
+function Widget({ data, colors, filters }) {
+  // filters objesi:
+  // {
+  //   tarihAraligi: { period: 'this_month', field: 'tarih' },
+  //   satisTemsilcisi: ['Ali Yılmaz'],
+  //   ozelkod2: ['VIP'],
+  //   searchTerm: 'ABC Ltd'
+  // }
+
+  // Filtre bilgisini widget'ta göster (opsiyonel)
+  var filterInfo = '';
+  if (filters && filters.satisTemsilcisi && filters.satisTemsilcisi.length > 0) {
+    filterInfo = 'Temsilci: ' + filters.satisTemsilcisi.join(', ');
   }
-};
+}
+
+NOT: Veri zaten filtrelenmiş olarak gelir. Widget içinde tekrar filtreleme YAPMA!
+Sadece hangi filtrelerin aktif olduğunu göstermek için filters prop'unu kullan.
+```
+
+### 6.2 Veri Analizi Bilgisi (Wizard Adım 1)
+
+AI widget oluştururken gösterilecek veri analizi:
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│  📊 Veri Analizi                                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Kayıt Sayısı: 1,245                                        │
+│  Alan Sayısı: 24                                            │
+│                                                             │
+│  🔢 SAYISAL ALANLAR (Filtrelenebilir)                      │
+│  ┌─────────────────────────────────────────────────────────┐
+│  │ toplambakiye   Min: -50K   Max: 2.5M   Avg: 125K       │
+│  │ vadesigecentutar   Min: 0   Max: 500K   Avg: 45K       │
+│  │ riskSkoru      Min: 0      Max: 100    Avg: 35         │
+│  └─────────────────────────────────────────────────────────┘
+│                                                             │
+│  📝 METİN ALANLARI (Filtrelenebilir)                       │
+│  ┌─────────────────────────────────────────────────────────┐
+│  │ satiselemani   ▸ 12 benzersiz değer                     │
+│  │   [Ali Yılmaz] [Mehmet Öz] [Ayşe Demir] ...            │
+│  │ ozelkod2kod    ▸ 8 benzersiz değer                      │
+│  │   [VIP] [ALTIN] [NORMAL] [YENİ] ...                    │
+│  │ sehir          ▸ 45 benzersiz değer                     │
+│  │   [İstanbul] [Ankara] [İzmir] ...                      │
+│  └─────────────────────────────────────────────────────────┘
+│                                                             │
+│  📅 TARİH ALANLARI                                          │
+│  ┌─────────────────────────────────────────────────────────┐
+│  │ tarih          Min: 2024-01-01   Max: 2024-12-31       │
+│  │ vadetarihi     Min: 2024-01-15   Max: 2025-06-30       │
+│  └─────────────────────────────────────────────────────────┘
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Bölüm 4: UI Bileşen Yapısı
+## Bölüm 7: DIA Entegrasyonu
 
-### Stepper Component
+### 7.1 Zorunlu Kullanıcı Filtreleri
 
-```text
-┌────────────────────────────────────────────────────────────┐
-│   ●━━━━━━●━━━━━━○━━━━━━○                                   │
-│   Veri   AI     Kod    Önizle                              │
-│   ✓      ●      ○      ○                                   │
-└────────────────────────────────────────────────────────────┘
+```typescript
+// profiles tablosundan zorunlu filtreler
+interface DiaAutoFilter {
+  field: string;      // DIA alan adı (örn: satiselemani)
+  operator: string;   // = veya IN
+  value: string;      // Değer
+  isLocked: boolean;  // Kullanıcı değiştiremez
+}
+
+// Örnek: Satış personeli için
+{
+  "dia_auto_filters": [
+    { "field": "satiselemani", "operator": "=", "value": "Ali Yılmaz", "isLocked": true }
+  ]
+}
 ```
 
-### Her Adım için Layout
+### 7.2 dia-api-test Güncellemesi
 
-**Adım 1 - Veri Kaynağı:**
-```text
-┌──────────────────────────────────────────────────────────┐
-│  📋 Widget Bilgileri                 📊 JSON Veri        │
-│  ┌─────────────────────────────┐    ┌─────────────────┐  │
-│  │ Key: custom_widget_xxx      │    │ {               │  │
-│  │ Ad: Özel Widget             │    │   "cari": ...,  │  │
-│  │ Boyut: [lg ▼]               │    │   "bakiye": ... │  │
-│  │ Sayfa: [dashboard ▼]        │    │ }               │  │
-│  │ İkon: [🎯 seç]              │    │                 │  │
-│  └─────────────────────────────┘    └─────────────────┘  │
-│                                                          │
-│  📁 Veri Kaynağı                                         │
-│  ┌─────────────────────────────────────────────────────┐ │
-│  │ [○ Tek Kaynak] [● Çoklu Kaynak]                     │ │
-│  │ [cari_vade_bakiye ▼]           [Veri Yükle 🔄]     │ │
-│  │ ✓ 145 kayıt yüklendi                                │ │
-│  └─────────────────────────────────────────────────────┘ │
-│                                    [İleri ▶]             │
-└──────────────────────────────────────────────────────────┘
+```typescript
+interface TestApiRequest {
+  // Mevcut alanlar...
+  
+  // Yeni: Kullanıcı filtreleri (profiles'dan otomatik)
+  applyUserFilters?: boolean;
+  
+  // Yeni: Sayfa filtreleri
+  pageFilters?: {
+    tarihAraligi?: { period: string; field: string };
+    satisTemsilcisi?: string[];
+    ozelkod?: string[];
+    // ...
+  };
+}
 ```
 
-**Adım 2 - AI Kod Üret:**
-```text
-┌──────────────────────────────────────────────────────────┐
-│  🤖 AI ile Widget Kodu Üret                              │
-│  ┌─────────────────────────────────────────────────────┐ │
-│  │ Ne tür bir widget istiyorsunuz?                     │ │
-│  │ ┌─────────────────────────────────────────────────┐ │ │
-│  │ │ Vade yaşlandırma grafiği oluştur...             │ │ │
-│  │ └─────────────────────────────────────────────────┘ │ │
-│  │                                                     │ │
-│  │ 📊 Veri Analizi: 145 kayıt, 12 alan                 │ │
-│  │ [toplambakiye] [cariunvan] [vadetarihi] ...        │ │
-│  └─────────────────────────────────────────────────────┘ │
-│                                                          │
-│  [◀ Geri]  [Atla →]  [🚀 AI ile Kod Üret]               │
-└──────────────────────────────────────────────────────────┘
-```
+### 7.3 Filtre Birleştirme Mantığı
 
-**Adım 3 - Kod Düzenle:**
 ```text
-┌──────────────────────────────────────────────────────────┐
-│  💻 Kod Editörü                                          │
-│  ┌─────────────────────────────────────────────────────┐ │
-│  │ function Widget({ data, colors }) {                 │ │
-│  │   ...                                               │ │
-│  │ }                                                   │ │
-│  │ return Widget;                                      │ │
-│  └─────────────────────────────────────────────────────┘ │
-│                                                          │
-│  💬 AI ile Kodu Geliştir                                 │
-│  ┌─────────────────────────────────────────────────────┐ │
-│  │ [Renklendir] [Türkçeleştir] [Animasyon] [Dark Mode] │ │
-│  │ ┌─────────────────────────────────────────────────┐ │ │
-│  │ │ Değişiklik isteğinizi yazın...                  │ │ │
-│  │ └─────────────────────────────────────────────────┘ │ │
-│  └─────────────────────────────────────────────────────┘ │
-│                                                          │
-│  [◀ Geri]  [✓ Hatasız]  [Önizle & Kaydet ▶]             │
-└──────────────────────────────────────────────────────────┘
-```
+DIA Sorgusu Oluşturma:
 
-**Adım 4 - Önizle & Kaydet:**
-```text
-┌──────────────────────────────────────────────────────────┐
-│  👁️ Widget Önizleme                                      │
-│  ┌─────────────────────────────────────────────────────┐ │
-│  │                                                     │ │
-│  │          [CANLI WIDGET ÖNİZLEME]                   │ │
-│  │                                                     │ │
-│  └─────────────────────────────────────────────────────┘ │
-│                                                          │
-│  📋 Özet:                                                │
-│  • Ad: Vade Yaşlandırma                                  │
-│  • Boyut: lg | Sayfa: dashboard                          │
-│  • Veri: cari_vade_bakiye (145 kayıt)                    │
-│                                                          │
-│  [◀ Geri]  [💾 Widget Kaydet]                            │
-└──────────────────────────────────────────────────────────┘
+1. DataSource.filters (Veri kaynağı tanımı)
+   +
+2. profiles.dia_auto_filters (Zorunlu kullanıcı filtreleri)
+   +
+3. PageFilters (Sayfa bazlı seçimler)
+   +
+4. WidgetConfig.filters (Widget özel filtreleri)
+   =
+   → FİNAL FİLTRE DİZİSİ
 ```
 
 ---
 
-## Bölüm 5: Dosya Değişiklikleri
+## Bölüm 8: Satış Takip Sayfası Örneği
 
-### Değiştirilecek Dosyalar
+### 8.1 Sayfa Yapılandırması
+
+```json
+{
+  "name": "Satış Takip",
+  "slug": "satis-takip",
+  "filter_config": {
+    "availableFilters": ["tarih", "musteri", "urunGrubu", "durum"],
+    "defaultFilters": {
+      "tarih": { "period": "this_month", "field": "tarih" }
+    },
+    "filterLayout": "sidebar",
+    "showFilterBar": true,
+    "lockedFilters": {
+      "satisTemsilcisi": "$CURRENT_USER" // DIA kullanıcısı
+    }
+  }
+}
+```
+
+### 8.2 Sayfa Görünümü
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Satış Takip - Ali Yılmaz                              [Filtreler 🔽]       │
+├────────────────────┬────────────────────────────────────────────────────────┤
+│  📊 Filtreler      │  ┌──────────────────────────────────────────────────┐ │
+│  ──────────────    │  │  KPI SATIRII: Toplam | Hedef | Gerçekleşme      │ │
+│                    │  │  ₺85K          ₺100K    %85                      │ │
+│  📅 Bu Ay     ▼    │  └──────────────────────────────────────────────────┘ │
+│                    │                                                        │
+│  👤 Ali Yılmaz     │  ┌──────────────────────────────────────────────────┐ │
+│  🔒 (Sizin kaydınız)│  │  SATIŞLARIM GRAFİĞİ (Bar Chart)                  │ │
+│                    │  │  ████ ████ ████ ███ ██                            │ │
+│  🏢 Müşteri        │  └──────────────────────────────────────────────────┘ │
+│  [ ] ABC Ltd       │                                                        │
+│  [ ] XYZ A.Ş.      │  ┌──────────────────────────────────────────────────┐ │
+│  [ ] 123 Tic.      │  │  MÜŞTERİ LİSTESİ (Tablo)                         │ │
+│                    │  │  ─────────────────────────────────────            │ │
+│  📦 Ürün Grubu     │  │  ABC Ltd    │ ₺25K  │ Aktif                       │ │
+│  [Tümü        ▼]   │  │  XYZ A.Ş.   │ ₺18K  │ Beklemede                   │ │
+│                    │  │  123 Tic.   │ ₺12K  │ Tamamlandı                  │ │
+│  [Uygula]          │  └──────────────────────────────────────────────────┘ │
+└────────────────────┴────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Bölüm 9: Dosya Değişiklikleri
+
+### Yeni Dosyalar
+
+| Dosya | Açıklama |
+|-------|----------|
+| `src/components/filters/GlobalFilterBar.tsx` | Üst filtre barı |
+| `src/components/filters/FilterSidebar.tsx` | Yan filtre paneli |
+| `src/components/filters/DateRangeFilter.tsx` | Tarih aralığı |
+| `src/components/filters/MultiSelectFilter.tsx` | Çoklu seçim |
+| `src/components/filters/FilterPresetSelector.tsx` | Kayıtlı filtreler |
+| `src/hooks/usePageFilters.tsx` | Sayfa filtre hook'u |
+| `src/lib/filterTypes.ts` | Filtre tipleri |
+
+### Güncellenecek Dosyalar
 
 | Dosya | Değişiklik |
 |-------|------------|
-| `supabase/functions/ai-code-generator/index.ts` | max_tokens: 8000 → 16000, tamamlama talimatı |
-| `src/components/admin/CustomCodeWidgetBuilder.tsx` | Tabs → Stepper wizard yapısı, navigasyon mantığı |
+| `src/contexts/DashboardFilterContext.tsx` | Genişletilmiş filtreler |
+| `src/hooks/useDynamicWidgetData.tsx` | Filtre entegrasyonu |
+| `supabase/functions/dia-api-test/index.ts` | Kullanıcı filtreleri |
+| `supabase/functions/ai-code-generator/index.ts` | filters prop bilgisi |
+| `src/components/admin/CustomCodeWidgetBuilder.tsx` | Veri analizi paneli |
 
-### Yeni Eklentiler
+### Veritabanı Migrasyonları
 
-1. **Stepper UI**: Wizard adımlarını gösteren üst bileşen
-2. **StepContent**: Her adım için ayrı render bölümü  
-3. **Navigation**: Geri/İleri/Atla/Kaydet butonları
+1. `profiles` tablosuna `dia_satis_elemani`, `dia_yetki_kodu`, `dia_auto_filters` alanları
+2. `user_pages` tablosuna `filter_config` alanı
+3. Yeni `page_filter_presets` tablosu
 
 ---
 
-## Bölüm 6: Uygulama Sırası
+## Bölüm 10: Uygulama Öncelik Sırası
 
-### Adım 1: AI Token Limiti
-- `ai-code-generator/index.ts` dosyasında `max_tokens: 16000` yap
-- System prompt'a tamamlama talimatı ekle
+### Faz 1: Temel Altyapı
+1. Veritabanı migrasyonları
+2. `DashboardFilterContext` genişletme
+3. `dia-api-test` kullanıcı filtresi desteği
 
-### Adım 2: Wizard State
-- `currentStep` ve `completedSteps` state'leri ekle
-- `canProceed()` ve `goToStep()` fonksiyonları
+### Faz 2: Filtre Bileşenleri
+4. `GlobalFilterBar` ve `FilterSidebar` bileşenleri
+5. `DateRangeFilter` ve `MultiSelectFilter`
+6. Sayfa bazlı filtre yapılandırması
 
-### Adım 3: Stepper Header
-- Mevcut TabsList yerine Stepper component
-- Adım numaraları ve başlıklar
+### Faz 3: AI Entegrasyonu
+7. AI system prompt'a filtre bilgisi ekleme
+8. Widget builder'da veri analizi paneli
+9. Filtrelenebilir alanları gösterme
 
-### Adım 4: Adım İçerikleri
-- Mevcut TabsContent'leri yeniden düzenle
-- Her adım için optimize edilmiş layout
-
-### Adım 5: Navigasyon
-- Alt kısma Geri/İleri/Atla butonları
-- Koşullu disabled state'ler
+### Faz 4: Kullanıcı Deneyimi
+10. Filtre preset'leri (kayıtlı filtreler)
+11. Satış takip sayfası örneği
+12. Mobil uyumluluk
 
 ---
 
 ## Sonuç
 
 Bu plan uygulandığında:
-- ✅ AI kodları yarıda kesilmeyecek (16000 token)
-- ✅ Adım adım wizard akışı (4 adım)
-- ✅ Kullanıcı yönlendirilmiş deneyim
-- ✅ Koşullu ilerleme (veri yükle → kod üret → düzenle → kaydet)
-- ✅ Geri/ileri navigasyon
-- ✅ "Atla" seçeneği (AI adımı opsiyonel)
-- ✅ Tamamlanan adımların görsel gösterimi
+- ✅ Tüm widgetları etkileyen global filtreler
+- ✅ DIA yetki kodu ve satış elemanı bazlı zorunlu filtreler
+- ✅ Sayfa bazlı özelleştirilebilir filtre yapılandırması
+- ✅ AI widget üretirken filtrelenebilir alan bilgisi
+- ✅ Veri analizi panelinde tüm alanların görünmesi
+- ✅ Satış personeli sayfası için kilitli filtreler
+- ✅ Filtre preset'leri ile hızlı erişim
