@@ -161,10 +161,10 @@ export function DynamicPage() {
           }
         />
 
-        <main className="flex-1 p-6 overflow-auto">
+        <main className="flex-1 p-2 md:p-4 overflow-auto">
           {/* Containers */}
           {containers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 border-2 border-dashed rounded-xl">
+            <div className="flex flex-col items-center justify-center py-12 border border-dashed rounded-lg">
               <Plus className="h-12 w-12 text-muted-foreground/50 mb-4" />
               <h3 className="text-lg font-medium mb-2">Bu sayfa henüz boş</h3>
               <p className="text-sm text-muted-foreground mb-6">
@@ -191,7 +191,7 @@ export function DynamicPage() {
               {/* Add Container Button */}
               <button
                 onClick={() => setShowContainerPicker(true)}
-                className="w-full py-8 border-2 border-dashed rounded-xl text-muted-foreground hover:text-primary hover:border-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-2"
+                className="w-full py-4 border border-dashed rounded-lg text-muted-foreground hover:text-primary hover:border-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-1.5 text-sm"
               >
                 <Plus className="h-5 w-5" />
                 <span className="font-medium">Konteyner Ekle</span>
