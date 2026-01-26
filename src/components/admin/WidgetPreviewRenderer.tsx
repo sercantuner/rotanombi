@@ -14,18 +14,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { cn } from '@/lib/utils';
-
-// Renk paleti
-const COLORS = [
-  'hsl(var(--primary))',
-  'hsl(var(--chart-2))',
-  'hsl(var(--chart-3))',
-  'hsl(var(--chart-4))',
-  'hsl(var(--chart-5))',
-  'hsl(210, 70%, 50%)',
-  'hsl(280, 60%, 55%)',
-  'hsl(160, 60%, 45%)',
-];
+import { useChartColorPalette } from '@/hooks/useChartColorPalette';
 
 interface WidgetPreviewRendererProps {
   config: WidgetBuilderConfig;
@@ -155,6 +144,7 @@ export function WidgetPreviewRenderer({
   legendField,
   calculatedFields,
 }: WidgetPreviewRendererProps) {
+  const { colors: COLORS } = useChartColorPalette();
   const vizType = config.visualization.type;
   const hasData = testResult?.success && testResult.sampleData && testResult.sampleData.length > 0;
   
@@ -287,7 +277,7 @@ export function WidgetPreviewRenderer({
                   fontSize: '11px'
                 }}
               />
-              <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="value" fill={COLORS[0]} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
@@ -324,7 +314,7 @@ export function WidgetPreviewRenderer({
                   fontSize: '11px'
                 }}
               />
-              <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="value" stroke={COLORS[0]} strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
         </CardContent>
@@ -361,7 +351,7 @@ export function WidgetPreviewRenderer({
                   fontSize: '11px'
                 }}
               />
-              <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary) / 0.3)" strokeWidth={2} />
+              <Area type="monotone" dataKey="value" stroke={COLORS[0]} fill={`${COLORS[0]}40`} strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         </CardContent>
