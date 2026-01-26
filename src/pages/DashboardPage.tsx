@@ -3,11 +3,13 @@ import { Header } from '@/components/layout/Header';
 import { VadeDetayListesi } from '@/components/dashboard/VadeDetayListesi';
 import { ContainerBasedDashboard } from '@/components/dashboard/ContainerBasedDashboard';
 import { DashboardLoadingScreen } from '@/components/dashboard/DashboardLoadingScreen';
-import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
+import { GlobalFilterProvider, useGlobalFilters } from '@/contexts/GlobalFilterContext';
+import { GlobalFilterBar } from '@/components/filters/GlobalFilterBar';
 import { useDiaDataCache } from '@/contexts/DiaDataCacheContext';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
+import { useDiaFilterOptions } from '@/hooks/useDiaFilterOptions';
 import { supabase } from '@/integrations/supabase/client';
 import { diaGetGenelRapor, diaGetFinansRapor, getDiaConnectionInfo, DiaConnectionInfo } from '@/lib/diaClient';
 import type { DiaGenelRapor, DiaFinansRapor, VadeYaslandirma, DiaCari } from '@/lib/diaClient';
@@ -20,12 +22,23 @@ function DashboardContent() {
   const { user } = useAuth();
   const { setSharedData, invalidateCache, setDiaConnected } = useDiaDataCache();
   const { refreshSettings } = useUserSettings();
+  const { filters, setFilterOptions } = useGlobalFilters();
   const [genelRapor, setGenelRapor] = useState<DiaGenelRapor | null>(null);
   const [finansRapor, setFinansRapor] = useState<DiaFinansRapor | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [diaConnectionInfo, setDiaConnectionInfo] = useState<DiaConnectionInfo | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [dashboardPageId, setDashboardPageId] = useState<string | null>(null);
+
+  // DIA filtre seçeneklerini çek
+  const { filterOptions: diaFilterOptions, isLoading: filterOptionsLoading } = useDiaFilterOptions();
+
+  // Filtre seçeneklerini context'e aktar
+  useEffect(() => {
+    if (diaFilterOptions && Object.keys(diaFilterOptions).length > 0) {
+      setFilterOptions(diaFilterOptions);
+    }
+  }, [diaFilterOptions, setFilterOptions]);
 
   // Merkezi veri kaynağı loader - Sayfadaki tüm widget'ların veri kaynaklarını yükler
   const { 
@@ -226,6 +239,15 @@ function DashboardContent() {
       />
 
       <main className="flex-1 p-2 md:p-4 overflow-auto">
+        {/* Global Filter Bar */}
+        <GlobalFilterBar 
+          className="mb-3" 
+          showSearch={true}
+          showDateFilter={true}
+          showSalesRepFilter={true}
+          showCardTypeFilter={true}
+        />
+
         {/* DIA Connection Status */}
         {!diaConnectionInfo?.connected && !dataSourcesLoading && loadedSources.length === 0 && (
           <div className="mb-2 md:mb-4 p-2 md:p-3 rounded-lg bg-warning/10 border border-warning/30 flex items-center justify-between animate-fade-in">
@@ -301,8 +323,8 @@ function DashboardContent() {
 
 export function DashboardPage() {
   return (
-    <DashboardFilterProvider>
+    <GlobalFilterProvider pageId="main-dashboard">
       <DashboardContent />
-    </DashboardFilterProvider>
+    </GlobalFilterProvider>
   );
 }
