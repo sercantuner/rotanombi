@@ -332,9 +332,9 @@ export function BuilderWidgetRenderer({
       }
       
       return (
-        <div className={cn(isolatedClassName, 'h-full flex flex-col')}>
+        <Card className={cn(isolatedClassName, 'h-full flex flex-col')}>
           <ChartHeader />
-          <div className="flex-1 flex flex-col min-h-0 p-0">
+          <CardContent className="flex-1 flex flex-col min-h-0 p-4 pt-3">
             <ErrorBoundary fallback={
               <div className="text-destructive text-sm flex items-center gap-2 py-4">
                 <AlertCircle className="h-4 w-4" />
@@ -346,8 +346,8 @@ export function BuilderWidgetRenderer({
                 <WidgetComponent data={filteredData} colors={userColors} filters={filters} />
               </div>
             </ErrorBoundary>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       );
     } catch (err: any) {
       console.error('Custom widget error:', err);
