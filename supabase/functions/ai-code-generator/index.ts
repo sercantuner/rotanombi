@@ -225,6 +225,41 @@ Pozitif badge:  'bg-success/20 text-success'
 Negatif badge:  'bg-destructive/20 text-destructive'
 İkon container: 'w-10 h-10 rounded-lg flex items-center justify-center bg-primary/10'
 
+📌 TOOLTIP Z-INDEX KURALI (ZORUNLU!)
+───────────────────────────────────────────────────────────────────────────────
+Recharts Tooltip'leri her zaman EN ÖNDE görünmeli. Custom Tooltip wrapper'ına 
+z-index eklenmeli:
+
+✅ ZORUNLU CUSTOM TOOLTIP YAPISI:
+var CustomTooltip = function(props) {
+  if (!props.active || !props.payload || props.payload.length === 0) return null;
+  
+  return React.createElement('div', {
+    className: 'bg-popover border border-border rounded-lg shadow-lg p-3',
+    style: { zIndex: 9999 }  // ← ZORUNLU: En önde görünsün
+  },
+    React.createElement('p', { className: 'font-medium text-foreground text-sm mb-1' }, props.label),
+    props.payload.map(function(entry, index) {
+      return React.createElement('div', { 
+        key: index, 
+        className: 'flex items-center gap-2 text-sm' 
+      },
+        React.createElement('span', { 
+          className: 'w-3 h-3 rounded-full',
+          style: { backgroundColor: entry.color }
+        }),
+        React.createElement('span', { className: 'text-muted-foreground' }, entry.name + ':'),
+        React.createElement('span', { className: 'font-medium text-foreground' }, 
+          typeof entry.value === 'number' ? formatCurrency(entry.value) : entry.value
+        )
+      );
+    })
+  );
+};
+
+❌ YANLIŞ: style prop olmadan tooltip (z-index eksik, diğer elementlerin altında kalabilir)
+❌ YANLIŞ: content prop'suz Recharts.Tooltip (varsayılan tooltip tema uyumsuz)
+
 ═══════════════════════════════════════════════════════════════════════════════
 
 🔍 GLOBAL FİLTRE SİSTEMİ
