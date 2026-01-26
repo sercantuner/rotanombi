@@ -1,6 +1,6 @@
 // Global Filter Bar - Üst filtre barı bileşeni (Dinamik filtre yönetimi)
-import React, { useState } from 'react';
-import { Calendar, Users, Filter, X, ChevronDown, RotateCcw, Settings2, Lock, Building2, Warehouse, MapPin, Hash, Tag } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Calendar, Users, Filter, X, ChevronDown, RotateCcw, Settings2, Lock, Building2, Warehouse, MapPin, Hash } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
 import { useFilterPreferences, ALL_AVAILABLE_FILTERS } from '@/hooks/useFilterPreferences';
@@ -15,6 +15,8 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { DatePeriod, datePeriodLabels, cariKartTipiLabels } from '@/lib/filterTypes';
 import { cn } from '@/lib/utils';
+
+type OptionItem = { value: string; label: string };
 
 interface GlobalFilterBarProps {
   showDateFilter?: boolean;
@@ -75,7 +77,7 @@ export function GlobalFilterBar({
     filterKey: keyof typeof filters,
     icon: React.ReactNode,
     label: string,
-    options: string[],
+    options: string[] | OptionItem[],
     selectedValues: string[],
     isLocked?: boolean,
     lockedLabel?: string
@@ -117,18 +119,21 @@ export function GlobalFilterBar({
                 Seçenek bulunamadı
               </p>
             ) : (
-              options.map((option) => (
+              (options as any[]).map((raw) => {
+                const opt: OptionItem = typeof raw === 'string' ? { value: raw, label: raw } : raw;
+                return (
                 <label
-                  key={option}
+                  key={opt.value}
                   className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted cursor-pointer"
                 >
                   <Checkbox
-                    checked={selectedValues.includes(option)}
-                    onCheckedChange={() => toggleArrayFilter(filterKey, option)}
+                    checked={selectedValues.includes(opt.value)}
+                    onCheckedChange={() => toggleArrayFilter(filterKey, opt.value)}
                   />
-                  <span className="text-sm">{option}</span>
+                  <span className="text-sm">{opt.label}</span>
                 </label>
-              ))
+                );
+              })
             )}
           </div>
           {selectedValues.length > 0 && (
@@ -156,6 +161,16 @@ export function GlobalFilterBar({
       visibleFilters: newFilters,
     });
   };
+
+  const lookupLabel = useMemo(() => {
+    const map = new Map<string, string>();
+    (filterOptions.subeler || []).forEach((o) => map.set(`sube:${o.value}`, o.label));
+    (filterOptions.depolar || []).forEach((o) => map.set(`depo:${o.value}`, o.label));
+    (filterOptions.ozelkodlar1 || []).forEach((o) => map.set(`ozelkod1:${o.value}`, o.label));
+    (filterOptions.ozelkodlar2 || []).forEach((o) => map.set(`ozelkod2:${o.value}`, o.label));
+    (filterOptions.ozelkodlar3 || []).forEach((o) => map.set(`ozelkod3:${o.value}`, o.label));
+    return map;
+  }, [filterOptions.depolar, filterOptions.ozelkodlar1, filterOptions.ozelkodlar2, filterOptions.ozelkodlar3, filterOptions.subeler]);
 
   return (
     <>
@@ -239,7 +254,7 @@ export function GlobalFilterBar({
             'sube',
             <Building2 className="w-4 h-4" />,
             'Şubeler',
-            filterOptions.subeler.map(s => s.label),
+            filterOptions.subeler,
             filters.sube
           )}
 
@@ -248,7 +263,7 @@ export function GlobalFilterBar({
             'depo',
             <Warehouse className="w-4 h-4" />,
             'Depolar',
-            filterOptions.depolar.map(d => d.label),
+            filterOptions.depolar,
             filters.depo
           )}
 
@@ -266,7 +281,7 @@ export function GlobalFilterBar({
             'ozelkod1',
             <Hash className="w-4 h-4" />,
             'Özel Kod 1',
-            filterOptions.ozelkodlar1.map(o => o.label),
+            filterOptions.ozelkodlar1,
             filters.ozelkod1
           )}
 
@@ -275,7 +290,7 @@ export function GlobalFilterBar({
             'ozelkod2',
             <Hash className="w-4 h-4" />,
             'Özel Kod 2',
-            filterOptions.ozelkodlar2.map(o => o.label),
+            filterOptions.ozelkodlar2,
             filters.ozelkod2
           )}
 
@@ -284,8 +299,48 @@ export function GlobalFilterBar({
             'ozelkod3',
             <Hash className="w-4 h-4" />,
             'Özel Kod 3',
-            filterOptions.ozelkodlar3.map(o => o.label),
+            filterOptions.ozelkodlar3,
             filters.ozelkod3
+          )}
+
+          {/* Görünüm Modu */}
+          {isFilterVisible('gorunumModu') && (
+            <div className="flex items-center gap-1 p-1 bg-secondary/50 rounded-lg">
+              {(['hepsi', 'potansiyel', 'cari'] as const).map((mod) => (
+                <button
+                  key={mod}
+                  onClick={() => setFilter('gorunumModu', mod)}
+                  className={cn(
+                    'px-3 py-1.5 text-xs font-medium rounded-md transition-all',
+                    filters.gorunumModu === mod
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  {mod === 'hepsi' ? 'Hepsi' : mod === 'potansiyel' ? 'Potansiyel' : 'Cari'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Durum (Aktif/Pasif) */}
+          {isFilterVisible('durum') && (
+            <div className="flex items-center gap-1 p-1 bg-secondary/50 rounded-lg">
+              {(['hepsi', 'aktif', 'pasif'] as const).map((durum) => (
+                <button
+                  key={durum}
+                  onClick={() => setFilter('durum', durum)}
+                  className={cn(
+                    'px-3 py-1.5 text-xs font-medium rounded-md transition-all',
+                    filters.durum === durum
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  {durum === 'aktif' ? 'Aktif' : durum === 'pasif' ? 'Pasif' : 'Hepsi'}
+                </button>
+              ))}
+            </div>
           )}
 
           {/* Filtre Yönetimi Butonu */}
@@ -362,7 +417,7 @@ export function GlobalFilterBar({
 
             {filters.sube.map((s) => (
               <Badge key={s} variant="secondary" className="gap-1 pr-1">
-                🏢 {s}
+                🏢 {lookupLabel.get(`sube:${s}`) || s}
                 <button 
                   onClick={() => toggleArrayFilter('sube', s)}
                   className="ml-1 hover:bg-muted rounded-full p-0.5"
@@ -374,7 +429,7 @@ export function GlobalFilterBar({
 
             {filters.depo.map((d) => (
               <Badge key={d} variant="secondary" className="gap-1 pr-1">
-                📦 {d}
+                📦 {lookupLabel.get(`depo:${d}`) || d}
                 <button 
                   onClick={() => toggleArrayFilter('depo', d)}
                   className="ml-1 hover:bg-muted rounded-full p-0.5"
@@ -397,11 +452,11 @@ export function GlobalFilterBar({
             ))}
 
             {filters.ozelkod1.map((k) => (
-              <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                #1 {k}
+              <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-primary/10 text-primary">
+                #1 {lookupLabel.get(`ozelkod1:${k}`) || k}
                 <button 
                   onClick={() => toggleArrayFilter('ozelkod1', k)}
-                  className="ml-1 hover:bg-blue-500/20 rounded-full p-0.5"
+                  className="ml-1 hover:bg-primary/20 rounded-full p-0.5"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -409,11 +464,11 @@ export function GlobalFilterBar({
             ))}
 
             {filters.ozelkod2.map((k) => (
-              <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                #2 {k}
+              <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-accent/20">
+                #2 {lookupLabel.get(`ozelkod2:${k}`) || k}
                 <button 
                   onClick={() => toggleArrayFilter('ozelkod2', k)}
-                  className="ml-1 hover:bg-purple-500/20 rounded-full p-0.5"
+                  className="ml-1 hover:bg-accent/30 rounded-full p-0.5"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -421,16 +476,40 @@ export function GlobalFilterBar({
             ))}
 
             {filters.ozelkod3.map((k) => (
-              <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-orange-500/10 text-orange-600 dark:text-orange-400">
-                #3 {k}
+              <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-secondary/70">
+                #3 {lookupLabel.get(`ozelkod3:${k}`) || k}
                 <button 
                   onClick={() => toggleArrayFilter('ozelkod3', k)}
-                  className="ml-1 hover:bg-orange-500/20 rounded-full p-0.5"
+                  className="ml-1 hover:bg-muted rounded-full p-0.5"
                 >
                   <X className="w-3 h-3" />
                 </button>
               </Badge>
             ))}
+
+            {filters.gorunumModu !== 'hepsi' && (
+              <Badge variant="secondary" className="gap-1 pr-1">
+                👁️ {filters.gorunumModu === 'potansiyel' ? 'Potansiyel' : 'Cari'}
+                <button
+                  onClick={() => setFilter('gorunumModu', 'hepsi')}
+                  className="ml-1 hover:bg-muted rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            )}
+
+            {filters.durum !== 'hepsi' && (
+              <Badge variant="secondary" className="gap-1 pr-1">
+                ⏺️ {filters.durum === 'aktif' ? 'Aktif' : 'Pasif'}
+                <button
+                  onClick={() => setFilter('durum', 'hepsi')}
+                  className="ml-1 hover:bg-muted rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            )}
             
             {/* Locked DIA filters */}
             {filters._diaAutoFilters.map((f, idx) => (

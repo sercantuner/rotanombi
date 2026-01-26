@@ -12,7 +12,8 @@ import { useDiaProfile } from './useDiaProfile';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 // Cache key for filter options
-const FILTER_OPTIONS_CACHE_KEY = 'dia_filter_options';
+// Not: Key'i sunucu/firma bazlı ve versiyonlu tutuyoruz ki eski cache (yanlış ozelkodlar vb.) kalmasın.
+const FILTER_OPTIONS_CACHE_KEY_PREFIX = 'dia_filter_options_v2';
 const CACHE_TTL = 30 * 60 * 1000; // 30 dakika
 
 interface DiaFilterOptionsResult {
@@ -36,10 +37,12 @@ export function useDiaFilterOptions(): DiaFilterOptionsResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cacheKey = `${FILTER_OPTIONS_CACHE_KEY_PREFIX}:${sunucuAdi || 'na'}:${firmaKodu || 'na'}`;
+
   // Check cache
   const getCachedOptions = useCallback((): Partial<FilterOptions> | null => {
     try {
-      const cached = localStorage.getItem(FILTER_OPTIONS_CACHE_KEY);
+      const cached = localStorage.getItem(cacheKey);
       if (cached) {
         const parsed: CachedFilterOptions = JSON.parse(cached);
         if (Date.now() - parsed.timestamp < CACHE_TTL) {
@@ -50,7 +53,7 @@ export function useDiaFilterOptions(): DiaFilterOptionsResult {
       console.warn('[DiaFilterOptions] Cache read error:', e);
     }
     return null;
-  }, []);
+  }, [cacheKey]);
 
   // Save to cache
   const setCachedOptions = useCallback((data: Partial<FilterOptions>) => {
@@ -59,11 +62,11 @@ export function useDiaFilterOptions(): DiaFilterOptionsResult {
         data,
         timestamp: Date.now(),
       };
-      localStorage.setItem(FILTER_OPTIONS_CACHE_KEY, JSON.stringify(cacheData));
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
     } catch (e) {
       console.warn('[DiaFilterOptions] Cache write error:', e);
     }
-  }, []);
+  }, [cacheKey]);
 
   // Fetch from Supabase tables (firma_branches, firma_warehouses)
   const fetchFromSupabase = useCallback(async (): Promise<Partial<FilterOptions>> => {
@@ -306,9 +309,9 @@ export function useDiaFilterOptions(): DiaFilterOptionsResult {
 
   // Refetch function (bypass cache)
   const refetch = useCallback(async () => {
-    localStorage.removeItem(FILTER_OPTIONS_CACHE_KEY);
+    localStorage.removeItem(cacheKey);
     await fetchFilterOptions();
-  }, [fetchFilterOptions]);
+  }, [cacheKey, fetchFilterOptions]);
 
   // Initial fetch
   useEffect(() => {
