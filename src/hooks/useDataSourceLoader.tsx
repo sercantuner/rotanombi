@@ -193,6 +193,26 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     return loadDataSourceFromApi(dataSource, accessToken);
   }, [getDataSourceData, getDataSourceDataWithStale, isDataSourceFetched, incrementCacheHit, incrementCacheMiss]);
 
+  // DIA hata mesajlarını kullanıcı dostu hale getir
+  const getDiaErrorMessage = useCallback((error: string): string => {
+    if (error.includes('dönem yetkiniz')) {
+      return 'Bu veri kaynağı için dönem erişim yetkiniz bulunmuyor. Ayarlardan farklı bir dönem seçin.';
+    }
+    if (error.includes('CREDITS_ERROR') || error.includes('UNKNOWN_CREDITS')) {
+      return 'DIA servis limiti aşıldı. Lütfen biraz bekleyip tekrar deneyin.';
+    }
+    if (error.includes('bağlantı hatası') || error.includes('500')) {
+      return 'DIA sunucusuna bağlanılamadı. Lütfen tekrar deneyin.';
+    }
+    if (error.includes('INVALID_SESSION')) {
+      return 'Oturum süresi doldu. Sayfa yenileniyor...';
+    }
+    if (error.includes('Erişim engellendi')) {
+      return 'DIA erişim yetkisi hatası. Ayarlardan bağlantınızı kontrol edin.';
+    }
+    return error;
+  }, []);
+
   // API'den veri çek (helper) - useCallback ile sarmalandı
   const loadDataSourceFromApi = useCallback(async (
     dataSource: DataSource,
@@ -228,8 +248,22 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       const result = await response.json();
       
       if (!result.success) {
+        const errorMessage = getDiaErrorMessage(result.error || 'Bilinmeyen hata');
         console.error(`[DataSourceLoader] API Error for ${dataSource.name}:`, result.error);
-        return null;
+        
+        // Dönem yetki hatası veya erişim hatası için toast göster
+        if (result.error?.includes('dönem yetkiniz') || result.error?.includes('Erişim engellendi')) {
+          toast.error(errorMessage, {
+            duration: 5000,
+            action: {
+              label: 'Ayarlar',
+              onClick: () => window.location.href = '/ayarlar',
+            },
+          });
+        }
+        
+        // Boş array döndür ama hata setleme - dashboard çökmesin
+        return [];
       }
 
       const data = result.sampleData || [];
@@ -257,11 +291,16 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       return data;
     } catch (err) {
       console.error(`[DataSourceLoader] Fetch error for ${dataSource.name}:`, err);
-      return null;
+      
+      // Network hatası için toast
+      const errorMsg = err instanceof Error ? err.message : 'Bağlantı hatası';
+      toast.error(`${dataSource.name}: ${errorMsg}`);
+      
+      return [];
     } finally {
       setDataSourceLoading(dataSource.id, false);
     }
-  }, [setDataSourceLoading, recordApiCall, setDataSourceData, markDataSourceFetched, updateLastFetch, targetUserId]);
+  }, [setDataSourceLoading, recordApiCall, setDataSourceData, markDataSourceFetched, updateLastFetch, targetUserId, getDiaErrorMessage]);
 
 
   // Sayfa için veri kaynaklarını yükle - SADECE EKSİK OLANLARI
