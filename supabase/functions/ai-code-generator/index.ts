@@ -360,6 +360,57 @@ var chartData = fillMissingDates(data, 'tarih', 'tutar', 30);
 
 ═══════════════════════════════════════════════════════════════════════════════
 
+📐 GRAFİK CONTAINER YÜKSEKLİK KURALI (ZORUNLU!)
+───────────────────────────────────────────────────────────────────────────────
+Recharts grafikleri için yükseklik kalıtımı ZORUNLUDUR. Aksi halde grafik 
+görünmez (0px yükseklik).
+
+✅ ZORUNLU YAPI:
+1. Ana widget container'ına "h-full" ekle:
+   className: 'p-4 bg-card rounded-xl border border-border h-full flex flex-col'
+
+2. Grafik container'ına "flex-1 h-full min-h-0 relative" ekle:
+   React.createElement('div', { className: 'flex-1 h-full min-h-0 relative' },
+     React.createElement(Recharts.ResponsiveContainer, { width: '100%', height: '100%' },
+       // PieChart, BarChart, LineChart, AreaChart...
+     )
+   )
+
+3. Donut/Pie ortasındaki metin için OVERLAY kullan (PieChart dışında):
+   React.createElement('div', { 
+     className: 'absolute inset-0 flex flex-col items-center justify-center pointer-events-none' 
+   },
+     React.createElement('span', { className: 'text-2xl font-bold text-foreground' }, value),
+     React.createElement('span', { className: 'text-xs text-muted-foreground' }, 'Toplam')
+   )
+
+❌ YANLIŞ (Grafik görünmez!):
+   className: 'flex-1 min-h-0'  // h-full YOK!
+
+❌ YANLIŞ (SVG hatası):
+   PieChart içine doğrudan <text> elementi koymak
+
+✅ DOĞRU ÖRNEK:
+React.createElement('div', { className: 'flex-1 h-full min-h-0 relative' },
+  React.createElement(Recharts.ResponsiveContainer, { width: '100%', height: '100%' },
+    React.createElement(Recharts.PieChart, null,
+      React.createElement(Recharts.Pie, { data: chartData, innerRadius: '55%', outerRadius: '80%', dataKey: 'value' },
+        chartData.map(function(entry, index) {
+          return React.createElement(Recharts.Cell, { key: 'cell-' + index, fill: getColor(index) });
+        })
+      ),
+      React.createElement(Recharts.Tooltip, { content: CustomTooltip })
+    )
+  ),
+  // Ortadaki metin OVERLAY olarak - PieChart DIŞında!
+  React.createElement('div', { className: 'absolute inset-0 flex flex-col items-center justify-center pointer-events-none' },
+    React.createElement('span', { className: 'text-2xl font-bold text-foreground' }, totalValue),
+    React.createElement('span', { className: 'text-xs text-muted-foreground' }, 'Toplam')
+  )
+)
+
+═══════════════════════════════════════════════════════════════════════════════
+
 ⚠️ KRİTİK UYARI - KODU TAMAMLA!
 ───────────────────────────────────────────────────────────────────────────────
 - Kodu MUTLAKA tamamla, ASLA yarıda bırakma!
