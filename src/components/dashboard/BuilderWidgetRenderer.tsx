@@ -11,7 +11,7 @@ import { WidgetDateFilter, getDateRangeForPeriod } from './WidgetDateFilter';
 import { StatCard } from './StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertCircle, Hash, Code, BarChart3, MousePointerClick } from 'lucide-react';
+import { AlertCircle, Hash, Code, BarChart3 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { 
   BarChart, Bar, LineChart, Line, AreaChart, Area,
@@ -263,13 +263,13 @@ export function BuilderWidgetRenderer({
     );
   };
 
-  // KPI Widget (drill-down destekli)
+  // KPI Widget (drill-down destekli) - feedback butonu ContainerRenderer'dan gelecek
   if (vizType === 'kpi' && data) {
     const IconComponent = widgetIcon ? (LucideIcons as any)[widgetIcon] || Hash : Hash;
     return (
       <>
         <div 
-          className="cursor-pointer group relative"
+          className="cursor-pointer group relative h-full"
           onClick={handleKpiDrillDown}
           title="Detayları görmek için tıklayın"
         >
@@ -284,9 +284,6 @@ export function BuilderWidgetRenderer({
             icon={IconComponent}
             variant="default"
           />
-          <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <MousePointerClick className="h-4 w-4 text-muted-foreground" />
-          </div>
         </div>
         <DrillDownModal
           open={drillDownOpen}
@@ -335,9 +332,9 @@ export function BuilderWidgetRenderer({
       }
       
       return (
-        <Card className={cn(isolatedClassName, 'h-full flex flex-col')}>
+        <div className={cn(isolatedClassName, 'h-full flex flex-col')}>
           <ChartHeader />
-          <CardContent className="flex-1 flex flex-col min-h-0 p-4 pt-3">
+          <div className="flex-1 flex flex-col min-h-0 p-0">
             <ErrorBoundary fallback={
               <div className="text-destructive text-sm flex items-center gap-2 py-4">
                 <AlertCircle className="h-4 w-4" />
@@ -349,8 +346,8 @@ export function BuilderWidgetRenderer({
                 <WidgetComponent data={filteredData} colors={userColors} filters={filters} />
               </div>
             </ErrorBoundary>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       );
     } catch (err: any) {
       console.error('Custom widget error:', err);

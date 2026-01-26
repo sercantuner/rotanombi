@@ -18,8 +18,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Plus, Trash2, GripVertical, Settings, X, Palette, Check, MessageSquarePlus } from 'lucide-react';
+import { Plus, Trash2, GripVertical, Settings, X, Palette, Check, MessageSquarePlus, Calendar } from 'lucide-react';
 import { WidgetFeedbackButton } from '@/components/dashboard/WidgetFeedbackButton';
+import { WidgetDateFilter, getDateRangeForPeriod } from '@/components/dashboard/WidgetDateFilter';
+import { DatePeriod } from '@/lib/widgetBuilderTypes';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -268,8 +270,20 @@ export function ContainerRenderer({
               isWidgetEditMode={isWidgetEditMode}
             />
             
-            {/* Feedback butonu - hover'da görünür */}
-            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+            {/* Hover kontrolleri - sağ üst */}
+            <div className="absolute top-1 right-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+              {/* Tarih filtresi - eğer widget'ta tarih filtresi aktifse */}
+              {widgetDetail.builder_config?.dateFilter?.enabled && widgetDetail.builder_config?.dateFilter?.showInWidget && (
+                <div className="bg-background/90 backdrop-blur-sm rounded shadow-sm">
+                  <WidgetDateFilter
+                    config={widgetDetail.builder_config.dateFilter}
+                    currentPeriod={widgetDetail.builder_config.dateFilter.defaultPeriod || 'all'}
+                    onPeriodChange={() => {}}
+                    compact
+                  />
+                </div>
+              )}
+              {/* Feedback butonu */}
               <WidgetFeedbackButton 
                 widgetId={widgetDetail.id} 
                 widgetName={widgetDetail.name}
