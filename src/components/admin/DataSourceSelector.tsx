@@ -131,81 +131,32 @@ export function DataSourceSelector({
         </SelectContent>
       </Select>
 
-      {/* Seçili kaynak detayları */}
+      {/* Seçili kaynak detayları - Sadeleştirilmiş */}
       {showDetails && selectedSource && (
         <Card className="bg-primary/5 border-primary/20">
-          <CardContent className="pt-4 space-y-3">
-            <div className="flex items-start justify-between">
-              <div>
-                <h4 className="font-medium text-sm flex items-center gap-2">
-                  <Database className="h-4 w-4 text-primary" />
-                  {selectedSource.name}
-                </h4>
-                {selectedSource.description && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {selectedSource.description}
-                  </p>
-                )}
-              </div>
-              {selectedSource.is_shared && (
-                <Badge variant="secondary" className="text-xs">
-                  Paylaşımlı
-                </Badge>
-              )}
+          <CardContent className="pt-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="font-medium text-sm flex items-center gap-2">
+                <Database className="h-4 w-4 text-primary" />
+                {selectedSource.name}
+              </h4>
+              <Badge variant="outline" className="text-xs">
+                {selectedSource.module}.{selectedSource.method}
+              </Badge>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="flex items-center gap-2">
-                <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-muted-foreground">API:</span>
-                <span className="font-mono">{selectedSource.module}.{selectedSource.method}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-muted-foreground">Önbellek:</span>
-                <span>{Math.floor(selectedSource.cache_ttl / 60)} dk</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-muted-foreground">Son Çalışma:</span>
-                <span>{formatLastFetch(selectedSource.last_fetched_at)}</span>
-              </div>
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {Math.floor(selectedSource.cache_ttl / 60)} dk önbellek
+              </span>
               {selectedSource.last_record_count !== null && (
-                <div className="flex items-center gap-2">
-                  <Database className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-muted-foreground">Kayıt:</span>
-                  <span>{selectedSource.last_record_count.toLocaleString('tr-TR')}</span>
-                </div>
+                <span className="flex items-center gap-1">
+                  <Database className="h-3 w-3" />
+                  {selectedSource.last_record_count.toLocaleString('tr-TR')} kayıt
+                </span>
               )}
             </div>
-
-            {selectedSource.filters && selectedSource.filters.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {selectedSource.filters.map((filter, i) => (
-                  <Badge key={i} variant="outline" className="text-[10px]">
-                    {filter.field} {filter.operator || '='} {filter.value}
-                  </Badge>
-                ))}
-              </div>
-            )}
-
-            {selectedSource.last_fields && selectedSource.last_fields.length > 0 && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1.5">Dönen Alanlar:</p>
-                <div className="flex flex-wrap gap-1">
-                  {selectedSource.last_fields.slice(0, 10).map(field => (
-                    <Badge key={field} variant="secondary" className="text-[10px]">
-                      {field}
-                    </Badge>
-                  ))}
-                  {selectedSource.last_fields.length > 10 && (
-                    <Badge variant="secondary" className="text-[10px]">
-                      +{selectedSource.last_fields.length - 10} daha
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}

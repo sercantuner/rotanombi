@@ -879,6 +879,44 @@ export type Database = {
           },
         ]
       }
+      widget_filter_fields: {
+        Row: {
+          created_at: string | null
+          field_key: string
+          field_label: string
+          field_type: string | null
+          id: string
+          is_global: boolean | null
+          widget_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          field_key: string
+          field_label: string
+          field_type?: string | null
+          id?: string
+          is_global?: boolean | null
+          widget_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          field_key?: string
+          field_label?: string
+          field_type?: string | null
+          id?: string
+          is_global?: boolean | null
+          widget_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "widget_filter_fields_widget_id_fkey"
+            columns: ["widget_id"]
+            isOneToOne: false
+            referencedRelation: "widgets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       widget_permissions: {
         Row: {
           can_add: boolean | null
@@ -920,6 +958,7 @@ export type Database = {
       widgets: {
         Row: {
           available_filters: Json | null
+          available_sizes: string[] | null
           builder_config: Json | null
           category: string
           change_notes: string | null
@@ -941,6 +980,7 @@ export type Database = {
           name: string
           size: string
           sort_order: number | null
+          target_pages: string[] | null
           type: string
           updated_at: string
           version: number | null
@@ -948,6 +988,7 @@ export type Database = {
         }
         Insert: {
           available_filters?: Json | null
+          available_sizes?: string[] | null
           builder_config?: Json | null
           category?: string
           change_notes?: string | null
@@ -969,6 +1010,7 @@ export type Database = {
           name: string
           size?: string
           sort_order?: number | null
+          target_pages?: string[] | null
           type?: string
           updated_at?: string
           version?: number | null
@@ -976,6 +1018,7 @@ export type Database = {
         }
         Update: {
           available_filters?: Json | null
+          available_sizes?: string[] | null
           builder_config?: Json | null
           category?: string
           change_notes?: string | null
@@ -997,6 +1040,7 @@ export type Database = {
           name?: string
           size?: string
           sort_order?: number | null
+          target_pages?: string[] | null
           type?: string
           updated_at?: string
           version?: number | null

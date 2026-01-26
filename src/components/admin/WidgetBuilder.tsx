@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useWidgetAdmin } from '@/hooks/useWidgets';
 import { useDataSources, DataSource } from '@/hooks/useDataSources';
-import { Widget, WidgetFormData, PAGE_CATEGORIES, WIDGET_SIZES } from '@/lib/widgetTypes';
+import { Widget, WidgetFormData, WidgetSize, WidgetCategory, PAGE_CATEGORIES, WIDGET_SIZES, FilterFieldConfig } from '@/lib/widgetTypes';
 import {
   ChartType,
   AggregationType,
@@ -36,6 +36,9 @@ import { TableColumnBuilder, TableColumn } from './TableColumnBuilder';
 import { PivotConfigBuilder, getDefaultPivotConfig } from './PivotConfigBuilder';
 import { FieldWellBuilder, FieldWellsConfig } from './FieldWellBuilder';
 import { ChartSettingsPanel, ChartSettingsData, getDefaultChartSettings, PaletteKey } from './ChartSettingsPanel';
+import { WidgetSizeSelector } from './WidgetSizeSelector';
+import { WidgetPageSelector } from './WidgetPageSelector';
+import { WidgetFilterFieldsBuilder } from './WidgetFilterFieldsBuilder';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,6 +50,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { 
   Wand2, BarChart3, Settings2, Save, 
   Hash, TrendingUp, Activity, PieChart, Circle, Table, List, LayoutGrid, CheckCircle, Edit,
@@ -121,8 +125,13 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   const [widgetName, setWidgetName] = useState('');
   const [widgetDescription, setWidgetDescription] = useState('');
   const [widgetIcon, setWidgetIcon] = useState('BarChart3');
-  const [widgetSize, setWidgetSize] = useState<'sm' | 'md' | 'lg' | 'xl' | 'full'>('md');
-  const [defaultPage, setDefaultPage] = useState<'dashboard' | 'satis' | 'finans' | 'cari'>('dashboard');
+  const [widgetSize, setWidgetSize] = useState<WidgetSize>('md');
+  const [availableSizes, setAvailableSizes] = useState<WidgetSize[]>(['md']);
+  const [defaultPage, setDefaultPage] = useState<WidgetCategory>('dashboard');
+  const [targetPages, setTargetPages] = useState<WidgetCategory[]>(['dashboard']);
+  
+  // Widget filtre alanları
+  const [filterFields, setFilterFields] = useState<FilterFieldConfig[]>([]);
   
   // Builder config
   const [config, setConfig] = useState<WidgetBuilderConfig>(getEmptyConfig());
@@ -285,7 +294,10 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
     setWidgetDescription('');
     setWidgetIcon('BarChart3');
     setWidgetSize('md');
+    setAvailableSizes(['md']);
     setDefaultPage('dashboard');
+    setTargetPages(['dashboard']);
+    setFilterFields([]);
     setConfig(getEmptyConfig());
     setSelectedDataSourceId(null);
     setXAxisField('');
@@ -299,11 +311,12 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
     setCalculatedFields([]);
     setDateFilterConfig(getDefaultDateFilterConfig());
     setSelectedTemplate(null);
-    // Yeni state'leri sıfırla
     setPostFetchFilters([]);
     setTableColumns([]);
     setPivotConfig(getDefaultPivotConfig());
     setIsDefaultWidget(false);
+    setFieldWells({});
+    setChartSettings(getDefaultChartSettings());
   };
   
   // Şablon uygulama
@@ -733,9 +746,9 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                 <BarChart3 className="h-3 w-3" />
                 Görsel
               </TabsTrigger>
-              <TabsTrigger value="settings" className="gap-1 text-xs px-2 py-1.5">
-                <Settings2 className="h-3 w-3" />
-                Ayar
+              <TabsTrigger value="widgetfilters" className="gap-1 text-xs px-2 py-1.5">
+                <Filter className="h-3 w-3" />
+                W.Filtre
               </TabsTrigger>
               <TabsTrigger value="code" className="gap-1 text-xs px-2 py-1.5">
                 <Code className="h-3 w-3" />
@@ -780,9 +793,9 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
               <BarChart3 className="h-3.5 w-3.5" />
               Görsel
             </TabsTrigger>
-            <TabsTrigger value="settings" className="gap-1 text-xs">
-              <Settings2 className="h-3.5 w-3.5" />
-              Ayarlar
+            <TabsTrigger value="widgetfilters" className="gap-1 text-xs">
+              <Filter className="h-3.5 w-3.5" />
+              W.Filtreler
             </TabsTrigger>
             <TabsTrigger value="code" className="gap-1 text-xs">
               <Code className="h-3.5 w-3.5" />
@@ -849,6 +862,38 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* Widget İsim ve Açıklama */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Widget Key *</Label>
+                      <Input
+                        value={widgetKey}
+                        onChange={(e) => setWidgetKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
+                        placeholder="toplam_alacak"
+                      />
+                      <p className="text-xs text-muted-foreground">Benzersiz teknik isim (a-z, 0-9, _)</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Widget Adı *</Label>
+                      <Input
+                        value={widgetName}
+                        onChange={(e) => setWidgetName(e.target.value)}
+                        placeholder="Toplam Alacak"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Açıklama</Label>
+                    <Input
+                      value={widgetDescription}
+                      onChange={(e) => setWidgetDescription(e.target.value)}
+                      placeholder="Widget açıklaması..."
+                    />
+                  </div>
+                  
+                  <Separator />
+                  
                   <DataSourceSelector
                     selectedId={selectedDataSourceId}
                     onSelect={handleDataSourceSelect}
@@ -868,35 +913,6 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                           </p>
                         </div>
                       </div>
-                    </div>
-                  )}
-                  
-                  {/* Mevcut alanlar */}
-                  {selectedDataSource && availableFieldsForVisualization.length > 0 && (
-                    <div className="space-y-2">
-                      <Label className="text-sm">Mevcut Alanlar</Label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {availableFieldsForVisualization.map((field) => {
-                          const isNumeric = numericFieldsForVisualization.includes(field);
-                          return (
-                            <Badge 
-                              key={field} 
-                              variant="outline" 
-                              className={cn(
-                                'text-xs cursor-pointer hover:opacity-80',
-                                isNumeric ? 'bg-blue-500/10 text-blue-600 border-blue-500/30' : ''
-                              )}
-                              onClick={() => handleFieldClick(field)}
-                            >
-                              {field}
-                              {isNumeric && <span className="ml-1 opacity-60 text-[10px]">(num)</span>}
-                            </Badge>
-                          );
-                        })}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Alanları tıklayarak kopyalayabilir veya Görsel sekmesinde hedef alana atayabilirsiniz
-                      </p>
                     </div>
                   )}
                 </CardContent>
@@ -1061,115 +1077,24 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
               </ScrollArea>
             </TabsContent>
 
-            {/* AYARLAR */}
-            <TabsContent value="settings" className="m-0 space-y-4">
+            {/* WİDGET FİLTRELERİ - Yeni sekme */}
+            <TabsContent value="widgetfilters" className="m-0 space-y-4">
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Widget Bilgileri</CardTitle>
-                  <CardDescription>Widget'ın temel bilgilerini girin</CardDescription>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Filter className="h-5 w-5 text-primary" />
+                    Widget Filtreleme Alanları
+                  </CardTitle>
+                  <CardDescription>
+                    Bu widget'ın hangi alanlara göre filtrelenebileceğini belirleyin
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Widget Key *</Label>
-                      <Input
-                        value={widgetKey}
-                        onChange={(e) => setWidgetKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
-                        placeholder="toplam_alacak"
-                      />
-                      <p className="text-xs text-muted-foreground">Benzersiz teknik isim (a-z, 0-9, _)</p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Widget Adı *</Label>
-                      <Input
-                        value={widgetName}
-                        onChange={(e) => setWidgetName(e.target.value)}
-                        placeholder="Toplam Alacak"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Açıklama</Label>
-                    <Input
-                      value={widgetDescription}
-                      onChange={(e) => setWidgetDescription(e.target.value)}
-                      placeholder="Widget açıklaması..."
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label>İkon</Label>
-                      <Select value={widgetIcon} onValueChange={setWidgetIcon}>
-                        <SelectTrigger>
-                          <SelectValue>
-                            <div className="flex items-center gap-2">
-                              <DynamicIcon iconName={widgetIcon} className="h-4 w-4" />
-                              {widgetIcon}
-                            </div>
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60">
-                          <div className="grid grid-cols-6 gap-1 p-2">
-                            {AVAILABLE_ICONS.map(icon => (
-                              <Button
-                                key={icon}
-                                variant={widgetIcon === icon ? 'default' : 'ghost'}
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => setWidgetIcon(icon)}
-                                title={icon}
-                              >
-                                <DynamicIcon iconName={icon} className="h-4 w-4" />
-                              </Button>
-                            ))}
-                          </div>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Boyut</Label>
-                      <Select value={widgetSize} onValueChange={(v: any) => setWidgetSize(v)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {WIDGET_SIZES.map(size => (
-                            <SelectItem key={size.id} value={size.id}>{size.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Varsayılan Sayfa</Label>
-                      <Select value={defaultPage} onValueChange={(v: any) => setDefaultPage(v)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="dashboard">Dashboard</SelectItem>
-                          <SelectItem value="satis">Satış</SelectItem>
-                          <SelectItem value="finans">Finans</SelectItem>
-                          <SelectItem value="cari">Cari</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  {/* Varsayılan Widget Toggle */}
-                  <div className="flex items-center justify-between p-4 bg-primary/5 rounded-lg border border-primary/20">
-                    <div>
-                      <Label className="text-base font-medium">Varsayılan Widget</Label>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Bu widget tüm yeni kullanıcılarda otomatik görünsün
-                      </p>
-                    </div>
-                    <Switch 
-                      checked={isDefaultWidget}
-                      onCheckedChange={setIsDefaultWidget}
-                    />
-                  </div>
+                <CardContent>
+                  <WidgetFilterFieldsBuilder
+                    availableFields={availableFieldsForVisualization}
+                    selectedFields={filterFields}
+                    onChange={setFilterFields}
+                  />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1235,15 +1160,95 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
           </ScrollArea>
         </Tabs>
 
-        <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            İptal
-          </Button>
-          <Button onClick={handleSave} disabled={isLoading}>
-            <Save className="h-4 w-4 mr-2" />
-            {isEditMode ? 'Güncelle' : 'Oluştur'}
-          </Button>
-        </DialogFooter>
+        {/* Gelişmiş Footer - Boyut, Sayfa, İkon ve Kaydet */}
+        <div className="mt-4 pt-4 border-t space-y-4">
+          {/* Üst Satır: Boyut ve Sayfa Seçiciler */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Boyut Seçici */}
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Boyutlar</Label>
+              <WidgetSizeSelector
+                selectedSizes={availableSizes}
+                defaultSize={widgetSize}
+                onChange={(sizes, def) => {
+                  setAvailableSizes(sizes);
+                  setWidgetSize(def);
+                }}
+              />
+            </div>
+            
+            {/* Sayfa Seçici */}
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Sayfalar</Label>
+              <WidgetPageSelector
+                selectedPages={targetPages}
+                defaultPage={defaultPage}
+                onChange={(pages, def) => {
+                  setTargetPages(pages);
+                  setDefaultPage(def);
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Alt Satır: İkon, Varsayılan ve Butonlar */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              {/* İkon Seçici */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <DynamicIcon iconName={widgetIcon} className="h-4 w-4" />
+                    <span className="hidden sm:inline">İkon</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72" align="start">
+                  <div className="space-y-2">
+                    <Label className="text-sm">İkon Seç</Label>
+                    <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
+                      {AVAILABLE_ICONS.map(icon => (
+                        <Button
+                          key={icon}
+                          variant={widgetIcon === icon ? 'default' : 'ghost'}
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setWidgetIcon(icon)}
+                          title={icon}
+                        >
+                          <DynamicIcon iconName={icon} className="h-4 w-4" />
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              {/* Varsayılan Widget */}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/50">
+                <Label className="text-xs cursor-pointer" htmlFor="default-widget-toggle">
+                  Varsayılan
+                </Label>
+                <Switch
+                  id="default-widget-toggle"
+                  checked={isDefaultWidget}
+                  onCheckedChange={setIsDefaultWidget}
+                  className="scale-75"
+                />
+              </div>
+            </div>
+
+            {/* Butonlar */}
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                İptal
+              </Button>
+              <Button onClick={handleSave} disabled={isLoading}>
+                <Save className="h-4 w-4 mr-2" />
+                {isEditMode ? 'Güncelle' : 'Oluştur'}
+              </Button>
+            </div>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
