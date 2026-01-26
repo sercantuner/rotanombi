@@ -529,6 +529,93 @@ React.createElement('div', { className: 'flex-1 h-full min-h-0 relative' },
 
 ═══════════════════════════════════════════════════════════════════════════════
 
+📊 RESPONSIVE LEGEND KURALI (ZORUNLU!)
+───────────────────────────────────────────────────────────────────────────────
+Pie/Donut/Bar/Line/Area grafiklerinde legend kullanıyorsan:
+
+1. Container yüksekliğini ölç ve legend'ın sığıp sığmayacağını kontrol et:
+
+var containerRef = React.useRef(null);
+var legendExpanded = React.useState(false);
+var hasEnoughSpace = React.useState(true);
+
+React.useEffect(function() {
+  if (containerRef.current) {
+    var containerHeight = containerRef.current.offsetHeight;
+    var headerHeight = 56; // Başlık alanı
+    var contentHeight = containerHeight - headerHeight;
+    
+    // Legend için tahmini yükseklik (item sayısı * 24px)
+    var legendHeight = chartData.length * 24;
+    var threshold = contentHeight * 0.40; // %40 eşik
+    
+    hasEnoughSpace[1](legendHeight <= threshold);
+  }
+}, [chartData]);
+
+2. Toggle butonu ekle (legend sığmıyorsa):
+
+!hasEnoughSpace[0] && React.createElement('button', {
+  onClick: function() { legendExpanded[1](!legendExpanded[0]); },
+  className: 'flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded hover:bg-muted/50'
+},
+  legendExpanded[0] ? 'Gizle' : 'Detaylar',
+  React.createElement('span', { 
+    className: 'transform transition-transform ' + (legendExpanded[0] ? 'rotate-180' : '') 
+  }, '▼')
+)
+
+3. Legend'ı koşullu göster:
+
+(hasEnoughSpace[0] || legendExpanded[0]) && React.createElement('div', {
+  className: 'grid grid-cols-2 gap-1',
+  style: !hasEnoughSpace[0] && legendExpanded[0] 
+    ? { maxHeight: Math.floor(contentHeight * 0.6), overflowY: 'auto' }
+    : undefined
+}, legendItems)
+
+❌ YANLIŞ: Legend'ı sabit yükseklikle göstermek (max-h-[120px] vb.)
+✅ DOĞRU: Container yüksekliğinin %40'ından fazla yer kaplıyorsa gizle, toggle ile aç
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📈 DRILL-DOWN DESTEĞİ (ÖNERİLEN)
+───────────────────────────────────────────────────────────────────────────────
+Grafik elementlerine onClick ekle ve kullanıcının detay görmesini sağla:
+
+✅ Bar için:
+React.createElement(Recharts.Bar, { 
+  dataKey: 'value',
+  onClick: function(entry) { 
+    console.log('Tıklanan:', entry.name); 
+    // Detay modalı veya alert gösterebilirsin
+  }
+})
+
+✅ Pie/Donut için:
+React.createElement(Recharts.Pie, {
+  data: chartData,
+  onClick: function(data, index) {
+    console.log('Seçilen dilim:', data.name, data.value);
+  }
+})
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📅 TARİH EKSENİ FORMATLAMA
+───────────────────────────────────────────────────────────────────────────────
+10'dan fazla tarih varsa etiketleri -45 derece döndür:
+
+React.createElement(Recharts.XAxis, { 
+  dataKey: 'name',
+  angle: data.length > 10 ? -45 : 0,
+  textAnchor: data.length > 10 ? 'end' : 'middle',
+  height: data.length > 10 ? 60 : 30,
+  interval: data.length > 15 ? Math.floor(data.length / 10) : 0
+})
+
+═══════════════════════════════════════════════════════════════════════════════
+
 ⚠️ KRİTİK UYARI - KODU TAMAMLA!
 ───────────────────────────────────────────────────────────────────────────────
 - Kodu MUTLAKA tamamla, ASLA yarıda bırakma!
