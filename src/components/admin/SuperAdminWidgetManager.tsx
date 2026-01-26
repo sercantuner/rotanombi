@@ -1,9 +1,9 @@
 // Super Admin Widget Manager - Widget ve kategori yönetimi
+// v2.0 - Sadece AI tabanlı widget oluşturma (No-code builder kaldırıldı)
 import React, { useState } from 'react';
 import { useWidgets, useWidgetAdmin } from '@/hooks/useWidgets';
 import { useWidgetCategories } from '@/hooks/useWidgetCategories';
 import { Widget, WidgetFormData } from '@/lib/widgetTypes';
-import { WidgetBuilder } from '@/components/admin/WidgetBuilder';
 import { CustomCodeWidgetBuilder } from '@/components/admin/CustomCodeWidgetBuilder';
 import { 
   Plus, 
@@ -12,16 +12,13 @@ import {
   Trash2, 
   Power, 
   Filter,
-  Folder,
-  Code
+  Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
@@ -66,7 +63,6 @@ export default function SuperAdminWidgetManager() {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   
-  const [showWidgetBuilder, setShowWidgetBuilder] = useState(false);
   const [showCodeBuilder, setShowCodeBuilder] = useState(false);
   const [editingWidget, setEditingWidget] = useState<Widget | null>(null);
   const [formData, setFormData] = useState<WidgetFormData>(getEmptyFormData());
@@ -85,18 +81,14 @@ export default function SuperAdminWidgetManager() {
     return matchesSearch && matchesCategory && matchesStatus;
   });
 
+  // Yeni widget oluştur (AI tabanlı)
   const handleCreateWidget = () => {
-    setEditingWidget(null);
-    setFormData(getEmptyFormData());
-    setShowWidgetBuilder(true);
-  };
-
-  const handleCreateCodeWidget = () => {
     setEditingWidget(null);
     setFormData(getEmptyFormData());
     setShowCodeBuilder(true);
   };
 
+  // Widget düzenle - Tümü artık AI builder ile açılıyor
   const handleEditWidget = (widget: Widget) => {
     setEditingWidget(widget);
     setFormData({
@@ -120,13 +112,8 @@ export default function SuperAdminWidgetManager() {
       builder_config: widget.builder_config
     });
     
-    // Check if it's a custom code widget by checking builder_config structure
-    const builderConfig = widget.builder_config;
-    if (builderConfig && 'customCode' in builderConfig) {
-      setShowCodeBuilder(true);
-    } else {
-      setShowWidgetBuilder(true);
-    }
+    // Tüm widgetlar artık AI builder ile düzenleniyor
+    setShowCodeBuilder(true);
   };
 
   const handleSaveWidget = async (data: WidgetFormData) => {
@@ -138,7 +125,6 @@ export default function SuperAdminWidgetManager() {
         await createWidget(data);
         toast.success('Widget oluşturuldu');
       }
-      setShowWidgetBuilder(false);
       setShowCodeBuilder(false);
       fetchWidgets();
     } catch (error) {
@@ -180,18 +166,12 @@ export default function SuperAdminWidgetManager() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Widget Yönetimi</h2>
-          <p className="text-muted-foreground">Tüm widget'ları oluşturun, düzenleyin ve yönetin</p>
+          <p className="text-muted-foreground">AI destekli widget oluşturma ve yönetim</p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={handleCreateWidget}>
-            <Plus className="w-4 h-4 mr-2" />
-            Widget Oluştur
-          </Button>
-          <Button variant="outline" onClick={handleCreateCodeWidget}>
-            <Code className="w-4 h-4 mr-2" />
-            Kod Widget
-          </Button>
-        </div>
+        <Button onClick={handleCreateWidget}>
+          <Sparkles className="w-4 h-4 mr-2" />
+          Yeni Widget Oluştur
+        </Button>
       </div>
 
       {/* Filters */}
@@ -308,18 +288,7 @@ export default function SuperAdminWidgetManager() {
         </div>
       )}
 
-      {/* Widget Builder Dialog */}
-      <WidgetBuilder
-        open={showWidgetBuilder}
-        onOpenChange={setShowWidgetBuilder}
-        onSave={() => {
-          fetchWidgets();
-          setShowWidgetBuilder(false);
-        }}
-        editWidget={editingWidget || undefined}
-      />
-
-      {/* Code Widget Builder Dialog */}
+      {/* AI Widget Builder Dialog */}
       <CustomCodeWidgetBuilder
         open={showCodeBuilder}
         onOpenChange={setShowCodeBuilder}

@@ -600,3 +600,107 @@ export interface DataSourceReference {
   slug: string;                 // data_sources.slug
   name: string;                 // Görüntülenen ad
 }
+
+// ============= ALERT/HEDEF SİSTEMİ =============
+
+// Alert/Hedef koşulu
+export type AlertCondition = 'above' | 'below' | 'equals' | 'between';
+
+// Bildirim tipi
+export type AlertNotificationType = 'critical' | 'warning' | 'info' | 'success';
+
+// Alert yapılandırması
+export interface AlertConfig {
+  id: string;
+  name: string;                              // "Aylık Satış Hedefi"
+  enabled: boolean;
+  field: string;                             // Hangi alanda kontrol edilecek
+  aggregation: AggregationType;              // sum, avg, max, count
+  condition: AlertCondition;                 // above, below, equals, between
+  threshold: number;                         // 500000 (₺500K hedef)
+  threshold2?: number;                       // between için ikinci eşik
+  notificationType: AlertNotificationType;   // critical, warning, info, success
+  showReferenceLine: boolean;                // Grafikte çizgi göster
+  referenceLineColor?: string;               // Çizgi rengi
+  referenceLineLabel?: string;               // "Hedef: ₺500K"
+  notifyOnce?: boolean;                      // Sadece bir kez bildir
+  lastTriggered?: string;                    // Son tetiklenme tarihi
+}
+
+// Varsayılan alert
+export const getDefaultAlertConfig = (): AlertConfig => ({
+  id: '',
+  name: '',
+  enabled: true,
+  field: '',
+  aggregation: 'sum',
+  condition: 'above',
+  threshold: 0,
+  notificationType: 'info',
+  showReferenceLine: true,
+  notifyOnce: false,
+});
+
+// ============= PARA BİRİMİ SİSTEMİ =============
+
+// Desteklenen para birimleri
+export const CURRENCY_SYMBOLS: Record<string, string> = {
+  TRY: '₺',
+  TL: '₺',
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  CHF: 'Fr.',
+  JPY: '¥',
+  CNY: '¥',
+  RUB: '₽',
+  AED: 'د.إ',
+  SAR: '﷼',
+  KWD: 'د.ك',
+  QAR: 'ر.ق',
+};
+
+// Para birimi formatı
+export const formatCurrencyValue = (value: number, currency: string = 'TRY'): string => {
+  const symbol = CURRENCY_SYMBOLS[currency] || currency + ' ';
+  const absValue = Math.abs(value);
+  let formatted: string;
+  
+  if (absValue >= 1000000000) {
+    formatted = (value / 1000000000).toFixed(1) + 'B';
+  } else if (absValue >= 1000000) {
+    formatted = (value / 1000000).toFixed(1) + 'M';
+  } else if (absValue >= 1000) {
+    formatted = (value / 1000).toFixed(0) + 'K';
+  } else {
+    formatted = value.toLocaleString('tr-TR');
+  }
+  
+  return symbol + formatted;
+};
+
+// ============= TREND VE İSTATİSTİK =============
+
+// Trend line hesaplama fonksiyonu
+export const calculateTrendLine = (data: any[], yField: string): { slope: number; intercept: number; points: number[] } | null => {
+  const n = data.length;
+  if (n < 2) return null;
+  
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+  
+  data.forEach((item, i) => {
+    const x = i;
+    const y = parseFloat(item[yField]) || 0;
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumX2 += x * x;
+  });
+  
+  const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+  
+  const points = data.map((_, i) => intercept + slope * i);
+  
+  return { slope, intercept, points };
+};
