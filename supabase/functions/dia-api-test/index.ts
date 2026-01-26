@@ -404,12 +404,25 @@ serve(async (req) => {
       const result = await response.json();
 
       // INVALID_SESSION kontrolü - retry mekanizması
+      // DIA çeşitli formatlarda INVALID_SESSION dönebilir:
+      // - result.msg: "INVALID_SESSION" (string)
+      // - result.code: "401" veya "403" veya "500" with SESSION in msg
+      // - result.error içinde SESSION kelimesi
+      const resultString = JSON.stringify(result).toUpperCase();
       const isInvalidSession = 
-        (result.code && result.code !== "200" && 
-         (result.msg?.includes('INVALID_SESSION') || result.msg?.includes('SESSION'))) ||
-        (typeof result.msg === 'string' && result.msg.includes('INVALID_SESSION'));
+        resultString.includes('INVALID_SESSION') ||
+        resultString.includes('SESSION_EXPIRED') ||
+        resultString.includes('SESSION_INVALID') ||
+        (result.code && (result.code === "401" || result.code === "403") && resultString.includes('SESSION')) ||
+        (typeof result.msg === 'string' && (
+          result.msg.toUpperCase().includes('INVALID') || 
+          result.msg.toUpperCase().includes('SESSION') ||
+          result.msg.toUpperCase().includes('OTURUM')
+        ));
 
       if (isInvalidSession && retryCount === 0) {
+        console.log(`INVALID_SESSION detected for user ${targetUserIdForRetry}, response: ${resultString.substring(0, 200)}`);
+        console.log(`Clearing session and retrying...`);
         console.log(`INVALID_SESSION detected for user ${targetUserIdForRetry}, clearing session and retrying...`);
         
         // Session'ı temizle - hedef kullanıcı için (impersonation durumunda)
