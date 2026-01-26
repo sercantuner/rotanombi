@@ -577,10 +577,20 @@ serve(async (req) => {
 
     // Normal mode - mevcut mantık
     if (result.code && result.code !== "200") {
+      // CREDITS_ERROR özel işleme - kullanıcı dostu mesaj
+      let errorMessage = result.msg || `DIA hata kodu: ${result.code}`;
+      if (errorMessage.includes('CREDITS') || errorMessage.includes('CREDIT')) {
+        errorMessage = 'DIA servis limiti aşıldı. Lütfen birkaç dakika bekleyip tekrar deneyin.';
+        console.log(`[DIA CREDITS_ERROR] User ${effectiveUserId}: ${result.msg}`);
+      }
+      
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: result.msg || `DIA hata kodu: ${result.code}` 
+          error: errorMessage,
+          // Önemli: Widget'ın boş veriyle çalışabilmesi için sampleData da dön
+          sampleData: [],
+          recordCount: 0,
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
