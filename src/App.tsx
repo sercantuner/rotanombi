@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { UserSettingsProvider } from "@/contexts/UserSettingsContext";
 import { DiaDataCacheProvider } from "@/contexts/DiaDataCacheContext";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
+import { GlobalFilterProvider } from "@/contexts/GlobalFilterContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
@@ -19,13 +20,15 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-// Wrapper component - AuthContext içinden userId'yi alıp DiaDataCacheProvider'a geçirir
+// Wrapper component - AuthContext içinden userId'yi alıp tüm provider'ları geçirir
 function AppWithCache({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   return (
     <DiaDataCacheProvider userId={user?.id}>
       <ImpersonationProvider>
-        {children}
+        <GlobalFilterProvider>
+          {children}
+        </GlobalFilterProvider>
       </ImpersonationProvider>
     </DiaDataCacheProvider>
   );
