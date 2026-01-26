@@ -4,6 +4,7 @@ import React, { useState, useMemo, Component, ErrorInfo, ReactNode } from 'react
 import { WidgetBuilderConfig, AggregationType, DatePeriod } from '@/lib/widgetBuilderTypes';
 import { useDynamicWidgetData } from '@/hooks/useDynamicWidgetData';
 import { useChartColorPalette } from '@/hooks/useChartColorPalette';
+import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
 import { DrillDownModal } from './DrillDownModal';
 import { WidgetDateFilter, getDateRangeForPeriod } from './WidgetDateFilter';
 import { WidgetFeedbackButton } from './WidgetFeedbackButton';
@@ -18,7 +19,6 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { cn } from '@/lib/utils';
-import { useDashboardFilters } from '@/contexts/DashboardFilterContext';
 import { 
   COLOR_PALETTES as CHART_UTILS_PALETTES, 
   PaletteKey, 

@@ -1,11 +1,13 @@
 // useDynamicWidgetData - Widget Builder ile oluşturulan widget'lar için dinamik veri çekme
+// Global filtreler desteklenir - veriler cache'den okunduktan sonra post-fetch olarak uygulanır
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useContext } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useDiaDataCache, generateCacheKey, SHARED_CACHE_KEYS } from '@/contexts/DiaDataCacheContext';
 import { useDataSources } from './useDataSources';
 import { WidgetBuilderConfig, AggregationType, CalculatedField, CalculationExpression, QueryMerge, DatePeriod, DiaApiFilter, PostFetchFilter, FilterOperator } from '@/lib/widgetBuilderTypes';
 import { queuedDiaFetch, handleRateLimitError } from '@/lib/diaRequestQueue';
+import { GlobalFilters, convertToDiaFilters } from '@/lib/filterTypes';
 import { 
   startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, 
   startOfQuarter, endOfQuarter, startOfYear, endOfYear, 
@@ -377,7 +379,135 @@ function applyPostFetchFilters(data: any[], filters: PostFetchFilter[]): any[] {
   });
 }
 
-export function useDynamicWidgetData(config: WidgetBuilderConfig | null): DynamicWidgetDataResult {
+// ============= GLOBAL FİLTRELERİ UYGULAMA =============
+
+function applyGlobalFilters(data: any[], globalFilters: GlobalFilters): any[] {
+  if (!globalFilters) return data;
+  
+  let filtered = [...data];
+  
+  // Arama terimi
+  if (globalFilters.searchTerm && globalFilters.searchTerm.trim()) {
+    const term = globalFilters.searchTerm.toLowerCase();
+    filtered = filtered.filter(row => {
+      // Tüm string alanlarında ara
+      return Object.values(row).some(val => 
+        val && String(val).toLowerCase().includes(term)
+      );
+    });
+  }
+  
+  // Cari kart tipi (AL, AS, ST)
+  if (globalFilters.cariKartTipi.length > 0) {
+    filtered = filtered.filter(row => {
+      const kartTipi = row.carikarttipi || row.karttipi || row.cari_kart_tipi;
+      return kartTipi && globalFilters.cariKartTipi.includes(String(kartTipi).toUpperCase());
+    });
+  }
+  
+  // Satış temsilcisi
+  if (globalFilters.satisTemsilcisi.length > 0) {
+    filtered = filtered.filter(row => {
+      const eleman = row.satiselemani || row.satis_elemani || row.temsilci;
+      return eleman && globalFilters.satisTemsilcisi.includes(String(eleman));
+    });
+  }
+  
+  // Şube
+  if (globalFilters.sube.length > 0) {
+    filtered = filtered.filter(row => {
+      const sube = row.subekodu || row.sube_kodu || row.sube;
+      return sube && globalFilters.sube.includes(String(sube));
+    });
+  }
+  
+  // Depo
+  if (globalFilters.depo.length > 0) {
+    filtered = filtered.filter(row => {
+      const depo = row.depokodu || row.depo_kodu || row.depo;
+      return depo && globalFilters.depo.includes(String(depo));
+    });
+  }
+  
+  // Özel kodlar
+  if (globalFilters.ozelkod1.length > 0) {
+    filtered = filtered.filter(row => {
+      const kod = row.ozelkod1kod || row.ozelkod1 || row.ozel_kod_1;
+      return kod && globalFilters.ozelkod1.includes(String(kod));
+    });
+  }
+  
+  if (globalFilters.ozelkod2.length > 0) {
+    filtered = filtered.filter(row => {
+      const kod = row.ozelkod2kod || row.ozelkod2 || row.ozel_kod_2;
+      return kod && globalFilters.ozelkod2.includes(String(kod));
+    });
+  }
+  
+  if (globalFilters.ozelkod3.length > 0) {
+    filtered = filtered.filter(row => {
+      const kod = row.ozelkod3kod || row.ozelkod3 || row.ozel_kod_3;
+      return kod && globalFilters.ozelkod3.includes(String(kod));
+    });
+  }
+  
+  // Şehir
+  if (globalFilters.sehir.length > 0) {
+    filtered = filtered.filter(row => {
+      const sehir = row.sehir || row.city;
+      return sehir && globalFilters.sehir.includes(String(sehir));
+    });
+  }
+  
+  // Durum (aktif/pasif)
+  if (globalFilters.durum !== 'hepsi') {
+    filtered = filtered.filter(row => {
+      const durum = row.durum || row.status;
+      if (globalFilters.durum === 'aktif') {
+        return durum === 'A' || durum === 'aktif' || durum === true;
+      } else {
+        return durum === 'P' || durum === 'pasif' || durum === false;
+      }
+    });
+  }
+  
+  // Görünüm modu (potansiyel/cari)
+  if (globalFilters.gorunumModu !== 'hepsi') {
+    filtered = filtered.filter(row => {
+      const potansiyel = row.potansiyel;
+      if (globalFilters.gorunumModu === 'potansiyel') {
+        return potansiyel === true || potansiyel === 't';
+      } else {
+        return potansiyel === false || potansiyel === 'f' || !potansiyel;
+      }
+    });
+  }
+  
+  // DIA zorunlu filtreler (kullanıcıya ait kilitli filtreler)
+  if (globalFilters._diaAutoFilters && globalFilters._diaAutoFilters.length > 0) {
+    for (const autoFilter of globalFilters._diaAutoFilters) {
+      filtered = filtered.filter(row => {
+        const val = row[autoFilter.field];
+        if (autoFilter.operator === '=' || autoFilter.operator === '') {
+          return String(val).toLowerCase() === String(autoFilter.value).toLowerCase();
+        }
+        if (autoFilter.operator === 'IN') {
+          const values = autoFilter.value.split(',').map(v => v.trim().toLowerCase());
+          return values.includes(String(val).toLowerCase());
+        }
+        return true;
+      });
+    }
+  }
+  
+  return filtered;
+}
+
+// Hook for using global filters in widgets
+export function useDynamicWidgetData(
+  config: WidgetBuilderConfig | null,
+  globalFilters?: GlobalFilters
+): DynamicWidgetDataResult {
   const [data, setData] = useState<any>(null);
   const [rawData, setRawData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -516,6 +646,15 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
         console.log(`[Post-Fetch] Filtered to ${fetchedData.length} records`);
       }
 
+      // Global filtreleri uygula (UI'dan gelen filtreler)
+      if (globalFilters) {
+        const beforeCount = fetchedData.length;
+        fetchedData = applyGlobalFilters(fetchedData, globalFilters);
+        if (fetchedData.length !== beforeCount) {
+          console.log(`[Global Filters] Applied: ${beforeCount} → ${fetchedData.length} records`);
+        }
+      }
+
       const recordCount = fetchedData.length;
       setRawData(fetchedData);
 
@@ -621,7 +760,7 @@ export function useDynamicWidgetData(config: WidgetBuilderConfig | null): Dynami
     } finally {
       setIsLoading(false);
     }
-  }, [config, getCachedData, setCachedData, sharedData, incrementCacheHit, incrementCacheMiss]);
+  }, [config, globalFilters, getCachedData, setCachedData, sharedData, incrementCacheHit, incrementCacheMiss]);
 
   useEffect(() => {
     fetchData();
