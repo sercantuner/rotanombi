@@ -8,11 +8,10 @@ import { useChartColorPalette } from '@/hooks/useChartColorPalette';
 import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
 import { DrillDownModal } from './DrillDownModal';
 import { WidgetDateFilter, getDateRangeForPeriod } from './WidgetDateFilter';
-import { WidgetFeedbackButton } from './WidgetFeedbackButton';
 import { StatCard } from './StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertCircle, BarChart3, Hash, MousePointerClick, Code } from 'lucide-react';
+import { AlertCircle, Hash, Code, BarChart3, MousePointerClick } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { 
   BarChart, Bar, LineChart, Line, AreaChart, Area,
@@ -245,29 +244,24 @@ export function BuilderWidgetRenderer({
   const dateFilterConfig = builderConfig.dateFilter;
   const showDateFilter = dateFilterConfig?.enabled && dateFilterConfig?.showInWidget;
 
-  // Header bileşeni (tarih seçici ile)
-  const ChartHeader = ({ icon }: { icon: string }) => (
-    <CardHeader className="pb-2">
-      <div className="flex items-center justify-between gap-2">
-        <CardTitle className="text-base flex items-center gap-2 flex-1 min-w-0">
-          <DynamicIcon iconName={widgetIcon || icon} className="h-4 w-4 flex-shrink-0" />
-          <span className="truncate">{widgetName}</span>
-          <MousePointerClick className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-        </CardTitle>
-        <div className="flex items-center gap-1">
-          <WidgetFeedbackButton widgetId={widgetId} widgetName={widgetName} />
-          {showDateFilter && (
-            <WidgetDateFilter
-              config={dateFilterConfig!}
-              currentPeriod={selectedDatePeriod}
-              onPeriodChange={handleDatePeriodChange}
-              compact
-            />
-          )}
+  // Header bileşeni - sadece tarih seçici (widget ismi gizli, feedback butonu ContainerRenderer'da)
+  const ChartHeader = () => {
+    // Sadece tarih filtresi varsa header göster, yoksa null döndür
+    if (!showDateFilter) return null;
+    
+    return (
+      <CardHeader className="pb-2 pt-3 px-4">
+        <div className="flex items-center justify-end">
+          <WidgetDateFilter
+            config={dateFilterConfig!}
+            currentPeriod={selectedDatePeriod}
+            onPeriodChange={handleDatePeriodChange}
+            compact
+          />
         </div>
-      </div>
-    </CardHeader>
-  );
+      </CardHeader>
+    );
+  };
 
   // KPI Widget (drill-down destekli)
   if (vizType === 'kpi' && data) {
@@ -342,8 +336,8 @@ export function BuilderWidgetRenderer({
       
       return (
         <Card className={cn(isolatedClassName, 'h-full flex flex-col')}>
-          <ChartHeader icon="Code" />
-          <CardContent className="flex-1 flex flex-col min-h-0 p-4">
+          <ChartHeader />
+          <CardContent className="flex-1 flex flex-col min-h-0 p-4 pt-3">
             <ErrorBoundary fallback={
               <div className="text-destructive text-sm flex items-center gap-2 py-4">
                 <AlertCircle className="h-4 w-4" />

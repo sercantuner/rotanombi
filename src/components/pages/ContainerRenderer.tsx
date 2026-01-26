@@ -18,7 +18,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Plus, Trash2, GripVertical, Settings, X, Palette, Check } from 'lucide-react';
+import { Plus, Trash2, GripVertical, Settings, X, Palette, Check, MessageSquarePlus } from 'lucide-react';
+import { WidgetFeedbackButton } from '@/components/dashboard/WidgetFeedbackButton';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -266,6 +267,16 @@ export function ContainerRenderer({
               onFiltersChange={(filters) => handleWidgetFilterChange(slotWidget.id, filters)}
               isWidgetEditMode={isWidgetEditMode}
             />
+            
+            {/* Feedback butonu - hover'da görünür */}
+            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+              <WidgetFeedbackButton 
+                widgetId={widgetDetail.id} 
+                widgetName={widgetDetail.name}
+              />
+            </div>
+            
+            {/* Edit mode kontrolleri - sol üstte */}
             {isWidgetEditMode && (
               <div className="absolute top-1 left-1 flex items-center gap-0.5 z-20">
                 <Button
@@ -348,35 +359,33 @@ export function ContainerRenderer({
         isDragMode && 'ring-1 ring-primary/20',
         styleClasses
       )}>
-        {showTitle && (
+        {/* Konteyner başlığı sadece drag mode'da görünür */}
+        {showTitle && isDragMode && (
           <CardHeader className={cn('flex flex-row items-center justify-between', isCompact ? 'py-1 px-1.5' : 'py-1.5 px-2')}>
             <div className="flex items-center gap-1.5">
-              {isDragMode && <GripVertical className="h-3.5 w-3.5 text-muted-foreground cursor-grab" />}
+              <GripVertical className="h-3.5 w-3.5 text-muted-foreground cursor-grab" />
               <CardTitle className="text-xs font-medium">
                 {localContainer.title || template.name}
               </CardTitle>
             </div>
-            {/* Ayar ve silme butonları sadece drag modda görünür */}
-            {isDragMode && (
-              <div className="flex items-center gap-0.5">
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-6 w-6"
-                  onClick={() => setSettingsOpen(true)}
-                >
-                  <Settings className="h-3 w-3" />
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-6 w-6 text-destructive hover:text-destructive"
-                  onClick={onDelete}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-            )}
+            <div className="flex items-center gap-0.5">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-6 w-6"
+                onClick={() => setSettingsOpen(true)}
+              >
+                <Settings className="h-3 w-3" />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-6 w-6 text-destructive hover:text-destructive"
+                onClick={onDelete}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
           </CardHeader>
         )}
         <CardContent className={cn(
