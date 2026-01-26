@@ -411,6 +411,89 @@ React.createElement('div', { className: 'flex-1 h-full min-h-0 relative' },
 
 ═══════════════════════════════════════════════════════════════════════════════
 
+📊 GRAFİK TÜRÜNE ÖZEL KURALLAR
+───────────────────────────────────────────────────────────────────────────────
+
+🥧 PIE / DONUT CHART:
+   - innerRadius: '55%', outerRadius: '80%' (donut için)
+   - innerRadius: 0 (solid pie için)
+   - paddingAngle: 2 (dilimler arası boşluk)
+   - Ortadaki değer için OVERLAY kullan (PieChart dışında absolute div)
+   - Legend'ı chart dışında ayrı bir div ile render et
+   - Min yükseklik: h-[200px] veya daha fazla
+   
+   ✅ DOĞRU DONUT YAPISI:
+   React.createElement('div', { className: 'flex-1 h-full min-h-0 relative' },
+     React.createElement(Recharts.ResponsiveContainer, { width: '100%', height: '100%' },
+       React.createElement(Recharts.PieChart, null,
+         React.createElement(Recharts.Pie, { 
+           data: chartData, 
+           cx: '50%', cy: '50%',
+           innerRadius: '55%', outerRadius: '80%', 
+           paddingAngle: 2, dataKey: 'value' 
+         },
+           chartData.map(function(entry, idx) {
+             return React.createElement(Recharts.Cell, { key: 'cell-' + idx, fill: getColor(idx) });
+           })
+         ),
+         React.createElement(Recharts.Tooltip, { content: CustomTooltip })
+       )
+     ),
+     // OVERLAY - ortadaki toplam değer
+     React.createElement('div', { className: 'absolute inset-0 flex flex-col items-center justify-center pointer-events-none' },
+       React.createElement('span', { className: 'text-2xl font-bold text-foreground' }, total),
+       React.createElement('span', { className: 'text-xs text-muted-foreground' }, 'Toplam')
+     )
+   )
+
+📊 BAR CHART:
+   - Dikey: Recharts.BarChart + Recharts.Bar
+   - Yatay: layout: 'vertical' + XAxis type='number' + YAxis type='category'
+   - Birden fazla seri için farklı Bar + farklı getColor(idx)
+   - Negatif değerler için ReferenceLine y={0}
+   - Label: labelList prop veya label prop (position: 'top')
+   
+   ✅ DOĞRU BAR YAPISI:
+   React.createElement(Recharts.ResponsiveContainer, { width: '100%', height: '100%' },
+     React.createElement(Recharts.BarChart, { data: chartData },
+       React.createElement(Recharts.CartesianGrid, { strokeDasharray: '3 3', className: 'stroke-border' }),
+       React.createElement(Recharts.XAxis, { dataKey: 'name', tick: { fill: 'hsl(var(--foreground))', fontSize: 12 } }),
+       React.createElement(Recharts.YAxis, { tick: { fill: 'hsl(var(--foreground))', fontSize: 12 } }),
+       React.createElement(Recharts.Tooltip, { content: CustomTooltip }),
+       React.createElement(Recharts.Bar, { dataKey: 'value', fill: getColor(0), radius: [4, 4, 0, 0] })
+     )
+   )
+
+📈 LINE / AREA CHART:
+   - Smooth çizgi: type='monotone'
+   - Dot gösterimi: dot prop (true/false veya { r: 4 })
+   - Area için fillOpacity: 0.3
+   - Birden fazla seri: farklı Line/Area + farklı getColor(idx)
+   - Gradient dolgu: defs içinde linearGradient tanımla
+   
+   ✅ DOĞRU LINE YAPISI:
+   React.createElement(Recharts.ResponsiveContainer, { width: '100%', height: '100%' },
+     React.createElement(Recharts.LineChart, { data: chartData },
+       React.createElement(Recharts.CartesianGrid, { strokeDasharray: '3 3', className: 'stroke-border' }),
+       React.createElement(Recharts.XAxis, { dataKey: 'name', tick: { fill: 'hsl(var(--foreground))', fontSize: 12 } }),
+       React.createElement(Recharts.YAxis, { tick: { fill: 'hsl(var(--foreground))', fontSize: 12 } }),
+       React.createElement(Recharts.Tooltip, { content: CustomTooltip }),
+       React.createElement(Recharts.Line, { 
+         type: 'monotone', dataKey: 'value', stroke: getColor(0), 
+         strokeWidth: 2, dot: { r: 3, fill: getColor(0) } 
+       })
+     )
+   )
+
+📋 TABLO / LİSTE:
+   - Scroll için max-h-[XXXpx] + overflow-y-auto
+   - Zebra striping: even:bg-muted/30
+   - Hover efekti: hover:bg-muted/50
+   - Sıralama için data.sort() kullan
+   - Sayısal değerleri sağa hizala: text-right
+
+═══════════════════════════════════════════════════════════════════════════════
+
 ⚠️ KRİTİK UYARI - KODU TAMAMLA!
 ───────────────────────────────────────────────────────────────────────────────
 - Kodu MUTLAKA tamamla, ASLA yarıda bırakma!
