@@ -159,24 +159,35 @@ export function useChartColorPalette(options: UseChartColorPaletteOptions = {}) 
   // Global varsayılan palet
   const globalPaletteName = (settings?.chart_color_palette || 'corporate') as ColorPaletteName;
   
-  // Widget-specific palet (varsa)
-  const widgetFilters = widgetId ? getWidgetFilters(widgetId) : null;
+  // Widget-specific palet (varsa) - her render'da taze değer al
+  const widgetFilters = useMemo(() => {
+    return widgetId ? getWidgetFilters(widgetId) : null;
+  }, [widgetId, getWidgetFilters]);
+  
   const widgetPaletteName = widgetFilters?.colorPalette as ColorPaletteName | undefined;
   
   // Aktif palet: Widget seviyesi varsa onu kullan, yoksa global
-  const currentPaletteName = widgetPaletteName || globalPaletteName;
+  // ÖNEMLİ: Her widget kendi paletini kullanmalı, diğerlerini etkilememeli
+  const currentPaletteName = useMemo(() => {
+    // Widget ID varsa ve widget'a özel palet atanmışsa onu kullan
+    if (widgetId && widgetPaletteName) {
+      return widgetPaletteName;
+    }
+    // Widget ID yoksa veya widget'a özel palet yoksa global paleti kullan
+    return globalPaletteName;
+  }, [widgetId, widgetPaletteName, globalPaletteName]);
   
   const currentPalette = useMemo(() => 
     COLOR_PALETTES.find(p => p.name === currentPaletteName) || COLOR_PALETTES[0],
     [currentPaletteName]
   );
   
-  // Global paleti değiştir
+  // Global paleti değiştir - tüm widget'ları etkiler (widget özel paleti olmayanları)
   const setGlobalPalette = useCallback(async (paletteName: ColorPaletteName) => {
     await updateSettings({ chart_color_palette: paletteName });
   }, [updateSettings]);
   
-  // Widget bazında paleti değiştir
+  // Widget bazında paleti değiştir - SADECE bu widget'ı etkiler
   const setWidgetPalette = useCallback(async (paletteName: ColorPaletteName | null) => {
     if (!widgetId) {
       console.warn('setWidgetPalette requires a widgetId');
@@ -187,10 +198,10 @@ export function useChartColorPalette(options: UseChartColorPaletteOptions = {}) 
     
     if (paletteName === null) {
       // Widget paletini sil, global'e dön
-      const { colorPalette, ...restFilters } = currentFilters;
+      const { colorPalette, ...restFilters } = currentFilters as any;
       await saveWidgetFilters(widgetId, restFilters);
     } else {
-      // Widget için palet ayarla
+      // Widget için palet ayarla - bu SADECE bu widget'ı etkiler
       await saveWidgetFilters(widgetId, { 
         ...currentFilters, 
         colorPalette: paletteName 
@@ -198,11 +209,13 @@ export function useChartColorPalette(options: UseChartColorPaletteOptions = {}) 
     }
   }, [widgetId, getWidgetFilters, saveWidgetFilters]);
   
-  // Geriye uyumluluk için setPalette - widget varsa widget'a, yoksa global'e kaydet
+  // setPalette fonksiyonu: widgetId varsa SADECE o widget'ın paletini değiştirir
   const setPalette = useCallback(async (paletteName: ColorPaletteName) => {
     if (widgetId) {
+      // Widget bazında - sadece bu widget etkilenir
       await setWidgetPalette(paletteName);
     } else {
+      // Global - özel paleti olmayan tüm widget'lar etkilenir
       await setGlobalPalette(paletteName);
     }
   }, [widgetId, setWidgetPalette, setGlobalPalette]);
