@@ -51,50 +51,43 @@ export function GlobalFilterProvider({ children, pageId }: GlobalFilterProviderP
     try {
       // Zorunlu filtreleri preset'e dahil etme
       const filtersWithoutLocked = { ...filtersToSave, _diaAutoFilters: [] };
+      const filterData = JSON.parse(JSON.stringify(filtersWithoutLocked));
 
-      const { error } = await supabase
+      // Önce mevcut kaydı bul
+      let findQuery = supabase
         .from('page_filter_presets')
-        .upsert({
-          user_id: user.id,
-          page_id: pageId || null,
-          name: '__auto__',
-          filters: JSON.parse(JSON.stringify(filtersWithoutLocked)),
-          is_default: true,
-        }, { 
-          onConflict: 'user_id,page_id,name',
-          ignoreDuplicates: false 
-        });
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('name', '__auto__');
+      
+      if (pageId) {
+        findQuery = findQuery.eq('page_id', pageId);
+      } else {
+        findQuery = findQuery.is('page_id', null);
+      }
+      
+      const { data: existing } = await findQuery.maybeSingle();
 
-      if (error) {
-        // Unique constraint yoksa normal insert dene
-        if (error.code === '42P10' || error.message.includes('constraint')) {
-          // Önce mevcut kaydı sil, sonra ekle
-          let deleteQuery = supabase
-            .from('page_filter_presets')
-            .delete()
-            .eq('user_id', user.id)
-            .eq('name', '__auto__');
-          
-          if (pageId) {
-            deleteQuery = deleteQuery.eq('page_id', pageId);
-          } else {
-            deleteQuery = deleteQuery.is('page_id', null);
-          }
-          
-          await deleteQuery;
-          
-          await supabase
-            .from('page_filter_presets')
-            .insert({
-              user_id: user.id,
-              page_id: pageId || null,
-              name: '__auto__',
-              filters: JSON.parse(JSON.stringify(filtersWithoutLocked)),
-              is_default: true,
-            });
-        } else {
-          console.error('Error saving filters:', error);
-        }
+      if (existing) {
+        // Güncelle
+        await supabase
+          .from('page_filter_presets')
+          .update({
+            filters: filterData,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id);
+      } else {
+        // Yeni ekle
+        await supabase
+          .from('page_filter_presets')
+          .insert({
+            user_id: user.id,
+            page_id: pageId || null,
+            name: '__auto__',
+            filters: filterData,
+            is_default: true,
+          });
       }
     } catch (error) {
       console.error('Error saving filters to database:', error);
