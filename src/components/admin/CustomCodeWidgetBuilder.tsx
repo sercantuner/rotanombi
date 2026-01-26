@@ -940,23 +940,36 @@ Kullanıcı isteği: ${aiPrompt}`;
     }
   };
 
-  // Dinamik kod çalıştırma ile önizleme bileşeni
+  // Dinamik kod çalıştırma ile önizleme bileşeni - colors prop desteği
   const PreviewResult = useMemo(() => {
     if (!customCode.trim() || sampleData.length === 0) {
       return { component: null, error: null };
     }
     
     try {
-      // Kodu çalıştırılabilir fonksiyona dönüştür
+      // Kodu çalıştırılabilir fonksiyona dönüştür - colors parametresi eklendi
       const fn = new Function(
         'React',
         'data',
         'LucideIcons',
         'Recharts',
+        'colors',
         customCode
       );
       
-      const WidgetComponent = fn(React, sampleData, LucideIcons, RechartsScope);
+      // Önizleme için varsayılan palet renkleri
+      const previewColors = [
+        'hsl(220, 70%, 50%)',
+        'hsl(200, 80%, 50%)',
+        'hsl(180, 70%, 45%)',
+        'hsl(160, 75%, 45%)',
+        'hsl(140, 60%, 40%)',
+        'hsl(120, 50%, 45%)',
+        'hsl(100, 45%, 50%)',
+        'hsl(280, 70%, 55%)',
+      ];
+      
+      const WidgetComponent = fn(React, sampleData, LucideIcons, RechartsScope, previewColors);
       
       if (typeof WidgetComponent !== 'function') {
         return { 
@@ -965,7 +978,7 @@ Kullanıcı isteği: ${aiPrompt}`;
         };
       }
       
-      return { component: WidgetComponent, error: null };
+      return { component: WidgetComponent, error: null, colors: previewColors };
     } catch (err: any) {
       return { component: null, error: err.message };
     }
@@ -1656,7 +1669,7 @@ Kullanıcı isteği: ${aiPrompt}`;
                             Widget render hatası
                           </div>
                         }>
-                          {React.createElement(PreviewResult.component, { data: sampleData })}
+                          {React.createElement(PreviewResult.component, { data: sampleData, colors: PreviewResult.colors })}
                         </ErrorBoundary>
                       </div>
                     ) : (

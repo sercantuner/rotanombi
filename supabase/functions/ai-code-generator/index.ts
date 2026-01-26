@@ -14,11 +14,12 @@ const getGenerationSystemPrompt = () => `Sen bir React widget geliştirme uzman�
 ÖNEMLİ KURALLAR - JSX KULLANMA!
 1. Sadece JavaScript kodu yaz, TypeScript kullanma
 2. JSX SÖZDİZİMİ KULLANMA! Sadece React.createElement kullan
-3. "function Widget({ data })" formatında tek bir bileşen yaz
+3. "function Widget({ data, colors })" formatında tek bir bileşen yaz - colors prop'u zorunlu!
 4. React hook'ları React.useState, React.useMemo şeklinde kullan (import etme)
 5. En sonda "return Widget;" ile bileşeni döndür
 6. Veri yoksa "Veri bulunamadı" göster
 7. Para birimi için ₺ kullan ve formatla (K, M)
+8. GRAFİK RENKLERİ İÇİN KESİNLİKLE colors PROP'UNU KULLAN!
 
 === ZORUNLU STİL KURALLARI ===
 
@@ -56,7 +57,28 @@ TAILWIND STİL STANDARTLARI:
 - Yuvarlak köşeler: 'rounded-md', 'rounded-lg', 'rounded-xl'
 - Animasyonlar: 'transition-all duration-200'
 
-GRAFİK RENKLERİ (Recharts için):
+GRAFİK RENKLERİ (Recharts için) - KESİNLİKLE props.colors DİZİSİNİ KULLAN:
+- Widget'a "colors" prop'u olarak bir renk dizisi geçilir
+- props.colors[0], props.colors[1], ... şeklinde kullan
+- Fallback olarak tema renkleri kullanılabilir ama öncelik colors prop'unda
+- Örnek: fill: props.colors ? props.colors[0] : 'hsl(var(--primary))'
+- Bar/Line/Area/Pie grafiklerde HER ZAMAN props.colors dizisini kullan
+
+GRAFİK RENK KULLANIM ÖRNEĞİ:
+React.createElement(Bar, { 
+  dataKey: 'value', 
+  fill: props.colors && props.colors[0] ? props.colors[0] : 'hsl(var(--primary))' 
+})
+
+Çoklu seri için:
+data.map(function(item, idx) {
+  return React.createElement(Cell, { 
+    key: idx, 
+    fill: props.colors && props.colors[idx % props.colors.length] ? props.colors[idx % props.colors.length] : 'hsl(var(--primary))' 
+  });
+})
+
+YEDEK RENK DEĞERLERİ (colors prop yoksa):
 - Ana: 'hsl(var(--primary))'
 - İkincil: 'hsl(var(--accent))'
 - Üçüncül: 'hsl(var(--muted-foreground))'
@@ -88,14 +110,19 @@ value > 0
   ? React.createElement('span', { className: 'text-success' }, '+' + value)
   : React.createElement('span', { className: 'text-destructive' }, value)
 
-Örnek tam kod (tema uyumlu):
-function Widget({ data }) {
+Örnek tam kod (tema uyumlu, colors prop kullanımı):
+function Widget({ data, colors }) {
   if (!data || data.length === 0) {
     return React.createElement('div', 
       { className: 'flex items-center justify-center h-48 text-muted-foreground' },
       'Veri bulunamadı'
     );
   }
+
+  // colors prop'undan renk al, yoksa fallback kullan
+  var getColor = function(index) {
+    return colors && colors[index % colors.length] ? colors[index % colors.length] : 'hsl(var(--primary))';
+  };
 
   var toplam = data.reduce(function(acc, item) {
     return acc + (parseFloat(item.toplambakiye) || 0);
@@ -106,6 +133,22 @@ function Widget({ data }) {
     if (Math.abs(value) >= 1000) return '₺' + (value / 1000).toFixed(0) + 'K';
     return '₺' + value.toLocaleString('tr-TR');
   };
+
+  // Recharts Bar örneği - colors prop kullanımı
+  // React.createElement(Recharts.BarChart, {...},
+  //   React.createElement(Recharts.Bar, { 
+  //     dataKey: 'value', 
+  //     fill: getColor(0) 
+  //   })
+  // )
+
+  // PieChart Cell örneği - colors prop kullanımı
+  // data.map(function(item, idx) {
+  //   return React.createElement(Recharts.Cell, { 
+  //     key: idx, 
+  //     fill: getColor(idx) 
+  //   });
+  // })
 
   return React.createElement('div', { className: 'p-4 space-y-4 bg-card rounded-xl border border-border' },
     React.createElement('div', { className: 'text-2xl font-bold text-foreground' }, formatCurrency(toplam)),
@@ -128,6 +171,19 @@ const getRefinementSystemPrompt = () => `Sen bir React widget geliştirme uzman�
 2. Mevcut kod yapısını koru, sadece istenen değişiklikleri yap
 3. Animasyonlar için Tailwind animate-* sınıfları kullan
 4. En sonda "return Widget;" veya benzeri export olmalı
+5. Widget fonksiyonu "function Widget({ data, colors })" formatında olmalı - colors prop zorunlu!
+
+=== GRAFİK RENK PALETİ SİSTEMİ (ÇOK ÖNEMLİ!) ===
+
+Widget'a otomatik olarak "colors" prop'u geçirilir. Bu diziden renk almak için:
+
+var getColor = function(index) {
+  return colors && colors[index % colors.length] ? colors[index % colors.length] : 'hsl(var(--primary))';
+};
+
+- Bar/Line/Area grafiklerinde: fill: getColor(0), stroke: getColor(0)
+- PieChart Cell'lerinde: data.map(function(item, idx) { return React.createElement(Cell, { key: idx, fill: getColor(idx) }); })
+- Legend renkleri: getColor(0), getColor(1), getColor(2), ...
 
 === ZORUNLU STİL KURALLARI (HER ZAMAN UYGULANMALI) ===
 
@@ -143,7 +199,7 @@ RENK DEĞİŞİKLİKLERİ İÇİN:
   * Vurgu: 'text-accent', 'bg-accent'
   * Kenarlık: 'border-border'
 
-GRAFİK RENKLERİ:
+YEDEK GRAFİK RENKLERİ (colors prop yoksa):
 - 'hsl(var(--primary))', 'hsl(var(--destructive))', 'hsl(var(--success))', 'hsl(var(--accent))'
 
 KOYU MOD:
@@ -160,6 +216,7 @@ Kod güncellemesi yaparken:
 - Mevcut hesaplamaları ve mantığı koru
 - Yeni özellik eklerken mevcut yapıyı bozma
 - Renkleri her zaman tema uyumlu yap
+- Grafik renkleri için KESİNLİKLE colors prop'unu kullan
 
 SADECE güncellenmiş JavaScript kodunu döndür, açıklama ekleme.`;
 

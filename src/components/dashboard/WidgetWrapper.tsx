@@ -42,14 +42,16 @@ export function WidgetWrapper({
   const [showSettings, setShowSettings] = useState(false);
   const { removeWidgetFromPage, moveWidgetToPage, getWidgetFilters, resetWidgetFilters } = useUserSettings();
   
-  // Widget bazında palet yönetimi
+  // Widget bazında palet yönetimi - widgetDbId (veritabanı UUID) kullanılmalı, yoksa widgetId (key) kullan
+  // Bu şekilde her widget kendi benzersiz paletini saklayabilir
+  const paletteWidgetId = widgetDbId || widgetId;
   const { 
     currentPaletteName, 
     globalPaletteName,
     hasWidgetPalette,
     setWidgetPalette,
     setGlobalPalette,
-  } = useChartColorPalette({ widgetId });
+  } = useChartColorPalette({ widgetId: paletteWidgetId });
   
   const widget = getWidgetById(widgetId);
   const filters = getWidgetFilters(widgetId);
