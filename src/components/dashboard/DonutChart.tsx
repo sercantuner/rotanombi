@@ -18,6 +18,7 @@ interface DonutChartProps {
   selectedSegments?: string[];
   isLoading?: boolean;
   colors?: string[];
+  widgetId?: string; // Widget bazında palet desteği için
 }
 
 export function DonutChart({
@@ -29,9 +30,10 @@ export function DonutChart({
   selectedSegments = [],
   isLoading,
   colors: propColors,
+  widgetId,
 }: DonutChartProps) {
-  // Kullanıcının seçtiği paleti kullan
-  const { colors: userColors } = useChartColorPalette();
+  // Widget bazında palet desteği - widgetId varsa widget-specific palet kullanılır
+  const { colors: userColors } = useChartColorPalette({ widgetId });
   const colors = propColors || userColors;
   const formatCurrency = (value: number) => {
     if (value >= 1000000) return `₺${(value / 1000000).toFixed(1)}M`;

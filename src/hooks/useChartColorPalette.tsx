@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
 
 export type ColorPaletteName = 
@@ -11,6 +11,11 @@ export type ColorPaletteName =
   | 'pastel'
   | 'warm'
   | 'cool';
+
+// Widget bazında palet seçimi için options
+export interface UseChartColorPaletteOptions {
+  widgetId?: string; // Widget ID verilirse widget-specific palet kullanılır
+}
 
 export interface ColorPalette {
   name: ColorPaletteName;
@@ -147,26 +152,78 @@ export const COLOR_PALETTES: ColorPalette[] = [
   },
 ];
 
-export function useChartColorPalette() {
-  const { settings, updateSettings } = useUserSettings();
+export function useChartColorPalette(options: UseChartColorPaletteOptions = {}) {
+  const { widgetId } = options;
+  const { settings, updateSettings, getWidgetFilters, saveWidgetFilters } = useUserSettings();
   
-  const currentPaletteName = (settings?.chart_color_palette || 'corporate') as ColorPaletteName;
+  // Global varsayılan palet
+  const globalPaletteName = (settings?.chart_color_palette || 'corporate') as ColorPaletteName;
   
-  const currentPalette = COLOR_PALETTES.find(p => p.name === currentPaletteName) || COLOR_PALETTES[0];
+  // Widget-specific palet (varsa)
+  const widgetFilters = widgetId ? getWidgetFilters(widgetId) : null;
+  const widgetPaletteName = widgetFilters?.colorPalette as ColorPaletteName | undefined;
   
-  const setPalette = useCallback(async (paletteName: ColorPaletteName) => {
+  // Aktif palet: Widget seviyesi varsa onu kullan, yoksa global
+  const currentPaletteName = widgetPaletteName || globalPaletteName;
+  
+  const currentPalette = useMemo(() => 
+    COLOR_PALETTES.find(p => p.name === currentPaletteName) || COLOR_PALETTES[0],
+    [currentPaletteName]
+  );
+  
+  // Global paleti değiştir
+  const setGlobalPalette = useCallback(async (paletteName: ColorPaletteName) => {
     await updateSettings({ chart_color_palette: paletteName });
   }, [updateSettings]);
+  
+  // Widget bazında paleti değiştir
+  const setWidgetPalette = useCallback(async (paletteName: ColorPaletteName | null) => {
+    if (!widgetId) {
+      console.warn('setWidgetPalette requires a widgetId');
+      return;
+    }
+    
+    const currentFilters = getWidgetFilters(widgetId);
+    
+    if (paletteName === null) {
+      // Widget paletini sil, global'e dön
+      const { colorPalette, ...restFilters } = currentFilters;
+      await saveWidgetFilters(widgetId, restFilters);
+    } else {
+      // Widget için palet ayarla
+      await saveWidgetFilters(widgetId, { 
+        ...currentFilters, 
+        colorPalette: paletteName 
+      });
+    }
+  }, [widgetId, getWidgetFilters, saveWidgetFilters]);
+  
+  // Geriye uyumluluk için setPalette - widget varsa widget'a, yoksa global'e kaydet
+  const setPalette = useCallback(async (paletteName: ColorPaletteName) => {
+    if (widgetId) {
+      await setWidgetPalette(paletteName);
+    } else {
+      await setGlobalPalette(paletteName);
+    }
+  }, [widgetId, setWidgetPalette, setGlobalPalette]);
   
   const getColor = useCallback((index: number): string => {
     return currentPalette.colors[index % currentPalette.colors.length];
   }, [currentPalette]);
   
+  // Widget'ın özel paleti var mı?
+  const hasWidgetPalette = Boolean(widgetPaletteName);
+  
   return {
     currentPalette,
     currentPaletteName,
+    globalPaletteName,
+    widgetPaletteName,
+    hasWidgetPalette,
     palettes: COLOR_PALETTES,
     setPalette,
+    setGlobalPalette,
+    setWidgetPalette,
     getColor,
     colors: currentPalette.colors,
   };

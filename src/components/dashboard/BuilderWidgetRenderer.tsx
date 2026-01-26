@@ -142,8 +142,8 @@ export function BuilderWidgetRenderer({
   const isolatedClassName = cn(className, 'isolate overflow-visible');
   const { data, rawData, isLoading, error, refetch } = useDynamicWidgetData(builderConfig);
   
-  // Kullanıcı renk paleti - ayarlardan alınır
-  const { colors: userColors } = useChartColorPalette();
+  // Widget bazında kullanıcı renk paleti - widgetId ile çağırarak widget-specific override desteklenir
+  const { colors: userColors } = useChartColorPalette({ widgetId });
   
   // Tarih filtresi state
   const [selectedDatePeriod, setSelectedDatePeriod] = useState<DatePeriod>(

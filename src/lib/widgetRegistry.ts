@@ -13,6 +13,7 @@ export interface WidgetFilter {
   ozelKodlar?: string[];
   sehirler?: string[];
   satisElemanlari?: string[];
+  colorPalette?: string; // Widget bazında renk paleti override
 }
 
 export interface WidgetDefinition {
