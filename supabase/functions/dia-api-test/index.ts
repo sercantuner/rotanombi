@@ -33,6 +33,17 @@ interface TestApiRequest {
     historicalCount: number;   // Kaç dönem geriye git
     mergeStrategy: 'union' | 'separate';
   };
+  // Kullanıcı bazlı zorunlu filtreler (profiles.dia_auto_filters'dan otomatik uygulanır)
+  applyUserFilters?: boolean;
+  // Sayfa bazlı global filtreler
+  pageFilters?: {
+    satisTemsilcisi?: string[];
+    sube?: string[];
+    depo?: string[];
+    ozelkod1?: string[];
+    ozelkod2?: string[];
+    ozelkod3?: string[];
+  };
 }
 
 interface TestApiResponse {

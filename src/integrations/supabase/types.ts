@@ -385,16 +385,60 @@ export type Database = {
           },
         ]
       }
+      page_filter_presets: {
+        Row: {
+          created_at: string | null
+          filters: Json
+          id: string
+          is_default: boolean | null
+          name: string
+          page_id: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          filters?: Json
+          id?: string
+          is_default?: boolean | null
+          name: string
+          page_id?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          filters?: Json
+          id?: string
+          is_default?: boolean | null
+          name?: string
+          page_id?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "page_filter_presets_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "user_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
           created_at: string
           dia_api_key: string | null
+          dia_auto_filters: Json | null
+          dia_satis_elemani: string | null
           dia_session_expires: string | null
           dia_session_id: string | null
           dia_sunucu_adi: string | null
           dia_ws_kullanici: string | null
           dia_ws_sifre: string | null
+          dia_yetki_kodu: string | null
           display_name: string | null
           donem_kodu: string | null
           donem_yili: string | null
@@ -414,11 +458,14 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           dia_api_key?: string | null
+          dia_auto_filters?: Json | null
+          dia_satis_elemani?: string | null
           dia_session_expires?: string | null
           dia_session_id?: string | null
           dia_sunucu_adi?: string | null
           dia_ws_kullanici?: string | null
           dia_ws_sifre?: string | null
+          dia_yetki_kodu?: string | null
           display_name?: string | null
           donem_kodu?: string | null
           donem_yili?: string | null
@@ -438,11 +485,14 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           dia_api_key?: string | null
+          dia_auto_filters?: Json | null
+          dia_satis_elemani?: string | null
           dia_session_expires?: string | null
           dia_session_id?: string | null
           dia_sunucu_adi?: string | null
           dia_ws_kullanici?: string | null
           dia_ws_sifre?: string | null
+          dia_yetki_kodu?: string | null
           display_name?: string | null
           donem_kodu?: string | null
           donem_yili?: string | null
@@ -490,6 +540,7 @@ export type Database = {
       user_pages: {
         Row: {
           created_at: string
+          filter_config: Json | null
           icon: string | null
           id: string
           is_active: boolean | null
@@ -501,6 +552,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          filter_config?: Json | null
           icon?: string | null
           id?: string
           is_active?: boolean | null
@@ -512,6 +564,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          filter_config?: Json | null
           icon?: string | null
           id?: string
           is_active?: boolean | null

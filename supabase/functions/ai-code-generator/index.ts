@@ -21,7 +21,10 @@ const getGenerationSystemPrompt = () => `Sen bir React widget geliştirme uzman�
 ✅ ZORUNLU:
    - Sadece JavaScript kodu yaz (TypeScript YASAK)
    - JSX SÖZDİZİMİ KULLANMA! Sadece React.createElement kullan
-   - "function Widget({ data, colors })" formatı ZORUNLU - colors prop ŞART!
+   - "function Widget({ data, colors, filters })" formatı ZORUNLU!
+     • data: DIA'dan gelen veri dizisi
+     • colors: Grafik renk paleti dizisi  
+     • filters: Aktif global filtreler (satisTemsilcisi, tarihAraligi, vb.)
    - React.useState, React.useMemo, React.useCallback (import etme, React. prefix)
    - En sonda "return Widget;" ile bileşeni döndür
    - Veri yoksa "Veri bulunamadı" mesajı göster
