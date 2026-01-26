@@ -3,6 +3,7 @@ import { Clock, AlertTriangle, Calendar } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
 import type { VadeYaslandirma } from '@/lib/diaClient';
 import { useDashboardFilters } from '@/contexts/DashboardFilterContext';
+import { useChartColorPalette } from '@/hooks/useChartColorPalette';
 
 interface Props {
   yaslandirma: VadeYaslandirma;
@@ -13,6 +14,7 @@ type Periyot = 'gunluk' | 'haftalik' | 'aylik';
 
 export function VadeYaslandirmasi({ yaslandirma, isLoading }: Props) {
   const { filters, setFilter } = useDashboardFilters();
+  const { colors: paletteColors, getColor } = useChartColorPalette();
   const [periyot, setPeriyot] = useState<Periyot>('gunluk');
 
   const formatCurrency = (value: number) => {
@@ -31,87 +33,87 @@ export function VadeYaslandirmasi({ yaslandirma, isLoading }: Props) {
   // Periyota göre chart data hesapla
   const { chartData, toplam, gecmisToplam, gelecekToplam } = useMemo(() => {
     if (periyot === 'gunluk') {
-      // Mevcut günlük görünüm
+      // Mevcut günlük görünüm - kullanıcının seçtiği palet renklerini kullan
       const data = [
-        { name: '90+ Gün', value: yaslandirma.vade90Plus, key: 'vade90Plus', type: 'gecmis', color: 'hsl(var(--destructive))' },
-        { name: '61-90', value: yaslandirma.vade90, key: 'vade90', type: 'gecmis', color: 'hsl(var(--chart-2))' },
-        { name: '31-60', value: yaslandirma.vade60, key: 'vade60', type: 'gecmis', color: 'hsl(var(--chart-3))' },
-        { name: '1-30', value: yaslandirma.vade30, key: 'vade30', type: 'gecmis', color: 'hsl(var(--chart-4))' },
-        { name: 'BUGÜN', value: yaslandirma.guncel, key: 'guncel', type: 'guncel', color: 'hsl(var(--primary))' },
-        { name: '-30', value: yaslandirma.gelecek30, key: 'gelecek30', type: 'gelecek', color: 'hsl(var(--success))' },
-        { name: '-60', value: yaslandirma.gelecek60, key: 'gelecek60', type: 'gelecek', color: 'hsl(var(--chart-1))' },
-        { name: '-90', value: yaslandirma.gelecek90, key: 'gelecek90', type: 'gelecek', color: 'hsl(var(--accent))' },
-        { name: '-90+', value: yaslandirma.gelecek90Plus, key: 'gelecek90Plus', type: 'gelecek', color: 'hsl(var(--muted-foreground))' },
+        { name: '90+ Gün', value: yaslandirma.vade90Plus, key: 'vade90Plus', type: 'gecmis', color: getColor(0) },
+        { name: '61-90', value: yaslandirma.vade90, key: 'vade90', type: 'gecmis', color: getColor(1) },
+        { name: '31-60', value: yaslandirma.vade60, key: 'vade60', type: 'gecmis', color: getColor(2) },
+        { name: '1-30', value: yaslandirma.vade30, key: 'vade30', type: 'gecmis', color: getColor(3) },
+        { name: 'BUGÜN', value: yaslandirma.guncel, key: 'guncel', type: 'guncel', color: getColor(4) },
+        { name: '-30', value: yaslandirma.gelecek30, key: 'gelecek30', type: 'gelecek', color: getColor(5) },
+        { name: '-60', value: yaslandirma.gelecek60, key: 'gelecek60', type: 'gelecek', color: getColor(6) },
+        { name: '-90', value: yaslandirma.gelecek90, key: 'gelecek90', type: 'gelecek', color: getColor(7) },
+        { name: '-90+', value: yaslandirma.gelecek90Plus, key: 'gelecek90Plus', type: 'gelecek', color: getColor(0) },
       ];
       const toplam = data.reduce((acc, item) => acc + item.value, 0);
       const gecmis = yaslandirma.vade90Plus + yaslandirma.vade90 + yaslandirma.vade60 + yaslandirma.vade30;
       const gelecek = yaslandirma.gelecek30 + yaslandirma.gelecek60 + yaslandirma.gelecek90 + yaslandirma.gelecek90Plus;
       return { chartData: data, toplam, gecmisToplam: gecmis, gelecekToplam: gelecek };
     } else if (periyot === 'haftalik') {
-      // Haftalık görünüm - günlük verileri haftalara grupla
+      // Haftalık görünüm - kullanıcının seçtiği palet renklerini kullan
       const data = [
         { 
           name: '4+ Hafta', 
           value: yaslandirma.vade90Plus + yaslandirma.vade90 * 0.5, 
           key: 'hafta4plus', 
           type: 'gecmis', 
-          color: 'hsl(var(--destructive))' 
+          color: getColor(0) 
         },
         { 
           name: '3 Hafta', 
           value: yaslandirma.vade90 * 0.5 + yaslandirma.vade60 * 0.5, 
           key: 'hafta3', 
           type: 'gecmis', 
-          color: 'hsl(var(--chart-2))' 
+          color: getColor(1) 
         },
         { 
           name: '2 Hafta', 
           value: yaslandirma.vade60 * 0.5 + yaslandirma.vade30 * 0.5, 
           key: 'hafta2', 
           type: 'gecmis', 
-          color: 'hsl(var(--chart-3))' 
+          color: getColor(2) 
         },
         { 
           name: '1 Hafta', 
           value: yaslandirma.vade30 * 0.5, 
           key: 'hafta1', 
           type: 'gecmis', 
-          color: 'hsl(var(--chart-4))' 
+          color: getColor(3) 
         },
         { 
           name: 'BU HAFTA', 
           value: yaslandirma.guncel, 
           key: 'buhafta', 
           type: 'guncel', 
-          color: 'hsl(var(--primary))' 
+          color: getColor(4) 
         },
         { 
           name: '+1 Hafta', 
           value: yaslandirma.gelecek30 * 0.5, 
           key: 'gelecek1', 
           type: 'gelecek', 
-          color: 'hsl(var(--success))' 
+          color: getColor(5) 
         },
         { 
           name: '+2 Hafta', 
           value: yaslandirma.gelecek30 * 0.5 + yaslandirma.gelecek60 * 0.5, 
           key: 'gelecek2', 
           type: 'gelecek', 
-          color: 'hsl(var(--chart-1))' 
+          color: getColor(6) 
         },
         { 
           name: '+3 Hafta', 
           value: yaslandirma.gelecek60 * 0.5 + yaslandirma.gelecek90 * 0.5, 
           key: 'gelecek3', 
           type: 'gelecek', 
-          color: 'hsl(var(--accent))' 
+          color: getColor(7) 
         },
         { 
           name: '+4+ Hafta', 
           value: yaslandirma.gelecek90 * 0.5 + yaslandirma.gelecek90Plus, 
           key: 'gelecek4plus', 
           type: 'gelecek', 
-          color: 'hsl(var(--muted-foreground))' 
+          color: getColor(0) 
         },
       ];
       const toplam = data.reduce((acc, item) => acc + item.value, 0);
@@ -119,56 +121,56 @@ export function VadeYaslandirmasi({ yaslandirma, isLoading }: Props) {
       const gelecek = data.filter(d => d.type === 'gelecek').reduce((acc, d) => acc + d.value, 0);
       return { chartData: data, toplam, gecmisToplam: gecmis, gelecekToplam: gelecek };
     } else {
-      // Aylık görünüm
+      // Aylık görünüm - kullanıcının seçtiği palet renklerini kullan
       const data = [
         { 
           name: '3+ Ay', 
           value: yaslandirma.vade90Plus, 
           key: 'ay3plus', 
           type: 'gecmis', 
-          color: 'hsl(var(--destructive))' 
+          color: getColor(0) 
         },
         { 
           name: '2 Ay', 
           value: yaslandirma.vade90 + yaslandirma.vade60, 
           key: 'ay2', 
           type: 'gecmis', 
-          color: 'hsl(var(--chart-3))' 
+          color: getColor(1) 
         },
         { 
           name: '1 Ay', 
           value: yaslandirma.vade30, 
           key: 'ay1', 
           type: 'gecmis', 
-          color: 'hsl(var(--chart-4))' 
+          color: getColor(2) 
         },
         { 
           name: 'BU AY', 
           value: yaslandirma.guncel, 
           key: 'buay', 
           type: 'guncel', 
-          color: 'hsl(var(--primary))' 
+          color: getColor(3) 
         },
         { 
           name: '+1 Ay', 
           value: yaslandirma.gelecek30, 
           key: 'gelecekay1', 
           type: 'gelecek', 
-          color: 'hsl(var(--success))' 
+          color: getColor(4) 
         },
         { 
           name: '+2 Ay', 
           value: yaslandirma.gelecek60 + yaslandirma.gelecek90, 
           key: 'gelecekay2', 
           type: 'gelecek', 
-          color: 'hsl(var(--chart-1))' 
+          color: getColor(5) 
         },
         { 
           name: '+3+ Ay', 
           value: yaslandirma.gelecek90Plus, 
           key: 'gelecekay3plus', 
           type: 'gelecek', 
-          color: 'hsl(var(--muted-foreground))' 
+          color: getColor(6) 
         },
       ];
       const toplam = data.reduce((acc, item) => acc + item.value, 0);
@@ -176,7 +178,7 @@ export function VadeYaslandirmasi({ yaslandirma, isLoading }: Props) {
       const gelecek = data.filter(d => d.type === 'gelecek').reduce((acc, d) => acc + d.value, 0);
       return { chartData: data, toplam, gecmisToplam: gecmis, gelecekToplam: gelecek };
     }
-  }, [yaslandirma, periyot]);
+  }, [yaslandirma, periyot, getColor]);
 
   const guncelLabel = periyot === 'gunluk' ? 'BUGÜN' : periyot === 'haftalik' ? 'BU HAFTA' : 'BU AY';
 
@@ -281,15 +283,15 @@ export function VadeYaslandirmasi({ yaslandirma, isLoading }: Props) {
       {/* Legend - Mobilde daha kompakt */}
       <div className="flex flex-wrap items-center justify-center gap-2 md:gap-6 mb-2 md:mb-4 text-[10px] md:text-xs">
         <div className="flex items-center gap-1 md:gap-2">
-          <div className="w-2 h-2 md:w-3 md:h-3 rounded-sm bg-destructive" />
+          <div className="w-2 h-2 md:w-3 md:h-3 rounded-sm" style={{ backgroundColor: getColor(0) }} />
           <span className="text-muted-foreground">Geçmiş: <span className="font-semibold text-foreground">{formatCurrency(gecmisToplam)}</span></span>
         </div>
         <div className="flex items-center gap-1 md:gap-2">
-          <div className="w-2 h-2 md:w-3 md:h-3 rounded-sm bg-primary" />
+          <div className="w-2 h-2 md:w-3 md:h-3 rounded-sm" style={{ backgroundColor: getColor(4) }} />
           <span className="text-muted-foreground">Güncel: <span className="font-semibold text-foreground">{formatCurrency(chartData.find(d => d.type === 'guncel')?.value || 0)}</span></span>
         </div>
         <div className="flex items-center gap-1 md:gap-2">
-          <div className="w-2 h-2 md:w-3 md:h-3 rounded-sm bg-success" />
+          <div className="w-2 h-2 md:w-3 md:h-3 rounded-sm" style={{ backgroundColor: getColor(5) }} />
           <span className="text-muted-foreground">Gelecek: <span className="font-semibold text-foreground">{formatCurrency(gelecekToplam)}</span></span>
         </div>
       </div>
