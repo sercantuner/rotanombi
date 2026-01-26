@@ -274,6 +274,13 @@ return Widget;
 
 ═══════════════════════════════════════════════════════════════════════════════
 
+⚠️ KRİTİK UYARI - KODU TAMAMLA!
+───────────────────────────────────────────────────────────────────────────────
+- Kodu MUTLAKA tamamla, ASLA yarıda bırakma!
+- Son satır HER ZAMAN "return Widget;" olmalıdır
+- Eksik parantez, süslü parantez bırakma
+- Tüm fonksiyonları kapat
+
 SADECE JavaScript kodu döndür, açıklama veya markdown formatı kullanma.`;
 
 // Kod iyileştirme/chat için system prompt
@@ -376,7 +383,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-3-pro-preview",
         messages,
-        max_tokens: 8000,
+        max_tokens: 16000,
         temperature: 0.7,
       }),
     });
