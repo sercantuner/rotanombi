@@ -6,7 +6,9 @@ import React, { useState, useEffect, useMemo, useCallback, Component, ErrorInfo,
 import { useDataSources, DataSource as DataSourceType } from '@/hooks/useDataSources';
 import { useWidgetAdmin, useWidgets } from '@/hooks/useWidgets';
 import { WidgetFormData, PAGE_CATEGORIES, WIDGET_SIZES } from '@/lib/widgetTypes';
-import { MultiQueryConfig } from '@/lib/widgetBuilderTypes';
+import { MultiQueryConfig, DiaModelReference, AIRequirement, DEFAULT_AI_REQUIREMENTS, extractModelNameFromUrl } from '@/lib/widgetBuilderTypes';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Checkbox } from '@/components/ui/checkbox';
 import { DataSourceSelector } from './DataSourceSelector';
 import { MultiQueryBuilder } from './MultiQueryBuilder';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -221,6 +223,17 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   // Widget şablon seçimi
   const [showWidgetTemplates, setShowWidgetTemplates] = useState(false);
   
+  // DIA Model Referansları
+  const [diaModelLinks, setDiaModelLinks] = useState<DiaModelReference[]>([]);
+  const [newModelLink, setNewModelLink] = useState('');
+  const [showModelLinks, setShowModelLinks] = useState(false);
+  
+  // AI Zorunlulukları
+  const [aiRequirements, setAiRequirements] = useState<AIRequirement[]>(DEFAULT_AI_REQUIREMENTS);
+  const [customRules, setCustomRules] = useState<string[]>([]);
+  const [newCustomRule, setNewCustomRule] = useState('');
+  const [showAiRequirements, setShowAiRequirements] = useState(false);
+  
   // Mevcut custom widget'ları şablon olarak listele
   const customWidgetTemplates = useMemo(() => {
     return (widgets || []).filter(w => 
@@ -293,6 +306,24 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
         setCurrentStep(2); // Kod düzenleme adımına git
       }
       
+      // DIA Model linkleri yükle
+      if (config?.diaModelLinks && Array.isArray(config.diaModelLinks)) {
+        setDiaModelLinks(config.diaModelLinks);
+      }
+      
+      // AI zorunlulukları yükle
+      if (config?.aiRequirements && Array.isArray(config.aiRequirements)) {
+        setAiRequirements(prev => prev.map(r => ({
+          ...r,
+          isActive: r.isDefault || config.aiRequirements.includes(r.id)
+        })));
+      }
+      
+      // Özel AI kuralları yükle
+      if (config?.customAiRules && Array.isArray(config.customAiRules)) {
+        setCustomRules(config.customAiRules);
+      }
+      
       if (config?.multiQuery) {
         setIsMultiQueryMode(true);
         setMultiQuery(config.multiQuery);
@@ -326,6 +357,13 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       setChatHistory([]);
       setCurrentStep(0);
       setCompletedSteps([]);
+      // Yeni alanları sıfırla
+      setDiaModelLinks([]);
+      setNewModelLink('');
+      setAiRequirements(DEFAULT_AI_REQUIREMENTS);
+      setCustomRules([]);
+      setNewCustomRule('');
+      setSelectedFilterFields([]);
     }
   }, [editingWidget, open]);
 
@@ -554,7 +592,7 @@ ${queryAnalyses.map(qa => `
 📊 ${qa.queryName} (${qa.recordCount} kayıt)
    Alanlar: ${qa.fields.join(', ')}`).join('\n')}
 
-Kullanıcı isteği: ${aiPrompt}`;
+Kullanıcı isteği: ${buildEnhancedPrompt()}`;
 
         dataToSend = getMultiQueryJsonData();
       } else {
@@ -573,7 +611,7 @@ ${Object.entries(dataAnalysis).map(([field, stats]) => {
 
 Örnek kayıt: ${JSON.stringify(sampleData[0], null, 2)}
 
-Kullanıcı isteği: ${aiPrompt}`;
+Kullanıcı isteği: ${buildEnhancedPrompt()}`;
 
         dataToSend = sampleData.slice(0, 3);
       }
@@ -694,6 +732,10 @@ Kullanıcı isteği: ${aiPrompt}`;
         type: 'custom' as const,
         isCustomCode: true,
       },
+      // Yeni alanlar
+      diaModelLinks: diaModelLinks.length > 0 ? diaModelLinks : undefined,
+      aiRequirements: aiRequirements.filter(r => r.isActive && !r.isDefault).map(r => r.id),
+      customAiRules: customRules.length > 0 ? customRules : undefined,
     };
     
     if (isMultiQueryMode && multiQuery) {
@@ -1116,6 +1158,70 @@ Kullanıcı isteği: ${aiPrompt}`;
     );
   };
 
+  // DIA Model Link ekleme
+  const addDiaModelLink = () => {
+    if (!newModelLink.trim()) return;
+    if (!newModelLink.includes('doc.dia.com.tr')) {
+      toast.error('Geçerli bir DIA dokümantasyon linki girin');
+      return;
+    }
+    if (diaModelLinks.some(l => l.url === newModelLink)) {
+      toast.error('Bu link zaten eklenmiş');
+      return;
+    }
+    const modelName = extractModelNameFromUrl(newModelLink);
+    setDiaModelLinks(prev => [...prev, { url: newModelLink.trim(), modelName }]);
+    setNewModelLink('');
+    toast.success(`${modelName} eklendi`);
+  };
+
+  // AI zorunluluğu toggle
+  const toggleAiRequirement = (id: string) => {
+    setAiRequirements(prev => prev.map(r => 
+      r.id === id && !r.isDefault ? { ...r, isActive: !r.isActive } : r
+    ));
+  };
+
+  // Özel kural ekleme
+  const addCustomRule = () => {
+    if (!newCustomRule.trim()) return;
+    if (customRules.includes(newCustomRule.trim())) {
+      toast.error('Bu kural zaten eklenmiş');
+      return;
+    }
+    setCustomRules(prev => [...prev, newCustomRule.trim()]);
+    setNewCustomRule('');
+    toast.success('Kural eklendi');
+  };
+
+  // AI prompt'unu zenginleştir (DIA linkleri + zorunluluklar)
+  const buildEnhancedPrompt = useCallback(() => {
+    let prompt = aiPrompt;
+    
+    // DIA Model linkleri ekle
+    if (diaModelLinks.length > 0) {
+      prompt += '\n\n📚 Referans DIA Modelleri:\n';
+      diaModelLinks.forEach(link => {
+        prompt += `- ${link.modelName}: ${link.url}\n`;
+      });
+      prompt += '\nBu modellerin alanlarını ve veri tiplerini dikkate al.';
+    }
+    
+    // Aktif zorunlulukları ekle
+    const activeRules = aiRequirements.filter(r => r.isActive && !r.isDefault);
+    if (activeRules.length > 0 || customRules.length > 0) {
+      prompt += '\n\n⚙️ EK ZORUNLU KURALLAR:\n';
+      activeRules.forEach(rule => {
+        prompt += `- ${rule.promptAddition}\n`;
+      });
+      customRules.forEach(rule => {
+        prompt += `- ${rule}\n`;
+      });
+    }
+    
+    return prompt;
+  }, [aiPrompt, diaModelLinks, aiRequirements, customRules]);
+
   // Step 2: AI Kod Üret
   const renderStep2 = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
@@ -1130,15 +1236,146 @@ Kullanıcı isteği: ${aiPrompt}`;
             Ne tür bir widget istediğinizi açıklayın. Sağdaki alanlara tıklayarak prompt'a ekleyebilirsiniz.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex-1 flex flex-col gap-4">
-          <Textarea
-            value={aiPrompt}
-            onChange={(e) => setAiPrompt(e.target.value)}
-            placeholder="Örnek: Vade yaşlandırma grafiği oluştur. X ekseninde vade dilimleri (90+ gün, 60-90, 30-60, 0-30, bugün, gelecek) Y ekseninde toplam bakiye göster..."
-            className="flex-1 min-h-[200px] resize-none"
-          />
+        <CardContent className="flex-1 flex flex-col gap-3 overflow-hidden">
+          <ScrollArea className="flex-1">
+            {/* DIA Model Referansları */}
+            <Collapsible open={showModelLinks} onOpenChange={setShowModelLinks} className="mb-3">
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full justify-between h-8">
+                  <span className="flex items-center gap-2 text-xs">
+                    <LucideIcons.BookOpen className="h-3.5 w-3.5" />
+                    DIA Model Referansları
+                    {diaModelLinks.length > 0 && (
+                      <Badge variant="secondary" className="text-[10px] h-4">{diaModelLinks.length}</Badge>
+                    )}
+                  </span>
+                  <LucideIcons.ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showModelLinks && "rotate-180")} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2 p-3 border rounded-lg bg-muted/30 space-y-2">
+                {diaModelLinks.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {diaModelLinks.map((link, idx) => (
+                      <Badge key={idx} variant="outline" className="text-xs gap-1">
+                        <a href={link.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                          {link.modelName}
+                        </a>
+                        <X 
+                          className="h-3 w-3 cursor-pointer hover:text-destructive" 
+                          onClick={() => setDiaModelLinks(prev => prev.filter((_, i) => i !== idx))}
+                        />
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    value={newModelLink}
+                    onChange={(e) => setNewModelLink(e.target.value)}
+                    placeholder="https://doc.dia.com.tr/doku.php?id=gelistirici:models:..."
+                    className="flex-1 h-8 text-xs"
+                    onKeyDown={(e) => e.key === 'Enter' && addDiaModelLink()}
+                  />
+                  <Button size="sm" variant="secondary" onClick={addDiaModelLink} className="h-8 px-3">
+                    <LucideIcons.Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* AI Prompt */}
+            <Textarea
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              placeholder="Örnek: Vade yaşlandırma grafiği oluştur. X ekseninde vade dilimleri (90+ gün, 60-90, 30-60, 0-30, bugün, gelecek) Y ekseninde toplam bakiye göster..."
+              className="min-h-[150px] resize-none"
+            />
+            
+            {/* AI Zorunlulukları */}
+            <Collapsible open={showAiRequirements} onOpenChange={setShowAiRequirements} className="mt-3">
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full justify-between h-8">
+                  <span className="flex items-center gap-2 text-xs">
+                    <LucideIcons.Settings2 className="h-3.5 w-3.5" />
+                    AI Zorunlulukları
+                    <Badge variant="secondary" className="text-[10px] h-4">
+                      {aiRequirements.filter(r => r.isActive).length + customRules.length}
+                    </Badge>
+                  </span>
+                  <LucideIcons.ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showAiRequirements && "rotate-180")} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2 p-3 border rounded-lg bg-muted/30 space-y-3">
+                {/* Varsayılan kurallar (kilitli) */}
+                <div className="space-y-2">
+                  <div className="text-[10px] font-medium text-muted-foreground uppercase">Varsayılan (Değiştirilemez)</div>
+                  {aiRequirements.filter(r => r.isDefault).map(rule => (
+                    <div key={rule.id} className="flex items-start gap-2 text-xs opacity-60">
+                      <Checkbox checked={true} disabled className="mt-0.5" />
+                      <div>
+                        <span className="font-medium">{rule.label}</span>
+                        <span className="text-muted-foreground ml-1">- {rule.description}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                <Separator />
+                
+                {/* Seçilebilir kurallar */}
+                <div className="space-y-2">
+                  <div className="text-[10px] font-medium text-muted-foreground uppercase">Seçilebilir</div>
+                  {aiRequirements.filter(r => !r.isDefault).map(rule => (
+                    <div 
+                      key={rule.id} 
+                      className="flex items-start gap-2 text-xs cursor-pointer hover:bg-accent/50 rounded p-1 -m-1"
+                      onClick={() => toggleAiRequirement(rule.id)}
+                    >
+                      <Checkbox checked={rule.isActive} className="mt-0.5" />
+                      <div>
+                        <span className="font-medium">{rule.label}</span>
+                        <span className="text-muted-foreground ml-1">- {rule.description}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                <Separator />
+                
+                {/* Özel kurallar */}
+                <div className="space-y-2">
+                  <div className="text-[10px] font-medium text-muted-foreground uppercase">Özel Kurallar</div>
+                  {customRules.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {customRules.map((rule, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs gap-1">
+                          {rule.length > 30 ? rule.slice(0, 30) + '...' : rule}
+                          <X 
+                            className="h-3 w-3 cursor-pointer hover:text-destructive" 
+                            onClick={() => setCustomRules(prev => prev.filter((_, i) => i !== idx))}
+                          />
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Input
+                      value={newCustomRule}
+                      onChange={(e) => setNewCustomRule(e.target.value)}
+                      placeholder='Örn: "Negatif değerleri kırmızı göster"'
+                      className="flex-1 h-8 text-xs"
+                      onKeyDown={(e) => e.key === 'Enter' && addCustomRule()}
+                    />
+                    <Button size="sm" variant="secondary" onClick={addCustomRule} className="h-8 px-3">
+                      <LucideIcons.Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </ScrollArea>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pt-2 border-t">
             <Button
               onClick={generateCodeWithAI}
               disabled={isGeneratingCode || !aiPrompt.trim() || sampleData.length === 0}
