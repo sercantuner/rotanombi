@@ -234,6 +234,10 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   const [newCustomRule, setNewCustomRule] = useState('');
   const [showAiRequirements, setShowAiRequirements] = useState(false);
   
+  // Tam Prompt Görüntüleme Modal
+  const [showFullPromptModal, setShowFullPromptModal] = useState(false);
+  const [fullPromptContent, setFullPromptContent] = useState('');
+  
   // Mevcut custom widget'ları şablon olarak listele
   const customWidgetTemplates = useMemo(() => {
     return (widgets || []).filter(w => 
@@ -1223,6 +1227,114 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
     return prompt;
   }, [aiPrompt, diaModelLinks, aiRequirements, customRules]);
 
+  // Tam prompt oluşturma - AI'ye gönderilen tüm içerik
+  const generateFullPromptPreview = useCallback(() => {
+    const hasData = isMultiQueryMode 
+      ? Object.keys(mergedQueryData).length > 0 
+      : sampleData.length > 0;
+    
+    if (!hasData) {
+      return '⚠️ Önce veri kaynağı seçilmeli';
+    }
+
+    let fullPrompt = '';
+    
+    // Multi-query modu
+    if (isMultiQueryMode && multiQuery?.queries?.length) {
+      const queryAnalyses = multiQuery.queries.map(q => {
+        const qData = mergedQueryData[q.id] || [];
+        const analysis = qData.length > 0 ? analyzeDataForAI(qData) : {};
+        return {
+          queryName: q.name,
+          queryId: q.id,
+          dataSourceName: q.dataSourceName,
+          recordCount: qData.length,
+          fields: qData[0] ? Object.keys(qData[0]) : [],
+          fieldStats: analysis,
+          sampleRecord: qData[0] || null,
+        };
+      });
+      
+      const querySections = queryAnalyses.map(qa => {
+        const statsLines = Object.entries(qa.fieldStats || {}).map(([field, stats]) => {
+          const s = stats as any;
+          let info = '   • ' + field + ' (' + s.type + '): ' + s.uniqueCount + ' benzersiz değer';
+          if (s.min !== undefined) info += ', min: ' + formatNumber(s.min) + ', max: ' + formatNumber(s.max) + ', toplam: ' + formatNumber(s.sum);
+          if (s.minDate) info += ', tarih aralığı: ' + s.minDate + ' - ' + s.maxDate;
+          return info;
+        }).join('\n');
+        
+        return '📊 ' + qa.queryName + ' (' + qa.recordCount + ' kayıt)\n' +
+               '   Veri Kaynağı: ' + qa.dataSourceName + '\n' +
+               '   Alanlar: ' + qa.fields.join(', ') + '\n\n' +
+               '   Alan İstatistikleri:\n' + statsLines + '\n\n' +
+               '   Örnek Kayıt:\n   ' + JSON.stringify(qa.sampleRecord, null, 2);
+      }).join('\n\n');
+      
+      fullPrompt = '═══════════════════════════════════════════════════════════════\n' +
+                   '                    MULTI-QUERY VERİ YAPISI\n' +
+                   '═══════════════════════════════════════════════════════════════\n\n' +
+                   'Bu widget birden fazla veri kaynağından besleniyor.\n\n' +
+                   'SORGULAR:\n' + querySections + '\n\n' +
+                   '═══════════════════════════════════════════════════════════════\n' +
+                   '                    KULLANICI İSTEĞİ\n' +
+                   '═══════════════════════════════════════════════════════════════\n\n' +
+                   buildEnhancedPrompt();
+
+    } else {
+      // Tek kaynak modu
+      const dataAnalysis = analyzeDataForAI(sampleData);
+      
+      const statsLines = Object.entries(dataAnalysis).map(([field, stats]) => {
+        const s = stats as any;
+        let info = '  • ' + field + ' (' + s.type + '): ' + s.uniqueCount + ' benzersiz değer';
+        if (s.min !== undefined) info += ', min: ' + formatNumber(s.min) + ', max: ' + formatNumber(s.max) + ', toplam: ' + formatNumber(s.sum);
+        if (s.minDate) info += ', tarih aralığı: ' + s.minDate + ' - ' + s.maxDate;
+        return info;
+      }).join('\n');
+      
+      fullPrompt = '═══════════════════════════════════════════════════════════════\n' +
+                   '                    VERİ ANALİZİ\n' +
+                   '═══════════════════════════════════════════════════════════════\n\n' +
+                   'Veri Kaynağı: ' + (selectedDataSource?.name || 'Bilinmeyen') + '\n' +
+                   'Toplam Kayıt: ' + sampleData.length + '\n' +
+                   'API: ' + (selectedDataSource?.module || '?') + '/' + (selectedDataSource?.method || '?') + '\n\n' +
+                   'ALAN İSTATİSTİKLERİ:\n' + statsLines + '\n\n' +
+                   'ÖRNEK KAYIT:\n' + JSON.stringify(sampleData[0], null, 2) + '\n\n' +
+                   '═══════════════════════════════════════════════════════════════\n' +
+                   '                    KULLANICI İSTEĞİ\n' +
+                   '═══════════════════════════════════════════════════════════════\n\n' +
+                   buildEnhancedPrompt();
+    }
+
+    // AI Zorunlulukları bilgisi
+    fullPrompt += '\n\n═══════════════════════════════════════════════════════════════\n' +
+                  '                    AI SİSTEM PROMPT (ÖN TANIMLI)\n' +
+                  '═══════════════════════════════════════════════════════════════\n\n' +
+                  'Bu istek aşağıdaki sabit kurallarla AI\'ye gönderilir:\n\n' +
+                  '📋 KOD YAPISI:\n' +
+                  '   - Sadece JavaScript (TypeScript yok)\n' +
+                  '   - JSX yok, sadece React.createElement\n' +
+                  '   - function Widget({ data, colors, filters }) formatı\n' +
+                  '   - En sonda "return Widget;" zorunlu\n\n' +
+                  '🎨 RENK SİSTEMİ:\n' +
+                  '   - Sabit renkler yasak (text-white, #RRGGBB, rgb() vb.)\n' +
+                  '   - CSS değişkenleri zorunlu: text-foreground, bg-card, text-success, text-destructive\n' +
+                  '   - Grafik renkleri: colors prop\'undan getColor(index) ile\n\n' +
+                  '📊 GRAFİK KURALLARI:\n' +
+                  '   - Ana container: h-full flex flex-col\n' +
+                  '   - Grafik container: flex-1 h-full min-h-0 relative\n' +
+                  '   - Donut ortası: overlay div ile (PieChart dışında)\n' +
+                  '   - Bar/Line: CartesianGrid, XAxis, YAxis zorunlu\n\n' +
+                  '💰 PARA BİRİMİ:\n' +
+                  '   - formatCurrency helper zorunlu\n' +
+                  '   - TRY varsayılan, çoklu para birimi destekli\n\n' +
+                  '📅 TARİH KRONOLOJİSİ (aktifse):\n' +
+                  '   - fillMissingDates helper ile eksik günleri 0 ile doldur';
+
+    return fullPrompt;
+  }, [isMultiQueryMode, multiQuery, mergedQueryData, sampleData, selectedDataSource, buildEnhancedPrompt, analyzeDataForAI, formatNumber]);
+
   // Step 2: AI Kod Üret
   const renderStep2 = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
@@ -1388,6 +1500,20 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
                 <Send className="h-4 w-4" />
               )}
               {isGeneratingCode ? 'Kod Üretiliyor...' : 'AI ile Kod Üret'}
+            </Button>
+            
+            {/* Tam Prompt Görüntüle Butonu */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setFullPromptContent(generateFullPromptPreview());
+                setShowFullPromptModal(true);
+              }}
+              className="gap-2"
+            >
+              <LucideIcons.FileText className="h-4 w-4" />
+              Prompt'u Göster
             </Button>
             
             {sampleData.length === 0 && (
@@ -1677,7 +1803,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
               </AlertDescription>
             </Alert>
           ) : PreviewResult.component ? (
-            <div className="h-[340px] border rounded-lg p-4 flex flex-col">
+            <div className="h-[420px] border rounded-lg p-4 flex flex-col">
               <ErrorBoundary fallback={
                 <div className="text-destructive text-sm flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" />
@@ -1750,6 +1876,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
   );
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-6xl w-[95vw] md:w-full h-[95vh] md:h-[90vh] flex flex-col p-0 gap-0">
         {/* Header */}
@@ -1820,5 +1947,49 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    
+    {/* Tam Prompt Görüntüleme Modal */}
+    <Dialog open={showFullPromptModal} onOpenChange={setShowFullPromptModal}>
+      <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <LucideIcons.FileText className="h-5 w-5 text-primary" />
+            AI'ye Gönderilen Tam Prompt
+          </DialogTitle>
+          <DialogDescription>
+            Bu içeriği kopyalayıp başka AI'lere (ChatGPT, Claude vb.) gönderebilirsiniz.
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="flex-1 min-h-0">
+          <ScrollArea className="h-[55vh] border rounded-lg">
+            <pre className="p-4 text-xs font-mono whitespace-pre-wrap bg-muted/30">
+              {fullPromptContent}
+            </pre>
+          </ScrollArea>
+        </div>
+        
+        <DialogFooter className="flex items-center gap-2">
+          <div className="text-xs text-muted-foreground mr-auto">
+            {fullPromptContent.length.toLocaleString('tr-TR')} karakter
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => {
+              navigator.clipboard.writeText(fullPromptContent);
+              toast.success('Prompt panoya kopyalandı!');
+            }}
+            className="gap-2"
+          >
+            <Copy className="h-4 w-4" />
+            Kopyala
+          </Button>
+          <Button variant="secondary" onClick={() => setShowFullPromptModal(false)}>
+            Kapat
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
