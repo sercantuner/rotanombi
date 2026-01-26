@@ -447,10 +447,16 @@ serve(async (req) => {
         
         if (currentPayload[methodKey]?.session_id) {
           currentPayload[methodKey].session_id = newSessionId;
+          console.log(`[RETRY] Updated payload session_id to: ${newSessionId.substring(0, 8)}...`);
+        } else {
+          console.log(`[RETRY] WARNING: Could not find session_id in payload for method ${methodKey}`);
+          console.log(`[RETRY] Payload keys: ${JSON.stringify(Object.keys(currentPayload[methodKey] || {}))}`);
         }
 
-        console.log(`Retrying DIA API call with new session for user ${targetUserIdForRetry}`);
-        return makeDiaRequest(currentPayload, currentUrl, retryCount + 1);
+        console.log(`[RETRY] Retrying DIA API call with new session for user ${targetUserIdForRetry}`);
+        const retryResult = await makeDiaRequest(currentPayload, currentUrl, retryCount + 1);
+        console.log(`[RETRY] Retry result code: ${retryResult?.code}, has data: ${!!retryResult?.result}`);
+        return retryResult;
       }
 
       return result;
