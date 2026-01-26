@@ -400,7 +400,8 @@ function applyGlobalFilters(data: any[], globalFilters: GlobalFilters): any[] {
   // Cari kart tipi (AL, AS, ST)
   if (globalFilters.cariKartTipi.length > 0) {
     filtered = filtered.filter(row => {
-      const kartTipi = row.carikarttipi || row.karttipi || row.cari_kart_tipi;
+      // DIA'dan gelen alan adları: carikarttipi, carikarttip, karttipi vb.
+      const kartTipi = row.carikarttipi || row.carikarttip || row.karttipi || row.cari_kart_tipi;
       return kartTipi && globalFilters.cariKartTipi.includes(String(kartTipi).toUpperCase());
     });
   }
