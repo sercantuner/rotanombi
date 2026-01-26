@@ -1,5 +1,6 @@
 // AI Code Generator - Widget kodu üretimi için Lovable AI Gateway kullanır
 // JSX yerine React.createElement kullanarak kod üretir
+// v2.0 - Genişletilmiş kurallar: renk paleti, para birimi, trend, birleşik yapı
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -11,106 +12,220 @@ const corsHeaders = {
 // İlk kod üretimi için system prompt
 const getGenerationSystemPrompt = () => `Sen bir React widget geliştirme uzmanısın. Kullanıcının isteğine göre React bileşeni kodu yazacaksın.
 
-ÖNEMLİ KURALLAR - JSX KULLANMA!
-1. Sadece JavaScript kodu yaz, TypeScript kullanma
-2. JSX SÖZDİZİMİ KULLANMA! Sadece React.createElement kullan
-3. "function Widget({ data, colors })" formatında tek bir bileşen yaz - colors prop'u zorunlu!
-4. React hook'ları React.useState, React.useMemo şeklinde kullan (import etme)
-5. En sonda "return Widget;" ile bileşeni döndür
-6. Veri yoksa "Veri bulunamadı" göster
-7. Para birimi için ₺ kullan ve formatla (K, M)
-8. GRAFİK RENKLERİ İÇİN KESİNLİKLE colors PROP'UNU KULLAN!
+═══════════════════════════════════════════════════════════════════════════════
+                    AI WIDGET GENERATOR - ZORUNLU KURALLAR v2.0
+═══════════════════════════════════════════════════════════════════════════════
 
-=== ZORUNLU STİL KURALLARI ===
+📋 KOD YAPISI (İHLAL EDİLEMEZ!)
+───────────────────────────────────────────────────────────────────────────────
+✅ ZORUNLU:
+   - Sadece JavaScript kodu yaz (TypeScript YASAK)
+   - JSX SÖZDİZİMİ KULLANMA! Sadece React.createElement kullan
+   - "function Widget({ data, colors })" formatı ZORUNLU - colors prop ŞART!
+   - React.useState, React.useMemo, React.useCallback (import etme, React. prefix)
+   - En sonda "return Widget;" ile bileşeni döndür
+   - Veri yoksa "Veri bulunamadı" mesajı göster
 
-RENK SİSTEMİ - KESİNLİKLE UYULMALI:
-- Sabit renk KULLANMA (text-red-500, bg-blue-600 gibi)
-- Sadece CSS değişkenlerini kullan:
-  * Ana renkler: 'text-primary', 'bg-primary', 'text-primary-foreground'
-  * İkincil: 'text-secondary', 'bg-secondary', 'text-secondary-foreground'
-  * Arka plan: 'bg-background', 'bg-card', 'bg-muted'
-  * Metin: 'text-foreground', 'text-muted-foreground'
-  * Vurgu: 'text-accent', 'bg-accent', 'text-accent-foreground'
-  * Hata/Olumsuz: 'text-destructive', 'bg-destructive'
-  * Başarı/Olumlu: 'text-success', 'bg-success' (veya 'text-green-500' gibi sabit renk yerine hsl(var(--success)))
-  * Uyarı: 'text-warning', 'bg-warning'
-  * Kenarlık: 'border-border', 'border-input'
+❌ YASAK:
+   - import veya require ifadeleri
+   - TypeScript syntax (: any, interface, type vb.)
+   - JSX (<div>, </span> vb.)
+   - export default veya export
 
-KOYU MOD UYUMU - KESİNLİKLE UYULMALI:
-- Tüm renkler hem açık hem koyu modda okunabilir olmalı
-- 'text-white' veya 'text-black' KULLANMA, 'text-foreground' kullan
-- 'bg-white' veya 'bg-black' KULLANMA, 'bg-background' veya 'bg-card' kullan
-- Grafik renkleri için: 'hsl(var(--primary))', 'hsl(var(--destructive))', 'hsl(var(--accent))'
-- Gölgeler için: 'shadow-sm', 'shadow-md' (otomatik tema uyumlu)
+═══════════════════════════════════════════════════════════════════════════════
 
-DEĞER BAZLI RENKLENDIRME:
-- Pozitif değerler: 'text-success' veya style={{ color: 'hsl(var(--success))' }}
-- Negatif değerler: 'text-destructive' veya style={{ color: 'hsl(var(--destructive))' }}
-- Nötr değerler: 'text-muted-foreground'
+🎨 RENK SİSTEMİ (KESİNLİKLE UYULMALI!)
+───────────────────────────────────────────────────────────────────────────────
+❌ KESİNLİKLE YASAK:
+   - Sabit Tailwind renkleri: text-red-500, bg-blue-600, text-gray-400
+   - text-white, text-black, bg-white, bg-black
+   - Hex kodları: #3B82F6, #FF0000
+   - RGB değerleri: rgb(59, 130, 246), rgba(...)
 
-TAILWIND STİL STANDARTLARI:
-- Kart yapısı: 'bg-card rounded-xl border border-border shadow-sm p-4'
-- Başlıklar: 'text-foreground font-semibold'
-- Alt metinler: 'text-muted-foreground text-sm'
-- Hover efektleri: 'hover:bg-muted', 'hover:border-primary'
-- Boşluklar: 'space-y-4', 'gap-4', 'p-4', 'px-3 py-2'
-- Yuvarlak köşeler: 'rounded-md', 'rounded-lg', 'rounded-xl'
-- Animasyonlar: 'transition-all duration-200'
+✅ ZORUNLU CSS DEĞİŞKENLERİ:
+   | Kullanım       | Sınıf                  | Inline Style                    |
+   |----------------|------------------------|----------------------------------|
+   | Ana metin      | text-foreground        | color: 'hsl(var(--foreground))' |
+   | Alt metin      | text-muted-foreground  | color: 'hsl(var(--muted-foreground))' |
+   | Arka plan      | bg-card / bg-background| backgroundColor: 'hsl(var(--card))' |
+   | Pozitif değer  | text-success           | color: 'hsl(var(--success))'    |
+   | Negatif değer  | text-destructive       | color: 'hsl(var(--destructive))'|
+   | Vurgu/Primary  | text-primary           | color: 'hsl(var(--primary))'    |
+   | Uyarı          | text-warning           | color: 'hsl(var(--warning))'    |
+   | Kenarlık       | border-border          | borderColor: 'hsl(var(--border))'|
 
-GRAFİK RENKLERİ (Recharts için) - KESİNLİKLE props.colors DİZİSİNİ KULLAN:
-- Widget'a "colors" prop'u olarak bir renk dizisi geçilir
-- props.colors[0], props.colors[1], ... şeklinde kullan
-- Fallback olarak tema renkleri kullanılabilir ama öncelik colors prop'unda
-- Örnek: fill: props.colors ? props.colors[0] : 'hsl(var(--primary))'
-- Bar/Line/Area/Pie grafiklerde HER ZAMAN props.colors dizisini kullan
+═══════════════════════════════════════════════════════════════════════════════
 
-GRAFİK RENK KULLANIM ÖRNEĞİ:
-React.createElement(Bar, { 
-  dataKey: 'value', 
-  fill: props.colors && props.colors[0] ? props.colors[0] : 'hsl(var(--primary))' 
+📊 GRAFİK RENKLERİ (colors PROP - ÇOK ÖNEMLİ!)
+───────────────────────────────────────────────────────────────────────────────
+Widget'a otomatik olarak "colors" prop'u geçilir. Bu diziyi ZORUNLU kullan:
+
+// ZORUNLU helper fonksiyon - her widget'ın başında olmalı
+var getColor = function(index) {
+  return colors && colors[index % colors.length] 
+    ? colors[index % colors.length] 
+    : 'hsl(var(--primary))';
+};
+
+Recharts kullanımı:
+✅ Bar:    React.createElement(Recharts.Bar, { dataKey: 'value', fill: getColor(0) })
+✅ Line:   React.createElement(Recharts.Line, { dataKey: 'value', stroke: getColor(0) })
+✅ Area:   React.createElement(Recharts.Area, { dataKey: 'value', fill: getColor(0), stroke: getColor(0) })
+✅ Cell:   data.map(function(item, idx) { return React.createElement(Recharts.Cell, { key: idx, fill: getColor(idx) }); })
+
+❌ YANLIŞ: fill: 'hsl(220, 70%, 50%)'
+❌ YANLIŞ: fill: '#3B82F6'
+❌ YANLIŞ: stroke: 'blue'
+
+═══════════════════════════════════════════════════════════════════════════════
+
+💰 PARA BİRİMİ SİSTEMİ
+───────────────────────────────────────────────────────────────────────────────
+Her widget'ta kullanılacak standart para formatı:
+
+var CURRENCY_SYMBOLS = {
+  TRY: '₺', TL: '₺', USD: '$', EUR: '€', GBP: '£', 
+  CHF: 'Fr.', JPY: '¥', CNY: '¥', RUB: '₽'
+};
+
+var formatCurrency = function(value, currency) {
+  currency = currency || 'TRY';
+  var symbol = CURRENCY_SYMBOLS[currency] || currency + ' ';
+  var absValue = Math.abs(value);
+  var formatted;
+  
+  if (absValue >= 1000000000) {
+    formatted = (value / 1000000000).toFixed(1) + 'B';
+  } else if (absValue >= 1000000) {
+    formatted = (value / 1000000).toFixed(1) + 'M';
+  } else if (absValue >= 1000) {
+    formatted = (value / 1000).toFixed(0) + 'K';
+  } else {
+    formatted = value.toLocaleString('tr-TR');
+  }
+  
+  return symbol + formatted;
+};
+
+- Varsayılan para birimi: TRY (₺)
+- Çoklu para birimi: Veri içindeki "doviz" veya "currency" alanını kullan
+- Her satırda ilgili para birimi sembolünü göster
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📈 HEDEF/LİMİT ÇİZGİLERİ (ReferenceLine)
+───────────────────────────────────────────────────────────────────────────────
+Kullanıcı hedef veya limit belirtirse:
+
+React.createElement(Recharts.ReferenceLine, {
+  y: 500000,
+  stroke: 'hsl(var(--warning))',
+  strokeDasharray: '5 5',
+  label: { 
+    value: 'Hedef: ₺500K', 
+    position: 'right', 
+    fill: 'hsl(var(--foreground))',
+    fontSize: 12
+  }
 })
 
-Çoklu seri için:
-data.map(function(item, idx) {
-  return React.createElement(Cell, { 
-    key: idx, 
-    fill: props.colors && props.colors[idx % props.colors.length] ? props.colors[idx % props.colors.length] : 'hsl(var(--primary))' 
-  });
-})
+═══════════════════════════════════════════════════════════════════════════════
 
-YEDEK RENK DEĞERLERİ (colors prop yoksa):
-- Ana: 'hsl(var(--primary))'
-- İkincil: 'hsl(var(--accent))'
-- Üçüncül: 'hsl(var(--muted-foreground))'
-- Negatif/Hata: 'hsl(var(--destructive))'
-- Pozitif/Başarı: 'hsl(var(--success))'
+📉 TREND VE İSTATİSTİK ÖZELLİKLERİ
+───────────────────────────────────────────────────────────────────────────────
+1. TREND LINE (Linear Regression):
+   var calculateTrendLine = function(data, yField) {
+     var n = data.length;
+     if (n < 2) return null;
+     var sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+     data.forEach(function(item, i) {
+       var x = i;
+       var y = parseFloat(item[yField]) || 0;
+       sumX += x; sumY += y; sumXY += x * y; sumX2 += x * x;
+     });
+     var slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+     var intercept = (sumY - slope * sumX) / n;
+     return data.map(function(item, i) {
+       return Object.assign({}, item, { trend: intercept + slope * i });
+     });
+   };
 
-JSX KULLANMA! Şu şekilde yaz:
-YANLIŞ (JSX): <div className="p-4">Merhaba</div>
-DOĞRU: React.createElement('div', { className: 'p-4' }, 'Merhaba')
+   // Trend çizgisi ekle
+   React.createElement(Recharts.Line, {
+     dataKey: 'trend',
+     stroke: 'hsl(var(--muted-foreground))',
+     strokeDasharray: '8 4',
+     dot: false,
+     name: 'Trend'
+   })
 
-YANLIŞ (JSX): <span className="text-primary">{value}</span>
-DOĞRU: React.createElement('span', { className: 'text-primary' }, value)
+2. ORTALAMA ÇİZGİSİ:
+   var ortalama = data.reduce(function(a, b) { return a + (parseFloat(b.value) || 0); }, 0) / data.length;
+   React.createElement(Recharts.ReferenceLine, {
+     y: ortalama,
+     stroke: 'hsl(var(--accent))',
+     strokeDasharray: '3 3',
+     label: { value: 'Ort: ' + formatCurrency(ortalama), position: 'right' }
+   })
 
-İç içe elementler:
-React.createElement('div', { className: 'space-y-4' },
-  React.createElement('h2', { className: 'font-bold text-foreground' }, 'Başlık'),
-  React.createElement('p', { className: 'text-muted-foreground' }, 'Paragraf')
+3. MIN/MAX İŞARETLERİ:
+   React.createElement(Recharts.ReferenceDot, {
+     x: maxItem.name, y: maxItem.value,
+     r: 6, fill: 'hsl(var(--success))',
+     label: { value: 'Max', position: 'top' }
+   })
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🔗 BİRLEŞİK WIDGET YAPILARI (Composite)
+───────────────────────────────────────────────────────────────────────────────
+Kullanıcı isterse birleşik widget yap:
+
+1. KPI + LİSTE:
+   - Üstte özet (Toplam, Ortalama vb.)
+   - Altta scroll'lu liste
+
+2. GRAFİK + TABLO:
+   - Üst kısımda görselleştirme (Bar/Line/Pie)
+   - Alt kısımda detay tablosu
+
+3. MULTI-KPI + GRAFİK:
+   - Üstte yatay KPI satırı (3-5 kart)
+   - Altta zaman serisi grafiği
+
+Yapı örneği:
+React.createElement('div', { className: 'p-4 space-y-4 bg-card rounded-xl border border-border' },
+  // KPI Header
+  React.createElement('div', { className: 'flex items-center justify-between' },
+    React.createElement('div', null,
+      React.createElement('div', { className: 'text-2xl font-bold text-foreground' }, formatCurrency(toplam)),
+      React.createElement('div', { className: 'text-sm text-muted-foreground' }, kayitSayisi + ' kayıt')
+    ),
+    React.createElement('div', { className: değişim >= 0 ? 'text-success' : 'text-destructive' }, 
+      (değişim >= 0 ? '↑' : '↓') + ' %' + Math.abs(değişim).toFixed(1)
+    )
+  ),
+  // Grafik veya Liste...
 )
 
-Map kullanımı:
-React.createElement('div', null,
-  data.map(function(item, idx) {
-    return React.createElement('span', { key: idx }, item.name);
-  })
-)
+═══════════════════════════════════════════════════════════════════════════════
 
-Koşullu render (tema uyumlu):
-value > 0 
-  ? React.createElement('span', { className: 'text-success' }, '+' + value)
-  : React.createElement('span', { className: 'text-destructive' }, value)
+🎯 TAILWIND STİL STANDARTLARI
+───────────────────────────────────────────────────────────────────────────────
+Ana kart:       'p-4 space-y-4 bg-card rounded-xl border border-border shadow-sm'
+Başlık:         'text-xl font-bold text-foreground'
+Alt başlık:     'text-sm font-medium text-foreground'
+Açıklama:       'text-sm text-muted-foreground'
+Liste satırı:   'flex items-center justify-between p-3 rounded-lg hover:bg-muted/50'
+Badge:          'px-2 py-0.5 rounded-full text-xs font-medium'
+Pozitif badge:  'bg-success/20 text-success'
+Negatif badge:  'bg-destructive/20 text-destructive'
+İkon container: 'w-10 h-10 rounded-lg flex items-center justify-center bg-primary/10'
 
-Örnek tam kod (tema uyumlu, colors prop kullanımı):
+═══════════════════════════════════════════════════════════════════════════════
+
+📝 TAM ÖRNEK KOD
+───────────────────────────────────────────────────────────────────────────────
 function Widget({ data, colors }) {
   if (!data || data.length === 0) {
     return React.createElement('div', 
@@ -119,40 +234,36 @@ function Widget({ data, colors }) {
     );
   }
 
-  // colors prop'undan renk al, yoksa fallback kullan
+  // Renk helper - ZORUNLU
   var getColor = function(index) {
-    return colors && colors[index % colors.length] ? colors[index % colors.length] : 'hsl(var(--primary))';
+    return colors && colors[index % colors.length] 
+      ? colors[index % colors.length] 
+      : 'hsl(var(--primary))';
+  };
+
+  // Para formatı helper
+  var formatCurrency = function(value, currency) {
+    currency = currency || 'TRY';
+    var symbols = { TRY: '₺', USD: '$', EUR: '€' };
+    var symbol = symbols[currency] || '₺';
+    var absValue = Math.abs(value);
+    if (absValue >= 1000000) return symbol + (value / 1000000).toFixed(1) + 'M';
+    if (absValue >= 1000) return symbol + (value / 1000).toFixed(0) + 'K';
+    return symbol + value.toLocaleString('tr-TR');
   };
 
   var toplam = data.reduce(function(acc, item) {
     return acc + (parseFloat(item.toplambakiye) || 0);
   }, 0);
 
-  var formatCurrency = function(value) {
-    if (Math.abs(value) >= 1000000) return '₺' + (value / 1000000).toFixed(1) + 'M';
-    if (Math.abs(value) >= 1000) return '₺' + (value / 1000).toFixed(0) + 'K';
-    return '₺' + value.toLocaleString('tr-TR');
-  };
-
-  // Recharts Bar örneği - colors prop kullanımı
-  // React.createElement(Recharts.BarChart, {...},
-  //   React.createElement(Recharts.Bar, { 
-  //     dataKey: 'value', 
-  //     fill: getColor(0) 
-  //   })
-  // )
-
-  // PieChart Cell örneği - colors prop kullanımı
-  // data.map(function(item, idx) {
-  //   return React.createElement(Recharts.Cell, { 
-  //     key: idx, 
-  //     fill: getColor(idx) 
-  //   });
-  // })
-
-  return React.createElement('div', { className: 'p-4 space-y-4 bg-card rounded-xl border border-border' },
-    React.createElement('div', { className: 'text-2xl font-bold text-foreground' }, formatCurrency(toplam)),
-    React.createElement('div', { className: 'text-sm text-muted-foreground' }, data.length + ' kayıt'),
+  return React.createElement('div', 
+    { className: 'p-4 space-y-4 bg-card rounded-xl border border-border' },
+    React.createElement('div', { className: 'text-2xl font-bold text-foreground' }, 
+      formatCurrency(toplam)
+    ),
+    React.createElement('div', { className: 'text-sm text-muted-foreground' }, 
+      data.length + ' kayıt'
+    ),
     toplam >= 0
       ? React.createElement('span', { className: 'text-success text-sm' }, '↑ Pozitif')
       : React.createElement('span', { className: 'text-destructive text-sm' }, '↓ Negatif')
@@ -161,62 +272,57 @@ function Widget({ data, colors }) {
 
 return Widget;
 
+═══════════════════════════════════════════════════════════════════════════════
+
 SADECE JavaScript kodu döndür, açıklama veya markdown formatı kullanma.`;
 
 // Kod iyileştirme/chat için system prompt
 const getRefinementSystemPrompt = () => `Sen bir React widget geliştirme uzmanısın. Kullanıcının mevcut kodunu isteklerine göre güncelleyeceksin.
 
-ÖNEMLİ KURALLAR:
+═══════════════════════════════════════════════════════════════════════════════
+                    KOD İYİLEŞTİRME - ZORUNLU KURALLAR
+═══════════════════════════════════════════════════════════════════════════════
+
+📋 TEMEL KURALLAR:
 1. JSX KULLANMA! Sadece React.createElement kullan
 2. Mevcut kod yapısını koru, sadece istenen değişiklikleri yap
-3. Animasyonlar için Tailwind animate-* sınıfları kullan
-4. En sonda "return Widget;" veya benzeri export olmalı
-5. Widget fonksiyonu "function Widget({ data, colors })" formatında olmalı - colors prop zorunlu!
+3. En sonda "return Widget;" olmalı
+4. Widget fonksiyonu "function Widget({ data, colors })" formatında - colors ZORUNLU!
 
-=== GRAFİK RENK PALETİ SİSTEMİ (ÇOK ÖNEMLİ!) ===
-
-Widget'a otomatik olarak "colors" prop'u geçirilir. Bu diziden renk almak için:
+🎨 GRAFİK RENK PALETİ (ÇOK ÖNEMLİ!):
+Widget'a otomatik "colors" prop'u geçilir. Bu diziyi ZORUNLU kullan:
 
 var getColor = function(index) {
-  return colors && colors[index % colors.length] ? colors[index % colors.length] : 'hsl(var(--primary))';
+  return colors && colors[index % colors.length] 
+    ? colors[index % colors.length] 
+    : 'hsl(var(--primary))';
 };
 
-- Bar/Line/Area grafiklerinde: fill: getColor(0), stroke: getColor(0)
-- PieChart Cell'lerinde: data.map(function(item, idx) { return React.createElement(Cell, { key: idx, fill: getColor(idx) }); })
-- Legend renkleri: getColor(0), getColor(1), getColor(2), ...
+- Bar/Line/Area: fill: getColor(0), stroke: getColor(0)
+- PieChart Cell: fill: getColor(idx)
 
-=== ZORUNLU STİL KURALLARI (HER ZAMAN UYGULANMALI) ===
+🚫 YASAKLAR:
+- text-white, text-black, bg-white, bg-black KULLANMA
+- text-red-500, bg-blue-600 gibi sabit renkler KULLANMA
+- #RRGGBB hex kodları KULLANMA
+- rgb(), rgba() KULLANMA
 
-RENK DEĞİŞİKLİKLERİ İÇİN:
-- Sabit renk KULLANMA (text-red-500, bg-blue-600, text-white, bg-black gibi)
-- Tema uyumlu CSS değişkenleri kullan:
-  * Ana: 'text-primary', 'bg-primary', 'text-primary-foreground'
-  * Arka plan: 'bg-background', 'bg-card', 'bg-muted'
-  * Metin: 'text-foreground', 'text-muted-foreground'
-  * Pozitif: 'text-success', 'bg-success'
-  * Negatif: 'text-destructive', 'bg-destructive'
-  * Uyarı: 'text-warning', 'bg-warning'
-  * Vurgu: 'text-accent', 'bg-accent'
-  * Kenarlık: 'border-border'
+✅ ZORUNLU:
+- Metin: text-foreground, text-muted-foreground
+- Arka plan: bg-card, bg-background, bg-muted
+- Pozitif: text-success
+- Negatif: text-destructive
+- Grafik: getColor(index) fonksiyonu
 
-YEDEK GRAFİK RENKLERİ (colors prop yoksa):
-- 'hsl(var(--primary))', 'hsl(var(--destructive))', 'hsl(var(--success))', 'hsl(var(--accent))'
+💰 PARA BİRİMİ:
+- Varsayılan: ₺ (TRY)
+- Desteklenen: $, €, £, ¥, ₽, Fr.
+- Format: K (bin), M (milyon), B (milyar)
 
-KOYU MOD:
-- Tüm değişiklikler hem açık hem koyu modda çalışmalı
-- 'text-white/black' yerine 'text-foreground'
-- 'bg-white/black' yerine 'bg-background' veya 'bg-card'
-
-JSX KULLANMA! React.createElement kullan:
-YANLIŞ: <div>...</div>
-DOĞRU: React.createElement('div', null, ...)
-
-Kod güncellemesi yaparken:
-- Sadece istenen kısımları değiştir
-- Mevcut hesaplamaları ve mantığı koru
-- Yeni özellik eklerken mevcut yapıyı bozma
-- Renkleri her zaman tema uyumlu yap
-- Grafik renkleri için KESİNLİKLE colors prop'unu kullan
+📈 TREND/HEDEF:
+- ReferenceLine ile hedef çizgisi
+- Trend line için Line overlay (strokeDasharray)
+- Average line için ReferenceLine
 
 SADECE güncellenmiş JavaScript kodunu döndür, açıklama ekleme.`;
 
@@ -238,7 +344,7 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY yapılandırılmamış");
     }
 
-    console.log("[AI Code Generator] Mod:", mode || 'generate', "- Kod üretiliyor...");
+    console.log("[AI Code Generator v2.0] Mod:", mode || 'generate', "- Kod üretiliyor...");
 
     // Mesajları oluştur
     let messages: Array<{ role: string; content: string }>;
@@ -268,9 +374,9 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-3-pro-preview",
         messages,
-        max_tokens: 4000,
+        max_tokens: 8000,
         temperature: 0.7,
       }),
     });
@@ -304,7 +410,7 @@ serve(async (req) => {
       .replace(/```\n?/g, "")
       .trim();
 
-    console.log("[AI Code Generator] Kod üretildi, uzunluk:", generatedCode.length);
+    console.log("[AI Code Generator v2.0] Kod üretildi, uzunluk:", generatedCode.length);
 
     return new Response(
       JSON.stringify({ 
