@@ -140,7 +140,11 @@ export function BuilderWidgetRenderer({
 }: BuilderWidgetRendererProps) {
   // CSS izolasyonu - konteyner stillerinin widget'ı etkilememesi için
   const isolatedClassName = cn(className, 'isolate overflow-visible');
-  const { data, rawData, isLoading, error, refetch } = useDynamicWidgetData(builderConfig);
+  // Global filtreler - widget verilerini filtrelemek için
+  const { filters } = useGlobalFilters();
+  
+  // Veri çekme - global filtreler ile
+  const { data, rawData, isLoading, error, refetch } = useDynamicWidgetData(builderConfig, filters);
   
   // Widget bazında kullanıcı renk paleti - widgetId ile çağırarak widget-specific override desteklenir
   const { colors: userColors } = useChartColorPalette({ widgetId });
@@ -401,11 +405,12 @@ export function BuilderWidgetRenderer({
         'LucideIcons',
         'Recharts',
         'colors',
+        'filters',  // Global filtreler - widget'lar aktif filtreleri görebilir
         customCode
       );
       
-      // Custom widget'a colors prop olarak kullanıcının seçtiği paleti geç
-      const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors);
+      // Custom widget'a colors ve filters prop'ları geç
+      const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters);
       
       if (typeof WidgetComponent !== 'function') {
         return (
@@ -433,8 +438,8 @@ export function BuilderWidgetRenderer({
                 Widget render hatası
               </div>
             }>
-              {/* Custom widget'a data ve colors prop'ları geçirilir */}
-              <WidgetComponent data={filteredData} colors={userColors} />
+              {/* Custom widget'a data, colors ve filters prop'ları geçirilir */}
+              <WidgetComponent data={filteredData} colors={userColors} filters={filters} />
             </ErrorBoundary>
           </CardContent>
         </Card>

@@ -254,10 +254,7 @@ function DashboardContent() {
         {/* Global Filter Bar */}
         <GlobalFilterBar 
           className="mb-3" 
-          showSearch={true}
           showDateFilter={true}
-          showSalesRepFilter={true}
-          showCardTypeFilter={true}
         />
 
         {/* DIA Connection Status */}

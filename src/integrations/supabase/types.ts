@@ -537,6 +537,33 @@ export type Database = {
         }
         Relationships: []
       }
+      user_filter_preferences: {
+        Row: {
+          created_at: string | null
+          filter_order: string[] | null
+          id: string
+          updated_at: string | null
+          user_id: string
+          visible_filters: string[] | null
+        }
+        Insert: {
+          created_at?: string | null
+          filter_order?: string[] | null
+          id?: string
+          updated_at?: string | null
+          user_id: string
+          visible_filters?: string[] | null
+        }
+        Update: {
+          created_at?: string | null
+          filter_order?: string[] | null
+          id?: string
+          updated_at?: string | null
+          user_id?: string
+          visible_filters?: string[] | null
+        }
+        Relationships: []
+      }
       user_pages: {
         Row: {
           created_at: string

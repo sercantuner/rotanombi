@@ -227,9 +227,40 @@ Negatif badge:  'bg-destructive/20 text-destructive'
 
 ═══════════════════════════════════════════════════════════════════════════════
 
+🔍 GLOBAL FİLTRE SİSTEMİ
+───────────────────────────────────────────────────────────────────────────────
+Widget'a "filters" prop'u da geçilir. Bu prop aktif global filtreleri içerir:
+
+function Widget({ data, colors, filters }) {
+  // filters objesi örneği:
+  // {
+  //   tarihAraligi: { period: 'this_month', field: 'tarih' },
+  //   satisTemsilcisi: ['Ali Yılmaz'],
+  //   ozelkod1: [], ozelkod2: [], ozelkod3: [],
+  //   cariKartTipi: ['AL', 'AS'],
+  //   sube: [], depo: [], sehir: [],
+  //   durum: 'hepsi', gorunumModu: 'hepsi',
+  //   searchTerm: '',
+  //   _diaAutoFilters: [{ field: 'satiselemani', value: 'ALI', isLocked: true }]
+  // }
+
+  // NOT: "data" zaten filtrelenmiş olarak gelir!
+  // Widget içinde tekrar filtreleme YAPMA.
+  // "filters" prop'unu sadece:
+  //   1) Hangi filtrelerin aktif olduğunu bilgi olarak göstermek için
+  //   2) Koşullu render (örn: tarih filtresi aktifse "Son X gün" göster)
+  // kullan.
+}
+
+Aktif filtre kontrolü:
+var hasSalesRepFilter = filters && filters.satisTemsilcisi && filters.satisTemsilcisi.length > 0;
+var hasDateFilter = filters && filters.tarihAraligi && filters.tarihAraligi.period !== 'all';
+
+═══════════════════════════════════════════════════════════════════════════════
+
 📝 TAM ÖRNEK KOD
 ───────────────────────────────────────────────────────────────────────────────
-function Widget({ data, colors }) {
+function Widget({ data, colors, filters }) {
   if (!data || data.length === 0) {
     return React.createElement('div', 
       { className: 'flex items-center justify-center h-48 text-muted-foreground' },
@@ -258,6 +289,11 @@ function Widget({ data, colors }) {
   var toplam = data.reduce(function(acc, item) {
     return acc + (parseFloat(item.toplambakiye) || 0);
   }, 0);
+  
+  // Aktif filtre bilgisi gösterimi (opsiyonel)
+  var activeFilterInfo = filters && filters.satisTemsilcisi && filters.satisTemsilcisi.length > 0 
+    ? filters.satisTemsilcisi.join(', ') 
+    : null;
 
   return React.createElement('div', 
     { className: 'p-4 space-y-4 bg-card rounded-xl border border-border' },
@@ -267,6 +303,11 @@ function Widget({ data, colors }) {
     React.createElement('div', { className: 'text-sm text-muted-foreground' }, 
       data.length + ' kayıt'
     ),
+    activeFilterInfo 
+      ? React.createElement('div', { className: 'text-xs text-muted-foreground' }, 
+          '🔍 ' + activeFilterInfo
+        )
+      : null,
     toplam >= 0
       ? React.createElement('span', { className: 'text-success text-sm' }, '↑ Pozitif')
       : React.createElement('span', { className: 'text-destructive text-sm' }, '↓ Negatif')
@@ -297,7 +338,9 @@ const getRefinementSystemPrompt = () => `Sen bir React widget geliştirme uzman�
 1. JSX KULLANMA! Sadece React.createElement kullan
 2. Mevcut kod yapısını koru, sadece istenen değişiklikleri yap
 3. En sonda "return Widget;" olmalı
-4. Widget fonksiyonu "function Widget({ data, colors })" formatında - colors ZORUNLU!
+4. Widget fonksiyonu "function Widget({ data, colors, filters })" formatında - colors ve filters ZORUNLU!
+   - filters: Aktif global filtreler objesi (tarihAraligi, satisTemsilcisi, cariKartTipi, sube, depo, vb.)
+   - "data" zaten filtrelenmiş gelir, filters sadece bilgi amaçlıdır
 
 🎨 GRAFİK RENK PALETİ (ÇOK ÖNEMLİ!):
 Widget'a otomatik "colors" prop'u geçilir. Bu diziyi ZORUNLU kullan:
