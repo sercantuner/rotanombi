@@ -3,6 +3,7 @@
 import React, { useState, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import { WidgetBuilderConfig, AggregationType, DatePeriod } from '@/lib/widgetBuilderTypes';
 import { useDynamicWidgetData } from '@/hooks/useDynamicWidgetData';
+import { useChartColorPalette } from '@/hooks/useChartColorPalette';
 import { DrillDownModal } from './DrillDownModal';
 import { WidgetDateFilter, getDateRangeForPeriod } from './WidgetDateFilter';
 import { WidgetFeedbackButton } from './WidgetFeedbackButton';
@@ -19,7 +20,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useDashboardFilters } from '@/contexts/DashboardFilterContext';
 import { 
-  COLOR_PALETTES, 
+  COLOR_PALETTES as CHART_UTILS_PALETTES, 
   PaletteKey, 
   isDateField, 
   detectDateGroupingType, 
@@ -141,6 +142,9 @@ export function BuilderWidgetRenderer({
   const isolatedClassName = cn(className, 'isolate overflow-visible');
   const { data, rawData, isLoading, error, refetch } = useDynamicWidgetData(builderConfig);
   
+  // Kullanıcı renk paleti - ayarlardan alınır
+  const { colors: userColors } = useChartColorPalette();
+  
   // Tarih filtresi state
   const [selectedDatePeriod, setSelectedDatePeriod] = useState<DatePeriod>(
     builderConfig.dateFilter?.defaultPeriod || 'all'
@@ -157,16 +161,15 @@ export function BuilderWidgetRenderer({
   const vizChart = builderConfig.visualization?.chart;
   const fieldWells = builderConfig.fieldWells;
   
-  // Renk paleti ve görsel ayarlar - her widget kendi ayarlarını kullanır
-  const colorPalette = chartSettings.colorPalette || 'default';
+  // Renk paleti - kullanıcının seçtiği palet öncelikli, yoksa widget-level palet
   const showGrid = chartSettings.showGrid !== false;
   const legendPosition = chartSettings.legendPosition || 'bottom';
   const displayLimit = chartSettings.displayLimit || 10;
   const showTrendLine = chartSettings.showTrendLine || false;
   const showAverageLine = chartSettings.showAverageLine || false;
   
-  // Aktif renk paleti - her widget kendi chartSettings.colorPalette değerini kullanır
-  const activeColors = COLOR_PALETTES[colorPalette as PaletteKey] || COLOR_PALETTES.default;
+  // Aktif renk paleti - kullanıcının tercih ettiği palet kullanılır
+  const activeColors = userColors;
   
   // X ve Y ekseni alanlarını belirle - fieldWells öncelikli
   const xAxisField = fieldWells?.xAxis?.field || vizChart?.xAxis?.field || '';

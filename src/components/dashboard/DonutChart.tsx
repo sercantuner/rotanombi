@@ -1,5 +1,6 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { useChartColorPalette } from '@/hooks/useChartColorPalette';
 
 interface DonutChartData {
   name: string;
@@ -19,17 +20,6 @@ interface DonutChartProps {
   colors?: string[];
 }
 
-const DEFAULT_COLORS = [
-  'hsl(var(--primary))',
-  'hsl(var(--success))',
-  'hsl(var(--warning))',
-  'hsl(var(--destructive))',
-  'hsl(220 70% 50%)',
-  'hsl(280 70% 50%)',
-  'hsl(180 70% 50%)',
-  'hsl(320 70% 50%)',
-];
-
 export function DonutChart({
   data,
   title,
@@ -38,8 +28,11 @@ export function DonutChart({
   onSegmentClick,
   selectedSegments = [],
   isLoading,
-  colors = DEFAULT_COLORS,
+  colors: propColors,
 }: DonutChartProps) {
+  // Kullanıcının seçtiği paleti kullan
+  const { colors: userColors } = useChartColorPalette();
+  const colors = propColors || userColors;
   const formatCurrency = (value: number) => {
     if (value >= 1000000) return `₺${(value / 1000000).toFixed(1)}M`;
     if (value >= 1000) return `₺${(value / 1000).toFixed(0)}K`;

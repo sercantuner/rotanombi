@@ -17,6 +17,7 @@ export type Database = {
       app_settings: {
         Row: {
           auto_refresh: boolean | null
+          chart_color_palette: string | null
           created_at: string
           id: string
           language: string | null
@@ -28,6 +29,7 @@ export type Database = {
         }
         Insert: {
           auto_refresh?: boolean | null
+          chart_color_palette?: string | null
           created_at?: string
           id?: string
           language?: string | null
@@ -39,6 +41,7 @@ export type Database = {
         }
         Update: {
           auto_refresh?: boolean | null
+          chart_color_palette?: string | null
           created_at?: string
           id?: string
           language?: string | null

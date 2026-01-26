@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 interface UserSettings {
   useMockData: boolean;
   isDemoAccount: boolean;
+  chart_color_palette: string;
 }
 
 interface UserSettingsContextType {
@@ -27,6 +28,9 @@ interface UserSettingsContextType {
   // Mock data toggle
   useMockData: boolean;
   setUseMockData: (value: boolean) => Promise<void>;
+  
+  // Chart color palette
+  updateSettings: (updates: Partial<Pick<UserSettings, 'chart_color_palette'>>) => Promise<void>;
   
   // Layout management
   getPageLayout: (page: WidgetCategory) => PageLayout;
@@ -62,6 +66,7 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
   const [settings, setSettings] = useState<UserSettings>({
     useMockData: false,
     isDemoAccount: false,
+    chart_color_palette: 'corporate',
   });
   
   // Layouts per page
@@ -93,10 +98,18 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
         .eq('user_id', user.id)
         .single();
 
+      // Load app_settings for chart palette
+      const { data: appSettings } = await supabase
+        .from('app_settings')
+        .select('chart_color_palette')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
       if (profile) {
         setSettings({
           useMockData: profile.use_mock_data || false,
           isDemoAccount: profile.is_demo_account || false,
+          chart_color_palette: appSettings?.chart_color_palette || 'corporate',
         });
       }
 
@@ -334,11 +347,37 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     }
   };
 
+  // ============ UPDATE SETTINGS ============
+  
+  const updateSettings = async (updates: Partial<Pick<UserSettings, 'chart_color_palette'>>) => {
+    if (!user) return;
+    
+    try {
+      // Update app_settings table
+      const { error } = await supabase
+        .from('app_settings')
+        .upsert({
+          user_id: user.id,
+          ...updates,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+
+      setSettings(prev => ({ ...prev, ...updates }));
+      toast.success('Ayarlar kaydedildi');
+    } catch (error) {
+      console.error('Error updating settings:', error);
+      toast.error('Ayar kaydedilemedi');
+    }
+  };
+
   const value: UserSettingsContextType = {
     settings,
     isLoading,
     useMockData: settings.useMockData,
     setUseMockData,
+    updateSettings,
     getPageLayout,
     savePageLayout,
     resetPageLayout,
