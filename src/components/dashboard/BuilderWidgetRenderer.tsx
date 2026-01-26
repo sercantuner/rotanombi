@@ -135,28 +135,44 @@ function PieDonutChartWithResponsiveLegend({
   ChartHeader,
 }: PieDonutChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const [legendExpanded, setLegendExpanded] = useState(false);
   const [hasEnoughSpace, setHasEnoughSpace] = useState(true); // Varsayılan göster, ölçüm sonrası karar ver
+  const [contentHeight, setContentHeight] = useState(0);
   
   // Legend yüksekliği konteyner yüksekliğinin %40'ından fazla mı kontrol et
   useEffect(() => {
     const checkRatio = () => {
       if (containerRef.current && measureRef.current) {
-        const containerHeight = containerRef.current.offsetHeight;
-        const legendHeight = measureRef.current.offsetHeight;
-        const headerHeight = 56; // Header + padding
-        const toggleHeight = 28; // Toggle button
-        const availableHeight = containerHeight - headerHeight - toggleHeight;
-        
-        if (availableHeight <= 0) {
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const headerRect = headerRef.current?.getBoundingClientRect();
+
+        // Legend eşiğini toplam kart yüksekliğinin değil, içerik alanının (header hariç) %40'ı olarak hesapla
+        const computedContentHeight = Math.max(0, containerRect.height - (headerRect?.height || 0));
+        setContentHeight(computedContentHeight);
+
+        // Ölçüm div'inin genişliği gerçek kart genişliğine yakın olmalı; aksi halde legend yüksekliği olduğundan düşük ölçülüyor
+        const targetLegendWidth = Math.max(220, Math.min(containerRect.width, 380));
+        measureRef.current.style.width = `${targetLegendWidth}px`;
+
+        // scrollHeight: görünmez olsa bile gerçek içerik yüksekliğini daha doğru verir
+        const legendHeight = measureRef.current.scrollHeight || measureRef.current.offsetHeight;
+        const threshold = computedContentHeight * 0.4;
+
+        // Çok küçük alanlarda legend'i otomatik kapat
+        if (computedContentHeight <= 0) {
           setHasEnoughSpace(false);
+          setLegendExpanded(false);
           return;
         }
-        
-        // Legend, mevcut alanın %40'ından az yer kaplıyorsa göster
-        const legendRatio = legendHeight / availableHeight;
-        setHasEnoughSpace(legendRatio <= 0.4);
+
+        const enough = legendHeight <= threshold;
+        setHasEnoughSpace(enough);
+        if (enough) {
+          // Alan yeterliyse manuel açma durumunu sıfırla (buton da kaybolsun)
+          setLegendExpanded(false);
+        }
       }
     };
     
@@ -216,15 +232,17 @@ function PieDonutChartWithResponsiveLegend({
       {/* Görünmez ölçüm div'i - legend yüksekliğini hesaplamak için */}
       <div 
         ref={measureRef}
-        className="absolute opacity-0 pointer-events-none grid grid-cols-2 gap-x-3 gap-y-0.5 w-full max-w-[380px]"
-        style={{ visibility: 'hidden', position: 'fixed', top: -9999 }}
+        className="absolute opacity-0 pointer-events-none grid grid-cols-2 gap-x-3 gap-y-0.5 max-w-[380px]"
+        style={{ visibility: 'hidden', position: 'fixed', top: -9999, left: 0 }}
         aria-hidden="true"
       >
         <LegendItems />
       </div>
       
       <Card ref={containerRef} className={cn(isolatedClassName, 'overflow-hidden h-full flex flex-col')}>
-        <ChartHeader icon="PieChart" />
+        <div ref={headerRef} className="flex-shrink-0">
+          <ChartHeader icon="PieChart" />
+        </div>
         <CardContent className="flex-1 flex flex-col items-center py-2 min-h-0 overflow-hidden">
           {/* Grafik alanı - flex-1 ile kalan alanı doldur, min yükseklik garantili */}
           <div className="w-full max-w-[280px] mx-auto relative flex-1 min-h-[120px]">
@@ -281,30 +299,40 @@ function PieDonutChartWithResponsiveLegend({
             )}
           </div>
           
-          {/* Legend toggle butonu - yer yoksa göster */}
+          {/* Legend toggle butonu - legend otomatik gizlendiyse her zaman göster */}
           {!hasEnoughSpace && (
-            <button
-              onClick={() => setLegendExpanded(!legendExpanded)}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded hover:bg-muted/50"
-            >
-              <span>{legendExpanded ? 'Gizle' : 'Detaylar'}</span>
-              <LucideIcons.ChevronDown 
-                className={cn(
-                  "h-3 w-3 transition-transform duration-200",
-                  legendExpanded && "rotate-180"
-                )} 
-              />
-            </button>
+            <div className="w-full flex items-center justify-center flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setLegendExpanded((v) => !v)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded hover:bg-muted/50"
+              >
+                <span>{legendExpanded ? 'Gizle' : 'Detaylar'}</span>
+                <LucideIcons.ChevronDown 
+                  className={cn(
+                    "h-3 w-3 transition-transform duration-200",
+                    legendExpanded && "rotate-180"
+                  )} 
+                />
+              </button>
+            </div>
           )}
-          {/* Legend - görünürlük kontrollü */}
+
+          {/* Legend - otomatik gizle + açılınca scroll */}
           {(hasEnoughSpace || legendExpanded) && (
             <div 
               className={cn(
-                "grid grid-cols-2 gap-x-3 gap-y-0.5 w-full max-w-[380px] flex-shrink-0",
+                "w-full max-w-[380px] flex-shrink-0",
                 !hasEnoughSpace && legendExpanded && "mt-2 pt-2 border-t border-border"
               )}
+              style={!hasEnoughSpace && legendExpanded && contentHeight > 0
+                ? { maxHeight: Math.max(96, Math.floor(contentHeight * 0.6)), overflowY: 'auto' as const }
+                : undefined
+              }
             >
-              <LegendItems />
+              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                <LegendItems />
+              </div>
             </div>
           )}
         </CardContent>
