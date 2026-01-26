@@ -429,17 +429,19 @@ export function BuilderWidgetRenderer({
       }
       
       return (
-        <Card className={isolatedClassName}>
+        <Card className={cn(isolatedClassName, 'h-full flex flex-col')}>
           <ChartHeader icon="Code" />
-          <CardContent>
+          <CardContent className="flex-1 flex flex-col min-h-0 p-4">
             <ErrorBoundary fallback={
               <div className="text-destructive text-sm flex items-center gap-2 py-4">
                 <AlertCircle className="h-4 w-4" />
                 Widget render hatası
               </div>
             }>
-              {/* Custom widget'a data, colors ve filters prop'ları geçirilir */}
-              <WidgetComponent data={filteredData} colors={userColors} filters={filters} />
+              {/* Custom widget'a data, colors ve filters prop'ları geçirilir - h-full wrapper ile */}
+              <div className="flex-1 h-full min-h-0 flex flex-col">
+                <WidgetComponent data={filteredData} colors={userColors} filters={filters} />
+              </div>
             </ErrorBoundary>
           </CardContent>
         </Card>

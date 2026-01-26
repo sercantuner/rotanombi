@@ -395,6 +395,42 @@ export function GlobalFilterBar({
                 </button>
               </Badge>
             ))}
+
+            {filters.ozelkod1.map((k) => (
+              <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                #1 {k}
+                <button 
+                  onClick={() => toggleArrayFilter('ozelkod1', k)}
+                  className="ml-1 hover:bg-blue-500/20 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
+
+            {filters.ozelkod2.map((k) => (
+              <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                #2 {k}
+                <button 
+                  onClick={() => toggleArrayFilter('ozelkod2', k)}
+                  className="ml-1 hover:bg-purple-500/20 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
+
+            {filters.ozelkod3.map((k) => (
+              <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-orange-500/10 text-orange-600 dark:text-orange-400">
+                #3 {k}
+                <button 
+                  onClick={() => toggleArrayFilter('ozelkod3', k)}
+                  className="ml-1 hover:bg-orange-500/20 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
             
             {/* Locked DIA filters */}
             {filters._diaAutoFilters.map((f, idx) => (
