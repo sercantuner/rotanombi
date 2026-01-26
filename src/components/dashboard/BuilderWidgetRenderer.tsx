@@ -390,7 +390,7 @@ export function BuilderWidgetRenderer({
     );
   }
 
-  // Custom Code Widget
+  // Custom Code Widget - colors prop'u ile palet desteği
   if (vizType === 'custom' && (builderConfig as any).customCode) {
     const customCode = (builderConfig as any).customCode;
     
@@ -400,10 +400,12 @@ export function BuilderWidgetRenderer({
         'data',
         'LucideIcons',
         'Recharts',
+        'colors',
         customCode
       );
       
-      const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope);
+      // Custom widget'a colors prop olarak kullanıcının seçtiği paleti geç
+      const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors);
       
       if (typeof WidgetComponent !== 'function') {
         return (
@@ -431,7 +433,8 @@ export function BuilderWidgetRenderer({
                 Widget render hatası
               </div>
             }>
-              <WidgetComponent data={filteredData} />
+              {/* Custom widget'a data ve colors prop'ları geçirilir */}
+              <WidgetComponent data={filteredData} colors={userColors} />
             </ErrorBoundary>
           </CardContent>
         </Card>
