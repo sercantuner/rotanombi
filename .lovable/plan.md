@@ -1,381 +1,379 @@
 
-# Global Filtre Sistemi - Kapsamlı Güncelleme Planı
+# Widget Düzenleme Aracı - Kapsamlı Yeniden Tasarım Planı
 
 ## Özet
-Bu plan, global filtrelerin tüm widget'lar (özellikle Nakit Akış Projeksiyonu) tarafından kullanılmasını, kullanıcı bazlı filtre yönetimi UI'ını ve AI widget kurallarına filtre bilgisi eklenmesini kapsar.
+Widget Builder ve CustomCodeWidgetBuilder bileşenlerini tam kapsamlı bir düzenleme aracına dönüştürmek için aşağıdaki değişiklikler yapılacak.
 
 ---
 
-## Bölüm 1: Tespit Edilen Sorunlar
+## Bölüm 1: Tespit Edilen Sorunlar ve Çözümler
 
-### 1.1 Nakit Akış Projeksiyonu Filtrelere Tepki Vermiyor
+### 1.1 İkonların Konumu
+**Sorun:** İkonlar şu an "Ayarlar" sekmesinde ikon dropdown içinde.
+**Çözüm:** İkonları en sona (kaydet butonlarının yanına) taşıyacağız. İsteğe bağlı ekleme butonu olacak.
 
-**Kök Sebep:**
-`BuilderWidgetRenderer.tsx` bileşeninde `useGlobalFilters` hook'u import edilmiş ancak **hiç kullanılmamış**. `useDynamicWidgetData(builderConfig)` çağrısı, ikinci parametre olan `globalFilters` argümanı olmadan yapılıyor.
+### 1.2 Boyutlar - Önizleme ve Çoklu Seçim
+**Sorun:** Boyut seçimi tek seçim (dropdown).
+**Çözüm:** Boyutları görsel kartlar halinde göstereceğiz. Her kart tıklanabilir önizleme içerecek. Çoklu boyut seçimi desteklenecek (varsayılan + alternatif boyutlar).
 
-```text
-Mevcut Durum (Satır 143):
-  useDynamicWidgetData(builderConfig)  ← globalFilters YOK!
+### 1.3 Sayfa Ataması
+**Sorun:** Sayfa seçimi en üstte.
+**Çözüm:** Sayfa atamasını en sona alacağız. ComboBox ile birden fazla sayfaya eklenebilir olacak.
 
-Olması Gereken:
-  useDynamicWidgetData(builderConfig, filters)  ← filters eklenmeli
+### 1.4 Veri Sekmesinde "Mevcut Alanlar"
+**Sorun:** Veri kaynağı seçim alanında "Mevcut Alanlar" bölümü gereksiz gösteriliyor.
+**Çözüm:** "Mevcut Alanlar" kısmını kaldıracağız.
+
+### 1.5 Birleştirilmiş Alanlar Görselleştirmesi
+**Sorun:** Birleştirilen sorguların sonucu net görünmüyor.
+**Çözüm:** MultiQueryBuilder'da birleştirme sonucunu görsel bir diyagram şeklinde göstereceğiz:
+```
+[Cari Kart] ──LEFT JOIN──> [Vade Bakiye] = Zenginleştirilmiş Veri
+     └─ carikartkodu ─────────┘
 ```
 
-### 1.2 Vade Yaşlandırma Verisinde Filtrelenebilir Alanlar Yok
+### 1.6 AI Kod Üret - Veri Analizi
+**Sorun:** AI sekmesinde gereksiz "Veri Analizi" paneli var.
+**Çözüm:** Veri Analizi panelini kaldıracağız. Yerine tüm sorgu alanlarını (birleşik sorgular dahil) liste halinde göstereceğiz.
 
-`Cari_vade_bakiye` veri kaynağı `__borchareketler` içeriyor ancak üst seviyede `satiselemani`, `ozelkod1kod`, `carikarttipi` gibi alanlar yok. Dolayısıyla `applyGlobalFilters` fonksiyonu bu alanları bulamıyor.
+### 1.7 Widget Düzenleme - Önizle ve Kaydet Çalışmıyor
+**Sorun:** Mevcut widget düzenlerken önizleme ve kaydetme çalışmıyor.
+**Kök Sebep:** `editingWidget` varken `sampleData` yüklenmiyor çünkü `fetchDataFromSource` fonksiyonu çağrılmıyor.
+**Çözüm:** `useEffect` içinde düzenleme modunda otomatik veri çekme işlemi ekleyeceğiz.
 
-**Çözüm:** `Cari Kart Listesi` ile `Cari_vade_bakiye` birleştirilerek (LEFT JOIN) filtrelenebilir alanlar eklenmeli.
+### 1.8 Filtreleme Alanları Ekleme
+**Sorun:** Widget'a hangi alanların filtrelenebileceği tanımlanamıyor.
+**Çözüm:** Yeni bir "Filtreleme" sekmesi ekleyeceğiz. Kullanıcı tüm alanları görecek ve filtrelenebilir olanları seçebilecek. Seçilen filtreler widget'ın `available_filters` alanına kaydedilecek.
 
-### 1.3 GlobalFilterBar'da Filtre Yönetimi Yok
-
-Kullanıcı hangi filtrelerin görüneceğini seçemiyor. Tarih hariç tüm filtreler (şube, depo, özel kodlar vb.) yönetilebilir olmalı.
+### 1.9 Global Filtrelere Otomatik Ekleme
+**Sorun:** Widget'a eklenen yeni filtreler global filtre sistemine eklenmiyor.
+**Çözüm:** Bir widget'a yeni bir filtre alanı eklendiğinde, eğer bu alan `ALL_AVAILABLE_FILTERS` listesinde yoksa, dinamik olarak global filtrelere ekleneceğiz.
 
 ---
 
-## Bölüm 2: Veritabanı Değişiklikleri
+## Bölüm 2: UI Düzeni Yeniden Tasarım
 
-### 2.1 Yeni Tablo: user_filter_preferences
+### 2.1 Yeni Sekme Sıralaması (WidgetBuilder)
 
-Kullanıcının hangi filtreleri görmek istediğini saklar:
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│  [Şablonlar] [Veri] [Birleştir] [Hesapla] [Filtrele] [Tarih] [Görsel] [Kod] [Önizle]  │
+└────────────────────────────────────────────────────────────────────────────┘
+```
 
-```sql
-CREATE TABLE public.user_filter_preferences (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  visible_filters TEXT[] DEFAULT ARRAY['satisTemsilcisi', 'cariKartTipi'],
-  filter_order TEXT[] DEFAULT ARRAY['tarih', 'satisTemsilcisi', 'cariKartTipi'],
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(user_id)
-);
+**Değişiklikler:**
+- "Ayarlar" sekmesi kaldırılacak
+- Ayarlardaki alanlar (isim, açıklama) "Veri" sekmesine
+- Ayarlardaki alanlar (ikon, boyut, sayfa) diyaloğun alt kısmına (footer) taşınacak
 
--- RLS Policies
-ALTER TABLE public.user_filter_preferences ENABLE ROW LEVEL SECURITY;
+### 2.2 Dialog Footer Yeniden Tasarımı
 
-CREATE POLICY "Users can view own preferences"
-ON public.user_filter_preferences FOR SELECT
-TO authenticated
-USING (user_id = auth.uid());
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  [İkon Seç ▼]  [Boyutlar: ⬚sm ⬜md ☑lg ⬜xl ⬜full]  [Sayfalar: + Ekle ▼]  │
+│                                                                             │
+│  [İptal]                                            [Varsayılan Widget ☐]  [Kaydet]  │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
-CREATE POLICY "Users can insert own preferences"
-ON public.user_filter_preferences FOR INSERT
-TO authenticated
-WITH CHECK (user_id = auth.uid());
+### 2.3 Boyut Seçici - Görsel Önizleme
 
-CREATE POLICY "Users can update own preferences"
-ON public.user_filter_preferences FOR UPDATE
-TO authenticated
-USING (user_id = auth.uid());
+Boyutları görsel kart sistemine çevireceğiz:
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│  Boyut Seç (Birden fazla seçebilirsiniz)                                  │
+├───────────────────────────────────────────────────────────────────────────┤
+│  ┌───┐  ┌──────┐  ┌─────────┐  ┌────────────┐  ┌───────────────────────┐  │
+│  │ S │  │  M   │  │    L    │  │     XL     │  │         Full          │  │
+│  │   │  │      │  │         │  │            │  │                       │  │
+│  └───┘  └──────┘  └─────────┘  └────────────┘  └───────────────────────┘  │
+│   ☐       ☑         ☑            ☐               ☐                        │
+│  Küçük   Orta      Büyük      Çok Büyük       Tam Genişlik               │
+│  1 kolon 2 kolon   3 kolon     4 kolon         5 kolon                    │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+### 2.4 Sayfa Ataması - Multi-Select ComboBox
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Sayfalar   [Dashboard ×] [Finans ×] [+ Ekle ▼]                             │
+│                            ┌────────────────────┐                           │
+│                            │ ☐ Satış            │                           │
+│                            │ ☐ Cari Hesaplar    │                           │
+│                            └────────────────────┘                           │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Bölüm 3: Frontend Değişiklikleri
+## Bölüm 3: Birleştirilmiş Alanlar Görselleştirmesi
 
-### 3.1 BuilderWidgetRenderer - Global Filtre Entegrasyonu
+### 3.1 MergeVisualization Bileşeni
 
-**Dosya:** `src/components/dashboard/BuilderWidgetRenderer.tsx`
+MultiQueryBuilder içinde birleştirme sonucunu görsel olarak göstereceğiz:
 
-```text
-ÖNCE (Satır 143):
-  const { data, rawData, isLoading, error, refetch } = useDynamicWidgetData(builderConfig);
-
-SONRA:
-  const { filters } = useGlobalFilters();
-  const { data, rawData, isLoading, error, refetch } = useDynamicWidgetData(builderConfig, filters);
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  📊 Birleştirme Sonucu                                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────┐          ┌─────────────┐         ┌───────────────────────┐ │
+│  │ Cari Kart   │    +     │ Vade Bakiye │    =    │ Zenginleştirilmiş     │ │
+│  │ 15 alan     │  LEFT    │ 8 alan      │  ───►   │ Sonuç: 21 alan        │ │
+│  │ 250 kayıt   │  JOIN    │ 180 kayıt   │         │ ~180 kayıt (tahmini)  │ │
+│  └─────────────┘          └─────────────┘         └───────────────────────┘ │
+│        │                         │                                          │
+│        └─── carikartkodu ────────┘                                          │
+│                                                                             │
+│  Sonuç Alanları:                                                            │
+│  [carikartkodu] [cariunvan] [satiselemani] [ozelkod1] [toplambakiye] ...   │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Bu değişiklik ile tüm Builder widget'ları (KPI, Bar, Pie, Custom Code dahil) global filtrelere tepki verecek.
+---
 
-### 3.2 useDynamicWidgetData - Veri Zenginleştirme (Data Enrichment)
+## Bölüm 4: AI Kod Üret Sekmesi Yeniden Tasarım
 
-**Dosya:** `src/hooks/useDynamicWidgetData.tsx`
+### 4.1 Veri Analizi Paneli Kaldırılacak
 
-Eğer veri kaynağı `cari_vade_bakiye` gibi filtrelenebilir alanları içermiyorsa, `Cari Kart Listesi` verileriyle otomatik zenginleştirme yapılacak:
+Sağ taraftaki "Veri Analizi" paneli kaldırılacak. Yerine:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  AI ile Widget Kodu Üret                                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌───────────────────────────────────────────────────────────┐              │
+│  │  Ne tür bir widget istediğinizi açıklayın...              │              │
+│  │                                                           │              │
+│  │  Örnek: Vade yaşlandırma grafiği oluştur. X ekseninde     │              │
+│  │  vade dilimleri, Y ekseninde toplam bakiye göster...      │              │
+│  │                                                           │              │
+│  └───────────────────────────────────────────────────────────┘              │
+│                                                                             │
+│  [AI ile Kod Üret]                                                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  📋 Kullanılabilir Alanlar (tıkla prompt'a ekle)                            │
+│                                                                             │
+│  Ana Sorgu (Cari Kart):                                                     │
+│  [carikartkodu] [cariunvan] [satiselemani] [toplambakiye] ...               │
+│                                                                             │
+│  Birleşik Sorgu (Vade Bakiye):                                              │
+│  [carikartkodu] [vadetarihi] [borc] [alacak] [bakiye] ...                   │
+│                                                                             │
+│  Hesaplanan Alanlar:                                                        │
+│  [aylik_toplam] [bakiye_yuzdesi] ...                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Bölüm 5: Filtreleme Alanları Yönetimi
+
+### 5.1 Yeni Sekme: "Widget Filtreleri"
+
+WidgetBuilder'a yeni bir sekme ekleyeceğiz:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  🔍 Widget Filtreleme Alanları                                              │
+│  Bu widget hangi alanlara göre filtrelenebilsin?                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Mevcut Alanlar               Seçili Filtre Alanları                        │
+│  ┌────────────────────────┐   ┌────────────────────────┐                    │
+│  │ 🔍 Alan ara...          │   │                        │                    │
+│  ├────────────────────────┤   │ ☑ satiselemani         │                    │
+│  │ ○ carikartkodu         │   │   → Satış Temsilcisi   │                    │
+│  │ ○ cariunvan            │   │                        │                    │
+│  │ ● satiselemani  [+]    │   │ ☑ carikarttipi         │                    │
+│  │ ● ozelkod1kod   [+]    │   │   → Kart Tipi          │                    │
+│  │ ● carikarttipi  [+]    │   │                        │                    │
+│  │ ○ toplambakiye         │   │ ☑ ozelkod1kod          │                    │
+│  │ ○ sehir         [+]    │   │   → Özel Kod 1         │                    │
+│  │ ...                    │   │                        │                    │
+│  └────────────────────────┘   └────────────────────────┘                    │
+│                                                                             │
+│  ⚡ Not: Seçilen filtreler global filtre barında da görünecektir.           │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 5.2 Global Filtrelere Otomatik Ekleme Mantığı
 
 ```typescript
-// Veri zenginleştirme - cari verilerini join et
-function enrichWithCariData(data: any[], cariData: any[]): any[] {
-  if (!cariData || cariData.length === 0) return data;
-  
-  const cariMap = new Map(cariData.map(c => [
-    c.carikartkodu || c._key,
-    {
-      satiselemani: c.satiselemani,
-      ozelkod1kod: c.ozelkod1kod,
-      ozelkod2kod: c.ozelkod2kod,
-      ozelkod3kod: c.ozelkod3kod,
-      carikarttipi: c.carikarttipi,
-      sehir: c.sehir,
-      potansiyel: c.potansiyel,
-      durum: c.durum,
+// Widget kaydedilirken:
+const newFilterFields = widgetFilterFields.filter(
+  field => !ALL_AVAILABLE_FILTERS.some(f => f.key === field)
+);
+
+if (newFilterFields.length > 0) {
+  // Bu alanları user_filter_preferences'a dinamik olarak ekle
+  // veya widget bazında custom filter tanımı oluştur
+}
+```
+
+---
+
+## Bölüm 6: Düzenleme Modunda Veri Yükleme Sorunu
+
+### 6.1 Kök Sebep
+
+`CustomCodeWidgetBuilder.tsx` satır 279-330 arasında `editingWidget` kontrol ediliyor ama veri kaynağından veri çekme işlemi yapılmıyor.
+
+### 6.2 Çözüm
+
+```typescript
+// useEffect içinde düzenleme modunda otomatik veri yükleme
+useEffect(() => {
+  if (editingWidget && open) {
+    // ... mevcut config yükleme kodu ...
+    
+    // VERİ YÜKLEME EKLENMELİ:
+    if (config?.dataSourceId && !sampleData.length) {
+      const ds = getDataSourceById(config.dataSourceId);
+      if (ds) {
+        if (ds.last_sample_data) {
+          setSampleData(ds.last_sample_data as any[]);
+        } else {
+          // API'den veri çek
+          fetchDataFromSource(ds);
+        }
+      }
     }
-  ]));
-  
-  return data.map(row => {
-    const cariKey = row.carikartkodu || row._key_scf_carikart;
-    const cariInfo = cariMap.get(cariKey);
-    return cariInfo ? { ...row, ...cariInfo } : row;
-  });
-}
-```
-
-### 3.3 GlobalFilterBar - Filtre Yönetimi UI
-
-**Dosya:** `src/components/filters/GlobalFilterBar.tsx`
-
-Yeni özellikler:
-- Hızlı arama kaldırılacak
-- Filtre ekle/kaldır butonu (+ ⚙️ ikonu)
-- Filtre seçim modalı
-
-```text
-┌─────────────────────────────────────────────────────────────────────┐
-│  📅 Bu Ay ▼ │ 👤 Temsilci ▼ │ 🏷️ AL/AS/ST │ +Filtre │ ✕ Temizle │
-└─────────────────────────────────────────────────────────────────────┘
-                               │
-                               ▼ (+Filtre tıklandığında)
-┌─────────────────────────────────────────────────────────────────────┐
-│  Görünür Filtreleri Seç                                    [Kaydet] │
-├─────────────────────────────────────────────────────────────────────┤
-│  📅 Tarih Aralığı              [🔒 Zorunlu - Kaldırılamaz]          │
-│  [✓] Satış Temsilcisi                                               │
-│  [✓] Cari Kart Tipi (AL/AS/ST)                                      │
-│  [ ] Şube                                                           │
-│  [ ] Depo                                                           │
-│  [ ] Özel Kod 1                                                     │
-│  [ ] Özel Kod 2                                                     │
-│  [ ] Özel Kod 3                                                     │
-│  [ ] Şehir                                                          │
-│  [ ] Durum (Aktif/Pasif)                                            │
-│  [ ] Görünüm Modu (Potansiyel/Cari)                                 │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### 3.4 Yeni Hook: useFilterPreferences
-
-**Dosya:** `src/hooks/useFilterPreferences.tsx`
-
-```typescript
-interface FilterPreferences {
-  visibleFilters: string[];
-  filterOrder: string[];
-}
-
-function useFilterPreferences() {
-  // Kullanıcının filtre tercihlerini yükle/kaydet
-  const loadPreferences = async (): Promise<FilterPreferences>;
-  const savePreferences = async (prefs: FilterPreferences): Promise<void>;
-  
-  return { preferences, isLoading, savePreferences };
-}
-```
-
-### 3.5 Yeni Bileşen: FilterManagerModal
-
-**Dosya:** `src/components/filters/FilterManagerModal.tsx`
-
-Kullanıcının hangi filtreleri göreceğini seçtiği modal:
-
-```typescript
-interface FilterManagerModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  currentFilters: string[];
-  onSave: (filters: string[]) => void;
-}
+  }
+}, [editingWidget, open]);
 ```
 
 ---
 
-## Bölüm 4: AI Kod Kurallarına Global Filtre Ekleme
+## Bölüm 7: Dosya Değişiklikleri Özeti
 
-### 4.1 ai-code-generator System Prompt Güncelleme
+### Yeni Bileşenler
 
-**Dosya:** `supabase/functions/ai-code-generator/index.ts`
-
-Mevcut system prompt'a eklenecek bölüm:
-
-```text
-═══════════════════════════════════════════════════════════════════════════════
-
-🔍 GLOBAL FİLTRE SİSTEMİ
-───────────────────────────────────────────────────────────────────────────────
-
-Widget'a "filters" prop'u da geçilir. Bu prop aktif global filtreleri içerir:
-
-function Widget({ data, colors, filters }) {
-  // filters objesi örneği:
-  // {
-  //   tarihAraligi: { period: 'this_month', field: 'tarih' },
-  //   satisTemsilcisi: ['Ali Yılmaz'],
-  //   ozelkod2: ['VIP'],
-  //   cariKartTipi: ['AL', 'AS'],
-  //   searchTerm: ''
-  // }
-
-  // NOT: "data" zaten filtrelenmiş olarak gelir!
-  // Widget içinde tekrar filtreleme YAPMA.
-  // "filters" prop'unu sadece hangi filtrelerin aktif olduğunu
-  // göstermek için kullan (opsiyonel bilgi gösterimi).
-}
-
-ZORUNLU İMZA (Güncellendi):
-  function Widget({ data, colors, filters })
-
-═══════════════════════════════════════════════════════════════════════════════
-```
-
-### 4.2 BuilderWidgetRenderer - filters Prop'unu Custom Widget'lara Geç
-
-**Dosya:** `src/components/dashboard/BuilderWidgetRenderer.tsx`
-
-```typescript
-// Mevcut (Satır 398-408):
-const fn = new Function(
-  'React',
-  'data',
-  'LucideIcons',
-  'Recharts',
-  'colors',
-  customCode
-);
-const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors);
-
-// Yeni - filters ekleniyor:
-const fn = new Function(
-  'React',
-  'data',
-  'LucideIcons',
-  'Recharts',
-  'colors',
-  'filters',  // YENİ
-  customCode
-);
-const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters);
-```
-
----
-
-## Bölüm 5: Yetki Kodu (Lock Gösterimi)
-
-Yetki kodu aktif ise GlobalFilterBar'da görsel lock gösterimi:
-
-```text
-┌─────────────────────────────────────────────────────────────────────┐
-│  📅 Bu Ay │ 🔒 Temsilci: Ali Yılmaz │ 🏷️ AL/AS/ST │ +Filtre │      │
-└─────────────────────────────────────────────────────────────────────┘
-            ↑ Kilitli - tıklanamaz, değiştirilemez
-```
-
-Bu zaten `_diaAutoFilters` ile destekleniyor, sadece UI'da gösterim eklenmeli.
-
----
-
-## Bölüm 6: Dosya Değişiklikleri Özeti
-
-### Yeni Dosyalar
 | Dosya | Açıklama |
 |-------|----------|
-| `src/hooks/useFilterPreferences.tsx` | Kullanıcı filtre tercihleri hook'u |
-| `src/components/filters/FilterManagerModal.tsx` | Filtre seçim modalı |
+| `src/components/admin/WidgetSizeSelector.tsx` | Görsel boyut seçici |
+| `src/components/admin/WidgetPageSelector.tsx` | Multi-select sayfa seçici |
+| `src/components/admin/WidgetFilterFieldsBuilder.tsx` | Filtreleme alanları seçici |
+| `src/components/admin/MergeResultVisualization.tsx` | Birleştirme sonuç görselleştirmesi |
 
 ### Güncellenecek Dosyalar
+
 | Dosya | Değişiklik |
 |-------|------------|
-| `src/components/dashboard/BuilderWidgetRenderer.tsx` | useGlobalFilters kullanımı, filters prop'u geçirme |
-| `src/hooks/useDynamicWidgetData.tsx` | Veri zenginleştirme (cari join), globalFilters kullanımı |
-| `src/components/filters/GlobalFilterBar.tsx` | Hızlı arama kaldırma, filtre yönetimi butonu ekleme |
-| `supabase/functions/ai-code-generator/index.ts` | filters prop dokümantasyonu |
+| `src/components/admin/WidgetBuilder.tsx` | UI yeniden düzenleme, sekme kaldırma, footer tasarımı |
+| `src/components/admin/CustomCodeWidgetBuilder.tsx` | Veri yükleme düzeltmesi, AI sekmesi yeniden tasarım |
+| `src/components/admin/MultiQueryBuilder.tsx` | Birleştirme sonucu görselleştirmesi ekleme |
+| `src/components/admin/DataSourceSelector.tsx` | "Mevcut Alanlar" kaldırma |
+| `src/hooks/useFilterPreferences.tsx` | Dinamik filtre alanı ekleme desteği |
+| `src/lib/widgetTypes.ts` | `available_sizes` ve `target_pages` alanları ekleme |
 
-### Veritabanı
-| Migrasyon | Açıklama |
-|-----------|----------|
-| `user_filter_preferences` tablosu | Kullanıcı filtre tercihleri |
+### Veritabanı Değişiklikleri
 
----
+```sql
+-- Widget'ın birden fazla boyutu desteklemesi için
+ALTER TABLE widgets ADD COLUMN IF NOT EXISTS available_sizes TEXT[] DEFAULT ARRAY['md'];
 
-## Bölüm 7: Uygulama Sırası
+-- Widget'ın birden fazla sayfada görünmesi için
+ALTER TABLE widgets ADD COLUMN IF NOT EXISTS target_pages TEXT[] DEFAULT ARRAY['dashboard'];
 
-### Faz 1: Kritik Düzeltme (Nakit Akış Tepkisi)
-1. `BuilderWidgetRenderer.tsx` - `useGlobalFilters` entegrasyonu
-2. `useDynamicWidgetData.tsx` - `globalFilters` parametresini kullan
-
-### Faz 2: Veri Zenginleştirme
-3. `useDynamicWidgetData.tsx` - Cari verilerle join (enrichWithCariData)
-
-### Faz 3: Filtre Yönetimi UI
-4. Veritabanı migrasyonu: `user_filter_preferences`
-5. `useFilterPreferences.tsx` hook'u oluştur
-6. `FilterManagerModal.tsx` bileşeni oluştur
-7. `GlobalFilterBar.tsx` güncelle (hızlı arama kaldır, +Filtre butonu)
-
-### Faz 4: AI Entegrasyonu
-8. `ai-code-generator/index.ts` - filters prop dokümantasyonu
-9. `BuilderWidgetRenderer.tsx` - Custom widget'lara filters geçir
-
----
-
-## Bölüm 8: Teknik Detaylar
-
-### 8.1 Mevcut Filtre Operatörleri
-`applyGlobalFilters` fonksiyonu şu alanları destekliyor:
-- `searchTerm` - Metin arama (tüm alanlarda)
-- `cariKartTipi` - AL, AS, ST
-- `satisTemsilcisi` - Satış elemanı
-- `sube` - Şube kodu
-- `depo` - Depo kodu
-- `ozelkod1/2/3` - Özel kodlar
-- `sehir` - Şehir
-- `durum` - Aktif/Pasif
-- `gorunumModu` - Potansiyel/Cari
-- `_diaAutoFilters` - Zorunlu kilitli filtreler
-
-### 8.2 Veri Zenginleştirme Mantığı
-
-```text
-┌───────────────────┐     ┌───────────────────┐
-│ Cari_vade_bakiye  │     │ Cari Kart Listesi │
-│ (vade hareketleri)│     │ (metadata)        │
-├───────────────────┤     ├───────────────────┤
-│ carikartkodu      │◄────│ carikartkodu      │
-│ toplambakiye      │     │ satiselemani      │
-│ __borchareketler  │     │ ozelkod1kod       │
-└───────────────────┘     │ carikarttipi      │
-         │                │ sehir             │
-         │                └───────────────────┘
-         ▼
-┌───────────────────────────────────────┐
-│ Zenginleştirilmiş Veri                │
-│ (Filtrelenebilir alanlar eklendi)     │
-├───────────────────────────────────────┤
-│ carikartkodu, toplambakiye,           │
-│ __borchareketler, satiselemani,       │
-│ ozelkod1kod, carikarttipi, sehir...   │
-└───────────────────────────────────────┘
+-- Widget bazlı custom filter tanımları
+CREATE TABLE IF NOT EXISTS widget_filter_fields (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  widget_id UUID REFERENCES widgets(id) ON DELETE CASCADE,
+  field_key TEXT NOT NULL,
+  field_label TEXT NOT NULL,
+  field_type TEXT DEFAULT 'string',
+  is_global BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 ```
 
-### 8.3 Filtre Tercihleri Varsayılanları
+---
+
+## Bölüm 8: Uygulama Sırası
+
+### Faz 1: Kritik Düzeltmeler
+1. `CustomCodeWidgetBuilder.tsx` - Düzenleme modunda veri yükleme sorunu
+2. `DataSourceSelector.tsx` - "Mevcut Alanlar" kaldırma
+
+### Faz 2: UI Yeniden Düzenleme
+3. `WidgetSizeSelector.tsx` - Görsel boyut seçici bileşeni
+4. `WidgetPageSelector.tsx` - Multi-select sayfa seçici
+5. `WidgetBuilder.tsx` - Footer tasarımı ve sekme düzenlemesi
+
+### Faz 3: Birleştirme Görselleştirmesi
+6. `MergeResultVisualization.tsx` - Birleştirme sonucu gösterimi
+7. `MultiQueryBuilder.tsx` - Görselleştirme entegrasyonu
+
+### Faz 4: AI Sekmesi İyileştirmesi
+8. `CustomCodeWidgetBuilder.tsx` - AI sekmesi yeniden tasarım (Veri Analizi kaldırma)
+
+### Faz 5: Filtreleme Sistemi
+9. Veritabanı migrasyonu: `widget_filter_fields` tablosu
+10. `WidgetFilterFieldsBuilder.tsx` - Filtre alanları seçici
+11. `useFilterPreferences.tsx` - Dinamik filtre ekleme
+12. `WidgetBuilder.tsx` - Filtreleme sekmesi entegrasyonu
+
+---
+
+## Bölüm 9: Teknik Detaylar
+
+### 9.1 Boyut Seçici Bileşeni
 
 ```typescript
-const DEFAULT_VISIBLE_FILTERS = [
-  'tarihAraligi',       // Zorunlu - kaldırılamaz
-  'satisTemsilcisi',
-  'cariKartTipi',
-];
+interface WidgetSizeSelectorProps {
+  selectedSizes: WidgetSize[];
+  defaultSize: WidgetSize;
+  onChange: (sizes: WidgetSize[], defaultSize: WidgetSize) => void;
+}
 
-const ALL_AVAILABLE_FILTERS = [
-  { key: 'tarihAraligi', label: 'Tarih Aralığı', locked: true },
-  { key: 'satisTemsilcisi', label: 'Satış Temsilcisi' },
-  { key: 'cariKartTipi', label: 'Cari Kart Tipi' },
-  { key: 'sube', label: 'Şube' },
-  { key: 'depo', label: 'Depo' },
-  { key: 'ozelkod1', label: 'Özel Kod 1' },
-  { key: 'ozelkod2', label: 'Özel Kod 2' },
-  { key: 'ozelkod3', label: 'Özel Kod 3' },
-  { key: 'sehir', label: 'Şehir' },
-  { key: 'durum', label: 'Durum (Aktif/Pasif)' },
-  { key: 'gorunumModu', label: 'Görünüm Modu' },
-];
+// Kullanım
+<WidgetSizeSelector
+  selectedSizes={['md', 'lg']}
+  defaultSize="lg"
+  onChange={(sizes, def) => {
+    setAvailableSizes(sizes);
+    setWidgetSize(def);
+  }}
+/>
+```
+
+### 9.2 Sayfa Seçici Bileşeni
+
+```typescript
+interface WidgetPageSelectorProps {
+  selectedPages: WidgetCategory[];
+  defaultPage: WidgetCategory;
+  onChange: (pages: WidgetCategory[], defaultPage: WidgetCategory) => void;
+}
+```
+
+### 9.3 Birleştirme Sonucu Görselleştirmesi
+
+```typescript
+interface MergeResultVisualizationProps {
+  queries: DiaApiQuery[];
+  merges: QueryMerge[];
+  mergedData: Record<string, any[]>;
+}
+
+// Bileşen çıktısı:
+// - Sol sorgu kartı (alan sayısı, kayıt sayısı)
+// - Birleştirme operatörü (LEFT JOIN, UNION vb.)
+// - Sağ sorgu kartı
+// - Sonuç kartı (birleşik alan sayısı, tahmini kayıt sayısı)
+// - Birleşim alanı gösterimi (ok ile)
+```
+
+### 9.4 Widget Filter Fields Builder
+
+```typescript
+interface WidgetFilterFieldsBuilderProps {
+  availableFields: string[];
+  selectedFields: string[];
+  fieldLabels: Record<string, string>;
+  onChange: (fields: string[], labels: Record<string, string>) => void;
+}
 ```
