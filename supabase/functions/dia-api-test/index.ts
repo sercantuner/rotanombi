@@ -355,6 +355,21 @@ serve(async (req) => {
 
       // DIA payload oluştur
       const methodKey = `${module}_${method}`;
+      
+      // Bazı DIA servisleri özel parametreler gerektirir
+      // Bu parametreler olmadan nested diziler (örn: __borchareketler) dönmez
+      const methodParams: Record<string, any> = {};
+      
+      // scf_carikart_vade_bakiye_listele için detaylı veri gerekli
+      if (method === 'carikart_vade_bakiye_listele') {
+        methodParams.params = {
+          detaygoster: "True",  // __borchareketler dizisini döndürmek için ZORUNLU
+          irsaliyeleriDahilEt: "True",
+          tarihreferans: new Date().toISOString().split('T')[0], // Bugünün tarihi
+        };
+        console.log(`[DIA Params] Added required params for ${method}:`, methodParams.params);
+      }
+      
       payload = {
         [methodKey]: {
           session_id: sessionId,
@@ -363,6 +378,7 @@ serve(async (req) => {
           // Limit sadece belirtilmişse gönder, yoksa (returnAll* isteklerinde) güvenli limit uygula
           ...(effectiveLimit !== undefined && { limit: effectiveLimit }),
           offset: 0,
+          ...methodParams, // Metod-specific parametreler
         }
       };
 
