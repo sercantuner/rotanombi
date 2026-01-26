@@ -171,7 +171,7 @@ React.createElement(Recharts.ReferenceLine, {
      label: { value: 'Ort: ' + formatCurrency(ortalama), position: 'right' }
    })
 
-3. MIN/MAX İŞARETLERİ:
+3. MIN/MAX İŞARETLERİ (showMinMaxMarkers aktifse):
    React.createElement(Recharts.ReferenceDot, {
      x: maxItem.name, y: maxItem.value,
      r: 6, fill: 'hsl(var(--success))',
@@ -315,6 +315,48 @@ function Widget({ data, colors, filters }) {
 }
 
 return Widget;
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📅 TARİH KRONOLOJİSİ KURALI (ÖNEMLİ!)
+───────────────────────────────────────────────────────────────────────────────
+Eğer grafikte tarih/zaman serisi kullanılıyorsa ve kullanıcı "tarih kronolojisi" 
+veya "eksik günleri göster" veya "tüm tarihleri göster" isterse:
+
+ZORUNLU HELPER FONKSİYON:
+var fillMissingDates = function(data, dateField, valueField, dayCount) {
+  dayCount = dayCount || 30;
+  var today = new Date();
+  var dateMap = {};
+  
+  data.forEach(function(item) {
+    var d = new Date(item[dateField]);
+    if (!isNaN(d.getTime())) {
+      var key = d.toISOString().split('T')[0];
+      dateMap[key] = (dateMap[key] || 0) + (parseFloat(item[valueField]) || 0);
+    }
+  });
+  
+  var result = [];
+  for (var i = dayCount - 1; i >= 0; i--) {
+    var d = new Date(today);
+    d.setDate(d.getDate() - i);
+    var key = d.toISOString().split('T')[0];
+    result.push({
+      tarih: key,
+      label: d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' }),
+      [valueField]: dateMap[key] || 0
+    });
+  }
+  
+  return result;
+};
+
+// Kullanım örneği:
+var chartData = fillMissingDates(data, 'tarih', 'tutar', 30);
+
+❌ YANLIŞ: Sadece veri olan günleri göstermek
+✅ DOĞRU: Tüm tarih aralığını, boş günleri 0 ile doldurup göstermek
 
 ═══════════════════════════════════════════════════════════════════════════════
 

@@ -704,3 +704,97 @@ export const calculateTrendLine = (data: any[], yField: string): { slope: number
   
   return { slope, intercept, points };
 };
+
+// ============= DIA MODEL REFERANSLARI =============
+
+// DIA dokümantasyon link referansı
+export interface DiaModelReference {
+  url: string;
+  modelName: string; // URL'den otomatik çıkarılır
+}
+
+// DIA URL'inden model adını çıkar
+export const extractModelNameFromUrl = (url: string): string => {
+  // https://doc.dia.com.tr/doku.php?id=gelistirici:models:scf_carikart_liste_view_model
+  const match = url.match(/models:([^&]+)/);
+  if (match) {
+    // scf_carikart_liste_view_model -> ScfCarikartListeViewModel
+    return match[1]
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join('');
+  }
+  return 'UnknownModel';
+};
+
+// ============= AI ZORUNLULUKLARI =============
+
+// AI kuralı/zorunluluğu
+export interface AIRequirement {
+  id: string;
+  label: string;
+  description: string;
+  isDefault: boolean;  // Varsayılan ve değiştirilemez
+  isActive: boolean;
+  promptAddition: string;  // AI prompt'a eklenecek metin
+}
+
+// Varsayılan AI kuralları
+export const DEFAULT_AI_REQUIREMENTS: AIRequirement[] = [
+  {
+    id: 'color_system',
+    label: 'Renk sistemi',
+    description: 'CSS değişkenleri zorunlu (text-foreground, bg-card vb.)',
+    isDefault: true,
+    isActive: true,
+    promptAddition: 'Renk için sadece CSS değişkenlerini kullan (text-foreground, bg-card, text-success, text-destructive).'
+  },
+  {
+    id: 'currency_format',
+    label: 'Para birimi formatı',
+    description: '₺, K, M, B formatında göster',
+    isDefault: true,
+    isActive: true,
+    promptAddition: 'Para değerlerini formatCurrency fonksiyonu ile ₺, K, M, B formatında göster.'
+  },
+  {
+    id: 'no_jsx',
+    label: 'React.createElement kullan',
+    description: 'JSX syntax yasak',
+    isDefault: true,
+    isActive: true,
+    promptAddition: 'JSX KULLANMA! Sadece React.createElement kullan.'
+  },
+  {
+    id: 'date_chronology',
+    label: 'Tarih kronolojisi',
+    description: 'Eksik günleri 0 ile doldur',
+    isDefault: false,
+    isActive: false,
+    promptAddition: 'Tarih bazlı grafiklerde TÜM tarihleri göster. Eksik günleri 0 değeriyle doldur. fillMissingDates helper fonksiyonunu kullan.'
+  },
+  {
+    id: 'trend_line',
+    label: 'Trend çizgisi',
+    description: 'Linear regression trend çizgisi ekle',
+    isDefault: false,
+    isActive: false,
+    promptAddition: 'Grafiğe linear regression trend çizgisi ekle. calculateTrendLine fonksiyonunu kullan ve kesikli çizgi (strokeDasharray: "8 4") ile göster.'
+  },
+  {
+    id: 'average_line',
+    label: 'Ortalama çizgisi',
+    description: 'Yatay ortalama çizgisi ekle',
+    isDefault: false,
+    isActive: false,
+    promptAddition: 'Grafiğe ortalama değerini gösteren yatay ReferenceLine ekle.'
+  },
+  {
+    id: 'min_max_markers',
+    label: 'Min/Max işaretleri',
+    description: 'Minimum ve maksimum noktaları işaretle',
+    isDefault: false,
+    isActive: false,
+    promptAddition: 'Grafikte minimum ve maksimum noktaları ReferenceDot ile özel işaretlerle göster.'
+  }
+];
