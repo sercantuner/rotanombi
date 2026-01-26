@@ -1,493 +1,381 @@
 
-# Global Filtre Widget Sistemi ve Satış Personeli Yetkilendirmesi
+# Global Filtre Sistemi - Kapsamlı Güncelleme Planı
 
-## Genel Bakış
-
-Bu plan, tüm dashboard/sayfa widgetlarını etkileyen global filtre elemanları oluşturma, AI widget kurallarına filtre bilgisi ekleme ve DIA'daki satış elemanı/yetki kodu bazlı filtreleme desteğini kapsar.
-
----
-
-## Bölüm 1: Mevcut Yapı Analizi
-
-### Mevcut Filtre Sistemi
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│  DashboardFilterContext (Mevcut)                            │
-├─────────────────────────────────────────────────────────────┤
-│  • cariTipi[], cariKartTipi[]                              │
-│  • ozelkod1[], ozelkod2[], ozelkod3[]                      │
-│  • sehir[], satisTemsilcisi[]                              │
-│  • vadeDilimi, durum, gorunumModu                          │
-│  • searchTerm                                              │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Eksikler
-1. Filtreler sadece frontend'de uygulanıyor (post-fetch)
-2. DIA'ya gönderilen sorgulara otomatik eklenmiyor
-3. AI widget üretirken filtre bilgisi aktarılmıyor
-4. Sayfa bazlı özel filtreler tanımlanamıyor
-5. Kullanıcı bazlı zorunlu filtreler (satış personeli) yok
+## Özet
+Bu plan, global filtrelerin tüm widget'lar (özellikle Nakit Akış Projeksiyonu) tarafından kullanılmasını, kullanıcı bazlı filtre yönetimi UI'ını ve AI widget kurallarına filtre bilgisi eklenmesini kapsar.
 
 ---
 
-## Bölüm 2: Yeni Filtreleme Mimarisi
+## Bölüm 1: Tespit Edilen Sorunlar
 
-### 2.1 Üç Katmanlı Filtre Sistemi
+### 1.1 Nakit Akış Projeksiyonu Filtrelere Tepki Vermiyor
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│  1. KULLANICI FİLTRELERİ (Zorunlu - Backend)               │
-│     DIA kullanıcısına bağlı otomatik filtreler              │
-│     Örn: satiselemani = "Ali Yılmaz" (değiştirilemez)      │
-├─────────────────────────────────────────────────────────────┤
-│  2. SAYFA FİLTRELERİ (Yapılandırılabilir)                  │
-│     Sayfa bazında tanımlanan filtre alanları                │
-│     Örn: Satış sayfası → tarih, müşteri, ürün grubu        │
-├─────────────────────────────────────────────────────────────┤
-│  3. KULLANICI SEÇİMİ (Dinamik)                              │
-│     Kullanıcının seçtiği anlık filtreler                    │
-│     Örn: "Bu ay", "Özel kod: VIP", "Şehir: İstanbul"       │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 2.2 Filtre Akış Şeması
+**Kök Sebep:**
+`BuilderWidgetRenderer.tsx` bileşeninde `useGlobalFilters` hook'u import edilmiş ancak **hiç kullanılmamış**. `useDynamicWidgetData(builderConfig)` çağrısı, ikinci parametre olan `globalFilters` argümanı olmadan yapılıyor.
 
 ```text
-┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
-│  Sayfa Açılır    │───▶│  PageFilterConfig│───▶│  FilterContext   │
-│                  │    │  Yüklenir        │    │  Güncellenir     │
-└──────────────────┘    └──────────────────┘    └──────────────────┘
-                                                        │
-                                                        ▼
-┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
-│  Widget Render   │◀───│  Data Loader     │◀───│  DIA API Call    │
-│  (Filtered Data) │    │  Applies Filters │    │  + User Filters  │
-└──────────────────┘    └──────────────────┘    └──────────────────┘
+Mevcut Durum (Satır 143):
+  useDynamicWidgetData(builderConfig)  ← globalFilters YOK!
+
+Olması Gereken:
+  useDynamicWidgetData(builderConfig, filters)  ← filters eklenmeli
 ```
+
+### 1.2 Vade Yaşlandırma Verisinde Filtrelenebilir Alanlar Yok
+
+`Cari_vade_bakiye` veri kaynağı `__borchareketler` içeriyor ancak üst seviyede `satiselemani`, `ozelkod1kod`, `carikarttipi` gibi alanlar yok. Dolayısıyla `applyGlobalFilters` fonksiyonu bu alanları bulamıyor.
+
+**Çözüm:** `Cari Kart Listesi` ile `Cari_vade_bakiye` birleştirilerek (LEFT JOIN) filtrelenebilir alanlar eklenmeli.
+
+### 1.3 GlobalFilterBar'da Filtre Yönetimi Yok
+
+Kullanıcı hangi filtrelerin görüneceğini seçemiyor. Tarih hariç tüm filtreler (şube, depo, özel kodlar vb.) yönetilebilir olmalı.
 
 ---
 
-## Bölüm 3: Veritabanı Değişiklikleri
+## Bölüm 2: Veritabanı Değişiklikleri
 
-### 3.1 profiles Tablosuna Yeni Alanlar
+### 2.1 Yeni Tablo: user_filter_preferences
 
-```sql
--- Satış personeli için DIA'daki kullanıcı adı
-ALTER TABLE profiles ADD COLUMN dia_satis_elemani TEXT;
--- Yetki kodu (DIA'daki yetki sistemi)
-ALTER TABLE profiles ADD COLUMN dia_yetki_kodu TEXT;
--- Otomatik uygulanacak zorunlu filtreler (JSON)
-ALTER TABLE profiles ADD COLUMN dia_auto_filters JSONB DEFAULT '[]';
-```
-
-### 3.2 user_pages Tablosuna Filtre Konfigürasyonu
+Kullanıcının hangi filtreleri görmek istediğini saklar:
 
 ```sql
--- Sayfa bazlı filtre yapılandırması
-ALTER TABLE user_pages ADD COLUMN filter_config JSONB DEFAULT NULL;
-
--- Örnek filter_config:
--- {
---   "availableFilters": ["tarih", "satisTemsilcisi", "ozelkod2", "sehir"],
---   "defaultFilters": { "tarih": "this_month" },
---   "filterLayout": "horizontal" | "sidebar",
---   "showFilterBar": true
--- }
-```
-
-### 3.3 Yeni Tablo: page_filter_presets
-
-```sql
-CREATE TABLE public.page_filter_presets (
+CREATE TABLE public.user_filter_preferences (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  page_id UUID REFERENCES user_pages(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  filters JSONB NOT NULL,
-  is_default BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  visible_filters TEXT[] DEFAULT ARRAY['satisTemsilcisi', 'cariKartTipi'],
+  filter_order TEXT[] DEFAULT ARRAY['tarih', 'satisTemsilcisi', 'cariKartTipi'],
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id)
 );
+
+-- RLS Policies
+ALTER TABLE public.user_filter_preferences ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own preferences"
+ON public.user_filter_preferences FOR SELECT
+TO authenticated
+USING (user_id = auth.uid());
+
+CREATE POLICY "Users can insert own preferences"
+ON public.user_filter_preferences FOR INSERT
+TO authenticated
+WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "Users can update own preferences"
+ON public.user_filter_preferences FOR UPDATE
+TO authenticated
+USING (user_id = auth.uid());
 ```
 
 ---
 
-## Bölüm 4: Genişletilmiş DashboardFilterContext
+## Bölüm 3: Frontend Değişiklikleri
 
-### 4.1 Yeni Interface
+### 3.1 BuilderWidgetRenderer - Global Filtre Entegrasyonu
+
+**Dosya:** `src/components/dashboard/BuilderWidgetRenderer.tsx`
+
+```text
+ÖNCE (Satır 143):
+  const { data, rawData, isLoading, error, refetch } = useDynamicWidgetData(builderConfig);
+
+SONRA:
+  const { filters } = useGlobalFilters();
+  const { data, rawData, isLoading, error, refetch } = useDynamicWidgetData(builderConfig, filters);
+```
+
+Bu değişiklik ile tüm Builder widget'ları (KPI, Bar, Pie, Custom Code dahil) global filtrelere tepki verecek.
+
+### 3.2 useDynamicWidgetData - Veri Zenginleştirme (Data Enrichment)
+
+**Dosya:** `src/hooks/useDynamicWidgetData.tsx`
+
+Eğer veri kaynağı `cari_vade_bakiye` gibi filtrelenebilir alanları içermiyorsa, `Cari Kart Listesi` verileriyle otomatik zenginleştirme yapılacak:
 
 ```typescript
-interface ExtendedDashboardFilters extends DashboardFilters {
-  // Mevcut filtreler...
+// Veri zenginleştirme - cari verilerini join et
+function enrichWithCariData(data: any[], cariData: any[]): any[] {
+  if (!cariData || cariData.length === 0) return data;
   
-  // Yeni Global Filtreler
-  tarihAraligi: {
-    period: DatePeriod;
-    customStart?: string;
-    customEnd?: string;
-    field: string; // Hangi tarih alanına uygulanacak
-  } | null;
+  const cariMap = new Map(cariData.map(c => [
+    c.carikartkodu || c._key,
+    {
+      satiselemani: c.satiselemani,
+      ozelkod1kod: c.ozelkod1kod,
+      ozelkod2kod: c.ozelkod2kod,
+      ozelkod3kod: c.ozelkod3kod,
+      carikarttipi: c.carikarttipi,
+      sehir: c.sehir,
+      potansiyel: c.potansiyel,
+      durum: c.durum,
+    }
+  ]));
   
-  depo: string[];           // Depo filtresi
-  sube: string[];           // Şube filtresi
-  urunGrubu: string[];      // Ürün grubu
-  marka: string[];          // Marka
-  kategori: string[];       // Kategori
-  
-  // DIA Zorunlu Filtreler (değiştirilemez)
-  _diaAutoFilters: DiaApiFilter[];
-}
-
-interface PageFilterConfig {
-  pageId: string;
-  availableFilters: FilterType[];
-  defaultFilters: Partial<ExtendedDashboardFilters>;
-  filterLayout: 'horizontal' | 'sidebar' | 'modal';
-  showFilterBar: boolean;
-  filterableFields: FilterableFieldConfig[];
-}
-
-interface FilterableFieldConfig {
-  field: string;
-  label: string;
-  type: 'select' | 'multiselect' | 'date' | 'daterange' | 'number' | 'text';
-  diaField: string; // DIA'daki alan adı
-  options?: { value: string; label: string }[];
-  loadOptionsFrom?: string; // DataSource ID
+  return data.map(row => {
+    const cariKey = row.carikartkodu || row._key_scf_carikart;
+    const cariInfo = cariMap.get(cariKey);
+    return cariInfo ? { ...row, ...cariInfo } : row;
+  });
 }
 ```
 
-### 4.2 Filtre Türleri
+### 3.3 GlobalFilterBar - Filtre Yönetimi UI
 
-| Filtre Tipi | UI Bileşeni | Kullanım |
-|-------------|-------------|----------|
-| `select` | Dropdown | Tek seçim |
-| `multiselect` | Checkbox grubu | Çoklu seçim |
-| `date` | DatePicker | Tek tarih |
-| `daterange` | DateRangePicker | Tarih aralığı |
-| `number` | Slider/Input | Sayı aralığı |
-| `text` | Input | Metin arama |
-| `toggle` | Switch | Açık/Kapalı |
+**Dosya:** `src/components/filters/GlobalFilterBar.tsx`
 
----
-
-## Bölüm 5: Filtre Widget Bileşenleri
-
-### 5.1 Ana Filtre Bileşenleri
+Yeni özellikler:
+- Hızlı arama kaldırılacak
+- Filtre ekle/kaldır butonu (+ ⚙️ ikonu)
+- Filtre seçim modalı
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│  Yeni Bileşenler                                            │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  📁 src/components/filters/                                 │
-│  ├── GlobalFilterBar.tsx      (Üst bar)                    │
-│  ├── FilterSidebar.tsx        (Yan panel)                  │
-│  ├── FilterModal.tsx          (Popup modal)                │
-│  ├── FilterPresetSelector.tsx (Kayıtlı filtreler)          │
-│  ├── DateRangeFilter.tsx      (Tarih aralığı)              │
-│  ├── MultiSelectFilter.tsx    (Çoklu seçim)                │
-│  ├── NumberRangeFilter.tsx    (Sayı aralığı)               │
-│  └── SearchFilter.tsx         (Hızlı arama)                │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  📅 Bu Ay ▼ │ 👤 Temsilci ▼ │ 🏷️ AL/AS/ST │ +Filtre │ ✕ Temizle │
+└─────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼ (+Filtre tıklandığında)
+┌─────────────────────────────────────────────────────────────────────┐
+│  Görünür Filtreleri Seç                                    [Kaydet] │
+├─────────────────────────────────────────────────────────────────────┤
+│  📅 Tarih Aralığı              [🔒 Zorunlu - Kaldırılamaz]          │
+│  [✓] Satış Temsilcisi                                               │
+│  [✓] Cari Kart Tipi (AL/AS/ST)                                      │
+│  [ ] Şube                                                           │
+│  [ ] Depo                                                           │
+│  [ ] Özel Kod 1                                                     │
+│  [ ] Özel Kod 2                                                     │
+│  [ ] Özel Kod 3                                                     │
+│  [ ] Şehir                                                          │
+│  [ ] Durum (Aktif/Pasif)                                            │
+│  [ ] Görünüm Modu (Potansiyel/Cari)                                 │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 5.2 GlobalFilterBar Tasarımı
+### 3.4 Yeni Hook: useFilterPreferences
 
-```text
-┌────────────────────────────────────────────────────────────────────────┐
-│  🔍 Ara...  │ 📅 Bu Ay ▼ │ 👤 Tüm Temsilciler ▼ │ 🏷️ +3 Filtre │ ✕ Temizle │
-└────────────────────────────────────────────────────────────────────────┘
-                    │                │
-                    ▼                ▼
-         ┌─────────────────┐  ┌─────────────────┐
-         │ [○] Bugün       │  │ [✓] Ali Yılmaz  │
-         │ [○] Bu Hafta    │  │ [✓] Mehmet Öz   │
-         │ [●] Bu Ay       │  │ [ ] Ayşe Demir  │
-         │ [○] Bu Yıl      │  │ [ ] Fatih Kara  │
-         │ [○] Özel...     │  └─────────────────┘
-         └─────────────────┘
+**Dosya:** `src/hooks/useFilterPreferences.tsx`
+
+```typescript
+interface FilterPreferences {
+  visibleFilters: string[];
+  filterOrder: string[];
+}
+
+function useFilterPreferences() {
+  // Kullanıcının filtre tercihlerini yükle/kaydet
+  const loadPreferences = async (): Promise<FilterPreferences>;
+  const savePreferences = async (prefs: FilterPreferences): Promise<void>;
+  
+  return { preferences, isLoading, savePreferences };
+}
 ```
 
-### 5.3 FilterSidebar Tasarımı (Satış Takip Sayfası İçin)
+### 3.5 Yeni Bileşen: FilterManagerModal
 
-```text
-┌─────────────────────────────────────┐
-│  📊 Filtreler                   [x] │
-├─────────────────────────────────────┤
-│                                     │
-│  📅 Tarih Aralığı                   │
-│  ┌─────────────────────────────────┐│
-│  │ Bu Ay                      ▼  ││
-│  └─────────────────────────────────┘│
-│                                     │
-│  👤 Satış Temsilcisi                │
-│  ┌─────────────────────────────────┐│
-│  │ 🔒 Ali Yılmaz (Siz)           ││
-│  └─────────────────────────────────┘│
-│  (Değiştirilemez - DIA yetkiniz)    │
-│                                     │
-│  🏢 Müşteri Grubu                   │
-│  [ ] Altın Müşteriler               │
-│  [ ] VIP                            │
-│  [ ] Yeni Müşteriler                │
-│                                     │
-│  📦 Ürün Kategorisi                 │
-│  [Tümü                          ▼] │
-│                                     │
-│  💰 Tutar Aralığı                   │
-│  ₺0 ═══════●═══════ ₺100K          │
-│                                     │
-│  [Filtreleri Uygula]  [Sıfırla]     │
-└─────────────────────────────────────┘
+**Dosya:** `src/components/filters/FilterManagerModal.tsx`
+
+Kullanıcının hangi filtreleri göreceğini seçtiği modal:
+
+```typescript
+interface FilterManagerModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  currentFilters: string[];
+  onSave: (filters: string[]) => void;
+}
 ```
 
 ---
 
-## Bölüm 6: AI Widget Kurallarına Filtre Bilgisi Ekleme
+## Bölüm 4: AI Kod Kurallarına Global Filtre Ekleme
 
-### 6.1 Güncellenmiş AI System Prompt
+### 4.1 ai-code-generator System Prompt Güncelleme
+
+**Dosya:** `supabase/functions/ai-code-generator/index.ts`
+
+Mevcut system prompt'a eklenecek bölüm:
 
 ```text
 ═══════════════════════════════════════════════════════════════════════════════
+
 🔍 GLOBAL FİLTRE SİSTEMİ
 ───────────────────────────────────────────────────────────────────────────────
 
-Widget'a "filters" prop'u da geçilir. Bu prop aktif filtreleri içerir:
+Widget'a "filters" prop'u da geçilir. Bu prop aktif global filtreleri içerir:
 
 function Widget({ data, colors, filters }) {
-  // filters objesi:
+  // filters objesi örneği:
   // {
   //   tarihAraligi: { period: 'this_month', field: 'tarih' },
   //   satisTemsilcisi: ['Ali Yılmaz'],
   //   ozelkod2: ['VIP'],
-  //   searchTerm: 'ABC Ltd'
+  //   cariKartTipi: ['AL', 'AS'],
+  //   searchTerm: ''
   // }
 
-  // Filtre bilgisini widget'ta göster (opsiyonel)
-  var filterInfo = '';
-  if (filters && filters.satisTemsilcisi && filters.satisTemsilcisi.length > 0) {
-    filterInfo = 'Temsilci: ' + filters.satisTemsilcisi.join(', ');
-  }
+  // NOT: "data" zaten filtrelenmiş olarak gelir!
+  // Widget içinde tekrar filtreleme YAPMA.
+  // "filters" prop'unu sadece hangi filtrelerin aktif olduğunu
+  // göstermek için kullan (opsiyonel bilgi gösterimi).
 }
 
-NOT: Veri zaten filtrelenmiş olarak gelir. Widget içinde tekrar filtreleme YAPMA!
-Sadece hangi filtrelerin aktif olduğunu göstermek için filters prop'unu kullan.
+ZORUNLU İMZA (Güncellendi):
+  function Widget({ data, colors, filters })
+
+═══════════════════════════════════════════════════════════════════════════════
 ```
 
-### 6.2 Veri Analizi Bilgisi (Wizard Adım 1)
+### 4.2 BuilderWidgetRenderer - filters Prop'unu Custom Widget'lara Geç
 
-AI widget oluştururken gösterilecek veri analizi:
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│  📊 Veri Analizi                                            │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Kayıt Sayısı: 1,245                                        │
-│  Alan Sayısı: 24                                            │
-│                                                             │
-│  🔢 SAYISAL ALANLAR (Filtrelenebilir)                      │
-│  ┌─────────────────────────────────────────────────────────┐
-│  │ toplambakiye   Min: -50K   Max: 2.5M   Avg: 125K       │
-│  │ vadesigecentutar   Min: 0   Max: 500K   Avg: 45K       │
-│  │ riskSkoru      Min: 0      Max: 100    Avg: 35         │
-│  └─────────────────────────────────────────────────────────┘
-│                                                             │
-│  📝 METİN ALANLARI (Filtrelenebilir)                       │
-│  ┌─────────────────────────────────────────────────────────┐
-│  │ satiselemani   ▸ 12 benzersiz değer                     │
-│  │   [Ali Yılmaz] [Mehmet Öz] [Ayşe Demir] ...            │
-│  │ ozelkod2kod    ▸ 8 benzersiz değer                      │
-│  │   [VIP] [ALTIN] [NORMAL] [YENİ] ...                    │
-│  │ sehir          ▸ 45 benzersiz değer                     │
-│  │   [İstanbul] [Ankara] [İzmir] ...                      │
-│  └─────────────────────────────────────────────────────────┘
-│                                                             │
-│  📅 TARİH ALANLARI                                          │
-│  ┌─────────────────────────────────────────────────────────┐
-│  │ tarih          Min: 2024-01-01   Max: 2024-12-31       │
-│  │ vadetarihi     Min: 2024-01-15   Max: 2025-06-30       │
-│  └─────────────────────────────────────────────────────────┘
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Bölüm 7: DIA Entegrasyonu
-
-### 7.1 Zorunlu Kullanıcı Filtreleri
+**Dosya:** `src/components/dashboard/BuilderWidgetRenderer.tsx`
 
 ```typescript
-// profiles tablosundan zorunlu filtreler
-interface DiaAutoFilter {
-  field: string;      // DIA alan adı (örn: satiselemani)
-  operator: string;   // = veya IN
-  value: string;      // Değer
-  isLocked: boolean;  // Kullanıcı değiştiremez
-}
+// Mevcut (Satır 398-408):
+const fn = new Function(
+  'React',
+  'data',
+  'LucideIcons',
+  'Recharts',
+  'colors',
+  customCode
+);
+const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors);
 
-// Örnek: Satış personeli için
-{
-  "dia_auto_filters": [
-    { "field": "satiselemani", "operator": "=", "value": "Ali Yılmaz", "isLocked": true }
-  ]
-}
-```
-
-### 7.2 dia-api-test Güncellemesi
-
-```typescript
-interface TestApiRequest {
-  // Mevcut alanlar...
-  
-  // Yeni: Kullanıcı filtreleri (profiles'dan otomatik)
-  applyUserFilters?: boolean;
-  
-  // Yeni: Sayfa filtreleri
-  pageFilters?: {
-    tarihAraligi?: { period: string; field: string };
-    satisTemsilcisi?: string[];
-    ozelkod?: string[];
-    // ...
-  };
-}
-```
-
-### 7.3 Filtre Birleştirme Mantığı
-
-```text
-DIA Sorgusu Oluşturma:
-
-1. DataSource.filters (Veri kaynağı tanımı)
-   +
-2. profiles.dia_auto_filters (Zorunlu kullanıcı filtreleri)
-   +
-3. PageFilters (Sayfa bazlı seçimler)
-   +
-4. WidgetConfig.filters (Widget özel filtreleri)
-   =
-   → FİNAL FİLTRE DİZİSİ
+// Yeni - filters ekleniyor:
+const fn = new Function(
+  'React',
+  'data',
+  'LucideIcons',
+  'Recharts',
+  'colors',
+  'filters',  // YENİ
+  customCode
+);
+const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters);
 ```
 
 ---
 
-## Bölüm 8: Satış Takip Sayfası Örneği
+## Bölüm 5: Yetki Kodu (Lock Gösterimi)
 
-### 8.1 Sayfa Yapılandırması
-
-```json
-{
-  "name": "Satış Takip",
-  "slug": "satis-takip",
-  "filter_config": {
-    "availableFilters": ["tarih", "musteri", "urunGrubu", "durum"],
-    "defaultFilters": {
-      "tarih": { "period": "this_month", "field": "tarih" }
-    },
-    "filterLayout": "sidebar",
-    "showFilterBar": true,
-    "lockedFilters": {
-      "satisTemsilcisi": "$CURRENT_USER" // DIA kullanıcısı
-    }
-  }
-}
-```
-
-### 8.2 Sayfa Görünümü
+Yetki kodu aktif ise GlobalFilterBar'da görsel lock gösterimi:
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  Satış Takip - Ali Yılmaz                              [Filtreler 🔽]       │
-├────────────────────┬────────────────────────────────────────────────────────┤
-│  📊 Filtreler      │  ┌──────────────────────────────────────────────────┐ │
-│  ──────────────    │  │  KPI SATIRII: Toplam | Hedef | Gerçekleşme      │ │
-│                    │  │  ₺85K          ₺100K    %85                      │ │
-│  📅 Bu Ay     ▼    │  └──────────────────────────────────────────────────┘ │
-│                    │                                                        │
-│  👤 Ali Yılmaz     │  ┌──────────────────────────────────────────────────┐ │
-│  🔒 (Sizin kaydınız)│  │  SATIŞLARIM GRAFİĞİ (Bar Chart)                  │ │
-│                    │  │  ████ ████ ████ ███ ██                            │ │
-│  🏢 Müşteri        │  └──────────────────────────────────────────────────┘ │
-│  [ ] ABC Ltd       │                                                        │
-│  [ ] XYZ A.Ş.      │  ┌──────────────────────────────────────────────────┐ │
-│  [ ] 123 Tic.      │  │  MÜŞTERİ LİSTESİ (Tablo)                         │ │
-│                    │  │  ─────────────────────────────────────            │ │
-│  📦 Ürün Grubu     │  │  ABC Ltd    │ ₺25K  │ Aktif                       │ │
-│  [Tümü        ▼]   │  │  XYZ A.Ş.   │ ₺18K  │ Beklemede                   │ │
-│                    │  │  123 Tic.   │ ₺12K  │ Tamamlandı                  │ │
-│  [Uygula]          │  └──────────────────────────────────────────────────┘ │
-└────────────────────┴────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  📅 Bu Ay │ 🔒 Temsilci: Ali Yılmaz │ 🏷️ AL/AS/ST │ +Filtre │      │
+└─────────────────────────────────────────────────────────────────────┘
+            ↑ Kilitli - tıklanamaz, değiştirilemez
 ```
+
+Bu zaten `_diaAutoFilters` ile destekleniyor, sadece UI'da gösterim eklenmeli.
 
 ---
 
-## Bölüm 9: Dosya Değişiklikleri
+## Bölüm 6: Dosya Değişiklikleri Özeti
 
 ### Yeni Dosyalar
-
 | Dosya | Açıklama |
 |-------|----------|
-| `src/components/filters/GlobalFilterBar.tsx` | Üst filtre barı |
-| `src/components/filters/FilterSidebar.tsx` | Yan filtre paneli |
-| `src/components/filters/DateRangeFilter.tsx` | Tarih aralığı |
-| `src/components/filters/MultiSelectFilter.tsx` | Çoklu seçim |
-| `src/components/filters/FilterPresetSelector.tsx` | Kayıtlı filtreler |
-| `src/hooks/usePageFilters.tsx` | Sayfa filtre hook'u |
-| `src/lib/filterTypes.ts` | Filtre tipleri |
+| `src/hooks/useFilterPreferences.tsx` | Kullanıcı filtre tercihleri hook'u |
+| `src/components/filters/FilterManagerModal.tsx` | Filtre seçim modalı |
 
 ### Güncellenecek Dosyalar
-
 | Dosya | Değişiklik |
 |-------|------------|
-| `src/contexts/DashboardFilterContext.tsx` | Genişletilmiş filtreler |
-| `src/hooks/useDynamicWidgetData.tsx` | Filtre entegrasyonu |
-| `supabase/functions/dia-api-test/index.ts` | Kullanıcı filtreleri |
-| `supabase/functions/ai-code-generator/index.ts` | filters prop bilgisi |
-| `src/components/admin/CustomCodeWidgetBuilder.tsx` | Veri analizi paneli |
+| `src/components/dashboard/BuilderWidgetRenderer.tsx` | useGlobalFilters kullanımı, filters prop'u geçirme |
+| `src/hooks/useDynamicWidgetData.tsx` | Veri zenginleştirme (cari join), globalFilters kullanımı |
+| `src/components/filters/GlobalFilterBar.tsx` | Hızlı arama kaldırma, filtre yönetimi butonu ekleme |
+| `supabase/functions/ai-code-generator/index.ts` | filters prop dokümantasyonu |
 
-### Veritabanı Migrasyonları
-
-1. `profiles` tablosuna `dia_satis_elemani`, `dia_yetki_kodu`, `dia_auto_filters` alanları
-2. `user_pages` tablosuna `filter_config` alanı
-3. Yeni `page_filter_presets` tablosu
+### Veritabanı
+| Migrasyon | Açıklama |
+|-----------|----------|
+| `user_filter_preferences` tablosu | Kullanıcı filtre tercihleri |
 
 ---
 
-## Bölüm 10: Uygulama Öncelik Sırası
+## Bölüm 7: Uygulama Sırası
 
-### Faz 1: Temel Altyapı
-1. Veritabanı migrasyonları
-2. `DashboardFilterContext` genişletme
-3. `dia-api-test` kullanıcı filtresi desteği
+### Faz 1: Kritik Düzeltme (Nakit Akış Tepkisi)
+1. `BuilderWidgetRenderer.tsx` - `useGlobalFilters` entegrasyonu
+2. `useDynamicWidgetData.tsx` - `globalFilters` parametresini kullan
 
-### Faz 2: Filtre Bileşenleri
-4. `GlobalFilterBar` ve `FilterSidebar` bileşenleri
-5. `DateRangeFilter` ve `MultiSelectFilter`
-6. Sayfa bazlı filtre yapılandırması
+### Faz 2: Veri Zenginleştirme
+3. `useDynamicWidgetData.tsx` - Cari verilerle join (enrichWithCariData)
 
-### Faz 3: AI Entegrasyonu
-7. AI system prompt'a filtre bilgisi ekleme
-8. Widget builder'da veri analizi paneli
-9. Filtrelenebilir alanları gösterme
+### Faz 3: Filtre Yönetimi UI
+4. Veritabanı migrasyonu: `user_filter_preferences`
+5. `useFilterPreferences.tsx` hook'u oluştur
+6. `FilterManagerModal.tsx` bileşeni oluştur
+7. `GlobalFilterBar.tsx` güncelle (hızlı arama kaldır, +Filtre butonu)
 
-### Faz 4: Kullanıcı Deneyimi
-10. Filtre preset'leri (kayıtlı filtreler)
-11. Satış takip sayfası örneği
-12. Mobil uyumluluk
+### Faz 4: AI Entegrasyonu
+8. `ai-code-generator/index.ts` - filters prop dokümantasyonu
+9. `BuilderWidgetRenderer.tsx` - Custom widget'lara filters geçir
 
 ---
 
-## Sonuç
+## Bölüm 8: Teknik Detaylar
 
-Bu plan uygulandığında:
-- ✅ Tüm widgetları etkileyen global filtreler
-- ✅ DIA yetki kodu ve satış elemanı bazlı zorunlu filtreler
-- ✅ Sayfa bazlı özelleştirilebilir filtre yapılandırması
-- ✅ AI widget üretirken filtrelenebilir alan bilgisi
-- ✅ Veri analizi panelinde tüm alanların görünmesi
-- ✅ Satış personeli sayfası için kilitli filtreler
-- ✅ Filtre preset'leri ile hızlı erişim
+### 8.1 Mevcut Filtre Operatörleri
+`applyGlobalFilters` fonksiyonu şu alanları destekliyor:
+- `searchTerm` - Metin arama (tüm alanlarda)
+- `cariKartTipi` - AL, AS, ST
+- `satisTemsilcisi` - Satış elemanı
+- `sube` - Şube kodu
+- `depo` - Depo kodu
+- `ozelkod1/2/3` - Özel kodlar
+- `sehir` - Şehir
+- `durum` - Aktif/Pasif
+- `gorunumModu` - Potansiyel/Cari
+- `_diaAutoFilters` - Zorunlu kilitli filtreler
+
+### 8.2 Veri Zenginleştirme Mantığı
+
+```text
+┌───────────────────┐     ┌───────────────────┐
+│ Cari_vade_bakiye  │     │ Cari Kart Listesi │
+│ (vade hareketleri)│     │ (metadata)        │
+├───────────────────┤     ├───────────────────┤
+│ carikartkodu      │◄────│ carikartkodu      │
+│ toplambakiye      │     │ satiselemani      │
+│ __borchareketler  │     │ ozelkod1kod       │
+└───────────────────┘     │ carikarttipi      │
+         │                │ sehir             │
+         │                └───────────────────┘
+         ▼
+┌───────────────────────────────────────┐
+│ Zenginleştirilmiş Veri                │
+│ (Filtrelenebilir alanlar eklendi)     │
+├───────────────────────────────────────┤
+│ carikartkodu, toplambakiye,           │
+│ __borchareketler, satiselemani,       │
+│ ozelkod1kod, carikarttipi, sehir...   │
+└───────────────────────────────────────┘
+```
+
+### 8.3 Filtre Tercihleri Varsayılanları
+
+```typescript
+const DEFAULT_VISIBLE_FILTERS = [
+  'tarihAraligi',       // Zorunlu - kaldırılamaz
+  'satisTemsilcisi',
+  'cariKartTipi',
+];
+
+const ALL_AVAILABLE_FILTERS = [
+  { key: 'tarihAraligi', label: 'Tarih Aralığı', locked: true },
+  { key: 'satisTemsilcisi', label: 'Satış Temsilcisi' },
+  { key: 'cariKartTipi', label: 'Cari Kart Tipi' },
+  { key: 'sube', label: 'Şube' },
+  { key: 'depo', label: 'Depo' },
+  { key: 'ozelkod1', label: 'Özel Kod 1' },
+  { key: 'ozelkod2', label: 'Özel Kod 2' },
+  { key: 'ozelkod3', label: 'Özel Kod 3' },
+  { key: 'sehir', label: 'Şehir' },
+  { key: 'durum', label: 'Durum (Aktif/Pasif)' },
+  { key: 'gorunumModu', label: 'Görünüm Modu' },
+];
+```
