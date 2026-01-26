@@ -10,7 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Button } from '@/components/ui/button';
 import { ChevronDown, Palette, LayoutGrid, TrendingUp, Settings2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ChartType, LegendPosition } from '@/lib/widgetBuilderTypes';
+import { ChartType, LegendPosition, LegendBehavior, LEGEND_BEHAVIORS } from '@/lib/widgetBuilderTypes';
 import { useState } from 'react';
 
 // Renk paletleri
@@ -35,6 +35,8 @@ export interface ChartSettingsData {
   colorPalette: PaletteKey;
   showLegend: boolean;
   legendPosition: LegendPosition;
+  legendBehavior: LegendBehavior;
+  legendThreshold: number;
   showGrid: boolean;
   stacked: boolean;
   displayLimit: number;
@@ -56,6 +58,8 @@ const getDefaultSettings = (): ChartSettingsData => ({
   colorPalette: 'default',
   showLegend: true,
   legendPosition: 'bottom',
+  legendBehavior: 'auto',
+  legendThreshold: 40,
   showGrid: true,
   stacked: false,
   displayLimit: 10,
@@ -154,22 +158,70 @@ export function ChartSettingsPanel({
           </div>
 
           {settings.showLegend && (
-            <div className="space-y-2">
-              <Label className="text-xs">Legend Konumu</Label>
-              <Select
-                value={settings.legendPosition}
-                onValueChange={(v) => handleChange({ legendPosition: v as LegendPosition })}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="bottom">Alt</SelectItem>
-                  <SelectItem value="right">Sağ</SelectItem>
-                  <SelectItem value="hidden">Gizli</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <>
+              <div className="space-y-2">
+                <Label className="text-xs">Legend Konumu</Label>
+                <Select
+                  value={settings.legendPosition}
+                  onValueChange={(v) => handleChange({ legendPosition: v as LegendPosition })}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bottom">Alt</SelectItem>
+                    <SelectItem value="right">Sağ</SelectItem>
+                    <SelectItem value="hidden">Gizli</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Legend Davranışı */}
+              <div className="space-y-2">
+                <Label className="text-xs">Legend Davranışı</Label>
+                <Select
+                  value={settings.legendBehavior || 'auto'}
+                  onValueChange={(v) => handleChange({ legendBehavior: v as LegendBehavior })}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LEGEND_BEHAVIORS.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        <div className="flex flex-col">
+                          <span>{b.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground">
+                  {LEGEND_BEHAVIORS.find(b => b.id === (settings.legendBehavior || 'auto'))?.description}
+                </p>
+              </div>
+
+              {/* Legend Eşik Oranı - sadece auto modda */}
+              {(settings.legendBehavior === 'auto' || !settings.legendBehavior) && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Gizleme Eşiği</Label>
+                    <span className="text-xs text-muted-foreground">%{settings.legendThreshold || 40}</span>
+                  </div>
+                  <Slider
+                    value={[settings.legendThreshold || 40]}
+                    onValueChange={([v]) => handleChange({ legendThreshold: v })}
+                    min={20}
+                    max={70}
+                    step={5}
+                    className="w-full"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Legend, içerik alanının bu yüzdeden fazlasını kaplıyorsa gizlenir
+                  </p>
+                </div>
+              )}
+            </>
           )}
 
           {/* Grid */}

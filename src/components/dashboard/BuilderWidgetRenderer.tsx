@@ -1,17 +1,18 @@
 // BuilderWidgetRenderer - Widget Builder ile oluşturulan widget'ları render eder (Drill-down destekli)
 
-import React, { useState, useMemo, Component, ErrorInfo, ReactNode, useRef, useEffect } from 'react';
-import { WidgetBuilderConfig, AggregationType, DatePeriod } from '@/lib/widgetBuilderTypes';
+import React, { useState, useMemo, Component, ErrorInfo, ReactNode, useRef, useEffect, useCallback } from 'react';
+import { WidgetBuilderConfig, AggregationType, DatePeriod, LegendBehavior } from '@/lib/widgetBuilderTypes';
 import { useDynamicWidgetData } from '@/hooks/useDynamicWidgetData';
 import { useChartColorPalette } from '@/hooks/useChartColorPalette';
 import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
+import { useUserSettings } from '@/contexts/UserSettingsContext';
 import { DrillDownModal } from './DrillDownModal';
 import { WidgetDateFilter, getDateRangeForPeriod } from './WidgetDateFilter';
 import { WidgetFeedbackButton } from './WidgetFeedbackButton';
 import { StatCard } from './StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertCircle, BarChart3, Hash, MousePointerClick, Calendar, AlertTriangle, Code } from 'lucide-react';
+import { AlertCircle, BarChart3, Hash, MousePointerClick, Calendar, AlertTriangle, Code, ChevronDown, Minimize2 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { 
   BarChart, Bar, LineChart, Line, AreaChart, Area,
@@ -114,6 +115,9 @@ interface PieDonutChartProps {
   yAxisField: string;
   fieldWells: any;
   ChartHeader: React.FC<{ icon: string }>;
+  legendBehavior?: LegendBehavior;
+  legendThreshold?: number;
+  widgetId: string;
 }
 
 function PieDonutChartWithResponsiveLegend({
@@ -133,53 +137,91 @@ function PieDonutChartWithResponsiveLegend({
   yAxisField,
   fieldWells,
   ChartHeader,
+  legendBehavior = 'auto',
+  legendThreshold = 40,
+  widgetId,
 }: PieDonutChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
-  const [legendExpanded, setLegendExpanded] = useState(false);
-  const [hasEnoughSpace, setHasEnoughSpace] = useState(true); // Varsayılan göster, ölçüm sonrası karar ver
-  const [contentHeight, setContentHeight] = useState(0);
   
-  // Legend yüksekliği konteyner yüksekliğinin %40'ından fazla mı kontrol et
-  useEffect(() => {
-    const checkRatio = () => {
-      if (containerRef.current && measureRef.current) {
-        const containerRect = containerRef.current.getBoundingClientRect();
-        const headerRect = headerRef.current?.getBoundingClientRect();
+  // Kullanıcı tercihlerini al (legend expanded durumu dahil)
+  const { getWidgetFilters, saveWidgetFilters } = useUserSettings();
+  const widgetFilters = getWidgetFilters(widgetId) as Record<string, any>;
+  const savedLegendExpanded = widgetFilters?.legendExpanded as boolean | undefined;
+  
+  const [legendExpanded, setLegendExpanded] = useState(
+    savedLegendExpanded ?? (legendBehavior === 'always_visible')
+  );
+  const [hasEnoughSpace, setHasEnoughSpace] = useState(legendBehavior !== 'always_hidden' && legendBehavior !== 'collapsible');
+  const [contentHeight, setContentHeight] = useState(0);
+  const [isTooSmall, setIsTooSmall] = useState(false);
+  
+  // Legend toggle'ı kaydet
+  const handleLegendToggle = useCallback(() => {
+    const newExpanded = !legendExpanded;
+    setLegendExpanded(newExpanded);
+    // Kullanıcı tercihi olarak kaydet
+    saveWidgetFilters(widgetId, { ...widgetFilters, legendExpanded: newExpanded } as any);
+  }, [legendExpanded, widgetId, widgetFilters, saveWidgetFilters]);
+  
+  // Legend yüksekliği konteyner yüksekliğinin threshold'undan fazla mı kontrol et
+  const checkRatio = useCallback(() => {
+    // Davranış kontrolü
+    if (legendBehavior === 'always_visible') {
+      setHasEnoughSpace(true);
+      return;
+    }
+    if (legendBehavior === 'always_hidden') {
+      setHasEnoughSpace(false);
+      setLegendExpanded(false);
+      return;
+    }
+    if (legendBehavior === 'collapsible') {
+      setHasEnoughSpace(false);
+      return;
+    }
+    
+    // Auto mod - oran hesapla
+    if (containerRef.current && measureRef.current) {
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const headerRect = headerRef.current?.getBoundingClientRect();
 
-        // Legend eşiğini toplam kart yüksekliğinin değil, içerik alanının (header hariç) %40'ı olarak hesapla
-        const computedContentHeight = Math.max(0, containerRect.height - (headerRect?.height || 0));
-        setContentHeight(computedContentHeight);
-
-        // Ölçüm div'inin genişliği gerçek kart genişliğine yakın olmalı; aksi halde legend yüksekliği olduğundan düşük ölçülüyor
-        const targetLegendWidth = Math.max(220, Math.min(containerRect.width, 380));
-        measureRef.current.style.width = `${targetLegendWidth}px`;
-
-        // scrollHeight: görünmez olsa bile gerçek içerik yüksekliğini daha doğru verir
-        const legendHeight = measureRef.current.scrollHeight || measureRef.current.offsetHeight;
-        const threshold = computedContentHeight * 0.4;
-
-        // Çok küçük alanlarda legend'i otomatik kapat
-        if (computedContentHeight <= 0) {
-          setHasEnoughSpace(false);
-          setLegendExpanded(false);
-          return;
-        }
-
-        const enough = legendHeight <= threshold;
-        setHasEnoughSpace(enough);
-        if (enough) {
-          // Alan yeterliyse manuel açma durumunu sıfırla (buton da kaybolsun)
-          setLegendExpanded(false);
-        }
+      // Legend eşiğini toplam kart yüksekliğinin değil, içerik alanının (header hariç) threshold'u olarak hesapla
+      const computedContentHeight = Math.max(0, containerRect.height - (headerRect?.height || 0));
+      setContentHeight(computedContentHeight);
+      
+      // Min yükseklik kontrolü
+      if (computedContentHeight < 120) {
+        setIsTooSmall(true);
+      } else {
+        setIsTooSmall(false);
       }
-    };
+
+      // Ölçüm div'inin genişliği gerçek kart genişliğine yakın olmalı
+      const targetLegendWidth = Math.max(220, Math.min(containerRect.width, 380));
+      measureRef.current.style.width = `${targetLegendWidth}px`;
+
+      const legendHeight = measureRef.current.scrollHeight || measureRef.current.offsetHeight;
+      const threshold = computedContentHeight * (legendThreshold / 100);
+
+      if (computedContentHeight <= 0) {
+        setHasEnoughSpace(false);
+        setLegendExpanded(false);
+        return;
+      }
+
+      const enough = legendHeight <= threshold;
+      setHasEnoughSpace(enough);
+      if (enough) {
+        setLegendExpanded(false);
+      }
+    }
+  }, [legendBehavior, legendThreshold]);
+  
+  useEffect(() => {
+    const timer = setTimeout(checkRatio, 150);
     
-    // İlk render sonrası ölçüm için kısa gecikme
-    const timer = setTimeout(checkRatio, 200);
-    
-    // ResizeObserver ile dinamik kontrol
     const resizeObserver = new ResizeObserver(() => {
       setTimeout(checkRatio, 50);
     });
@@ -191,7 +233,7 @@ function PieDonutChartWithResponsiveLegend({
       clearTimeout(timer);
       resizeObserver.disconnect();
     };
-  }, [data.chartData.length, displayLimit]);
+  }, [checkRatio, data.chartData.length, displayLimit]);
 
   const isDonut = vizType === 'donut';
   const legendField = fieldWells?.category?.field || builderConfig.visualization.chart?.legendField || '';
@@ -300,11 +342,11 @@ function PieDonutChartWithResponsiveLegend({
           </div>
           
           {/* Legend toggle butonu - legend otomatik gizlendiyse her zaman göster */}
-          {!hasEnoughSpace && (
+          {!hasEnoughSpace && legendBehavior !== 'always_hidden' && (
             <div className="w-full flex items-center justify-center flex-shrink-0">
               <button
                 type="button"
-                onClick={() => setLegendExpanded((v) => !v)}
+                onClick={handleLegendToggle}
                 className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded hover:bg-muted/50"
               >
                 <span>{legendExpanded ? 'Gizle' : 'Detaylar'}</span>
@@ -419,6 +461,8 @@ export function BuilderWidgetRenderer({
   // Renk paleti - kullanıcının seçtiği palet öncelikli, yoksa widget-level palet
   const showGrid = chartSettings.showGrid !== false;
   const legendPosition = chartSettings.legendPosition || 'bottom';
+  const legendBehavior: LegendBehavior = chartSettings.legendBehavior || vizChart?.legendBehavior || 'auto';
+  const legendThreshold = chartSettings.legendThreshold || vizChart?.legendThreshold || 40;
   const displayLimit = chartSettings.displayLimit || 10;
   const showTrendLine = chartSettings.showTrendLine || false;
   const showAverageLine = chartSettings.showAverageLine || false;
@@ -931,6 +975,9 @@ export function BuilderWidgetRenderer({
         yAxisField={yAxisField}
         fieldWells={fieldWells}
         ChartHeader={ChartHeader}
+        legendBehavior={legendBehavior}
+        legendThreshold={legendThreshold}
+        widgetId={widgetId}
       />
     );
   }

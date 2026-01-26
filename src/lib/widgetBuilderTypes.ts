@@ -262,6 +262,16 @@ export interface ChartSeriesConfig {
 // Legend konumu
 export type LegendPosition = 'bottom' | 'right' | 'hidden';
 
+// Legend davranışı
+export type LegendBehavior = 'auto' | 'always_visible' | 'always_hidden' | 'collapsible';
+
+export const LEGEND_BEHAVIORS: { id: LegendBehavior; name: string; description: string }[] = [
+  { id: 'auto', name: 'Otomatik (%40)', description: 'Legend %40\'tan fazla yer kaplıyorsa gizle' },
+  { id: 'always_visible', name: 'Her Zaman Açık', description: 'Legend her zaman görünür' },
+  { id: 'always_hidden', name: 'Her Zaman Kapalı', description: 'Legend hiç gösterilmez' },
+  { id: 'collapsible', name: 'Katlanabilir', description: 'Legend kapalı başlar, kullanıcı açabilir' },
+];
+
 export interface ChartConfig {
   chartType: ChartType;
   xAxis?: ChartAxisConfig;
@@ -274,6 +284,8 @@ export interface ChartConfig {
   colorPalette?: string;           // Renk paleti adı (pastel, vivid, vb.)
   showLegend?: boolean;
   legendPosition?: LegendPosition; // Legend konumu (alt, sağ, gizli)
+  legendBehavior?: LegendBehavior; // Legend davranışı (auto, always_visible, always_hidden, collapsible)
+  legendThreshold?: number;        // Legend gizleme eşiği (0-100, varsayılan: 40)
   showGrid?: boolean;
   stacked?: boolean;
   displayLimit?: number;           // Grafikte gösterilecek maksimum kayıt sayısı (varsayılan: 10)
@@ -380,6 +392,8 @@ export interface WidgetBuilderConfig {
     colorPalette?: string;
     showLegend?: boolean;
     legendPosition?: 'top' | 'bottom' | 'left' | 'right' | 'hidden';
+    legendBehavior?: LegendBehavior; // Legend davranışı
+    legendThreshold?: number;        // Legend gizleme eşiği (%30-%60)
     showGrid?: boolean;
     stacked?: boolean;
     displayLimit?: number;
