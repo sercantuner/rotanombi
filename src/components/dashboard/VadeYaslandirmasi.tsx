@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Clock, AlertTriangle, Calendar } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
 import type { VadeYaslandirma } from '@/lib/diaClient';
-import { useDashboardFilters } from '@/contexts/DashboardFilterContext';
+import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
 import { useChartColorPalette } from '@/hooks/useChartColorPalette';
 
 interface Props {
@@ -14,7 +14,7 @@ interface Props {
 type Periyot = 'gunluk' | 'haftalik' | 'aylik';
 
 export function VadeYaslandirmasi({ yaslandirma, isLoading, widgetId }: Props) {
-  const { filters, setFilter } = useDashboardFilters();
+  const { filters, setFilter } = useGlobalFilters();
   // Widget bazında palet desteği - widgetId varsa widget-specific palet kullanılır
   const { colors: paletteColors, getColor } = useChartColorPalette({ widgetId });
   const [periyot, setPeriyot] = useState<Periyot>('gunluk');
