@@ -135,24 +135,38 @@ function PieDonutChartWithResponsiveLegend({
   ChartHeader,
 }: PieDonutChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
   const [legendExpanded, setLegendExpanded] = useState(false);
-  const [hasEnoughSpace, setHasEnoughSpace] = useState(false);
+  const [hasEnoughSpace, setHasEnoughSpace] = useState(true); // Varsayılan göster, ölçüm sonrası karar ver
   
-  // Container yüksekliğini kontrol et - legend için yeterli alan var mı?
+  // Legend yüksekliği konteyner yüksekliğinin %40'ından fazla mı kontrol et
   useEffect(() => {
-    const checkHeight = () => {
-      if (containerRef.current) {
+    const checkRatio = () => {
+      if (containerRef.current && measureRef.current) {
         const containerHeight = containerRef.current.offsetHeight;
-        // 350px üstünde legend için yer var demek
-        setHasEnoughSpace(containerHeight >= 350);
+        const legendHeight = measureRef.current.offsetHeight;
+        const headerHeight = 56; // Header + padding
+        const toggleHeight = 28; // Toggle button
+        const availableHeight = containerHeight - headerHeight - toggleHeight;
+        
+        if (availableHeight <= 0) {
+          setHasEnoughSpace(false);
+          return;
+        }
+        
+        // Legend, mevcut alanın %40'ından az yer kaplıyorsa göster
+        const legendRatio = legendHeight / availableHeight;
+        setHasEnoughSpace(legendRatio <= 0.4);
       }
     };
     
     // İlk render sonrası ölçüm için kısa gecikme
-    const timer = setTimeout(checkHeight, 100);
+    const timer = setTimeout(checkRatio, 200);
     
     // ResizeObserver ile dinamik kontrol
-    const resizeObserver = new ResizeObserver(checkHeight);
+    const resizeObserver = new ResizeObserver(() => {
+      setTimeout(checkRatio, 50);
+    });
     if (containerRef.current) {
       resizeObserver.observe(containerRef.current);
     }
@@ -161,17 +175,54 @@ function PieDonutChartWithResponsiveLegend({
       clearTimeout(timer);
       resizeObserver.disconnect();
     };
-  }, []);
+  }, [data.chartData.length, displayLimit]);
 
   const isDonut = vizType === 'donut';
   const legendField = fieldWells?.category?.field || builderConfig.visualization.chart?.legendField || '';
   const chartDataTotal = data.chartData.reduce((sum: number, d: any) => sum + d.value, 0);
   
-  // Legend'ı göster: ya yeterli yer varsa ya da kullanıcı manuel açtıysa
-  const showLegend = hasEnoughSpace || legendExpanded;
+  // Legend içeriğini oluşturan helper
+  const LegendItems = () => (
+    <>
+      {data.chartData.slice(0, displayLimit).map((item: any, index: number) => {
+        const percent = chartDataTotal > 0 ? ((item.value / chartDataTotal) * 100).toFixed(1) : '0';
+        return (
+          <div 
+            key={index} 
+            className="flex items-center gap-1.5 text-[11px] cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
+            onClick={() => handleDrillDown(item.name, legendField)}
+          >
+            <div 
+              className="w-2 h-2 rounded-sm flex-shrink-0" 
+              style={{ backgroundColor: activeColors[index % activeColors.length] }}
+            />
+            <span className="truncate flex-1" title={item.name}>
+              {String(item.name).slice(0, 12)}
+            </span>
+            <span className="text-muted-foreground">{percent}%</span>
+          </div>
+        );
+      })}
+      {data.chartData.length > displayLimit && (
+        <span className="text-[10px] text-muted-foreground col-span-2 text-center">
+          +{data.chartData.length - displayLimit} daha...
+        </span>
+      )}
+    </>
+  );
   
   return (
     <>
+      {/* Görünmez ölçüm div'i - legend yüksekliğini hesaplamak için */}
+      <div 
+        ref={measureRef}
+        className="absolute opacity-0 pointer-events-none grid grid-cols-2 gap-x-3 gap-y-0.5 w-full max-w-[380px]"
+        style={{ visibility: 'hidden', position: 'fixed', top: -9999 }}
+        aria-hidden="true"
+      >
+        <LegendItems />
+      </div>
+      
       <Card ref={containerRef} className={cn(isolatedClassName, 'overflow-hidden h-full flex flex-col')}>
         <ChartHeader icon="PieChart" />
         <CardContent className="flex-1 flex flex-col items-center py-2 min-h-0 overflow-hidden">
@@ -245,37 +296,15 @@ function PieDonutChartWithResponsiveLegend({
               />
             </button>
           )}
-          
-          {/* Legend - gösterilecekse */}
-          {showLegend && (
-            <div className={cn(
-              "grid grid-cols-2 gap-x-3 gap-y-0.5 w-full max-w-[380px] flex-shrink-0",
-              !hasEnoughSpace && "mt-2 pt-2 border-t border-border"
-            )}>
-              {data.chartData.slice(0, displayLimit).map((item: any, index: number) => {
-                const percent = chartDataTotal > 0 ? ((item.value / chartDataTotal) * 100).toFixed(1) : '0';
-                return (
-                  <div 
-                    key={index} 
-                    className="flex items-center gap-1.5 text-[11px] cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
-                    onClick={() => handleDrillDown(item.name, legendField)}
-                  >
-                    <div 
-                      className="w-2 h-2 rounded-sm flex-shrink-0" 
-                      style={{ backgroundColor: activeColors[index % activeColors.length] }}
-                    />
-                    <span className="truncate flex-1" title={item.name}>
-                      {String(item.name).slice(0, 12)}
-                    </span>
-                    <span className="text-muted-foreground">{percent}%</span>
-                  </div>
-                );
-              })}
-              {data.chartData.length > displayLimit && (
-                <span className="text-[10px] text-muted-foreground col-span-2 text-center">
-                  +{data.chartData.length - displayLimit} daha...
-                </span>
+          {/* Legend - görünürlük kontrollü */}
+          {(hasEnoughSpace || legendExpanded) && (
+            <div 
+              className={cn(
+                "grid grid-cols-2 gap-x-3 gap-y-0.5 w-full max-w-[380px] flex-shrink-0",
+                !hasEnoughSpace && legendExpanded && "mt-2 pt-2 border-t border-border"
               )}
+            >
+              <LegendItems />
             </div>
           )}
         </CardContent>
