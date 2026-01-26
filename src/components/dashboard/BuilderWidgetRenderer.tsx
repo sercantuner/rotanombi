@@ -96,7 +96,7 @@ interface BuilderWidgetRendererProps {
   className?: string;
 }
 
-// Pie/Donut Chart ile Responsive Legend - sığmazsa legend gizlenir
+// Pie/Donut Chart ile Collapsible Legend - sığmazsa legend gizlenir, ok ile açılır
 interface PieDonutChartProps {
   data: any;
   vizType: string;
@@ -135,47 +135,56 @@ function PieDonutChartWithResponsiveLegend({
   ChartHeader,
 }: PieDonutChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [showLegend, setShowLegend] = useState(true);
+  const [legendExpanded, setLegendExpanded] = useState(false);
+  const [hasEnoughSpace, setHasEnoughSpace] = useState(false);
   
-  // Container yüksekliğini kontrol et - legend sığmazsa gizle
+  // Container yüksekliğini kontrol et - legend için yeterli alan var mı?
   useEffect(() => {
     const checkHeight = () => {
       if (containerRef.current) {
         const containerHeight = containerRef.current.offsetHeight;
-        // 280px altında legend gösterme (grafik için min 200px + header ~50px)
-        setShowLegend(containerHeight >= 320);
+        // 350px üstünde legend için yer var demek
+        setHasEnoughSpace(containerHeight >= 350);
       }
     };
     
-    checkHeight();
+    // İlk render sonrası ölçüm için kısa gecikme
+    const timer = setTimeout(checkHeight, 100);
+    
     // ResizeObserver ile dinamik kontrol
     const resizeObserver = new ResizeObserver(checkHeight);
     if (containerRef.current) {
       resizeObserver.observe(containerRef.current);
     }
     
-    return () => resizeObserver.disconnect();
+    return () => {
+      clearTimeout(timer);
+      resizeObserver.disconnect();
+    };
   }, []);
 
   const isDonut = vizType === 'donut';
   const legendField = fieldWells?.category?.field || builderConfig.visualization.chart?.legendField || '';
   const chartDataTotal = data.chartData.reduce((sum: number, d: any) => sum + d.value, 0);
   
+  // Legend'ı göster: ya yeterli yer varsa ya da kullanıcı manuel açtıysa
+  const showLegend = hasEnoughSpace || legendExpanded;
+  
   return (
     <>
-      <Card ref={containerRef} className={cn(isolatedClassName, 'overflow-visible h-full flex flex-col')}>
+      <Card ref={containerRef} className={cn(isolatedClassName, 'overflow-hidden h-full flex flex-col')}>
         <ChartHeader icon="PieChart" />
-        <CardContent className="flex-1 flex flex-col items-center py-4 min-h-0">
-          {/* Grafik alanı - flex-1 ile kalan alanı doldur */}
-          <div className="w-full max-w-[280px] mx-auto relative flex-1 min-h-[150px]">
+        <CardContent className="flex-1 flex flex-col items-center py-2 min-h-0 overflow-hidden">
+          {/* Grafik alanı - flex-1 ile kalan alanı doldur, min yükseklik garantili */}
+          <div className="w-full max-w-[280px] mx-auto relative flex-1 min-h-[120px]">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsPieChart>
                 <Pie
                   data={data.chartData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={isDonut ? '45%' : 0}
-                  outerRadius="80%"
+                  innerRadius={isDonut ? '40%' : 0}
+                  outerRadius="75%"
                   dataKey="value"
                   nameKey="name"
                   paddingAngle={isDonut ? 2 : 1}
@@ -209,42 +218,61 @@ function PieDonutChartWithResponsiveLegend({
                 />
               </RechartsPieChart>
             </ResponsiveContainer>
-            {/* Donut merkez metin - düşük z-index */}
+            {/* Donut merkez metin */}
             {isDonut && (
               <div 
                 className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
                 style={{ zIndex: 10 }}
               >
-                <span className="text-2xl font-bold">{data.chartData.length}</span>
-                <span className="text-xs text-muted-foreground">{xAxisLabel}</span>
+                <span className="text-xl font-bold">{data.chartData.length}</span>
+                <span className="text-[10px] text-muted-foreground">{xAxisLabel}</span>
               </div>
             )}
           </div>
           
-          {/* Özel Legend - sadece yeterli alan varsa göster */}
+          {/* Legend toggle butonu - yer yoksa göster */}
+          {!hasEnoughSpace && (
+            <button
+              onClick={() => setLegendExpanded(!legendExpanded)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded hover:bg-muted/50"
+            >
+              <span>{legendExpanded ? 'Gizle' : 'Detaylar'}</span>
+              <LucideIcons.ChevronDown 
+                className={cn(
+                  "h-3 w-3 transition-transform duration-200",
+                  legendExpanded && "rotate-180"
+                )} 
+              />
+            </button>
+          )}
+          
+          {/* Legend - gösterilecekse */}
           {showLegend && (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-3 w-full max-w-[380px] flex-shrink-0">
+            <div className={cn(
+              "grid grid-cols-2 gap-x-3 gap-y-0.5 w-full max-w-[380px] flex-shrink-0",
+              !hasEnoughSpace && "mt-2 pt-2 border-t border-border"
+            )}>
               {data.chartData.slice(0, displayLimit).map((item: any, index: number) => {
                 const percent = chartDataTotal > 0 ? ((item.value / chartDataTotal) * 100).toFixed(1) : '0';
                 return (
                   <div 
                     key={index} 
-                    className="flex items-center gap-2 text-xs cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
+                    className="flex items-center gap-1.5 text-[11px] cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
                     onClick={() => handleDrillDown(item.name, legendField)}
                   >
                     <div 
-                      className="w-2.5 h-2.5 rounded-sm flex-shrink-0" 
+                      className="w-2 h-2 rounded-sm flex-shrink-0" 
                       style={{ backgroundColor: activeColors[index % activeColors.length] }}
                     />
                     <span className="truncate flex-1" title={item.name}>
-                      {String(item.name).slice(0, 15)}
+                      {String(item.name).slice(0, 12)}
                     </span>
                     <span className="text-muted-foreground">{percent}%</span>
                   </div>
                 );
               })}
               {data.chartData.length > displayLimit && (
-                <span className="text-xs text-muted-foreground col-span-2 text-center mt-1">
+                <span className="text-[10px] text-muted-foreground col-span-2 text-center">
                   +{data.chartData.length - displayLimit} daha...
                 </span>
               )}
