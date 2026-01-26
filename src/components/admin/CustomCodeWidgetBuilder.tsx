@@ -1068,18 +1068,66 @@ Kullanıcı isteği: ${aiPrompt}`;
     </div>
   );
 
+  // Tüm kullanılabilir alanlar - ana sorgu + birleşik sorgular
+  const getAllAvailableFields = useCallback(() => {
+    const fields: { key: string; source: string; sourceType: 'main' | 'merged' | 'calculated' }[] = [];
+    
+    if (isMultiQueryMode && multiQuery?.queries?.length) {
+      // Multi-query modunda tüm sorguların alanlarını topla
+      multiQuery.queries.forEach(q => {
+        const queryData = mergedQueryData[q.id] || [];
+        if (queryData.length > 0 && queryData[0]) {
+          Object.keys(queryData[0]).forEach(key => {
+            if (!fields.some(f => f.key === key)) {
+              fields.push({ key, source: q.name || q.dataSourceName || 'Sorgu', sourceType: q.id === multiQuery.primaryQueryId ? 'main' : 'merged' });
+            }
+          });
+        }
+      });
+    } else if (sampleData.length > 0 && sampleData[0]) {
+      // Tek sorgu modunda
+      Object.keys(sampleData[0]).forEach(key => {
+        fields.push({ key, source: selectedDataSource?.name || 'Ana Sorgu', sourceType: 'main' });
+      });
+    }
+    
+    return fields.sort((a, b) => a.key.localeCompare(b.key, 'tr'));
+  }, [isMultiQueryMode, multiQuery, mergedQueryData, sampleData, selectedDataSource]);
+
+  // Filtre olarak seçilen alanlar
+  const [selectedFilterFields, setSelectedFilterFields] = useState<string[]>([]);
+  const [fieldSearchTerm, setFieldSearchTerm] = useState('');
+
+  // Alanları filtrele
+  const filteredFields = useMemo(() => {
+    const allFields = getAllAvailableFields();
+    if (!fieldSearchTerm.trim()) return allFields;
+    return allFields.filter(f => 
+      f.key.toLowerCase().includes(fieldSearchTerm.toLowerCase())
+    );
+  }, [getAllAvailableFields, fieldSearchTerm]);
+
+  // Filtre alanı toggle
+  const toggleFilterField = (fieldKey: string) => {
+    setSelectedFilterFields(prev => 
+      prev.includes(fieldKey) 
+        ? prev.filter(f => f !== fieldKey)
+        : [...prev, fieldKey]
+    );
+  };
+
   // Step 2: AI Kod Üret
   const renderStep2 = () => (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
-      {/* Sol: AI Prompt */}
-      <Card className="flex flex-col">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
+      {/* Sol: AI Prompt (2/3) */}
+      <Card className="lg:col-span-2 flex flex-col">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
             AI ile Widget Kodu Üret
           </CardTitle>
           <CardDescription className="text-xs">
-            Ne tür bir widget istediğinizi açıklayın
+            Ne tür bir widget istediğinizi açıklayın. Sağdaki alanlara tıklayarak prompt'a ekleyebilirsiniz.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex-1 flex flex-col gap-4">
@@ -1087,7 +1135,7 @@ Kullanıcı isteği: ${aiPrompt}`;
             value={aiPrompt}
             onChange={(e) => setAiPrompt(e.target.value)}
             placeholder="Örnek: Vade yaşlandırma grafiği oluştur. X ekseninde vade dilimleri (90+ gün, 60-90, 30-60, 0-30, bugün, gelecek) Y ekseninde toplam bakiye göster..."
-            className="flex-1 min-h-[150px] resize-none"
+            className="flex-1 min-h-[200px] resize-none"
           />
           
           <div className="flex items-center gap-2">
@@ -1110,69 +1158,127 @@ Kullanıcı isteği: ${aiPrompt}`;
               </span>
             )}
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Sağ: Veri Analizi */}
-      <Card className="flex flex-col">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Database className="h-4 w-4" />
-            Veri Analizi
-            {sampleData.length > 0 && (
-              <Badge variant="secondary" className="text-xs ml-auto">
-                {sampleData.length} kayıt
-              </Badge>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex-1 overflow-hidden">
-          {sampleData.length > 0 ? (
-            <ScrollArea className="h-full">
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(analyzeDataForAI(sampleData)).slice(0, 8).map(([field, stats]) => {
-                    const s = stats as any;
-                    return (
-                      <div key={field} className="p-2 bg-muted/50 rounded border text-xs">
-                        <div className="font-medium truncate">{field}</div>
-                        <div className="text-muted-foreground">
-                          {s.type} • {s.uniqueCount} değer
-                          {s.sum !== undefined && ` • Σ ${formatNumber(s.sum)}`}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                
-                <Separator />
-                
-                <div>
-                  <div className="text-xs text-muted-foreground mb-2">Alanlar (tıkla prompt'a ekle):</div>
-                  <div className="flex flex-wrap gap-1">
-                    {Object.keys(sampleData[0] || {}).slice(0, 20).map(field => (
-                      <Badge 
-                        key={field} 
-                        variant="outline" 
-                        className="text-xs cursor-pointer hover:bg-accent" 
-                        onClick={() => setAiPrompt(prev => prev + ` ${field}`)}
-                      >
-                        {field}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
+          {/* Seçili Filtre Alanları */}
+          {selectedFilterFields.length > 0 && (
+            <div className="p-3 bg-muted/50 rounded-lg border">
+              <div className="text-xs font-medium mb-2 flex items-center gap-2">
+                <LucideIcons.Filter className="h-3 w-3" />
+                Widget Filtre Alanları ({selectedFilterFields.length})
               </div>
-            </ScrollArea>
-          ) : (
-            <div className="h-full flex items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                <Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Veri yüklenmedi</p>
-                <p className="text-xs">Önceki adımda veri kaynağı seçin</p>
+              <div className="flex flex-wrap gap-1">
+                {selectedFilterFields.map(field => (
+                  <Badge 
+                    key={field} 
+                    variant="secondary" 
+                    className="text-xs cursor-pointer hover:bg-destructive/20"
+                    onClick={() => toggleFilterField(field)}
+                  >
+                    {field}
+                    <X className="h-3 w-3 ml-1" />
+                  </Badge>
+                ))}
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Sağ: Kullanılabilir Alanlar (1/3) */}
+      <Card className="flex flex-col">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <LucideIcons.ListFilter className="h-4 w-4" />
+            Kullanılabilir Alanlar
+            <Badge variant="secondary" className="text-xs ml-auto">
+              {getAllAvailableFields().length}
+            </Badge>
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Tıkla: prompt'a ekle • Sağ tık: filtre olarak seç
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex-1 flex flex-col gap-3 overflow-hidden">
+          {/* Arama */}
+          <div className="relative">
+            <LucideIcons.Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Alan ara..."
+              value={fieldSearchTerm}
+              onChange={(e) => setFieldSearchTerm(e.target.value)}
+              className="pl-8 h-8 text-sm"
+            />
+          </div>
+
+          {/* Alan Listesi */}
+          <ScrollArea className="flex-1">
+            {filteredFields.length > 0 ? (
+              <div className="space-y-1 pr-2">
+                {filteredFields.map(field => {
+                  const isFilterSelected = selectedFilterFields.includes(field.key);
+                  return (
+                    <div
+                      key={field.key}
+                      className={cn(
+                        "group flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors cursor-pointer",
+                        "hover:bg-accent",
+                        isFilterSelected && "bg-primary/10 border border-primary/30"
+                      )}
+                      onClick={() => setAiPrompt(prev => prev + ` ${field.key}`)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        toggleFilterField(field.key);
+                      }}
+                    >
+                      {/* Tip ikonu */}
+                      <div className="shrink-0">
+                        {field.sourceType === 'main' ? (
+                          <LucideIcons.Database className="h-3 w-3 text-primary" />
+                        ) : field.sourceType === 'merged' ? (
+                          <LucideIcons.Link2 className="h-3 w-3 text-blue-500" />
+                        ) : (
+                          <LucideIcons.Calculator className="h-3 w-3 text-amber-500" />
+                        )}
+                      </div>
+                      
+                      {/* Alan adı */}
+                      <span className="flex-1 truncate font-mono text-xs">{field.key}</span>
+                      
+                      {/* Filtre ikonu */}
+                      {isFilterSelected ? (
+                        <LucideIcons.Filter className="h-3 w-3 text-primary shrink-0" />
+                      ) : (
+                        <LucideIcons.Plus className="h-3 w-3 opacity-0 group-hover:opacity-50 shrink-0" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : sampleData.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-muted-foreground">
+                <div className="text-center py-8">
+                  <LucideIcons.Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Veri yüklenmedi</p>
+                  <p className="text-xs">Önceki adımda veri kaynağı seçin</p>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-4 text-muted-foreground text-sm">
+                Eşleşen alan bulunamadı
+              </div>
+            )}
+          </ScrollArea>
+
+          {/* Alt bilgi */}
+          <div className="text-[10px] text-muted-foreground border-t pt-2">
+            <div className="flex items-center gap-1.5 mb-1">
+              <LucideIcons.Database className="h-3 w-3 text-primary" />
+              <span>Ana Sorgu</span>
+              <LucideIcons.Link2 className="h-3 w-3 text-blue-500 ml-2" />
+              <span>Birleşik</span>
+            </div>
+            <span>Sağ tık ile filtre alanı olarak işaretle</span>
+          </div>
         </CardContent>
       </Card>
     </div>
