@@ -1,5 +1,6 @@
 // Global Filter Context - Sayfa ve widget bazlı filtreleme sistemi
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+// v2.0 - Otomatik kaydetme/yükleme desteği eklendi
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -22,29 +23,146 @@ interface GlobalFilterProviderProps {
   pageId?: string;
 }
 
+// Basit debounce helper
+function debounce<T extends (...args: any[]) => any>(fn: T, delay: number): (...args: Parameters<T>) => void {
+  let timeoutId: ReturnType<typeof setTimeout>;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), delay);
+  };
+}
+
 export function GlobalFilterProvider({ children, pageId }: GlobalFilterProviderProps) {
   const { user } = useAuth();
   const [filters, setFilters] = useState<GlobalFilters>(defaultGlobalFilters);
   const [filterOptions, setFilterOptionsState] = useState<FilterOptions>(defaultFilterOptions);
   const [pageConfig, setPageConfigState] = useState<PageFilterConfig | null>(null);
   const [presets, setPresets] = useState<FilterPreset[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
 
-  // Sayfa yapılandırması ve DIA auto filters'ı yükle
+  // Debounced save ref
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Filtreleri veritabanına kaydet (debounced)
+  const saveFiltersToDb = useCallback(async (filtersToSave: GlobalFilters) => {
+    if (!user) return;
+
+    try {
+      // Zorunlu filtreleri preset'e dahil etme
+      const filtersWithoutLocked = { ...filtersToSave, _diaAutoFilters: [] };
+
+      const { error } = await supabase
+        .from('page_filter_presets')
+        .upsert({
+          user_id: user.id,
+          page_id: pageId || null,
+          name: '__auto__',
+          filters: JSON.parse(JSON.stringify(filtersWithoutLocked)),
+          is_default: true,
+        }, { 
+          onConflict: 'user_id,page_id,name',
+          ignoreDuplicates: false 
+        });
+
+      if (error) {
+        // Unique constraint yoksa normal insert dene
+        if (error.code === '42P10' || error.message.includes('constraint')) {
+          // Önce mevcut kaydı sil, sonra ekle
+          let deleteQuery = supabase
+            .from('page_filter_presets')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('name', '__auto__');
+          
+          if (pageId) {
+            deleteQuery = deleteQuery.eq('page_id', pageId);
+          } else {
+            deleteQuery = deleteQuery.is('page_id', null);
+          }
+          
+          await deleteQuery;
+          
+          await supabase
+            .from('page_filter_presets')
+            .insert({
+              user_id: user.id,
+              page_id: pageId || null,
+              name: '__auto__',
+              filters: JSON.parse(JSON.stringify(filtersWithoutLocked)),
+              is_default: true,
+            });
+        } else {
+          console.error('Error saving filters:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Error saving filters to database:', error);
+    }
+  }, [user, pageId]);
+
+  // Debounced save wrapper
+  const debouncedSave = useCallback((filtersToSave: GlobalFilters) => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    saveTimeoutRef.current = setTimeout(() => {
+      saveFiltersToDb(filtersToSave);
+    }, 1000);
+  }, [saveFiltersToDb]);
+
+  // Filtre değiştiğinde otomatik kaydet
+  useEffect(() => {
+    if (user && isInitialLoadComplete) {
+      debouncedSave(filters);
+    }
+  }, [filters, user, isInitialLoadComplete, debouncedSave]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Sayfa yüklendiğinde filtreleri ve yapılandırmayı yükle
   useEffect(() => {
     async function loadUserFilters() {
-      if (!user) return;
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
 
       try {
-        // Kullanıcının DIA otomatik filtrelerini yükle
+        setIsLoading(true);
+
+        // 1. Kaydedilmiş __auto__ filtreleri yükle
+        let autoPresetQuery = supabase
+          .from('page_filter_presets')
+          .select('filters')
+          .eq('user_id', user.id)
+          .eq('name', '__auto__');
+        
+        if (pageId) {
+          autoPresetQuery = autoPresetQuery.eq('page_id', pageId);
+        } else {
+          autoPresetQuery = autoPresetQuery.is('page_id', null);
+        }
+        
+        const { data: autoPreset } = await autoPresetQuery.maybeSingle();
+
+        // 2. Kullanıcının DIA otomatik filtrelerini yükle
         const { data: profile } = await supabase
           .from('profiles')
           .select('dia_satis_elemani, dia_yetki_kodu, dia_auto_filters')
           .eq('user_id', user.id)
           .single();
 
+        const autoFilters: DiaAutoFilter[] = [];
+        
         if (profile) {
-          const autoFilters: DiaAutoFilter[] = [];
-          
           // Satış elemanı filtresi
           if (profile.dia_satis_elemani) {
             autoFilters.push({
@@ -61,13 +179,16 @@ export function GlobalFilterProvider({ children, pageId }: GlobalFilterProviderP
           if (diaAutoFilters && Array.isArray(diaAutoFilters)) {
             autoFilters.push(...diaAutoFilters);
           }
-
-          if (autoFilters.length > 0) {
-            setFilters(prev => ({ ...prev, _diaAutoFilters: autoFilters }));
-          }
         }
 
-        // Sayfa yapılandırmasını yükle
+        // 3. Filtreleri birleştir
+        setFilters(prev => ({
+          ...defaultGlobalFilters,
+          ...(autoPreset?.filters as Partial<GlobalFilters> || {}),
+          _diaAutoFilters: autoFilters,
+        }));
+
+        // 4. Sayfa yapılandırmasını yükle
         if (pageId) {
           const { data: page } = await supabase
             .from('user_pages')
@@ -79,18 +200,19 @@ export function GlobalFilterProvider({ children, pageId }: GlobalFilterProviderP
             const config = page.filter_config as unknown as PageFilterConfig;
             setPageConfigState({ ...config, pageId });
             
-            // Varsayılan filtreleri uygula
-            if (config.defaultFilters) {
+            // Varsayılan filtreleri uygula (sadece auto preset yoksa)
+            if (!autoPreset?.filters && config.defaultFilters) {
               setFilters(prev => ({ ...prev, ...config.defaultFilters }));
             }
           }
         }
 
-        // Kullanıcının preset'lerini yükle
+        // 5. Kullanıcının preset'lerini yükle
         const { data: userPresets } = await supabase
           .from('page_filter_presets')
           .select('*')
           .eq('user_id', user.id)
+          .neq('name', '__auto__')
           .order('created_at', { ascending: false });
 
         if (userPresets) {
@@ -106,6 +228,9 @@ export function GlobalFilterProvider({ children, pageId }: GlobalFilterProviderP
         }
       } catch (error) {
         console.error('Error loading user filters:', error);
+      } finally {
+        setIsLoading(false);
+        setIsInitialLoadComplete(true);
       }
     }
 
