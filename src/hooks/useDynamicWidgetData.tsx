@@ -473,13 +473,29 @@ function applyGlobalFilters(data: any[], globalFilters: GlobalFilters): any[] {
   }
   
   // Görünüm modu (potansiyel/cari)
+  // DIA'da potansiyel alanı: "E" (Evet - potansiyel), "H" (Hayır - gerçek cari)
   if (globalFilters.gorunumModu !== 'hepsi') {
     filtered = filtered.filter(row => {
       const potansiyel = row.potansiyel;
+      const potansiyelStr = String(potansiyel || '').toUpperCase();
+      
       if (globalFilters.gorunumModu === 'potansiyel') {
-        return potansiyel === true || potansiyel === 't';
+        // Potansiyel müşteriler: E, Evet, true, t, 1
+        return potansiyel === true || 
+               potansiyel === 't' || 
+               potansiyelStr === 'E' || 
+               potansiyelStr === 'EVET' ||
+               potansiyelStr === '1' ||
+               potansiyelStr === 'TRUE';
       } else {
-        return potansiyel === false || potansiyel === 'f' || !potansiyel;
+        // Gerçek cariler: H, Hayır, false, f, 0, boş
+        return potansiyel === false || 
+               potansiyel === 'f' || 
+               potansiyelStr === 'H' || 
+               potansiyelStr === 'HAYIR' ||
+               potansiyelStr === '0' ||
+               potansiyelStr === 'FALSE' ||
+               !potansiyel;
       }
     });
   }
