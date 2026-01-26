@@ -245,25 +245,25 @@ export function ContainerRenderer({
   return (
     <>
       <Card className={cn(
-        'mb-2 md:mb-4',
-        isDragMode && 'ring-2 ring-primary/20',
+        'mb-1 md:mb-2',
+        isDragMode && 'ring-1 ring-primary/20',
         styleClasses
       )}>
         {showTitle && (
-          <CardHeader className={cn('flex flex-row items-center justify-between', isCompact ? 'py-1.5 px-2' : 'py-2 px-3 md:py-3 md:px-4')}>
-            <div className="flex items-center gap-2">
-              {isDragMode && <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />}
-              <CardTitle className="text-sm font-medium">
+          <CardHeader className={cn('flex flex-row items-center justify-between', isCompact ? 'py-1 px-1.5' : 'py-1.5 px-2')}>
+            <div className="flex items-center gap-1.5">
+              {isDragMode && <GripVertical className="h-3.5 w-3.5 text-muted-foreground cursor-grab" />}
+              <CardTitle className="text-xs font-medium">
                 {localContainer.title || template.name}
               </CardTitle>
             </div>
             {/* Ayar ve silme butonları sadece drag modda görünür */}
             {isDragMode && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5">
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="h-7 w-7"
+                  className="h-6 w-6"
                   onClick={() => setSettingsOpen(true)}
                 >
                   <Settings className="h-3 w-3" />
@@ -271,7 +271,7 @@ export function ContainerRenderer({
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="h-7 w-7 text-destructive hover:text-destructive"
+                  className="h-6 w-6 text-destructive hover:text-destructive"
                   onClick={onDelete}
                 >
                   <Trash2 className="h-3 w-3" />
@@ -281,16 +281,16 @@ export function ContainerRenderer({
           </CardHeader>
         )}
         <CardContent className={cn(
-          isCompact ? 'p-1 md:p-2' : 'p-2 md:p-4', 
+          isCompact ? 'p-0.5 md:p-1' : 'p-1 md:p-2', 
           showTitle ? 'pt-0' : ''
         )}>
           {/* Başlık kapalıyken ayar/sil butonları - sadece drag modda görünür */}
           {!showTitle && isDragMode && (
-            <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
+            <div className="absolute top-1 right-1 flex items-center gap-0.5 z-10">
               <Button 
                 variant="secondary" 
                 size="icon" 
-                className="h-7 w-7"
+                className="h-6 w-6"
                 onClick={() => setSettingsOpen(true)}
               >
                 <Settings className="h-3 w-3" />
@@ -298,14 +298,14 @@ export function ContainerRenderer({
               <Button 
                 variant="destructive" 
                 size="icon" 
-                className="h-7 w-7"
+                className="h-6 w-6"
                 onClick={onDelete}
               >
                 <Trash2 className="h-3 w-3" />
               </Button>
             </div>
           )}
-          <div className={cn('grid gap-2 md:gap-4 items-stretch [&>*]:h-full', template.gridClass)}>
+          <div className={cn('grid gap-1 md:gap-2 items-stretch [&>*]:h-full', template.gridClass)}>
             {renderSlots()}
           </div>
         </CardContent>

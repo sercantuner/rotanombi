@@ -151,9 +151,9 @@
 @layer components {
   .glass-card {
     background: var(--glass-bg);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(8px);
     border: 1px solid var(--glass-border);
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--shadow-sm);
   }
 
   .gradient-text {
@@ -168,22 +168,22 @@
   }
 
   .stat-card {
-    @apply glass-card rounded-xl transition-all duration-300;
+    @apply glass-card rounded-lg transition-all duration-200;
   }
 
   .stat-card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-glow);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
   }
 
   .nav-item {
-    @apply flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 cursor-pointer;
+    @apply flex items-center gap-2 px-3 py-2 rounded-md transition-all duration-150 cursor-pointer;
     @apply text-muted-foreground hover:text-foreground hover:bg-secondary;
   }
 
   .nav-item.active {
     @apply text-primary-foreground bg-primary;
-    box-shadow: var(--shadow-glow);
+    box-shadow: var(--shadow-sm);
   }
 
   .data-table {
@@ -191,11 +191,11 @@
   }
 
   .data-table th {
-    @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-secondary/50;
+    @apply px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-secondary/50;
   }
 
   .data-table td {
-    @apply px-4 py-3 border-t border-border;
+    @apply px-2 py-1.5 border-t border-border;
   }
 
   .data-table tr:hover {
@@ -203,40 +203,39 @@
   }
 
   .input-field {
-    @apply w-full px-4 py-3 rounded-lg bg-secondary border border-border text-foreground placeholder:text-muted-foreground;
-    @apply focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent;
-    @apply transition-all duration-200;
+    @apply w-full px-3 py-2 rounded-md bg-secondary border border-border text-foreground placeholder:text-muted-foreground;
+    @apply focus:outline-none focus:ring-1 focus:ring-primary focus:border-transparent;
+    @apply transition-all duration-150;
   }
 
   .btn-primary {
-    @apply px-6 py-3 rounded-lg font-semibold transition-all duration-200;
+    @apply px-4 py-2 rounded-md font-medium transition-all duration-150;
     background: var(--gradient-primary);
     @apply text-primary-foreground hover:opacity-90;
-    @apply focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background;
-    box-shadow: var(--shadow-md);
+    @apply focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 focus:ring-offset-background;
+    box-shadow: var(--shadow-sm);
   }
 
   .btn-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-glow);
+    box-shadow: var(--shadow-md);
   }
 
   .btn-secondary {
-    @apply px-6 py-3 rounded-lg font-semibold bg-secondary text-foreground;
-    @apply hover:bg-secondary/80 transition-all duration-200;
-    @apply focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background;
+    @apply px-4 py-2 rounded-md font-medium bg-secondary text-foreground;
+    @apply hover:bg-secondary/80 transition-all duration-150;
+    @apply focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-1 focus:ring-offset-background;
   }
 
   .metric-value {
-    @apply font-bold tracking-tight;
+    @apply font-semibold tracking-tight;
   }
 
   .metric-label {
-    @apply text-muted-foreground font-medium;
+    @apply text-muted-foreground font-medium text-xs;
   }
 
   .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium;
   }
 
   .badge-success {

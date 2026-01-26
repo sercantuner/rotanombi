@@ -225,10 +225,10 @@ function DashboardContent() {
         showWidgetPicker={false}
       />
 
-      <main className="flex-1 p-6 overflow-auto">
+      <main className="flex-1 p-2 md:p-4 overflow-auto">
         {/* DIA Connection Status */}
         {!diaConnectionInfo?.connected && !dataSourcesLoading && loadedSources.length === 0 && (
-          <div className="mb-6 p-4 rounded-xl bg-warning/10 border border-warning/30 flex items-center justify-between animate-fade-in">
+          <div className="mb-2 md:mb-4 p-2 md:p-3 rounded-lg bg-warning/10 border border-warning/30 flex items-center justify-between animate-fade-in">
             <div className="flex items-center gap-3">
               <Plug className="w-5 h-5 text-warning" />
               <div>
@@ -267,7 +267,7 @@ function DashboardContent() {
 
         {/* Dashboard Status Bar - Sadece yükleniyor göster */}
         {dataSourcesLoading && (
-          <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium animate-pulse">
               Yükleniyor...
             </span>
@@ -288,7 +288,7 @@ function DashboardContent() {
         )}
 
         {/* Vade Detay Listesi - Shows when a bar is clicked (cross-filtering) */}
-        <div className="mt-6">
+        <div className="mt-2 md:mt-4">
           <VadeDetayListesi 
             cariler={cariler} 
             yaslandirma={yaslandirma}

@@ -42,23 +42,23 @@ export function StatCard({
   const TrendIcon = trendIcons[trend];
 
   return (
-    <div className="stat-card animate-slide-up p-3 md:p-4">
-      <div className="flex items-start justify-between gap-2">
+    <div className="stat-card animate-slide-up p-2 md:p-3">
+      <div className="flex items-start justify-between gap-1.5">
         <div className="flex-1 min-w-0">
-          <p className="metric-label mb-0.5 md:mb-1 line-clamp-2 min-h-[2rem] md:min-h-[2.5rem] text-xs md:text-sm">{title}</p>
-          <p className={`metric-value text-lg md:text-2xl ${variantStyles[variant]}`}>{value}</p>
+          <p className="metric-label mb-0.5 line-clamp-2 min-h-[1.75rem] md:min-h-[2rem] text-[10px] md:text-xs">{title}</p>
+          <p className={`metric-value text-base md:text-xl ${variantStyles[variant]}`}>{value}</p>
           {subtitle && (
-            <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5 md:mt-1 truncate">{subtitle}</p>
+            <p className="text-[9px] md:text-[10px] text-muted-foreground mt-0.5 truncate">{subtitle}</p>
           )}
         </div>
-        <div className={`p-2 md:p-3 rounded-lg bg-secondary hidden sm:block ${variantStyles[variant]}`}>
-          <Icon className="w-5 h-5 md:w-6 md:h-6" />
+        <div className={`p-1.5 md:p-2 rounded-md bg-secondary hidden sm:block ${variantStyles[variant]}`}>
+          <Icon className="w-4 h-4 md:w-5 md:h-5" />
         </div>
       </div>
       
       {trendValue && (
-        <div className={`flex items-center gap-1 mt-2 md:mt-3 text-xs md:text-sm ${trendColors[trend]}`}>
-          <TrendIcon className="w-3 h-3 md:w-4 md:h-4" />
+        <div className={`flex items-center gap-0.5 mt-1.5 text-[10px] md:text-xs ${trendColors[trend]}`}>
+          <TrendIcon className="w-2.5 h-2.5 md:w-3 md:h-3" />
           <span>{trendValue}</span>
         </div>
       )}
