@@ -52,10 +52,14 @@ export function ContainerRenderer({
   if (!template) return null;
 
   // Widget detaylarını yükle (builder_config dahil)
+  // Ayrıca silinmiş widget'ları tespit et
+  const [orphanSlots, setOrphanSlots] = useState<Set<string>>(new Set());
+  
   useEffect(() => {
     const loadWidgetDetails = async () => {
       if (containerWidgets.length === 0) {
         setWidgetDetails({});
+        setOrphanSlots(new Set());
         return;
       }
       
@@ -67,7 +71,10 @@ export function ContainerRenderer({
       
       if (data) {
         const details: Record<string, Widget> = {};
+        const foundIds = new Set<string>();
+        
         data.forEach((w: any) => {
+          foundIds.add(w.id);
           details[w.id] = {
             id: w.id,
             widget_key: w.widget_key,
@@ -89,10 +96,20 @@ export function ContainerRenderer({
             created_at: w.created_at,
             updated_at: w.updated_at,
             created_by: w.created_by,
-            builder_config: w.builder_config || null, // builder_config dahil et
+            builder_config: w.builder_config || null,
           };
         });
+        
+        // Orphan widget'ları tespit et (container_widgets'ta var ama widgets tablosunda yok)
+        const orphans = new Set<string>();
+        containerWidgets.forEach(cw => {
+          if (!foundIds.has(cw.widget_id)) {
+            orphans.add(cw.id);
+          }
+        });
+        
         setWidgetDetails(details);
+        setOrphanSlots(orphans);
       }
     };
     
@@ -178,11 +195,47 @@ export function ContainerRenderer({
     return Array.from({ length: template.slots }).map((_, slotIndex) => {
       const slotWidget = containerWidgets.find(w => w.slot_index === slotIndex);
       const widgetDetail = slotWidget ? widgetDetails[slotWidget.widget_id] : null;
+      const isOrphan = slotWidget && orphanSlots.has(slotWidget.id);
+
+      // Orphan slot - widget silinmiş ama container_widgets'ta kayıt kalmış
+      if (isOrphan && slotWidget) {
+        return (
+          <div key={slotIndex} className="relative min-h-[80px] rounded border border-dashed border-destructive/50 bg-destructive/5 flex flex-col items-center justify-center gap-1 p-2">
+            <span className="text-[10px] text-destructive font-medium">Silinmiş Widget</span>
+            <div className="flex gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 text-[10px] px-2"
+                onClick={() => {
+                  handleRemoveWidget(slotWidget.id);
+                }}
+              >
+                <Trash2 className="h-3 w-3 mr-1" />
+                Temizle
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                className="h-6 text-[10px] px-2"
+                onClick={() => {
+                  handleRemoveWidget(slotWidget.id);
+                  setSelectedSlot(slotIndex);
+                  setWidgetPickerOpen(true);
+                }}
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Değiştir
+              </Button>
+            </div>
+          </div>
+        );
+      }
 
       // Widget var ama detayları henüz yüklenmedi - skeleton göster
       if (slotWidget && !widgetDetail) {
         return (
-          <Skeleton key={slotIndex} className="h-full w-full min-h-[120px] rounded-xl" />
+          <Skeleton key={slotIndex} className="h-full w-full min-h-[80px] rounded" />
         );
       }
 
@@ -193,7 +246,7 @@ export function ContainerRenderer({
 
         // Widget var, render et - CSS izolasyonu için isolate class, h-full eklendi
         return (
-          <div key={slotIndex} className="relative group h-full min-h-[120px] isolate">
+          <div key={slotIndex} className="relative group h-full min-h-[80px] isolate">
             <DynamicWidgetRenderer
               widgetId={widgetDetail.widget_key}
               data={widgetData}
@@ -209,13 +262,13 @@ export function ContainerRenderer({
               <Button
                 variant="destructive"
                 size="icon"
-                className="absolute top-2 left-2 h-7 w-7 shadow-md z-20"
+                className="absolute top-1 left-1 h-5 w-5 shadow-md z-20"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleRemoveWidget(slotWidget.id, widgetDetail.name);
                 }}
               >
-                <X className="h-4 w-4" />
+                <X className="h-3 w-3" />
               </Button>
             )}
           </div>
@@ -228,15 +281,14 @@ export function ContainerRenderer({
           key={slotIndex}
           onClick={() => handleSlotClick(slotIndex)}
           className={cn(
-            'min-h-[120px] rounded-lg border-2 border-dashed border-muted-foreground/30',
-            'flex flex-col items-center justify-center gap-2 p-4',
+            'min-h-[80px] rounded border border-dashed border-muted-foreground/20',
+            'flex flex-col items-center justify-center gap-1 p-2',
             'text-muted-foreground hover:border-primary hover:text-primary hover:bg-primary/5',
             'transition-all cursor-pointer'
           )}
         >
-          <Plus className="h-8 w-8" />
-          <span className="text-sm font-medium">Widget Ekle</span>
-          <span className="text-xs">Slot {slotIndex + 1}</span>
+          <Plus className="h-5 w-5" />
+          <span className="text-[10px] font-medium">Widget Ekle</span>
         </button>
       );
     });
