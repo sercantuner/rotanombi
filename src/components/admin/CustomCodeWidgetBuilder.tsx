@@ -802,6 +802,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
         'LucideIcons',
         'Recharts',
         'colors',
+        'filters',
         customCode
       );
       
@@ -816,7 +817,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
         'hsl(280, 70%, 55%)',
       ];
       
-      const WidgetComponent = fn(React, sampleData, LucideIcons, RechartsScope, previewColors);
+      const WidgetComponent = fn(React, sampleData, LucideIcons, RechartsScope, previewColors, {});
       
       if (typeof WidgetComponent !== 'function') {
         return { 
@@ -1676,14 +1677,14 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
               </AlertDescription>
             </Alert>
           ) : PreviewResult.component ? (
-            <div className="min-h-[300px] border rounded-lg p-4">
+            <div className="h-[340px] border rounded-lg p-4 flex flex-col">
               <ErrorBoundary fallback={
                 <div className="text-destructive text-sm flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" />
                   Widget render hatası
                 </div>
               }>
-                {React.createElement(PreviewResult.component, { data: sampleData, colors: PreviewResult.colors })}
+                {React.createElement(PreviewResult.component, { data: sampleData, colors: PreviewResult.colors, filters: {} })}
               </ErrorBoundary>
             </div>
           ) : (
