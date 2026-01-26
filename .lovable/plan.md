@@ -1,366 +1,277 @@
 
-# AI Widget Builder - DIA Model Linkleri, Tarih Kuralları ve AI Zorunlulukları Yönetimi
+# Kapsamlı Widget Sistemi Temizliği ve Responsive Legend Düzeltmesi
 
 ## Özet
-CustomCodeWidgetBuilder'ın AI Kod Üret (Step 2) sekmesine üç yeni özellik eklenecek:
-1. **DIA Model Dokümantasyon Linkleri**: Kullanıcı veri modeli hakkında AI'ya bilgi vermek için DIA doc linkleri ekleyebilecek
-2. **Tarih Kronolojisi Kuralı**: Grafikte tarih kullanılıyorsa eksik günlerin de 0 değeriyle gösterilmesi zorunluluğu
-3. **AI Zorunlulukları Yönetimi**: Widget bazında AI'ın uyması gereken kuralları tanımlayabilme
+
+Bu plan üç ana hedefi kapsar:
+1. **Custom Code Widget'ların Legend Sistemini Düzeltme** - %40 eşik ve toggle butonu
+2. **Global Filtre Barının Kalıcı Kaydedilmesi** - Sayfa yenilenince filtreler korunsun  
+3. **Standart Grafik Kodlarının Temizlenmesi** - Bar/Line/Area/Pie/Donut kodlarını sil, zorunlulukları AI'a aktar
 
 ---
 
-## Bölüm 1: DIA Model Dokümantasyon Linkleri
+## 1. Custom Code Widget Legend Düzeltmesi
 
-### 1.1 UI Tasarımı
+### Sorun
+"Müşteri Kaynak Dağılımı" widget'ı `viz_type: 'custom'` tipinde. Veritabanındaki `customCode` alanında kendi React kodunu barındırıyor ve legend'ı sabit `max-h-[120px]` ile gösteriyor. Hiçbir oran kontrolü veya toggle butonu yok.
 
-AI Prompt alanının üstüne yeni bir bölüm eklenecek:
+### Çözüm
+AI code generator'ın system prompt'una **Legend Responsive Kuralları** eklenmeli:
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  📚 DIA Model Referansları                                             [+]  │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  Eklenen Linkler:                                                           │
-│  [ScfCarikartListeViewModel ×]  [ScfVadeBakiyeModel ×]                      │
-│                                                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │ Link ekle: https://doc.dia.com.tr/doku.php?id=gelistirici:models:   │ [+]│
-│  └─────────────────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+**Yeni AI Zorunlulukları (ai-code-generator/index.ts):**
 
-### 1.2 Veri Yapısı
-
-```typescript
-interface DiaModelReference {
-  url: string;
-  modelName: string; // URL'den otomatik çıkarılacak
-}
-
-// State
-const [diaModelLinks, setDiaModelLinks] = useState<DiaModelReference[]>([]);
-```
-
-### 1.3 AI Prompt'a Ekleme
-
-DIA model linkleri AI'ya şu formatta gönderilecek:
-
-```
-📚 Referans DIA Modelleri:
-- ScfCarikartListeViewModel: https://doc.dia.com.tr/doku.php?id=gelistirici:models:scf_carikart_liste_view_model
-- ScfVadeBakiyeModel: https://doc.dia.com.tr/doku.php?id=gelistirici:models:scf_vade_bakiye_model
-
-Bu modellerin alanlarını ve veri tiplerini dikkate al.
-```
-
----
-
-## Bölüm 2: Tarih Kronolojisi Kuralı
-
-### 2.1 AI System Prompt Güncellemesi
-
-`supabase/functions/ai-code-generator/index.ts` dosyasına yeni kural eklenecek:
-
-```
-═══════════════════════════════════════════════════════════════════════════════
-
-📅 TARİH KRONOLOJİSİ KURALI (ZORUNLU!)
+```text
+📊 RESPONSIVE LEGEND KURALI (ZORUNLU!)
 ───────────────────────────────────────────────────────────────────────────────
-Eğer grafikte tarih (X ekseni veya zaman serisi) kullanılıyorsa:
+Pie/Donut/Bar/Line/Area grafiklerinde legend kullanıyorsan:
 
-1. TÜM TARİHLER GÖSTERİLMELİ - Veri olmayan günler bile!
-   - 30 günlük veri çekildiyse, grafikte 30 gün de gösterilmeli
-   - Veri olmayan günler 0 değeriyle gösterilmeli
+1. Container yüksekliğini ölç:
+   var containerRef = React.useRef(null);
+   var legendExpanded = React.useState(false);
+   var hasEnoughSpace = React.useState(true);
    
-2. ZORUNLU HELPER FONKSİYON:
-   var fillMissingDates = function(data, dateField, valueField, startDate, endDate) {
-     var dateMap = {};
-     data.forEach(function(item) {
-       var d = new Date(item[dateField]);
-       var key = d.toISOString().split('T')[0];
-       dateMap[key] = parseFloat(item[valueField]) || 0;
-     });
-     
-     var result = [];
-     var current = new Date(startDate);
-     var end = new Date(endDate);
-     
-     while (current <= end) {
-       var key = current.toISOString().split('T')[0];
-       result.push({
-         [dateField]: key,
-         [valueField]: dateMap[key] || 0
-       });
-       current.setDate(current.getDate() + 1);
+   React.useEffect(function() {
+     if (containerRef.current) {
+       var containerHeight = containerRef.current.offsetHeight;
+       var headerHeight = 56; // Başlık alanı
+       var contentHeight = containerHeight - headerHeight;
+       
+       // Legend için tahmini yükseklik (item sayısı * 24px)
+       var legendHeight = chartData.length * 24;
+       var threshold = contentHeight * 0.40; // %40 eşik
+       
+       hasEnoughSpace[1](legendHeight <= threshold);
      }
-     
-     return result;
-   };
+   }, [chartData]);
 
-3. KRONOLOJİK SIRALAMA:
-   - Tarihler her zaman kronolojik sırada (eskiden yeniye) gösterilmeli
-   - data.sort(function(a, b) { return new Date(a.tarih) - new Date(b.tarih); })
+2. Toggle butonu ekle (legend sığmıyorsa):
+   !hasEnoughSpace[0] && React.createElement('button', {
+     onClick: function() { legendExpanded[1](!legendExpanded[0]); },
+     className: 'flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground'
+   },
+     legendExpanded[0] ? 'Gizle' : 'Detaylar',
+     React.createElement('span', { 
+       className: 'transform transition-transform ' + (legendExpanded[0] ? 'rotate-180' : '') 
+     }, '▼')
+   )
 
-❌ YANLIŞ: Sadece veri olan günleri göstermek
-✅ DOĞRU: Tüm tarih aralığını, boş günleri 0 ile doldurup göstermek
+3. Legend'ı koşullu göster:
+   (hasEnoughSpace[0] || legendExpanded[0]) && React.createElement('div', {
+     className: 'grid grid-cols-2 gap-1',
+     style: !hasEnoughSpace[0] && legendExpanded[0] 
+       ? { maxHeight: Math.floor(contentHeight * 0.6), overflowY: 'auto' }
+       : undefined
+   }, legendItems)
+
+❌ YANLIŞ: Legend'ı sabit yükseklikle göstermek (max-h-[120px] vb.)
+✅ DOĞRU: Container yüksekliğinin %40'ından fazla yer kaplıyorsa gizle, toggle ile aç
 ```
 
-### 2.2 Widget Builder'da Toggle
-
-Kullanıcı bu kuralı aktif/pasif yapabilecek:
-
-```
-☑ Tarih Kronolojisi Zorunlu (eksik günleri 0 ile doldur)
-```
+### Mevcut Widget Güncelleme
+Veritabanındaki "Müşteri Kaynak Dağılımı" widget'ının (`c0490cae-4d72-4351-94a6-539db016aff0`) `customCode` alanı, bu yeni kurallara uygun olarak güncellenecek.
 
 ---
 
-## Bölüm 3: AI Zorunlulukları Yönetimi
+## 2. Global Filtre Barı Kaydetme
 
-### 3.1 UI Tasarımı - Collapsible Panel
+### Sorun
+Üst filtre barındaki seçimler (Satış Temsilcisi, Şube, Tarih vb.) sayfa yenilendiğinde sıfırlanıyor. `GlobalFilterContext` içindeki state hafızada tutuluyor, veritabanına kalıcı olarak kaydedilmiyor.
 
-AI Prompt alanının altına yeni bir collapsible bölüm eklenecek:
+### Çözüm
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  ⚙️ AI Zorunlulukları                                                   [▼] │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Aktif Kurallar:                                                            │
-│  ☑ Renk sistemi (CSS değişkenleri zorunlu)           [Varsayılan - Kilitli] │
-│  ☑ Para birimi formatı (₺, K, M, B)                  [Varsayılan - Kilitli] │
-│  ☑ React.createElement kullan (JSX yasak)            [Varsayılan - Kilitli] │
-│  ☑ Tarih kronolojisi (eksik günleri 0 ile doldur)    [Seçilebilir]          │
-│  ☐ Trend çizgisi ekle                                [Seçilebilir]          │
-│  ☐ Ortalama çizgisi ekle                             [Seçilebilir]          │
-│  ☐ Min/Max işaretleri                                [Seçilebilir]          │
-│                                                                             │
-│  Özel Kural Ekle:                                                           │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │ Örn: "Tüm değerleri yüzde olarak göster"                            │ [+]│
-│  └─────────────────────────────────────────────────────────────────────┘    │
-│                                                                             │
-│  Eklenen Özel Kurallar:                                                     │
-│  [Negatif değerleri kırmızı göster ×]  [Toplam satırı ekle ×]               │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### 3.2 Veri Yapısı
+**GlobalFilterContext.tsx değişiklikleri:**
 
 ```typescript
-interface AIRequirement {
-  id: string;
-  label: string;
-  description: string;
-  isDefault: boolean;  // Varsayılan ve değiştirilemez
-  isActive: boolean;
-  promptAddition: string;  // AI prompt'a eklenecek metin
-}
+// 1. Otomatik kaydetme için debounce mekanizması
+const debouncedSave = useCallback(
+  debounce(async (filtersToSave: GlobalFilters) => {
+    if (!user) return;
+    
+    // __auto__ isimli özel bir preset olarak kaydet
+    const filtersWithoutLocked = { ...filtersToSave, _diaAutoFilters: [] };
+    
+    await supabase
+      .from('page_filter_presets')
+      .upsert({
+        user_id: user.id,
+        page_id: pageId || null,
+        name: '__auto__',
+        filters: JSON.parse(JSON.stringify(filtersWithoutLocked)),
+        is_default: true,
+      }, { onConflict: 'user_id,page_id,name' });
+  }, 1000),
+  [user, pageId]
+);
 
-const DEFAULT_AI_REQUIREMENTS: AIRequirement[] = [
-  {
-    id: 'color_system',
-    label: 'Renk sistemi',
-    description: 'CSS değişkenleri zorunlu (text-foreground, bg-card vb.)',
-    isDefault: true,
-    isActive: true,
-    promptAddition: 'Renk için sadece CSS değişkenlerini kullan (text-foreground, bg-card, text-success, text-destructive).'
-  },
-  {
-    id: 'currency_format',
-    label: 'Para birimi formatı',
-    description: '₺, K, M, B formatında göster',
-    isDefault: true,
-    isActive: true,
-    promptAddition: 'Para değerlerini formatCurrency fonksiyonu ile ₺, K, M, B formatında göster.'
-  },
-  {
-    id: 'no_jsx',
-    label: 'React.createElement kullan',
-    description: 'JSX syntax yasak',
-    isDefault: true,
-    isActive: true,
-    promptAddition: 'JSX KULLANMA! Sadece React.createElement kullan.'
-  },
-  {
-    id: 'date_chronology',
-    label: 'Tarih kronolojisi',
-    description: 'Eksik günleri 0 ile doldur',
-    isDefault: false,
-    isActive: false,
-    promptAddition: 'Tarih bazlı grafiklerde eksik günleri 0 değeriyle doldur. Tüm tarih aralığını göster.'
-  },
-  {
-    id: 'trend_line',
-    label: 'Trend çizgisi',
-    description: 'Linear regression trend çizgisi ekle',
-    isDefault: false,
-    isActive: false,
-    promptAddition: 'Grafiğe linear regression trend çizgisi ekle (kesikli çizgi olarak).'
-  },
-  {
-    id: 'average_line',
-    label: 'Ortalama çizgisi',
-    description: 'Yatay ortalama çizgisi ekle',
-    isDefault: false,
-    isActive: false,
-    promptAddition: 'Grafiğe ortalama değerini gösteren yatay çizgi ekle.'
-  },
-  {
-    id: 'min_max_markers',
-    label: 'Min/Max işaretleri',
-    description: 'Minimum ve maksimum noktaları işaretle',
-    isDefault: false,
-    isActive: false,
-    promptAddition: 'Grafikte minimum ve maksimum noktaları özel işaretlerle göster.'
+// 2. Filtre değiştiğinde otomatik kaydet
+useEffect(() => {
+  if (user && !isLoading) {
+    debouncedSave(filters);
   }
-];
+}, [filters, user, isLoading, debouncedSave]);
 
-// State
-const [aiRequirements, setAiRequirements] = useState<AIRequirement[]>(DEFAULT_AI_REQUIREMENTS);
-const [customRules, setCustomRules] = useState<string[]>([]);
+// 3. Sayfa yüklendiğinde __auto__ preset'i yükle
+useEffect(() => {
+  async function loadAutoFilters() {
+    if (!user) return;
+    
+    const { data } = await supabase
+      .from('page_filter_presets')
+      .select('filters')
+      .eq('user_id', user.id)
+      .eq('name', '__auto__')
+      .eq('page_id', pageId || null)
+      .maybeSingle();
+    
+    if (data?.filters) {
+      setFilters(prev => ({
+        ...prev,
+        ...(data.filters as Partial<GlobalFilters>),
+      }));
+    }
+  }
+  
+  loadAutoFilters();
+}, [user, pageId]);
 ```
 
-### 3.3 AI Prompt Oluşturma
-
-```typescript
-const buildAIPrompt = () => {
-  let prompt = aiPrompt;
-  
-  // DIA Model linkleri ekle
-  if (diaModelLinks.length > 0) {
-    prompt += '\n\n📚 Referans DIA Modelleri:\n';
-    diaModelLinks.forEach(link => {
-      prompt += `- ${link.modelName}: ${link.url}\n`;
-    });
-  }
-  
-  // Aktif zorunlulukları ekle
-  const activeRules = aiRequirements.filter(r => r.isActive);
-  if (activeRules.length > 0 || customRules.length > 0) {
-    prompt += '\n\n⚙️ ZORUNLU KURALLAR:\n';
-    activeRules.forEach(rule => {
-      prompt += `- ${rule.promptAddition}\n`;
-    });
-    customRules.forEach(rule => {
-      prompt += `- ${rule}\n`;
-    });
-  }
-  
-  return prompt;
-};
-```
+**Kaydetme Mantığı:**
+- Filtre her değiştiğinde 1 saniye debounce ile otomatik kaydet
+- `__auto__` isimli özel preset olarak `page_filter_presets` tablosuna yaz
+- Sayfa yüklendiğinde önce `__auto__` preset'i kontrol et ve yükle
+- Zorunlu filtreler (`_diaAutoFilters`) preset'e dahil edilmez
 
 ---
 
-## Bölüm 4: Dosya Değişiklikleri
+## 3. Standart Grafik Kodlarının Silinmesi
 
-### 4.1 Güncellenecek Dosyalar
+### Kaldırılacak Kodlar (BuilderWidgetRenderer.tsx)
 
-| Dosya | Değişiklik |
-|-------|------------|
-| `src/components/admin/CustomCodeWidgetBuilder.tsx` | DIA linkleri UI, AI zorunlulukları panel, tarih toggle |
-| `supabase/functions/ai-code-generator/index.ts` | Tarih kronolojisi kuralını system prompt'a ekle |
-| `src/lib/widgetBuilderTypes.ts` | `AIRequirement` ve `DiaModelReference` tipleri |
+Aşağıdaki bloklar tamamen silinecek çünkü artık tüm widget'lar CustomCode olarak oluşturuluyor:
 
-### 4.2 Yeni State'ler (CustomCodeWidgetBuilder)
+| Satır Aralığı | İçerik | Açıklama |
+|---------------|--------|----------|
+| 762-826 | Bar Chart renderer | Standart bar grafik kodu |
+| 829-890 | Line Chart renderer | Standart çizgi grafik kodu |
+| 893-954 | Area Chart renderer | Standart alan grafik kodu |
+| 957-983 | Pie/Donut Chart delegasyonu | PieDonutChartWithResponsiveLegend çağrısı |
+| 100-391 | PieDonutChartWithResponsiveLegend | Tam bileşen |
+| 985-1017 | Table renderer | Standart tablo kodu |
+| 1020-1133 | Pivot Table renderer | Pivot tablo kodu |
+| 1136-1178 | List renderer | Standart liste kodu |
 
-```typescript
-// DIA Model Referansları
-const [diaModelLinks, setDiaModelLinks] = useState<DiaModelReference[]>([]);
-const [newModelLink, setNewModelLink] = useState('');
+### Korunacak Kodlar
 
-// AI Zorunlulukları
-const [aiRequirements, setAiRequirements] = useState<AIRequirement[]>(DEFAULT_AI_REQUIREMENTS);
-const [customRules, setCustomRules] = useState<string[]>([]);
-const [newCustomRule, setNewCustomRule] = useState('');
+| İçerik | Neden |
+|--------|-------|
+| KPI renderer (656-689) | KPI widget'ları hala standart sistem kullanıyor |
+| Custom Code renderer (692-759) | Tüm grafik/tablo widget'ları artık buradan render ediliyor |
+| ErrorBoundary (50-70) | Custom code hataları için gerekli |
+| calculateAggregation (73-91) | Pivot gibi yapılar için hala kullanılabilir |
+| formatValue (401-425) | KPI formatlaması için gerekli |
+| DynamicIcon (394-398) | İkon render için gerekli |
 
-// Panel açık/kapalı durumu
-const [showAiRequirements, setShowAiRequirements] = useState(false);
-const [showModelLinks, setShowModelLinks] = useState(false);
-```
+### AI'a Aktarılacak Zorunluluklar
 
----
+Silinen kodlardaki best practice'ler AI system prompt'una eklenmeli:
 
-## Bölüm 5: AI Code Generator System Prompt Güncellemesi
+**ai-code-generator/index.ts'e eklenecekler:**
 
-`supabase/functions/ai-code-generator/index.ts` dosyasına eklenecek yeni bölüm:
-
-```
-═══════════════════════════════════════════════════════════════════════════════
-
-📅 TARİH KRONOLOJİSİ KURALI (ÖNEMLİ!)
+```text
+📊 GRAFİK ZORUNLULUKları (SİLİNEN STANDART KODLARDAN)
 ───────────────────────────────────────────────────────────────────────────────
-Eğer grafikte tarih/zaman serisi kullanılıyorsa ve kullanıcı "tarih kronolojisi" 
-veya "eksik günleri göster" isterse:
 
-var fillMissingDates = function(data, dateField, valueField, dayCount) {
-  dayCount = dayCount || 30;
-  var today = new Date();
-  var dateMap = {};
-  
-  data.forEach(function(item) {
-    var d = new Date(item[dateField]);
-    var key = d.toISOString().split('T')[0];
-    dateMap[key] = (dateMap[key] || 0) + (parseFloat(item[valueField]) || 0);
-  });
-  
-  var result = [];
-  for (var i = dayCount - 1; i >= 0; i--) {
-    var d = new Date(today);
-    d.setDate(d.getDate() - i);
-    var key = d.toISOString().split('T')[0];
-    result.push({
-      tarih: key,
-      label: d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' }),
-      [valueField]: dateMap[key] || 0
-    });
-  }
-  
-  return result;
-};
+1. DRILL-DOWN DESTEĞİ:
+   - Grafik elementlerine onClick ekle
+   - onClick'te bar/slice/dot ismi ve field bilgisini yakala
+   - Modal veya detay görünümü aç
+   
+   ✅ Örnek (Bar):
+   React.createElement(Recharts.Bar, { 
+     dataKey: 'value',
+     onClick: function(entry) { 
+       console.log('Tıklanan:', entry.name); 
+       // Detay modalı açılabilir
+     }
+   })
 
-// Kullanım:
-var chartData = fillMissingDates(data, 'tarih', 'tutar', 30);
+2. TARİH EKSENİ FORMATLAMA:
+   - 10'dan fazla tarih varsa etiketleri -45 derece döndür
+   - interval hesapla: Math.floor(data.length / 10)
+   - textAnchor: 'end' kullan
+   
+   ✅ Örnek:
+   React.createElement(Recharts.XAxis, { 
+     dataKey: 'name',
+     angle: data.length > 10 ? -45 : 0,
+     textAnchor: data.length > 10 ? 'end' : 'middle',
+     height: data.length > 10 ? 60 : 30,
+     interval: data.length > 15 ? Math.floor(data.length / 10) : 0
+   })
+
+3. GRADİENT RENK (TARİH SERİLERİ):
+   - 10'dan fazla tarih noktası varsa gradient uygula
+   - İlk renk: colors[0] tam opaklık
+   - Son renk: colors[0] %30 opaklık (veya açık ton)
+
+4. LEGEND POZİSYONU:
+   - legendPosition: 'top' | 'bottom' | 'hidden'
+   - verticalAlign prop'u ile ayarla
+   - Varsayılan: 'bottom'
+
+5. RESPONSIVE TOOLTIP:
+   - contentStyle ile tema uyumlu stil
+   - backgroundColor: 'hsl(var(--card))'
+   - border: '1px solid hsl(var(--border))'
+   - borderRadius: '8px'
+   - zIndex: 9999 (ZORUNLU!)
+
+6. KART YAPISI:
+   - Ana container: 'p-4 bg-card rounded-xl border border-border h-full flex flex-col'
+   - Header: 'flex items-center justify-between gap-2'
+   - Content: 'flex-1 min-h-0'
 ```
 
 ---
 
-## Bölüm 6: Builder Config'e Kaydetme
+## Dosya Değişiklikleri
 
-Widget kaydedilirken bu ayarlar `builder_config` içine kaydedilecek:
+| Dosya | İşlem | Değişiklik |
+|-------|-------|------------|
+| `supabase/functions/ai-code-generator/index.ts` | Güncelle | Legend kuralları + silinen grafik zorunlulukları ekle |
+| `src/contexts/GlobalFilterContext.tsx` | Güncelle | Filtre auto-save + load mantığı ekle |
+| `src/components/dashboard/BuilderWidgetRenderer.tsx` | Büyük silme | Bar/Line/Area/Pie/Donut/Table/Pivot/List blokları sil |
+| Widget DB (customCode alanı) | SQL güncelleme | "Müşteri Kaynak Dağılımı" legend kodu düzelt |
+
+---
+
+## Uygulama Sırası
+
+1. **AI Code Generator Güncellemesi** - Tüm yeni kuralları system prompt'a ekle
+2. **GlobalFilterContext Güncelleme** - Auto-save/load mekanizması
+3. **BuilderWidgetRenderer Temizliği** - Standart grafik kodlarını sil
+4. **Widget DB Güncellemesi** - Mevcut custom widget'ları düzelt
+5. **Test** - Dashboard'da legend davranışını ve filtre kalıcılığını test et
+
+---
+
+## Teknik Notlar
+
+### Debounce Kütüphanesi
+`GlobalFilterContext` için debounce fonksiyonu gerekli. Mevcut projede lodash yoksa basit bir debounce helper yazılabilir:
 
 ```typescript
-builderConfig = {
-  ...builderConfig,
-  // Mevcut alanlar...
-  
-  // Yeni alanlar
-  diaModelLinks: diaModelLinks,
-  aiRequirements: aiRequirements.filter(r => r.isActive && !r.isDefault),
-  customAiRules: customRules,
-};
+function debounce<T extends (...args: any[]) => any>(fn: T, delay: number) {
+  let timeoutId: NodeJS.Timeout;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), delay);
+  };
+}
 ```
 
----
+### Veritabanı Unique Constraint
+`page_filter_presets` tablosunda `(user_id, page_id, name)` üzerinde unique constraint olmalı. Yoksa migration gerekebilir.
 
-## Bölüm 7: Uygulama Adımları
-
-1. **Tip Tanımları**: `widgetBuilderTypes.ts` dosyasına `AIRequirement` ve `DiaModelReference` tipleri ekle
-2. **AI Generator Güncelleme**: System prompt'a tarih kronolojisi kuralını ekle
-3. **CustomCodeWidgetBuilder Güncelleme**:
-   - DIA Model Linkleri bölümü (collapsible)
-   - AI Zorunlulukları paneli (collapsible)
-   - Tarih kronolojisi toggle
-   - Prompt oluşturma fonksiyonunu güncelle
-4. **Edge Function Deploy**: ai-code-generator'ı yeniden deploy et
-
----
-
-## Bölüm 8: Örnek Kullanım Senaryosu
-
-Kullanıcı:
-1. Veri kaynağı olarak "Cari Vade Bakiye" seçer
-2. DIA Model linki ekler: `https://doc.dia.com.tr/doku.php?id=gelistirici:models:scf_carikart_vade_bakiye_view_model`
-3. AI Zorunluluklarından "Tarih kronolojisi" ve "Trend çizgisi" seçer
-4. Prompt yazar: "Son 30 günün vade tutarlarını gösteren çizgi grafik yap"
-5. AI, eksik günleri dolduran ve trend çizgisi içeren kod üretir
+### Widget Kodları Güncellenecek
+Mevcut custom code widget'ların legend mantığı manuel olarak güncellenmeli veya AI ile yeniden üretilmeli. Alternatif olarak, widget builder'da bir "Legend davranışı" ayarı eklenip mevcut widget'lara uygulanabilir.
