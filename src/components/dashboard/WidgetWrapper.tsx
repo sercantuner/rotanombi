@@ -2,7 +2,7 @@
 // Her widget'ı saran konteyner, ayarlar ve kaldırma butonları içerir
 
 import React, { useState } from 'react';
-import { Settings, X, MoveRight, Filter, RotateCcw, Palette, Check } from 'lucide-react';
+import { Settings, X, MoveRight, Filter, RotateCcw, Palette, Check, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -18,7 +18,7 @@ import { WidgetSettingsModal } from './WidgetSettingsModal';
 import { WidgetFeedbackButton } from './WidgetFeedbackButton';
 import { getWidgetById, WidgetCategory, getPageCategories } from '@/lib/widgetRegistry';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
-import { useChartColorPalette, COLOR_PALETTES } from '@/hooks/useChartColorPalette';
+import { useChartColorPalette, COLOR_PALETTES, ColorPaletteName } from '@/hooks/useChartColorPalette';
 
 interface WidgetWrapperProps {
   widgetId: string;
@@ -41,11 +41,19 @@ export function WidgetWrapper({
 }: WidgetWrapperProps) {
   const [showSettings, setShowSettings] = useState(false);
   const { removeWidgetFromPage, moveWidgetToPage, getWidgetFilters, resetWidgetFilters } = useUserSettings();
-  const { currentPaletteName, setPalette } = useChartColorPalette();
+  
+  // Widget bazında palet yönetimi
+  const { 
+    currentPaletteName, 
+    globalPaletteName,
+    hasWidgetPalette,
+    setWidgetPalette,
+    setGlobalPalette,
+  } = useChartColorPalette({ widgetId });
   
   const widget = getWidgetById(widgetId);
   const filters = getWidgetFilters(widgetId);
-  const hasActiveFilters = Object.keys(filters).length > 0;
+  const hasActiveFilters = Object.keys(filters).filter(k => k !== 'colorPalette').length > 0;
   const pages = getPageCategories();
   const otherPages = pages.filter(p => p.id !== currentPage);
 
@@ -63,6 +71,18 @@ export function WidgetWrapper({
 
   const handleResetFilters = async () => {
     await resetWidgetFilters(widgetId);
+  };
+  
+  const handleSetWidgetPalette = async (paletteName: ColorPaletteName) => {
+    await setWidgetPalette(paletteName);
+  };
+  
+  const handleUseGlobalPalette = async () => {
+    await setWidgetPalette(null); // Widget paletini kaldır, global'e dön
+  };
+  
+  const handleSetGlobalPalette = async (paletteName: ColorPaletteName) => {
+    await setGlobalPalette(paletteName);
   };
 
   return (
@@ -114,13 +134,33 @@ export function WidgetWrapper({
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger className="gap-2">
                   <Palette className="w-4 h-4" />
-                  Renk Paleti
+                  Widget Paleti
+                  {hasWidgetPalette && (
+                    <span className="ml-auto text-[10px] px-1 py-0.5 rounded bg-primary/20 text-primary">
+                      Özel
+                    </span>
+                  )}
                 </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="w-40">
+                <DropdownMenuSubContent className="w-48">
+                  {/* Global paleti kullan seçeneği */}
+                  <DropdownMenuItem
+                    onClick={handleUseGlobalPalette}
+                    className="gap-2"
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    <span className="text-xs">Global Paleti Kullan</span>
+                    {!hasWidgetPalette && (
+                      <Check className="w-3 h-3 text-primary ml-auto" />
+                    )}
+                  </DropdownMenuItem>
+                  
+                  <DropdownMenuSeparator />
+                  
+                  {/* Widget için özel palet seçenekleri */}
                   {COLOR_PALETTES.map(palette => (
                     <DropdownMenuItem
                       key={palette.name}
-                      onClick={() => setPalette(palette.name)}
+                      onClick={() => handleSetWidgetPalette(palette.name)}
                       className="gap-2"
                     >
                       <div className="flex items-center gap-1.5 flex-1">
@@ -135,7 +175,40 @@ export function WidgetWrapper({
                         </div>
                         <span className="text-xs">{palette.label}</span>
                       </div>
-                      {currentPaletteName === palette.name && (
+                      {hasWidgetPalette && currentPaletteName === palette.name && (
+                        <Check className="w-3 h-3 text-primary" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              
+              {/* Global Palette Submenu */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="gap-2">
+                  <Globe className="w-4 h-4" />
+                  Global Palet
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-44">
+                  {COLOR_PALETTES.map(palette => (
+                    <DropdownMenuItem
+                      key={palette.name}
+                      onClick={() => handleSetGlobalPalette(palette.name)}
+                      className="gap-2"
+                    >
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <div className="flex gap-0.5">
+                          {palette.colors.slice(0, 4).map((color, i) => (
+                            <div
+                              key={i}
+                              className="w-2.5 h-2.5 rounded-sm"
+                              style={{ backgroundColor: color }}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-xs">{palette.label}</span>
+                      </div>
+                      {globalPaletteName === palette.name && (
                         <Check className="w-3 h-3 text-primary" />
                       )}
                     </DropdownMenuItem>

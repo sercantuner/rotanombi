@@ -25,6 +25,7 @@ interface WidgetPreviewRendererProps {
   yAxisField: string;
   legendField: string;
   calculatedFields: CalculatedField[];
+  widgetId?: string; // Widget bazında palet desteği için
 }
 
 // Dinamik icon renderer
@@ -143,8 +144,10 @@ export function WidgetPreviewRenderer({
   yAxisField,
   legendField,
   calculatedFields,
+  widgetId,
 }: WidgetPreviewRendererProps) {
-  const { colors: COLORS } = useChartColorPalette();
+  // Widget bazında palet desteği - önizleme modunda widget ID varsa o widget'ın paletini kullan
+  const { colors: COLORS } = useChartColorPalette({ widgetId });
   const vizType = config.visualization.type;
   const hasData = testResult?.success && testResult.sampleData && testResult.sampleData.length > 0;
   

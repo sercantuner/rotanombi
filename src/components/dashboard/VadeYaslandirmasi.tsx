@@ -8,13 +8,15 @@ import { useChartColorPalette } from '@/hooks/useChartColorPalette';
 interface Props {
   yaslandirma: VadeYaslandirma;
   isLoading?: boolean;
+  widgetId?: string; // Widget bazında palet desteği için
 }
 
 type Periyot = 'gunluk' | 'haftalik' | 'aylik';
 
-export function VadeYaslandirmasi({ yaslandirma, isLoading }: Props) {
+export function VadeYaslandirmasi({ yaslandirma, isLoading, widgetId }: Props) {
   const { filters, setFilter } = useDashboardFilters();
-  const { colors: paletteColors, getColor } = useChartColorPalette();
+  // Widget bazında palet desteği - widgetId varsa widget-specific palet kullanılır
+  const { colors: paletteColors, getColor } = useChartColorPalette({ widgetId });
   const [periyot, setPeriyot] = useState<Periyot>('gunluk');
 
   const formatCurrency = (value: number) => {
