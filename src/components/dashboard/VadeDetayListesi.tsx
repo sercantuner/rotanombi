@@ -1,7 +1,7 @@
 import React from 'react';
 import { X, Phone, Mail, Calendar, AlertTriangle, Building2 } from 'lucide-react';
 import type { DiaCari } from '@/lib/diaClient';
-import { useDashboardFilters } from '@/contexts/DashboardFilterContext';
+import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -53,7 +53,7 @@ const vadeDilimiColors: Record<string, string> = {
 };
 
 export function VadeDetayListesi({ cariler, yaslandirma }: Props) {
-  const { filters, setFilter } = useDashboardFilters();
+  const { filters, setFilter } = useGlobalFilters();
 
   const formatCurrency = (value: number) => {
     return `₺${Math.abs(value).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

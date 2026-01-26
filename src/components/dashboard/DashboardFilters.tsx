@@ -1,6 +1,6 @@
 import React from 'react';
 import { Filter, X, Search } from 'lucide-react';
-import { useDashboardFilters } from '@/contexts/DashboardFilterContext';
+import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +17,7 @@ export function DashboardFilters({ totalCustomers, filteredCount }: Props) {
     toggleArrayFilter,
     clearFilters, 
     activeFilterCount 
-  } = useDashboardFilters();
+  } = useGlobalFilters();
 
   const displayCount = filteredCount !== undefined ? filteredCount : totalCustomers;
   const showRatio = filteredCount !== undefined && filteredCount !== totalCustomers;
