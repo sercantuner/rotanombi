@@ -5,6 +5,7 @@ import { useUserSettings } from '@/contexts/UserSettingsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { diaTestConnection, getDiaConnectionInfo } from '@/lib/diaClient';
 import { useFirmaPeriods } from '@/hooks/useFirmaPeriods';
+import { useChartColorPalette, COLOR_PALETTES } from '@/hooks/useChartColorPalette';
 import { toast } from 'sonner';
 import { 
   User, 
@@ -24,7 +25,8 @@ import {
   Plug,
   FlaskConical,
   Calendar,
-  Download
+  Download,
+  Palette
 } from 'lucide-react';
 import {
   Select,
@@ -37,6 +39,7 @@ import {
 export function SettingsPage() {
   const { user } = useAuth();
   const { useMockData, setUseMockData } = useUserSettings();
+  const { currentPaletteName, setPalette, palettes } = useChartColorPalette();
   const [activeTab, setActiveTab] = useState('genel');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -84,6 +87,7 @@ export function SettingsPage() {
   // Tabs - DIA tab only visible for team admins
   const tabs = [
     { id: 'genel', label: 'Genel', icon: User },
+    { id: 'gorunum', label: 'Görünüm', icon: Palette },
     { id: 'demo', label: 'Demo Modu', icon: FlaskConical },
     ...(isTeamAdmin ? [{ id: 'dia', label: 'DIA Bağlantısı', icon: Plug }] : []),
     { id: 'sunucu', label: 'Bağlantı', icon: Server },
@@ -356,6 +360,77 @@ export function SettingsPage() {
                     )}
                     Kaydet
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Appearance Settings */}
+            {activeTab === 'gorunum' && (
+              <div className="glass-card rounded-xl p-6 animate-slide-up">
+                <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
+                  <Palette className="w-5 h-5 text-primary" />
+                  Görünüm Ayarları
+                </h3>
+
+                <div className="space-y-6">
+                  {/* Chart Color Palette */}
+                  <div>
+                    <label className="block text-sm font-medium text-muted-foreground mb-3">
+                      Grafik Renk Paleti
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {palettes.map((palette) => (
+                        <button
+                          key={palette.name}
+                          onClick={() => setPalette(palette.name)}
+                          className={`p-3 rounded-lg border-2 transition-all text-left ${
+                            currentPaletteName === palette.name
+                              ? 'border-primary bg-primary/10'
+                              : 'border-border hover:border-primary/50 bg-card'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium">{palette.label}</span>
+                            {currentPaletteName === palette.name && (
+                              <CheckCircle2 className="w-4 h-4 text-primary" />
+                            )}
+                          </div>
+                          <div className="flex gap-1">
+                            {palette.colors.slice(0, 6).map((color, idx) => (
+                              <div
+                                key={idx}
+                                className="w-5 h-5 rounded"
+                                style={{ backgroundColor: color }}
+                              />
+                            ))}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Preview */}
+                  <div className="p-4 rounded-lg bg-secondary/30 border border-border">
+                    <p className="text-sm font-medium mb-3">Önizleme</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {palettes.find(p => p.name === currentPaletteName)?.colors.map((color, idx) => (
+                        <div
+                          key={idx}
+                          className="flex flex-col items-center"
+                        >
+                          <div
+                            className="w-8 h-8 rounded"
+                            style={{ backgroundColor: color }}
+                          />
+                          <span className="text-[10px] text-muted-foreground mt-1">{idx + 1}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    Seçtiğiniz renk paleti tüm grafiklerde (çubuk, çizgi, pasta, alan) otomatik olarak uygulanacaktır.
+                  </p>
                 </div>
               </div>
             )}

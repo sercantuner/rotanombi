@@ -30,6 +30,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { LegendPosition } from '@/lib/widgetBuilderTypes';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
+import { useChartColorPalette, COLOR_PALETTES as USER_COLOR_PALETTES } from '@/hooks/useChartColorPalette';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -772,6 +773,7 @@ export function LiveWidgetPreview({
   onIconChange,
 }: LiveWidgetPreviewProps) {
   const { impersonatedUserId, isImpersonating } = useImpersonation();
+  const { colors: userColors, currentPaletteName } = useChartColorPalette();
   const [rawData, setRawData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -792,8 +794,8 @@ export function LiveWidgetPreview({
   // Tablo satır limiti
   const [tableRowLimit, setTableRowLimit] = useState(20);
   
-  // chartSettings'ten türetilen değerler (prop olarak gelir, lokal state yok)
-  const selectedPalette = (chartSettings?.colorPalette || 'default') as PaletteKey;
+  // Kullanıcının tercih ettiği palet kullanılır
+  const activeColors = userColors;
   const showGrid = chartSettings?.showGrid !== false;
   const legendPosition = chartSettings?.legendPosition || 'bottom';
   const showTrendLine = chartSettings?.showTrendLine || false;
@@ -874,11 +876,6 @@ export function LiveWidgetPreview({
       setIsLoading(false);
     }
   }, [config, dataSourceId]);
-
-  // Aktif renk paleti (chartSettings'ten gelir)
-  const activeColors = useMemo(() => {
-    return COLOR_PALETTES[selectedPalette]?.colors || COLOR_PALETTES.default.colors;
-  }, [selectedPalette]);
 
   // Tarih alanını tespit et - X ekseninde veya dateFilterConfig'den
   const detectedDateField = useMemo(() => {
@@ -1140,11 +1137,11 @@ export function LiveWidgetPreview({
                 />
               </div>
 
-              {/* Renk Paleti Göstergesi - Mobilde gizle */}
+              {/* Renk Paleti Göstergesi - Kullanıcının seçtiği palet */}
               <div className="hidden md:flex items-center gap-2 px-3 py-2 rounded border bg-muted/20">
                 <Palette className="h-4 w-4 text-muted-foreground" />
                 <div className="flex gap-0.5">
-                  {COLOR_PALETTES[selectedPalette]?.colors.slice(0, 5).map((color, idx) => (
+                  {activeColors.slice(0, 5).map((color, idx) => (
                     <div
                       key={idx}
                       className="w-3 h-3 rounded-sm"
@@ -1153,7 +1150,7 @@ export function LiveWidgetPreview({
                   ))}
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {COLOR_PALETTES[selectedPalette]?.name || 'Varsayılan'}
+                  {USER_COLOR_PALETTES.find(p => p.name === currentPaletteName)?.label || 'Kurumsal'}
                 </span>
               </div>
             </div>
