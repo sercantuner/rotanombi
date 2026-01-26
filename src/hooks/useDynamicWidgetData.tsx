@@ -180,14 +180,46 @@ function groupDataForChart(
 
 // ============= BİRLEŞTİRME FONKSİYONLARI =============
 
+// Korunacak nested dizi alanları (merge sırasında ezilmemeli)
+const PRESERVED_NESTED_FIELDS = [
+  '__borchareketler', 
+  'hareketler', 
+  'm_kalemler', 
+  'kalemler',
+  '__alacakhareketler',
+  '__stokhareketler'
+];
+
+// Akıllı merge: Sol taraftaki nested dizileri korur
+function smartMerge(left: any, right: any): any {
+  if (!right) return left;
+  
+  const result = { ...left };
+  
+  for (const key of Object.keys(right)) {
+    // Korunan alanları kontrol et
+    if (PRESERVED_NESTED_FIELDS.includes(key)) {
+      // Sol tarafta dolu bir dizi varsa, sağ tarafı yoksay
+      if (Array.isArray(left[key]) && left[key].length > 0) {
+        continue; // Sol taraftaki değeri koru
+      }
+    }
+    
+    // Diğer alanları normal şekilde merge et
+    result[key] = right[key];
+  }
+  
+  return result;
+}
+
 function leftJoin(left: any[], right: any[], leftKey: string, rightKey: string): any[] {
   const rightMap = new Map(right.map(r => [r[rightKey], r]));
-  return left.map(l => ({ ...l, ...rightMap.get(l[leftKey]) || {} }));
+  return left.map(l => smartMerge(l, rightMap.get(l[leftKey])));
 }
 
 function innerJoin(left: any[], right: any[], leftKey: string, rightKey: string): any[] {
   const rightMap = new Map(right.map(r => [r[rightKey], r]));
-  return left.filter(l => rightMap.has(l[leftKey])).map(l => ({ ...l, ...rightMap.get(l[leftKey]) }));
+  return left.filter(l => rightMap.has(l[leftKey])).map(l => smartMerge(l, rightMap.get(l[leftKey])));
 }
 
 function rightJoin(left: any[], right: any[], leftKey: string, rightKey: string): any[] {
@@ -197,7 +229,7 @@ function rightJoin(left: any[], right: any[], leftKey: string, rightKey: string)
 function fullJoin(left: any[], right: any[], leftKey: string, rightKey: string): any[] {
   const rightMap = new Map(right.map(r => [r[rightKey], r]));
   const leftKeys = new Set(left.map(l => l[leftKey]));
-  const joined = left.map(l => ({ ...l, ...rightMap.get(l[leftKey]) || {} }));
+  const joined = left.map(l => smartMerge(l, rightMap.get(l[leftKey])));
   const rightOnly = right.filter(r => !leftKeys.has(r[rightKey]));
   return [...joined, ...rightOnly];
 }
