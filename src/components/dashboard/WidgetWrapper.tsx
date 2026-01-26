@@ -2,7 +2,7 @@
 // Her widget'ı saran konteyner, ayarlar ve kaldırma butonları içerir
 
 import React, { useState } from 'react';
-import { Settings, X, MoveRight, Filter, RotateCcw } from 'lucide-react';
+import { Settings, X, MoveRight, Filter, RotateCcw, Palette, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -10,11 +10,15 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
 import { WidgetSettingsModal } from './WidgetSettingsModal';
 import { WidgetFeedbackButton } from './WidgetFeedbackButton';
 import { getWidgetById, WidgetCategory, getPageCategories } from '@/lib/widgetRegistry';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
+import { useChartColorPalette, COLOR_PALETTES } from '@/hooks/useChartColorPalette';
 
 interface WidgetWrapperProps {
   widgetId: string;
@@ -37,6 +41,7 @@ export function WidgetWrapper({
 }: WidgetWrapperProps) {
   const [showSettings, setShowSettings] = useState(false);
   const { removeWidgetFromPage, moveWidgetToPage, getWidgetFilters, resetWidgetFilters } = useUserSettings();
+  const { currentPaletteName, setPalette } = useChartColorPalette();
   
   const widget = getWidgetById(widgetId);
   const filters = getWidgetFilters(widgetId);
@@ -105,6 +110,41 @@ export function WidgetWrapper({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
+              {/* Color Palette Submenu */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="gap-2">
+                  <Palette className="w-4 h-4" />
+                  Renk Paleti
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-40">
+                  {COLOR_PALETTES.map(palette => (
+                    <DropdownMenuItem
+                      key={palette.name}
+                      onClick={() => setPalette(palette.name)}
+                      className="gap-2"
+                    >
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <div className="flex gap-0.5">
+                          {palette.colors.slice(0, 4).map((color, i) => (
+                            <div
+                              key={i}
+                              className="w-2.5 h-2.5 rounded-sm"
+                              style={{ backgroundColor: color }}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-xs">{palette.label}</span>
+                      </div>
+                      {currentPaletteName === palette.name && (
+                        <Check className="w-3 h-3 text-primary" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              
+              <DropdownMenuSeparator />
+              
               {/* Move to another page */}
               {otherPages.map(page => (
                 <DropdownMenuItem 

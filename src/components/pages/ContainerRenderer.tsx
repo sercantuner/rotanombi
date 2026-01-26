@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useContainerWidgets } from '@/hooks/useUserPages';
 import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
+import { useChartColorPalette, COLOR_PALETTES } from '@/hooks/useChartColorPalette';
 import { PageContainer, CONTAINER_TEMPLATES, ContainerType } from '@/lib/pageTypes';
 import { Widget } from '@/lib/widgetTypes';
 import { WidgetSlotPicker } from './WidgetSlotPicker';
@@ -11,7 +12,13 @@ import { DynamicWidgetRenderer } from '@/components/dashboard/DynamicWidgetRende
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Trash2, GripVertical, Settings, X } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Plus, Trash2, GripVertical, Settings, X, Palette, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -42,6 +49,7 @@ export function ContainerRenderer({
 }: ContainerRendererProps) {
   const { widgets: containerWidgets, addWidget, removeWidget, refreshWidgets } = useContainerWidgets(container.id);
   const { loadSingleDataSource } = useDataSourceLoader(pageId);
+  const { currentPaletteName, setPalette } = useChartColorPalette();
   const [widgetPickerOpen, setWidgetPickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<number>(0);
@@ -259,17 +267,56 @@ export function ContainerRenderer({
               isWidgetEditMode={isWidgetEditMode}
             />
             {isWidgetEditMode && (
-              <Button
-                variant="destructive"
-                size="icon"
-                className="absolute top-1 left-1 h-5 w-5 shadow-md z-20"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRemoveWidget(slotWidget.id, widgetDetail.name);
-                }}
-              >
-                <X className="h-3 w-3" />
-              </Button>
+              <div className="absolute top-1 left-1 flex items-center gap-0.5 z-20">
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  className="h-5 w-5 shadow-md"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveWidget(slotWidget.id, widgetDetail.name);
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="h-5 w-5 shadow-md"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Palette className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-40">
+                    {COLOR_PALETTES.map(palette => (
+                      <DropdownMenuItem
+                        key={palette.name}
+                        onClick={() => setPalette(palette.name)}
+                        className="gap-2"
+                      >
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <div className="flex gap-0.5">
+                            {palette.colors.slice(0, 4).map((color, i) => (
+                              <div
+                                key={i}
+                                className="w-2.5 h-2.5 rounded-sm"
+                                style={{ backgroundColor: color }}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-xs">{palette.label}</span>
+                        </div>
+                        {currentPaletteName === palette.name && (
+                          <Check className="w-3 h-3 text-primary" />
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             )}
           </div>
         );
