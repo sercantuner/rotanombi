@@ -56,7 +56,7 @@ export interface WidgetPermission {
   granted_at: string;
 }
 
-// Konteyner şablonları - Mobil responsive grid sınıfları (kompakt gap)
+// Konteyner şablonları - Mobil responsive grid sınıfları (ultra kompakt gap)
 export const CONTAINER_TEMPLATES: {
   id: ContainerType;
   name: string;
@@ -71,7 +71,7 @@ export const CONTAINER_TEMPLATES: {
     description: '5 adet KPI kartı yan yana',
     icon: 'LayoutGrid',
     slots: 5,
-    gridClass: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1 md:gap-1.5',
+    gridClass: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-0.5 md:gap-1',
   },
   {
     id: 'kpi_row_4',
@@ -79,7 +79,7 @@ export const CONTAINER_TEMPLATES: {
     description: '4 adet KPI kartı yan yana',
     icon: 'LayoutGrid',
     slots: 4,
-    gridClass: 'grid-cols-2 md:grid-cols-4 gap-1 md:gap-1.5',
+    gridClass: 'grid-cols-2 md:grid-cols-4 gap-0.5 md:gap-1',
   },
   {
     id: 'kpi_row_3',
@@ -87,7 +87,7 @@ export const CONTAINER_TEMPLATES: {
     description: '3 adet KPI kartı yan yana',
     icon: 'LayoutGrid',
     slots: 3,
-    gridClass: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1 md:gap-1.5',
+    gridClass: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-0.5 md:gap-1',
   },
   {
     id: 'chart_full',
@@ -95,7 +95,7 @@ export const CONTAINER_TEMPLATES: {
     description: 'Tek grafik, tam genişlik',
     icon: 'BarChart3',
     slots: 1,
-    gridClass: 'grid-cols-1 gap-1',
+    gridClass: 'grid-cols-1 gap-0.5',
   },
   {
     id: 'chart_half',
@@ -103,7 +103,7 @@ export const CONTAINER_TEMPLATES: {
     description: '2 grafik yan yana',
     icon: 'PieChart',
     slots: 2,
-    gridClass: 'grid-cols-1 md:grid-cols-2 gap-1 md:gap-1.5',
+    gridClass: 'grid-cols-1 md:grid-cols-2 gap-0.5 md:gap-1',
   },
   {
     id: 'chart_third',
@@ -111,7 +111,7 @@ export const CONTAINER_TEMPLATES: {
     description: '3 grafik yan yana',
     icon: 'Activity',
     slots: 3,
-    gridClass: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1 md:gap-1.5',
+    gridClass: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0.5 md:gap-1',
   },
   {
     id: 'info_cards_3',
@@ -119,7 +119,7 @@ export const CONTAINER_TEMPLATES: {
     description: '3 bilgi kartı yan yana',
     icon: 'CreditCard',
     slots: 3,
-    gridClass: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1 md:gap-1.5',
+    gridClass: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0.5 md:gap-1',
   },
   {
     id: 'info_cards_2',
@@ -127,7 +127,7 @@ export const CONTAINER_TEMPLATES: {
     description: '2 bilgi kartı yan yana',
     icon: 'CreditCard',
     slots: 2,
-    gridClass: 'grid-cols-1 md:grid-cols-2 gap-1 md:gap-1.5',
+    gridClass: 'grid-cols-1 md:grid-cols-2 gap-0.5 md:gap-1',
   },
   {
     id: 'table_full',
@@ -135,7 +135,7 @@ export const CONTAINER_TEMPLATES: {
     description: 'Tam genişlik tablo',
     icon: 'Table',
     slots: 1,
-    gridClass: 'grid-cols-1 gap-1',
+    gridClass: 'grid-cols-1 gap-0.5',
   },
   {
     id: 'list_full',
@@ -143,7 +143,7 @@ export const CONTAINER_TEMPLATES: {
     description: 'Tam genişlik liste',
     icon: 'List',
     slots: 1,
-    gridClass: 'grid-cols-1 gap-1',
+    gridClass: 'grid-cols-1 gap-0.5',
   },
   {
     id: 'custom_grid',
@@ -151,7 +151,7 @@ export const CONTAINER_TEMPLATES: {
     description: 'Esnek 6 slot grid',
     icon: 'Grid3x3',
     slots: 6,
-    gridClass: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-1 md:gap-1.5',
+    gridClass: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-0.5 md:gap-1',
   },
 ];
 
