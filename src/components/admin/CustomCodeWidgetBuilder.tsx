@@ -1,6 +1,6 @@
-// Custom Code Widget Builder - Hardcoded React kodu ile widget oluşturma
-// Veri kaynağı seçimi, JSON görüntüleme/indirme, AI kod üretimi, kod editörü ve önizleme
-// Multi-Query (kaynak birleştirme) desteği
+// Custom Code Widget Builder - Wizard Tabanlı Widget Oluşturma
+// 4 Adım: 1) Veri Kaynağı 2) AI Kod Üret 3) Kod Düzenle 4) Önizle & Kaydet
+// v2.0 - Wizard/Stepper yapısı
 
 import React, { useState, useEffect, useMemo, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import { useDataSources, DataSource as DataSourceType } from '@/hooks/useDataSources';
@@ -14,7 +14,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -27,7 +26,7 @@ import {
   Code, Database, Eye, Save, Play, Copy, Check, 
   LayoutGrid, AlertCircle, FileJson, Wand2, X,
   RefreshCw, Loader2, Download, Sparkles, Send, MessageSquare, 
-  Link2, Layers
+  Link2, Layers, ChevronLeft, ChevronRight, CheckCircle2, Circle
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -117,12 +116,10 @@ const DynamicIcon = ({ iconName, className }: { iconName: string; className?: st
   return <Icon className={className} />;
 };
 
-// Varsayılan kod şablonu - React.createElement ile
-const getDefaultCodeTemplate = () => `// Widget bileşeni - data prop'u ile veri alır
-// props: { data: any[] } - Veri kaynağından gelen veriler
+// Varsayılan kod şablonu
+const getDefaultCodeTemplate = () => `// Widget bileşeni - data ve colors prop'u ile veri alır
 
-function Widget({ data }) {
-  // Yükleme durumu
+function Widget({ data, colors }) {
   if (!data || data.length === 0) {
     return React.createElement('div', 
       { className: 'flex items-center justify-center h-48 text-muted-foreground' },
@@ -130,7 +127,13 @@ function Widget({ data }) {
     );
   }
 
-  // Örnek hesaplama
+  // Renk helper - ZORUNLU
+  var getColor = function(index) {
+    return colors && colors[index % colors.length] 
+      ? colors[index % colors.length] 
+      : 'hsl(var(--primary))';
+  };
+
   var toplamBakiye = data.reduce(function(acc, item) {
     var bakiye = parseFloat(item.toplambakiye) || 0;
     return acc + bakiye;
@@ -146,164 +149,20 @@ function Widget({ data }) {
   };
 
   return React.createElement('div', { className: 'p-4' },
-    React.createElement('div', { className: 'text-2xl font-bold text-primary' }, formatCurrency(toplamBakiye)),
+    React.createElement('div', { className: 'text-2xl font-bold text-foreground' }, formatCurrency(toplamBakiye)),
     React.createElement('div', { className: 'text-sm text-muted-foreground mt-1' }, data.length + ' kayıt')
   );
 }
 
-// Widget bileşenini export et
 return Widget;
 `;
 
-// Vade yaşlandırma şablonu - React.createElement ile
-const getAgingChartTemplate = () => `// Vade Yaşlandırma Grafiği
-// props: { data: any[] } - Cari vade bakiye verileri
-
-function VadeYaslandirmaWidget({ data }) {
-  var periyotState = React.useState('gunluk');
-  var periyot = periyotState[0];
-  var setPeriyot = periyotState[1];
-
-  if (!data || data.length === 0) {
-    return React.createElement('div', 
-      { className: 'flex items-center justify-center h-64 text-muted-foreground' },
-      'Veri bulunamadı'
-    );
-  }
-
-  // Verileri hesapla
-  var yaslandirma = React.useMemo(function() {
-    var vade90Plus = 0, vade90 = 0, vade60 = 0, vade30 = 0, guncel = 0;
-    var gelecek30 = 0, gelecek60 = 0, gelecek90 = 0, gelecek90Plus = 0;
-    
-    var today = new Date();
-    
-    data.forEach(function(item) {
-      var bakiye = parseFloat(item.toplambakiye) || 0;
-      if (bakiye <= 0) return;
-      
-      var vadeTarihi = item.vadetarihi ? new Date(item.vadetarihi) : today;
-      var gunFarki = Math.floor((today - vadeTarihi) / (1000 * 60 * 60 * 24));
-      
-      if (gunFarki > 90) vade90Plus += bakiye;
-      else if (gunFarki > 60) vade90 += bakiye;
-      else if (gunFarki > 30) vade60 += bakiye;
-      else if (gunFarki > 0) vade30 += bakiye;
-      else if (gunFarki === 0) guncel += bakiye;
-      else if (gunFarki > -30) gelecek30 += bakiye;
-      else if (gunFarki > -60) gelecek60 += bakiye;
-      else if (gunFarki > -90) gelecek90 += bakiye;
-      else gelecek90Plus += bakiye;
-    });
-    
-    return { vade90Plus: vade90Plus, vade90: vade90, vade60: vade60, vade30: vade30, guncel: guncel, gelecek30: gelecek30, gelecek60: gelecek60, gelecek90: gelecek90, gelecek90Plus: gelecek90Plus };
-  }, [data]);
-
-  var formatCurrency = function(value) {
-    if (value >= 1000000) return '₺' + (value / 1000000).toFixed(1) + 'M';
-    if (value >= 1000) return '₺' + (value / 1000).toFixed(0) + 'K';
-    return '₺' + value.toLocaleString('tr-TR');
-  };
-
-  // Chart verisi oluştur
-  var chartData = [
-    { name: '90+ Gün', value: yaslandirma.vade90Plus, type: 'gecmis', color: 'hsl(var(--destructive))' },
-    { name: '61-90', value: yaslandirma.vade90, type: 'gecmis', color: 'hsl(0 65% 50%)' },
-    { name: '31-60', value: yaslandirma.vade60, type: 'gecmis', color: 'hsl(25 95% 53%)' },
-    { name: '1-30', value: yaslandirma.vade30, type: 'gecmis', color: 'hsl(38 92% 50%)' },
-    { name: 'BUGÜN', value: yaslandirma.guncel, type: 'guncel', color: 'hsl(var(--primary))' },
-    { name: '-30', value: yaslandirma.gelecek30, type: 'gelecek', color: 'hsl(142 76% 46%)' },
-    { name: '-60', value: yaslandirma.gelecek60, type: 'gelecek', color: 'hsl(142 72% 40%)' },
-    { name: '-90', value: yaslandirma.gelecek90, type: 'gelecek', color: 'hsl(142 68% 34%)' },
-    { name: '-90+', value: yaslandirma.gelecek90Plus, type: 'gelecek', color: 'hsl(142 65% 28%)' }
-  ];
-
-  var toplam = chartData.reduce(function(acc, item) { return acc + item.value; }, 0);
-  var gecmisToplam = chartData.filter(function(d) { return d.type === 'gecmis'; }).reduce(function(acc, d) { return acc + d.value; }, 0);
-  var gelecekToplam = chartData.filter(function(d) { return d.type === 'gelecek'; }).reduce(function(acc, d) { return acc + d.value; }, 0);
-  var maxValue = Math.max.apply(null, chartData.map(function(d) { return d.value; }));
-
-  return React.createElement('div', { className: 'space-y-4' },
-    // Periyot seçici ve toplam
-    React.createElement('div', { className: 'flex items-center justify-between' },
-      React.createElement('div', { className: 'text-sm text-muted-foreground' },
-        'Toplam: ',
-        React.createElement('span', { className: 'font-semibold text-foreground' }, formatCurrency(toplam))
-      ),
-      React.createElement('div', { className: 'flex items-center bg-secondary/50 rounded-lg p-1' },
-        ['gunluk', 'haftalik', 'aylik'].map(function(p) {
-          return React.createElement('button', {
-            key: p,
-            onClick: function() { setPeriyot(p); },
-            className: 'px-3 py-1.5 text-xs font-medium rounded-md transition-colors ' + 
-              (periyot === p ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')
-          }, p === 'gunluk' ? 'Günlük' : p === 'haftalik' ? 'Haftalık' : 'Aylık');
-        })
-      )
-    ),
-    // Legend
-    React.createElement('div', { className: 'flex items-center justify-center gap-6 text-xs' },
-      React.createElement('div', { className: 'flex items-center gap-2' },
-        React.createElement('div', { className: 'w-3 h-3 rounded-sm bg-destructive' }),
-        React.createElement('span', { className: 'text-muted-foreground' }, 
-          'Vadesi Geçmiş: ',
-          React.createElement('span', { className: 'font-semibold text-foreground' }, formatCurrency(gecmisToplam))
-        )
-      ),
-      React.createElement('div', { className: 'flex items-center gap-2' },
-        React.createElement('div', { className: 'w-3 h-3 rounded-sm bg-primary' }),
-        React.createElement('span', { className: 'text-muted-foreground' }, 
-          'Güncel: ',
-          React.createElement('span', { className: 'font-semibold text-foreground' }, formatCurrency(yaslandirma.guncel))
-        )
-      ),
-      React.createElement('div', { className: 'flex items-center gap-2' },
-        React.createElement('div', { className: 'w-3 h-3 rounded-sm', style: { backgroundColor: 'hsl(142 76% 46%)' } }),
-        React.createElement('span', { className: 'text-muted-foreground' }, 
-          'Gelecek: ',
-          React.createElement('span', { className: 'font-semibold text-foreground' }, formatCurrency(gelecekToplam))
-        )
-      )
-    ),
-    // Bar chart (CSS tabanlı)
-    React.createElement('div', { className: 'h-48 flex items-end justify-center gap-1' },
-      chartData.map(function(item, idx) {
-        return React.createElement('div', { key: idx, className: 'flex flex-col items-center gap-1 flex-1' },
-          React.createElement('div', {
-            className: 'w-full rounded-t transition-all hover:opacity-80 cursor-pointer relative group',
-            style: { 
-              height: maxValue > 0 ? ((item.value / maxValue) * 100) + '%' : '0%',
-              backgroundColor: item.color,
-              minHeight: item.value > 0 ? '4px' : '0'
-            }
-          },
-            React.createElement('div', { 
-              className: 'absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-card border border-border rounded px-2 py-1 text-xs whitespace-nowrap z-10'
-            }, formatCurrency(item.value))
-          ),
-          React.createElement('span', { className: 'text-[10px] text-muted-foreground whitespace-nowrap' }, item.name)
-        );
-      })
-    ),
-    // Uyarı
-    yaslandirma.vade90Plus > 0 ? React.createElement('div', { 
-      className: 'p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-3'
-    },
-      React.createElement('span', { className: 'text-sm text-destructive' },
-        React.createElement('span', { className: 'font-semibold' }, formatCurrency(yaslandirma.vade90Plus)),
-        ' tutarında 90 günü aşmış alacak var'
-      )
-    ) : null
-  );
-}
-
-return VadeYaslandirmaWidget;
-`;
-
-// Kod şablonları
-const CODE_TEMPLATES = [
-  { id: 'basic', name: 'Temel Şablon', code: getDefaultCodeTemplate() },
-  { id: 'aging', name: 'Vade Yaşlandırma', code: getAgingChartTemplate() },
+// Wizard adım tanımları
+const WIZARD_STEPS = [
+  { id: 0, key: 'data', title: 'Veri Kaynağı', icon: Database, description: 'Widget bilgileri ve veri seçimi' },
+  { id: 1, key: 'ai', title: 'AI Kod Üret', icon: Sparkles, description: 'AI ile kod üretimi (opsiyonel)' },
+  { id: 2, key: 'code', title: 'Kod Düzenle', icon: Code, description: 'Kodu düzenle ve iyileştir' },
+  { id: 3, key: 'preview', title: 'Önizle & Kaydet', icon: Eye, description: 'Son kontrol ve kaydetme' },
 ];
 
 // Chat mesaj tipi
@@ -319,6 +178,10 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   const { user } = useAuth();
   const { impersonatedUserId, isImpersonating } = useImpersonation();
   
+  // Wizard state
+  const [currentStep, setCurrentStep] = useState(0);
+  const [completedSteps, setCompletedSteps] = useState<number[]>([]);
+  
   // Widget temel bilgileri
   const [widgetKey, setWidgetKey] = useState('custom_widget_' + Date.now());
   const [widgetName, setWidgetName] = useState('Özel Widget');
@@ -331,7 +194,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   const [selectedDataSourceId, setSelectedDataSourceId] = useState<string | null>(null);
   const selectedDataSource = selectedDataSourceId ? getDataSourceById(selectedDataSourceId) : null;
   
-  // Multi-query modu (kaynak birleştirme)
+  // Multi-query modu
   const [isMultiQueryMode, setIsMultiQueryMode] = useState(false);
   const [multiQuery, setMultiQuery] = useState<MultiQueryConfig | null>(null);
   const [mergedQueryData, setMergedQueryData] = useState<Record<string, any[]>>({});
@@ -355,9 +218,6 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   // Kopyalama durumu
   const [copied, setCopied] = useState(false);
   
-  // Aktif sekme
-  const [activeTab, setActiveTab] = useState('datasource');
-  
   // Widget şablon seçimi
   const [showWidgetTemplates, setShowWidgetTemplates] = useState(false);
   
@@ -369,6 +229,51 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       w.id !== editingWidget?.id
     );
   }, [widgets, editingWidget]);
+
+  // Adım geçiş kontrolü
+  const canProceed = useCallback((step: number) => {
+    switch(step) {
+      case 0: // Veri Kaynağı
+        if (isMultiQueryMode) {
+          return multiQuery && multiQuery.queries.length > 0 && Object.keys(mergedQueryData).length > 0;
+        }
+        return sampleData.length > 0;
+      case 1: // AI Kod Üret - opsiyonel
+        return true;
+      case 2: // Kod Düzenle
+        return !codeError && customCode.trim().length > 0;
+      case 3: // Önizle & Kaydet
+        return true;
+      default:
+        return false;
+    }
+  }, [isMultiQueryMode, multiQuery, mergedQueryData, sampleData, codeError, customCode]);
+
+  // Adım değiştir
+  const goToStep = (step: number) => {
+    if (step < currentStep || completedSteps.includes(step) || canProceed(currentStep)) {
+      // Mevcut adımı tamamlandı olarak işaretle
+      if (!completedSteps.includes(currentStep) && canProceed(currentStep)) {
+        setCompletedSteps(prev => [...prev, currentStep]);
+      }
+      setCurrentStep(step);
+    }
+  };
+
+  const handleNext = () => {
+    if (currentStep < WIZARD_STEPS.length - 1 && canProceed(currentStep)) {
+      if (!completedSteps.includes(currentStep)) {
+        setCompletedSteps(prev => [...prev, currentStep]);
+      }
+      setCurrentStep(prev => prev + 1);
+    }
+  };
+
+  const handleBack = () => {
+    if (currentStep > 0) {
+      setCurrentStep(prev => prev - 1);
+    }
+  };
 
   // Düzenleme modunda widget verilerini yükle
   useEffect(() => {
@@ -383,18 +288,18 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       
       if (config?.customCode) {
         setCustomCode(config.customCode);
+        // Düzenleme modunda ilk 3 adımı tamamlandı say
+        setCompletedSteps([0, 1, 2]);
+        setCurrentStep(2); // Kod düzenleme adımına git
       }
       
-      // Multi-query modu kontrolü
       if (config?.multiQuery) {
         setIsMultiQueryMode(true);
         setMultiQuery(config.multiQuery);
-        // Multi-query için veri yükle
         loadMultiQueryData(config.multiQuery);
       } else if (config?.dataSourceId) {
         setIsMultiQueryMode(false);
         setSelectedDataSourceId(config.dataSourceId);
-        // Veri kaynağından veri çek
         const ds = getDataSourceById(config.dataSourceId);
         if (ds) {
           if (ds.last_sample_data) {
@@ -405,7 +310,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
         }
       }
     } else if (!editingWidget && open) {
-      // Yeni widget oluşturma - form sıfırla
+      // Yeni widget - form sıfırla
       setWidgetKey('custom_widget_' + Date.now());
       setWidgetName('Özel Widget');
       setWidgetDescription('');
@@ -419,6 +324,8 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       setMergedQueryData({});
       setSampleData([]);
       setChatHistory([]);
+      setCurrentStep(0);
+      setCompletedSteps([]);
     }
   }, [editingWidget, open]);
 
@@ -441,23 +348,6 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       
       setMergedQueryData(dataMap);
       
-      // Tüm query verilerini birleştirerek sampleData oluştur (AI ve önizleme için)
-      // Her query'nin verisini ayrı key altında tut
-      const combinedData = {
-        _multiQuery: true,
-        _queries: config.queries.map(q => ({
-          id: q.id,
-          name: q.name,
-          dataSourceId: q.dataSourceId,
-          fields: dataMap[q.id]?.[0] ? Object.keys(dataMap[q.id][0]) : [],
-          recordCount: dataMap[q.id]?.length || 0,
-        })),
-        ...Object.fromEntries(
-          config.queries.map(q => [q.name || q.id, dataMap[q.id] || []])
-        ),
-      };
-      
-      // İlk sorgunun verisini ana sampleData olarak kullan (geriye uyumluluk)
       const primaryQuery = config.queries.find(q => q.id === config.primaryQueryId) || config.queries[0];
       if (primaryQuery && dataMap[primaryQuery.id]) {
         setSampleData(dataMap[primaryQuery.id]);
@@ -471,13 +361,12 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
     }
   };
   
-  // Multi-query için zengin veri yapısı oluştur
+  // Multi-query için zengin veri yapısı
   const getMultiQueryJsonData = useCallback(() => {
     if (!isMultiQueryMode || !multiQuery?.queries?.length) {
       return sampleData;
     }
     
-    // Her query için veri ve metadata içeren yapı
     const result: Record<string, any> = {
       _meta: {
         isMultiQuery: true,
@@ -490,17 +379,9 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
           fields: mergedQueryData[q.id]?.[0] ? Object.keys(mergedQueryData[q.id][0]) : [],
           recordCount: mergedQueryData[q.id]?.length || 0,
         })),
-        merges: multiQuery.merges?.map(m => ({
-          left: multiQuery.queries.find(q => q.id === m.leftQueryId)?.name,
-          right: multiQuery.queries.find(q => q.id === m.rightQueryId)?.name,
-          type: m.mergeType,
-          leftField: m.leftField,
-          rightField: m.rightField,
-        })),
       },
     };
     
-    // Her query'nin verisini ayrı key altında ekle
     multiQuery.queries.forEach(q => {
       const key = q.name || `query_${q.id.slice(0, 8)}`;
       result[key] = mergedQueryData[q.id] || [];
@@ -509,19 +390,17 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
     return result;
   }, [isMultiQueryMode, multiQuery, mergedQueryData, sampleData]);
 
-  // Veri kaynağı seçildiğinde veri çek
+  // Veri kaynağı seçildiğinde
   const handleDataSourceSelect = async (dataSource: DataSourceType | null) => {
     if (dataSource) {
       setSelectedDataSourceId(dataSource.id);
       
-      // Örnek veri varsa kullan
       if (dataSource.last_sample_data) {
         setSampleData(dataSource.last_sample_data as any[]);
         toast.success('Önbellek verisi yüklendi');
         return;
       }
       
-      // Yoksa API'den çek
       await fetchDataFromSource(dataSource);
     } else {
       setSelectedDataSourceId(null);
@@ -564,20 +443,6 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
     }
   };
 
-  // Şablon uygula
-  const applyTemplate = (templateId: string) => {
-    const template = CODE_TEMPLATES.find(t => t.id === templateId);
-    if (template) {
-      setCustomCode(template.code);
-      if (templateId === 'aging') {
-        setWidgetName('Vade Yaşlandırma');
-        setWidgetIcon('Calendar');
-        setWidgetSize('xl');
-      }
-      toast.success(`"${template.name}" şablonu uygulandı`);
-    }
-  };
-
   // Kodu kopyala
   const copyCode = () => {
     navigator.clipboard.writeText(customCode);
@@ -586,27 +451,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
     toast.success('Kod kopyalandı');
   };
 
-  // JSON kopyala
-  const copyJson = () => {
-    navigator.clipboard.writeText(JSON.stringify(sampleData, null, 2));
-    toast.success('JSON kopyalandı');
-  };
-
-  // JSON indir
-  const downloadJson = () => {
-    const blob = new Blob([JSON.stringify(sampleData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${selectedDataSource?.slug || 'data'}_${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success('JSON dosyası indirildi');
-  };
-
-  // Veri analizi fonksiyonu - AI için zengin context
+  // Veri analizi fonksiyonu
   const analyzeDataForAI = useCallback((data: any[]) => {
     if (!data || data.length === 0) return {};
     
@@ -617,7 +462,6 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       const values = data.map(d => d[field]).filter(v => v != null);
       const numericValues = values.filter(v => typeof v === 'number' || !isNaN(parseFloat(v)));
       
-      // Tip tespiti
       const detectType = () => {
         if (values.length === 0) return 'empty';
         const first = values[0];
@@ -639,7 +483,6 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
         sampleValues: [...new Set(values)].slice(0, 5),
       };
       
-      // Sayısal alan ise istatistikler
       if (numericValues.length > 0 && (fieldType === 'number' || fieldType === 'numeric-string')) {
         const nums = numericValues.map(v => typeof v === 'number' ? v : parseFloat(v));
         analysis[field].min = Math.min(...nums);
@@ -648,7 +491,6 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
         analysis[field].sum = Math.round(nums.reduce((a, b) => a + b, 0) * 100) / 100;
       }
       
-      // Tarih alanı ise aralık
       if (fieldType === 'date') {
         const dates = values.map(v => new Date(v)).filter(d => !isNaN(d.getTime()));
         if (dates.length > 0) {
@@ -675,7 +517,6 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       return;
     }
 
-    // Multi-query modunda mergedQueryData kontrolü
     const hasData = isMultiQueryMode 
       ? Object.keys(mergedQueryData).length > 0 
       : sampleData.length > 0;
@@ -691,7 +532,6 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       let dataToSend: any;
       
       if (isMultiQueryMode && multiQuery?.queries?.length) {
-        // Multi-query modu için zengin context
         const queryAnalyses = multiQuery.queries.map(q => {
           const qData = mergedQueryData[q.id] || [];
           const analysis = qData.length > 0 ? analyzeDataForAI(qData) : {};
@@ -707,40 +547,17 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
         });
         
         systemPrompt = `MULTI-QUERY VERİ YAPISI:
-Bu widget birden fazla veri kaynağından besleniyor. Widget fonksiyonuna gelen "data" prop'u şu yapıda:
+Bu widget birden fazla veri kaynağından besleniyor.
 
-{
-  _meta: { isMultiQuery: true, queryCount: ${multiQuery.queries.length}, queries: [...] },
-${multiQuery.queries.map(q => `  "${q.name}": [...] // ${mergedQueryData[q.id]?.length || 0} kayıt`).join(',\n')}
-}
-
-SORGULAR VE ALANLARI:
+SORGULAR:
 ${queryAnalyses.map(qa => `
 📊 ${qa.queryName} (${qa.recordCount} kayıt)
-   Alanlar: ${qa.fields.join(', ')}
-   ${Object.entries(qa.fieldStats).slice(0, 5).map(([f, s]: [string, any]) => {
-     let info = `   • ${f} (${s.type})`;
-     if (s.sum !== undefined) info += `: Σ${formatNumber(s.sum)}`;
-     return info;
-   }).join('\n')}`).join('\n')}
-
-${multiQuery.merges?.length ? `
-BİRLEŞTİRME KURALLARI:
-${multiQuery.merges.map(m => {
-  const left = multiQuery.queries.find(q => q.id === m.leftQueryId)?.name;
-  const right = multiQuery.queries.find(q => q.id === m.rightQueryId)?.name;
-  return `• ${left}.${m.leftField} ${m.mergeType.toUpperCase()} ${right}.${m.rightField}`;
-}).join('\n')}` : ''}
-
-ÖNEMLİ: Widget kodu data.${multiQuery.queries[0]?.name || 'queryName'} şeklinde her sorguya erişebilir.
+   Alanlar: ${qa.fields.join(', ')}`).join('\n')}
 
 Kullanıcı isteği: ${aiPrompt}`;
 
-        // Multi-query için veri yapısını gönder
         dataToSend = getMultiQueryJsonData();
-        
       } else {
-        // Tek kaynak modu için mevcut mantık
         const dataAnalysis = analyzeDataForAI(sampleData);
         
         systemPrompt = `Veri Analizi:
@@ -777,13 +594,14 @@ Kullanıcı isteği: ${aiPrompt}`;
         setCustomCode(generatedCode);
         setChatHistory([
           { role: 'user', content: aiPrompt },
-          { role: 'assistant', content: isMultiQueryMode 
-            ? `Kod üretildi! ${multiQuery?.queries?.length || 0} sorgu için multi-query yapısı kullanıldı.` 
-            : 'Kod üretildi! Aşağıdaki chat alanından değişiklik isteyebilirsiniz.' 
-          }
+          { role: 'assistant', content: 'Kod üretildi!' }
         ]);
-        setActiveTab('code');
-        toast.success('Kod üretildi! Kod editöründe görüntüleyebilirsiniz.');
+        // Otomatik olarak kod düzenleme adımına geç
+        if (!completedSteps.includes(1)) {
+          setCompletedSteps(prev => [...prev, 1]);
+        }
+        setCurrentStep(2);
+        toast.success('Kod üretildi! Kod düzenleme adımına geçildi.');
       } else {
         throw new Error('AI yanıtı alınamadı');
       }
@@ -807,7 +625,6 @@ Kullanıcı isteği: ${aiPrompt}`;
     setChatInput('');
     setIsChatLoading(true);
 
-    // Kullanıcı mesajını ekle
     const updatedHistory: ChatMessage[] = [
       ...chatHistory,
       { role: 'user', content: userMessage }
@@ -850,11 +667,6 @@ Kullanıcı isteği: ${aiPrompt}`;
     }
   };
 
-  // Hızlı eylem
-  const applyQuickAction = (action: string) => {
-    setChatInput(action);
-  };
-
   // Widget kaydet
   const handleSave = async () => {
     if (!widgetKey || !widgetName) {
@@ -862,7 +674,6 @@ Kullanıcı isteği: ${aiPrompt}`;
       return;
     }
 
-    // Multi-query modunda kontrol
     if (isMultiQueryMode) {
       if (!multiQuery || multiQuery.queries.length === 0) {
         toast.error('En az bir sorgu tanımlamalısınız');
@@ -877,7 +688,6 @@ Kullanıcı isteği: ${aiPrompt}`;
 
     const moduleValue = (selectedDataSource?.module || 'scf') as 'bcs' | 'fat' | 'gts' | 'scf' | 'sis' | 'stk';
     
-    // Builder config - multi-query veya tek kaynak moduna göre
     const builderConfig: Record<string, any> = {
       customCode: customCode,
       visualization: {
@@ -887,11 +697,9 @@ Kullanıcı isteği: ${aiPrompt}`;
     };
     
     if (isMultiQueryMode && multiQuery) {
-      // Multi-query modu
       builderConfig.multiQuery = multiQuery;
       builderConfig.isMultiQuery = true;
     } else {
-      // Tek kaynak modu
       builderConfig.dataSourceId = selectedDataSourceId;
       builderConfig.dataSourceSlug = selectedDataSource?.slug;
       builderConfig.diaApi = {
@@ -919,10 +727,9 @@ Kullanıcı isteği: ${aiPrompt}`;
       is_active: true,
       is_default: false,
       sort_order: 100,
-      builder_config: builderConfig as any, // Custom widget için esnek config
+      builder_config: builderConfig as any,
     };
 
-    // Düzenleme veya yeni oluşturma
     if (editingWidget) {
       const success = await updateWidget(editingWidget.id, formData);
       if (success) {
@@ -940,14 +747,13 @@ Kullanıcı isteği: ${aiPrompt}`;
     }
   };
 
-  // Dinamik kod çalıştırma ile önizleme bileşeni - colors prop desteği
+  // Dinamik kod çalıştırma ile önizleme
   const PreviewResult = useMemo(() => {
     if (!customCode.trim() || sampleData.length === 0) {
       return { component: null, error: null };
     }
     
     try {
-      // Kodu çalıştırılabilir fonksiyona dönüştür - colors parametresi eklendi
       const fn = new Function(
         'React',
         'data',
@@ -957,7 +763,6 @@ Kullanıcı isteği: ${aiPrompt}`;
         customCode
       );
       
-      // Önizleme için varsayılan palet renkleri
       const previewColors = [
         'hsl(220, 70%, 50%)',
         'hsl(200, 80%, 50%)',
@@ -974,7 +779,7 @@ Kullanıcı isteği: ${aiPrompt}`;
       if (typeof WidgetComponent !== 'function') {
         return { 
           component: null, 
-          error: 'Widget fonksiyonu bulunamadı. Kodunuzda "return Widget;" veya "return VadeYaslandirmaWidget;" olmalı.' 
+          error: 'Widget fonksiyonu bulunamadı. Kodunuzda "return Widget;" olmalı.' 
         };
       }
       
@@ -989,716 +794,685 @@ Kullanıcı isteği: ${aiPrompt}`;
     setCodeError(PreviewResult.error);
   }, [PreviewResult.error]);
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl w-[95vw] md:w-full h-[95vh] md:h-[90vh] flex flex-col p-0 gap-0">
-        <DialogHeader className="px-4 md:px-6 py-3 md:py-4 border-b">
-          <DialogTitle className="flex items-center gap-2 text-base md:text-lg">
-            <Code className="h-4 w-4 md:h-5 md:w-5 text-primary" />
-            Custom Code Widget Builder
-          </DialogTitle>
-          <DialogDescription className="text-xs md:text-sm hidden md:block">
-            Veri kaynağı seçin, kodu yazın ve önizleme yapın
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
-          {/* Sol Panel - Ayarlar (Mobile: collapsible, Desktop: fixed) */}
-          <div className="md:w-80 border-b md:border-b-0 md:border-r flex flex-col max-h-[30vh] md:max-h-none overflow-hidden">
-            <ScrollArea className="flex-1">
-              <div className="p-4 space-y-4">
-                {/* Widget Bilgileri */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <LayoutGrid className="h-4 w-4" />
-                    Widget Bilgileri
-                  </h3>
-                  
-                  <div className="space-y-2">
-                    <Label>Widget Key</Label>
-                    <Input
-                      value={widgetKey}
-                      onChange={(e) => setWidgetKey(e.target.value.toLowerCase().replace(/\s+/g, '_'))}
-                      placeholder="custom_widget_key"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Widget Adı</Label>
-                    <Input
-                      value={widgetName}
-                      onChange={(e) => setWidgetName(e.target.value)}
-                      placeholder="Özel Widget"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Açıklama</Label>
-                    <Input
-                      value={widgetDescription}
-                      onChange={(e) => setWidgetDescription(e.target.value)}
-                      placeholder="Widget açıklaması"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-2">
-                      <Label>Boyut</Label>
-                      <Select value={widgetSize} onValueChange={(v: any) => setWidgetSize(v)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                         <SelectContent>
-                          {WIDGET_SIZES.map(s => (
-                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Sayfa</Label>
-                      <Select value={defaultPage} onValueChange={(v: any) => setDefaultPage(v)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PAGE_CATEGORIES.map(p => (
-                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  {/* İkon Seçimi */}
-                  <div className="space-y-2">
-                    <Label>İkon</Label>
-                    <div className="grid grid-cols-4 md:grid-cols-8 gap-1 p-2 border rounded-lg max-h-32 overflow-y-auto">
-                      {AVAILABLE_ICONS.slice(0, 32).map(iconName => (
-                        <button
-                          key={iconName}
-                          onClick={() => setWidgetIcon(iconName)}
-                          className={cn(
-                            "p-1.5 rounded hover:bg-accent transition-colors",
-                            widgetIcon === iconName && "bg-primary/20 ring-1 ring-primary"
-                          )}
-                          title={iconName}
-                        >
-                          <DynamicIcon iconName={iconName} className="h-4 w-4" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+  // Stepper Header Component
+  const StepperHeader = () => (
+    <div className="px-4 md:px-6 py-4 border-b bg-muted/30">
+      <div className="flex items-center justify-between">
+        {WIZARD_STEPS.map((step, idx) => {
+          const isCompleted = completedSteps.includes(step.id);
+          const isCurrent = currentStep === step.id;
+          const isClickable = idx < currentStep || isCompleted || (idx === currentStep);
+          
+          return (
+            <React.Fragment key={step.id}>
+              <button
+                onClick={() => isClickable && goToStep(step.id)}
+                disabled={!isClickable}
+                className={cn(
+                  "flex items-center gap-2 md:gap-3 px-2 md:px-4 py-2 rounded-lg transition-all",
+                  isCurrent && "bg-primary text-primary-foreground shadow-md",
+                  isCompleted && !isCurrent && "bg-success/10 text-success",
+                  !isCurrent && !isCompleted && "text-muted-foreground",
+                  isClickable && !isCurrent && "hover:bg-muted cursor-pointer",
+                  !isClickable && "cursor-not-allowed opacity-50"
+                )}
+              >
+                <div className={cn(
+                  "w-6 h-6 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-semibold shrink-0",
+                  isCurrent && "bg-primary-foreground text-primary",
+                  isCompleted && !isCurrent && "bg-success text-success-foreground",
+                  !isCurrent && !isCompleted && "bg-muted-foreground/20"
+                )}>
+                  {isCompleted && !isCurrent ? (
+                    <Check className="h-3 w-3 md:h-4 md:w-4" />
+                  ) : (
+                    step.id + 1
+                  )}
                 </div>
+                <div className="hidden md:block text-left">
+                  <div className="text-sm font-medium">{step.title}</div>
+                  <div className="text-xs opacity-70">{step.description}</div>
+                </div>
+                <step.icon className="h-4 w-4 md:hidden" />
+              </button>
+              
+              {idx < WIZARD_STEPS.length - 1 && (
+                <div className={cn(
+                  "flex-1 h-0.5 mx-1 md:mx-2",
+                  completedSteps.includes(step.id) ? "bg-success" : "bg-border"
+                )} />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
 
-                <Separator />
+  // Step 1: Veri Kaynağı
+  const renderStep1 = () => (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
+      {/* Sol: Widget Bilgileri */}
+      <div className="space-y-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <LayoutGrid className="h-4 w-4" />
+              Widget Bilgileri
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Widget Key</Label>
+                <Input
+                  value={widgetKey}
+                  onChange={(e) => setWidgetKey(e.target.value.toLowerCase().replace(/\s+/g, '_'))}
+                  placeholder="custom_widget_key"
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Widget Adı</Label>
+                <Input
+                  value={widgetName}
+                  onChange={(e) => setWidgetName(e.target.value)}
+                  placeholder="Özel Widget"
+                  className="h-9"
+                />
+              </div>
+            </div>
 
-                {/* Veri Kaynağı Modu */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold flex items-center gap-2">
-                      <Database className="h-4 w-4" />
-                      Veri Kaynağı
-                    </h3>
-                    <div className="flex items-center gap-2 bg-secondary/60 rounded-lg px-2.5 py-1.5">
-                      <Label htmlFor="multi-query-mode" className="text-xs font-medium">
-                        Çoklu
-                      </Label>
-                      <Switch
-                        id="multi-query-mode"
-                        checked={isMultiQueryMode}
-                        onCheckedChange={(checked) => {
-                          setIsMultiQueryMode(checked);
-                          if (checked) {
-                            setActiveTab('multiquery');
-                          } else {
-                            setMultiQuery(null);
-                            setMergedQueryData({});
-                          }
-                        }}
-                      />
-                    </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Açıklama</Label>
+              <Input
+                value={widgetDescription}
+                onChange={(e) => setWidgetDescription(e.target.value)}
+                placeholder="Widget açıklaması"
+                className="h-9"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Boyut</Label>
+                <Select value={widgetSize} onValueChange={(v: any) => setWidgetSize(v)}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {WIDGET_SIZES.map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Sayfa</Label>
+                <Select value={defaultPage} onValueChange={(v: any) => setDefaultPage(v)}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAGE_CATEGORIES.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">İkon</Label>
+              <div className="grid grid-cols-8 gap-1 p-2 border rounded-lg max-h-24 overflow-y-auto">
+                {AVAILABLE_ICONS.slice(0, 32).map(iconName => (
+                  <button
+                    key={iconName}
+                    onClick={() => setWidgetIcon(iconName)}
+                    className={cn(
+                      "p-1.5 rounded hover:bg-accent transition-colors",
+                      widgetIcon === iconName && "bg-primary/20 ring-1 ring-primary"
+                    )}
+                    title={iconName}
+                  >
+                    <DynamicIcon iconName={iconName} className="h-4 w-4" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                Veri Kaynağı
+              </span>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="multi-mode" className="text-xs font-normal">Çoklu</Label>
+                <Switch
+                  id="multi-mode"
+                  checked={isMultiQueryMode}
+                  onCheckedChange={(checked) => {
+                    setIsMultiQueryMode(checked);
+                    if (!checked) {
+                      setMultiQuery(null);
+                      setMergedQueryData({});
+                    }
+                  }}
+                />
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!isMultiQueryMode ? (
+              <div className="space-y-3">
+                <DataSourceSelector
+                  selectedId={selectedDataSourceId}
+                  onSelect={handleDataSourceSelect}
+                  hideHeader={true}
+                />
+                {selectedDataSource && (
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">
+                      {selectedDataSource.module}.{selectedDataSource.method}
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => fetchDataFromSource(selectedDataSource)}
+                      disabled={isLoadingData}
+                    >
+                      {isLoadingData ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                    </Button>
+                    {sampleData.length > 0 && (
+                      <Badge variant="secondary" className="text-xs">
+                        {sampleData.length} kayıt
+                      </Badge>
+                    )}
                   </div>
-                  
-                  {/* Tek kaynak modu */}
-                  {!isMultiQueryMode && (
-                    <>
-                      <DataSourceSelector
-                        selectedId={selectedDataSourceId}
-                        onSelect={handleDataSourceSelect}
-                        hideHeader={true}
-                      />
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <MultiQueryBuilder
+                  multiQuery={multiQuery}
+                  onChange={(config) => {
+                    setMultiQuery(config);
+                    if (config) loadMultiQueryData(config);
+                  }}
+                />
+                {multiQuery?.queries?.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {multiQuery.queries.map(q => (
+                      <Badge key={q.id} variant="outline" className="text-xs">
+                        {q.name}: {mergedQueryData[q.id]?.length || 0}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
-                      {selectedDataSource && (
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs">
-                            {selectedDataSource.module}.{selectedDataSource.method}
-                          </Badge>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => fetchDataFromSource(selectedDataSource)}
-                            disabled={isLoadingData}
-                          >
-                            {isLoadingData ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <RefreshCw className="h-3 w-3" />
-                            )}
-                          </Button>
+      {/* Sağ: JSON Önizleme */}
+      <Card className="flex flex-col">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <FileJson className="h-4 w-4" />
+              JSON Veri Önizleme
+            </span>
+            <div className="flex items-center gap-2">
+              {sampleData.length > 0 && (
+                <>
+                  <Slider
+                    value={[jsonPreviewCount]}
+                    onValueChange={([val]) => setJsonPreviewCount(val)}
+                    min={5}
+                    max={Math.min(100, sampleData.length)}
+                    step={5}
+                    className="w-20"
+                  />
+                  <span className="text-xs font-mono w-6">{jsonPreviewCount}</span>
+                </>
+              )}
+              <Button size="sm" variant="ghost" onClick={() => {
+                const jsonData = isMultiQueryMode ? getMultiQueryJsonData() : sampleData;
+                navigator.clipboard.writeText(JSON.stringify(jsonData, null, 2));
+                toast.success('JSON kopyalandı');
+              }}>
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex-1 overflow-hidden">
+          <ScrollArea className="h-full border rounded-lg">
+            <pre className="p-3 text-xs font-mono whitespace-pre-wrap">
+              {isMultiQueryMode && multiQuery?.queries?.length ? (
+                JSON.stringify(getMultiQueryJsonData(), null, 2)
+              ) : sampleData.length > 0 ? (
+                JSON.stringify(sampleData.slice(0, jsonPreviewCount), null, 2)
+              ) : (
+                'Veri kaynağı seçin...'
+              )}
+            </pre>
+          </ScrollArea>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  // Step 2: AI Kod Üret
+  const renderStep2 = () => (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
+      {/* Sol: AI Prompt */}
+      <Card className="flex flex-col">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            AI ile Widget Kodu Üret
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Ne tür bir widget istediğinizi açıklayın
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex-1 flex flex-col gap-4">
+          <Textarea
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            placeholder="Örnek: Vade yaşlandırma grafiği oluştur. X ekseninde vade dilimleri (90+ gün, 60-90, 30-60, 0-30, bugün, gelecek) Y ekseninde toplam bakiye göster..."
+            className="flex-1 min-h-[150px] resize-none"
+          />
+          
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={generateCodeWithAI}
+              disabled={isGeneratingCode || !aiPrompt.trim() || sampleData.length === 0}
+              className="gap-2"
+            >
+              {isGeneratingCode ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              {isGeneratingCode ? 'Kod Üretiliyor...' : 'AI ile Kod Üret'}
+            </Button>
+            
+            {sampleData.length === 0 && (
+              <span className="text-xs text-destructive">
+                Önce veri kaynağı seçin
+              </span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Sağ: Veri Analizi */}
+      <Card className="flex flex-col">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Database className="h-4 w-4" />
+            Veri Analizi
+            {sampleData.length > 0 && (
+              <Badge variant="secondary" className="text-xs ml-auto">
+                {sampleData.length} kayıt
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex-1 overflow-hidden">
+          {sampleData.length > 0 ? (
+            <ScrollArea className="h-full">
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(analyzeDataForAI(sampleData)).slice(0, 8).map(([field, stats]) => {
+                    const s = stats as any;
+                    return (
+                      <div key={field} className="p-2 bg-muted/50 rounded border text-xs">
+                        <div className="font-medium truncate">{field}</div>
+                        <div className="text-muted-foreground">
+                          {s.type} • {s.uniqueCount} değer
+                          {s.sum !== undefined && ` • Σ ${formatNumber(s.sum)}`}
                         </div>
-                      )}
-                    </>
-                  )}
-                  
-                  {/* Çoklu kaynak modu */}
-                  {isMultiQueryMode && (
-                    <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Layers className="h-4 w-4 text-primary" />
-                        <span className="font-medium">Kaynak Birleştirme Aktif</span>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        Sağdaki "Kaynak Birleştir" sekmesinden sorguları yapılandırın.
-                      </p>
-                      {multiQuery?.queries?.length && (
-                        <Badge variant="secondary" className="text-xs">
-                          {multiQuery.queries.length} sorgu tanımlı
-                        </Badge>
-                      )}
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
-
+                
                 <Separator />
-
-                {/* Kod Şablonları */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <Wand2 className="h-4 w-4" />
-                    Şablonlar
-                  </h3>
-                  
-                  <div className="space-y-2">
-                    {CODE_TEMPLATES.map(template => (
-                      <Button
-                        key={template.id}
-                        variant="outline"
-                        size="sm"
-                        className="w-full justify-start"
-                        onClick={() => applyTemplate(template.id)}
+                
+                <div>
+                  <div className="text-xs text-muted-foreground mb-2">Alanlar (tıkla prompt'a ekle):</div>
+                  <div className="flex flex-wrap gap-1">
+                    {Object.keys(sampleData[0] || {}).slice(0, 20).map(field => (
+                      <Badge 
+                        key={field} 
+                        variant="outline" 
+                        className="text-xs cursor-pointer hover:bg-accent" 
+                        onClick={() => setAiPrompt(prev => prev + ` ${field}`)}
                       >
-                        <Code className="h-3 w-3 mr-2" />
-                        {template.name}
-                      </Button>
+                        {field}
+                      </Badge>
                     ))}
                   </div>
                 </div>
-                
-                {/* Mevcut Widget'lardan Şablon */}
-                {customWidgetTemplates.length > 0 && (
-                  <>
-                    <Separator />
-                    <div className="space-y-3">
-                      <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <Layers className="h-4 w-4" />
-                        Widget Referansları
-                      </h3>
-                      <p className="text-xs text-muted-foreground">
-                        Mevcut widget'ların kodunu şablon olarak kullanın
-                      </p>
-                      
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={() => setShowWidgetTemplates(!showWidgetTemplates)}
-                      >
-                        {showWidgetTemplates ? 'Gizle' : `${customWidgetTemplates.length} Widget Göster`}
-                      </Button>
-                      
-                      {showWidgetTemplates && (
-                        <div className="space-y-1 max-h-48 overflow-y-auto">
-                          {customWidgetTemplates.map(widget => (
-                            <Button
-                              key={widget.id}
-                              variant="ghost"
-                              size="sm"
-                              className="w-full justify-start text-left h-auto py-2"
-                              onClick={() => {
-                                const config = widget.builder_config as any;
-                                if (config?.customCode) {
-                                  setCustomCode(config.customCode);
-                                  toast.success(`"${widget.name}" kodu yüklendi`);
-                                  setActiveTab('code');
-                                }
-                              }}
-                            >
-                              <div className="flex flex-col items-start gap-0.5">
-                                <div className="flex items-center gap-2">
-                                  <DynamicIcon iconName={widget.icon || 'Code'} className="h-3 w-3" />
-                                  <span className="font-medium text-xs">{widget.name}</span>
-                                </div>
-                                {widget.description && (
-                                  <span className="text-[10px] text-muted-foreground truncate max-w-full">
-                                    {widget.description}
-                                  </span>
-                                )}
-                              </div>
-                            </Button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
               </div>
             </ScrollArea>
-          </div>
-
-          {/* Sağ Panel - Tabs */}
-          <div className="flex-1 flex flex-col">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-              <div className="overflow-x-auto border-b">
-                <TabsList className="w-max md:w-full justify-start rounded-none px-2 md:px-4 gap-1">
-                  <TabsTrigger value="datasource" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
-                    <FileJson className="h-3 w-3 md:h-4 md:w-4" />
-                    <span className="hidden sm:inline">JSON Veri</span>
-                    <span className="sm:hidden">JSON</span>
-                  </TabsTrigger>
-                  {isMultiQueryMode && (
-                    <TabsTrigger value="multiquery" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
-                      <Link2 className="h-3 w-3 md:h-4 md:w-4" />
-                      <span className="hidden sm:inline">Kaynak Birleştir</span>
-                      <span className="sm:hidden">Birleştir</span>
-                    </TabsTrigger>
-                  )}
-                  <TabsTrigger value="ai" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
-                    <Sparkles className="h-3 w-3 md:h-4 md:w-4" />
-                    <span className="hidden sm:inline">AI Kod Üret</span>
-                    <span className="sm:hidden">AI</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="code" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
-                    <Code className="h-3 w-3 md:h-4 md:w-4" />
-                    <span className="hidden sm:inline">Kod Editörü</span>
-                    <span className="sm:hidden">Kod</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="preview" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
-                    <Eye className="h-3 w-3 md:h-4 md:w-4" />
-                    <span className="hidden sm:inline">Önizleme</span>
-                    <span className="sm:hidden">Önizle</span>
-                  </TabsTrigger>
-                </TabsList>
+          ) : (
+            <div className="h-full flex items-center justify-center text-muted-foreground">
+              <div className="text-center">
+                <Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Veri yüklenmedi</p>
+                <p className="text-xs">Önceki adımda veri kaynağı seçin</p>
               </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
 
-              {/* JSON Veri Sekmesi */}
-              <TabsContent value="datasource" className="flex-1 p-2 md:p-4 m-0">
-                <div className="h-full flex flex-col">
-                  {/* Mobilde stack, masaüstünde row */}
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4 mb-3">
-                    {/* Kayıt sayısı ve slider */}
-                    <div className="flex flex-wrap items-center gap-2 md:gap-4">
-                      {isMultiQueryMode && multiQuery?.queries?.length ? (
-                        <div className="flex flex-wrap items-center gap-1 md:gap-2">
-                          <Badge variant="secondary" className="bg-primary/10 text-xs">
-                            <Layers className="h-3 w-3 mr-1" />
-                            {multiQuery.queries.length} sorgu
-                          </Badge>
-                          {multiQuery.queries.map(q => (
-                            <Badge key={q.id} variant="outline" className="text-[10px] md:text-xs">
-                              {q.name}: {mergedQueryData[q.id]?.length || 0}
-                            </Badge>
-                          ))}
-                        </div>
-                      ) : (
-                        <Badge variant="secondary" className="text-xs">{sampleData.length} kayıt</Badge>
-                      )}
-                      {isLoadingData && <Loader2 className="h-3 w-3 md:h-4 md:w-4 animate-spin" />}
-                    </div>
-                    
-                    {/* Slider kontrolü - tek kaynak modu - mobilde tam genişlik */}
-                    {!isMultiQueryMode && sampleData.length > 0 && (
-                      <div className="flex items-center gap-2 w-full md:w-auto">
-                        <span className="text-[10px] md:text-xs text-muted-foreground whitespace-nowrap">Göster:</span>
-                        <Slider
-                          value={[jsonPreviewCount]}
-                          onValueChange={([val]) => setJsonPreviewCount(val)}
-                          min={5}
-                          max={Math.min(100, sampleData.length)}
-                          step={5}
-                          className="flex-1 md:w-32"
-                        />
-                        <span className="text-[10px] md:text-xs font-mono w-6 text-center">{jsonPreviewCount}</span>
-                      </div>
-                    )}
-                    
-                    {/* Butonlar */}
-                    <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="h-7 text-xs px-2 md:px-3"
-                        onClick={() => {
-                          const jsonData = isMultiQueryMode ? getMultiQueryJsonData() : sampleData;
-                          navigator.clipboard.writeText(JSON.stringify(jsonData, null, 2));
-                          toast.success('JSON kopyalandı');
-                        }} 
-                        disabled={!isMultiQueryMode && sampleData.length === 0}
-                      >
-                        <Copy className="h-3 w-3 md:mr-1" />
-                        <span className="hidden md:inline">Kopyala</span>
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="h-7 text-xs px-2 md:px-3"
-                        onClick={() => {
-                          const jsonData = isMultiQueryMode ? getMultiQueryJsonData() : sampleData;
-                          const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = `widget_data_${new Date().toISOString().slice(0, 10)}.json`;
-                          document.body.appendChild(a);
-                          a.click();
-                          document.body.removeChild(a);
-                          URL.revokeObjectURL(url);
-                          toast.success('JSON dosyası indirildi');
-                        }} 
-                        disabled={!isMultiQueryMode && sampleData.length === 0}
-                      >
-                        <Download className="h-3 w-3 md:mr-1" />
-                        <span className="hidden md:inline">İndir</span>
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  <ScrollArea className="flex-1 border rounded-lg max-h-[40vh] md:max-h-none">
-                    <pre className="p-2 md:p-4 text-[10px] md:text-xs font-mono whitespace-pre-wrap break-all">
-                      {isMultiQueryMode && multiQuery?.queries?.length ? (
-                        JSON.stringify(getMultiQueryJsonData(), null, 2)
-                      ) : sampleData.length > 0 ? (
-                        JSON.stringify(sampleData.slice(0, jsonPreviewCount), null, 2)
-                      ) : (
-                        'Veri kaynağı seçin...'
-                      )}
-                    </pre>
-                  </ScrollArea>
-                  
-                  {!isMultiQueryMode && sampleData.length > jsonPreviewCount && (
-                    <p className="text-xs text-muted-foreground mt-2">
-                      İlk {jsonPreviewCount} kayıt gösteriliyor (toplam {sampleData.length})
-                    </p>
-                  )}
-                  
-                  {isMultiQueryMode && multiQuery?.queries?.length && (
-                    <div className="mt-2 p-2 rounded bg-muted/50 text-xs text-muted-foreground">
-                      <strong>Multi-Query Yapısı:</strong> Widget kodunda <code className="bg-background px-1 rounded">data._meta</code> ile sorgu bilgilerine, 
-                      <code className="bg-background px-1 rounded">data.["Sorgu Adı"]</code> ile her sorgunun verilerine erişebilirsiniz.
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-
-              {/* Multi-Query Kaynak Birleştirme Sekmesi */}
-              {isMultiQueryMode && (
-                <TabsContent value="multiquery" className="flex-1 p-0 m-0 overflow-hidden">
-                  <ScrollArea className="h-[calc(90vh-180px)]">
-                    <div className="p-4">
-                      <MultiQueryBuilder
-                        multiQuery={multiQuery}
-                        onChange={(config) => {
-                          setMultiQuery(config);
-                          // Config değiştiğinde veriyi yükle
-                          if (config) {
-                            loadMultiQueryData(config);
-                          }
-                        }}
-                      />
-                    </div>
-                  </ScrollArea>
-                </TabsContent>
+  // Step 3: Kod Düzenle
+  const renderStep3 = () => (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
+      {/* Sol: Kod Editörü (2/3) */}
+      <Card className="lg:col-span-2 flex flex-col">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Code className="h-4 w-4" />
+              Kod Editörü
+            </span>
+            <div className="flex items-center gap-2">
+              {codeError ? (
+                <Badge variant="destructive" className="text-xs gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  Hata
+                </Badge>
+              ) : customCode.trim() && (
+                <Badge variant="outline" className="text-xs gap-1 bg-success/10 text-success">
+                  <Check className="h-3 w-3" />
+                  Geçerli
+                </Badge>
               )}
+              <Button size="sm" variant="ghost" onClick={copyCode}>
+                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              </Button>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex-1 flex flex-col gap-3">
+          <Textarea
+            value={customCode}
+            onChange={(e) => setCustomCode(e.target.value)}
+            className="flex-1 font-mono text-xs resize-none min-h-[300px]"
+            placeholder="Widget kodunuzu buraya yazın..."
+          />
+          
+          {codeError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-xs">{codeError}</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
 
-              {/* AI Kod Üretimi Sekmesi */}
-              <TabsContent value="ai" className="flex-1 p-0 m-0 overflow-hidden">
-                <ScrollArea className="h-[calc(90vh-180px)]">
-                <div className="p-4 flex flex-col gap-4">
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-primary" />
-                      Ne tür bir widget istiyorsunuz?
-                    </Label>
-                    <Textarea
-                      value={aiPrompt}
-                      onChange={(e) => setAiPrompt(e.target.value)}
-                      placeholder="Örnek: Vade yaşlandırma grafiği oluştur. X ekseninde vade dilimleri (90+ gün, 60-90, 30-60, 0-30, bugün, gelecek) Y ekseninde toplam bakiye göster. Vadesi geçmişleri kırmızı tonlarında, gelecekleri yeşil tonlarında renklendir."
-                      className="min-h-[120px] resize-y"
-                    />
-                  </div>
-
-                  {/* Veri Analizi Özeti */}
-                  {sampleData.length > 0 && (
-                    <div className="p-3 rounded-lg bg-muted/50 border space-y-3">
-                      <div className="text-xs font-semibold flex items-center gap-2">
-                        <Database className="h-3 w-3" />
-                        Veri Analizi ({sampleData.length} kayıt)
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {Object.entries(analyzeDataForAI(sampleData)).slice(0, 6).map(([field, stats]) => {
-                          const s = stats as any;
-                          return (
-                            <div key={field} className="p-2 bg-background rounded border text-xs">
-                              <div className="font-medium truncate">{field}</div>
-                              <div className="text-muted-foreground">
-                                {s.type} • {s.uniqueCount} değer
-                                {s.sum !== undefined && ` • Σ ${formatNumber(s.sum)}`}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Kullanılabilir alanlar (tıkla ekle):</div>
-                      <div className="flex flex-wrap gap-1">
-                        {Object.keys(sampleData[0] || {}).slice(0, 15).map(field => (
-                          <Badge key={field} variant="outline" className="text-xs cursor-pointer hover:bg-accent" onClick={() => setAiPrompt(prev => prev + ` ${field}`)}>
-                            {field}
-                          </Badge>
-                        ))}
-                        {Object.keys(sampleData[0] || {}).length > 15 && (
-                          <Badge variant="secondary" className="text-xs">
-                            +{Object.keys(sampleData[0] || {}).length - 15} alan
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2">
-                    <Button
-                      onClick={generateCodeWithAI}
-                      disabled={isGeneratingCode || !aiPrompt.trim() || sampleData.length === 0}
-                      className="gap-2"
-                    >
-                      {isGeneratingCode ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Send className="h-4 w-4" />
-                      )}
-                      {isGeneratingCode ? 'Kod Üretiliyor...' : 'AI ile Kod Üret'}
-                    </Button>
-                    
-                    {sampleData.length === 0 && (
-                      <span className="text-xs text-muted-foreground">
-                        Önce sol panelden veri kaynağı seçin
-                      </span>
+      {/* Sağ: AI Chat (1/3) */}
+      <Card className="flex flex-col">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-primary" />
+            AI ile Geliştir
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex-1 flex flex-col gap-3">
+          {/* Chat geçmişi */}
+          {chatHistory.length > 0 && (
+            <ScrollArea className="flex-1 border rounded-lg p-2 bg-muted/30 max-h-40">
+              <div className="space-y-2">
+                {chatHistory.map((msg, i) => (
+                  <div 
+                    key={i} 
+                    className={cn(
+                      "text-xs p-2 rounded",
+                      msg.role === 'user' 
+                        ? 'bg-primary/10 text-primary ml-4' 
+                        : 'bg-secondary text-secondary-foreground mr-4'
                     )}
+                  >
+                    {msg.content}
                   </div>
-
-                  <div className="flex-1 p-4 rounded-lg border-2 border-dashed flex items-center justify-center text-muted-foreground">
-                    <div className="text-center max-w-md">
-                      <Sparkles className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                      <p className="text-sm font-medium mb-2">AI Kod Üretimi</p>
-                      <p className="text-xs">
-                        Veri yapısını ve istediğiniz görselleştirmeyi açıklayın. 
-                        AI, React/JavaScript kodu oluşturacak ve "Kod Editörü" sekmesine yazacak.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                </ScrollArea>
-              </TabsContent>
-
-              {/* Kod Editörü Sekmesi */}
-              <TabsContent value="code" className="flex-1 p-0 m-0 overflow-hidden">
-                <ScrollArea className="h-[calc(90vh-180px)]">
-                <div className="p-4 flex flex-col h-full">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline">React / JavaScript</Badge>
-                    </div>
-                    <Button size="sm" variant="outline" onClick={copyCode}>
-                      {copied ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
-                      {copied ? 'Kopyalandı' : 'Kopyala'}
-                    </Button>
-                  </div>
-                  
-                  {/* Kod editörü */}
-                  <Textarea
-                    value={customCode}
-                    onChange={(e) => setCustomCode(e.target.value)}
-                    className="flex-1 font-mono text-xs resize-y min-h-[300px]"
-                    placeholder="Widget kodunuzu buraya yazın..."
-                  />
-                  
-                  {codeError && (
-                    <div className="mt-2 p-2 rounded bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4" />
-                      {codeError}
-                    </div>
-                  )}
-
-                  {/* AI Chat Alanı */}
-                  <div className="border-t mt-4 pt-4">
-                    <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                      <MessageSquare className="h-4 w-4 text-primary" />
-                      AI ile Kodu Geliştir
-                    </h4>
-                    
-                    {/* Chat geçmişi */}
-                    {chatHistory.length > 0 && (
-                      <ScrollArea className="h-24 border rounded-lg p-2 mb-2 bg-muted/30">
-                        <div className="space-y-2">
-                          {chatHistory.map((msg, i) => (
-                            <div 
-                              key={i} 
-                              className={cn(
-                                "text-xs p-2 rounded",
-                                msg.role === 'user' 
-                                  ? 'bg-primary/10 text-primary ml-4' 
-                                  : 'bg-secondary text-secondary-foreground mr-4'
-                              )}
-                            >
-                              {msg.content}
-                            </div>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    )}
-                    
-                    {/* Input alanı */}
-                    <div className="flex gap-2">
-                      <Textarea 
-                        value={chatInput} 
-                        onChange={(e) => setChatInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            sendChatMessage();
-                          }
-                        }}
-                        placeholder="Renkleri değiştir, grafiği düzenle..."
-                        disabled={isChatLoading}
-                        className="min-h-[60px] resize-y"
-                      />
-                      <Button 
-                        size="sm" 
-                        onClick={sendChatMessage}
-                        disabled={isChatLoading || !chatInput.trim()}
-                      >
-                        {isChatLoading ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Send className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-
-                    {/* Hızlı eylem butonları */}
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="text-xs h-7"
-                        onClick={() => applyQuickAction('Renkleri daha canlı ve profesyonel yap')}
-                      >
-                        🎨 Renkler
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        className="text-xs h-7"
-                        onClick={() => applyQuickAction('Tooltipleri ve metinleri Türkçeleştir')}
-                      >
-                        🌍 Türkçeleştir
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        className="text-xs h-7"
-                        onClick={() => applyQuickAction('Hover animasyonları ekle')}
-                      >
-                        ✨ Animasyon
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        className="text-xs h-7"
-                        onClick={() => applyQuickAction('Dark mode uyumlu yap')}
-                      >
-                        🌙 Dark Mode
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-                </ScrollArea>
-              </TabsContent>
-
-              {/* Önizleme Sekmesi */}
-              <TabsContent value="preview" className="flex-1 p-4 m-0">
-                <Card className="h-full">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <DynamicIcon iconName={widgetIcon} className="h-4 w-4" />
-                      {widgetName}
-                    </CardTitle>
-                    {widgetDescription && (
-                      <CardDescription>{widgetDescription}</CardDescription>
-                    )}
-                  </CardHeader>
-                  <CardContent>
-                    {sampleData.length === 0 ? (
-                      <div className="border-2 border-dashed rounded-lg p-4 min-h-[300px] flex items-center justify-center text-muted-foreground">
-                        <div className="text-center">
-                          <Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                          <p className="text-sm">Önce veri kaynağı seçin</p>
-                        </div>
-                      </div>
-                    ) : codeError ? (
-                      <Alert variant="destructive" className="min-h-[300px]">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>
-                          <pre className="text-xs whitespace-pre-wrap mt-2">{codeError}</pre>
-                        </AlertDescription>
-                      </Alert>
-                    ) : PreviewResult.component ? (
-                      <div className="min-h-[300px] border rounded-lg p-4">
-                        <ErrorBoundary fallback={
-                          <div className="text-destructive text-sm flex items-center gap-2">
-                            <AlertCircle className="h-4 w-4" />
-                            Widget render hatası
-                          </div>
-                        }>
-                          {React.createElement(PreviewResult.component, { data: sampleData, colors: PreviewResult.colors })}
-                        </ErrorBoundary>
-                      </div>
-                    ) : (
-                      <div className="border-2 border-dashed rounded-lg p-4 min-h-[300px] flex items-center justify-center text-muted-foreground">
-                        <div className="text-center">
-                          <Code className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                          <p className="text-sm">Kod yazın veya AI ile üretin</p>
-                          <p className="text-xs mt-1">Widget otomatik önizlenecek</p>
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
+          
+          {/* Hızlı eylemler */}
+          <div className="flex flex-wrap gap-1">
+            {['🎨 Renkler', '🌍 Türkçe', '✨ Animasyon', '🌙 Dark'].map((action, i) => (
+              <Button
+                key={i}
+                variant="outline"
+                size="sm"
+                className="text-xs h-7"
+                onClick={() => setChatInput(
+                  action.includes('Renk') ? 'Renkleri daha canlı yap' :
+                  action.includes('Türkçe') ? 'Metinleri Türkçeleştir' :
+                  action.includes('Animasyon') ? 'Hover animasyonları ekle' :
+                  'Dark mode uyumlu yap'
+                )}
+              >
+                {action}
+              </Button>
+            ))}
           </div>
+          
+          {/* Input */}
+          <div className="flex gap-2">
+            <Textarea 
+              value={chatInput} 
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  sendChatMessage();
+                }
+              }}
+              placeholder="Değişiklik isteği..."
+              disabled={isChatLoading}
+              className="min-h-[60px] resize-none text-xs"
+            />
+            <Button 
+              size="icon" 
+              onClick={sendChatMessage}
+              disabled={isChatLoading || !chatInput.trim()}
+              className="shrink-0"
+            >
+              {isChatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  // Step 4: Önizle & Kaydet
+  const renderStep4 = () => (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
+      {/* Sol: Önizleme (2/3) */}
+      <Card className="lg:col-span-2 flex flex-col">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <DynamicIcon iconName={widgetIcon} className="h-4 w-4" />
+            {widgetName}
+          </CardTitle>
+          {widgetDescription && (
+            <CardDescription className="text-xs">{widgetDescription}</CardDescription>
+          )}
+        </CardHeader>
+        <CardContent className="flex-1">
+          {sampleData.length === 0 ? (
+            <div className="border-2 border-dashed rounded-lg p-4 min-h-[300px] flex items-center justify-center text-muted-foreground">
+              <div className="text-center">
+                <Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Veri yüklenmedi</p>
+              </div>
+            </div>
+          ) : codeError ? (
+            <Alert variant="destructive" className="min-h-[300px]">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <pre className="text-xs whitespace-pre-wrap mt-2">{codeError}</pre>
+              </AlertDescription>
+            </Alert>
+          ) : PreviewResult.component ? (
+            <div className="min-h-[300px] border rounded-lg p-4">
+              <ErrorBoundary fallback={
+                <div className="text-destructive text-sm flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  Widget render hatası
+                </div>
+              }>
+                {React.createElement(PreviewResult.component, { data: sampleData, colors: PreviewResult.colors })}
+              </ErrorBoundary>
+            </div>
+          ) : (
+            <div className="border-2 border-dashed rounded-lg p-4 min-h-[300px] flex items-center justify-center text-muted-foreground">
+              <div className="text-center">
+                <Code className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Kod yazılmadı</p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Sağ: Özet (1/3) */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-success" />
+            Widget Özeti
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Key:</span>
+              <span className="font-mono text-xs">{widgetKey}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Ad:</span>
+              <span className="font-medium">{widgetName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Boyut:</span>
+              <Badge variant="outline">{widgetSize}</Badge>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Sayfa:</span>
+              <Badge variant="outline">{defaultPage}</Badge>
+            </div>
+            <Separator />
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Veri Kaynağı:</span>
+              <span className="text-xs">
+                {isMultiQueryMode ? `${multiQuery?.queries?.length || 0} sorgu` : selectedDataSource?.name || '-'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Kayıt:</span>
+              <span className="font-medium">{sampleData.length}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Kod Durumu:</span>
+              {codeError ? (
+                <Badge variant="destructive" className="text-xs">Hatalı</Badge>
+              ) : (
+                <Badge variant="outline" className="text-xs bg-success/10 text-success">Geçerli</Badge>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-6xl w-[95vw] md:w-full h-[95vh] md:h-[90vh] flex flex-col p-0 gap-0">
+        {/* Header */}
+        <DialogHeader className="px-4 md:px-6 py-3 border-b shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Code className="h-5 w-5 text-primary" />
+            {editingWidget ? 'Widget Düzenle' : 'Yeni Widget Oluştur'}
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Stepper */}
+        <StepperHeader />
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto p-4">
+          {currentStep === 0 && renderStep1()}
+          {currentStep === 1 && renderStep2()}
+          {currentStep === 2 && renderStep3()}
+          {currentStep === 3 && renderStep4()}
         </div>
 
-        <DialogFooter className="px-6 py-4 border-t">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            İptal
-          </Button>
-          <Button 
-            onClick={handleSave} 
-            disabled={isSaving || (!isMultiQueryMode && !selectedDataSourceId) || (isMultiQueryMode && (!multiQuery || multiQuery.queries.length === 0))}
-          >
-            {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-            {editingWidget ? 'Widget Güncelle' : 'Widget Oluştur'}
-          </Button>
+        {/* Footer Navigation */}
+        <DialogFooter className="px-4 md:px-6 py-3 border-t shrink-0">
+          <div className="flex items-center justify-between w-full">
+            <Button 
+              variant="outline" 
+              onClick={handleBack}
+              disabled={currentStep === 0}
+              className="gap-2"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Geri
+            </Button>
+            
+            <div className="flex items-center gap-2">
+              {/* AI adımında Atla butonu */}
+              {currentStep === 1 && (
+                <Button 
+                  variant="ghost" 
+                  onClick={handleNext}
+                  className="text-muted-foreground"
+                >
+                  Atla →
+                </Button>
+              )}
+              
+              {currentStep < WIZARD_STEPS.length - 1 ? (
+                <Button 
+                  onClick={handleNext}
+                  disabled={!canProceed(currentStep)}
+                  className="gap-2"
+                >
+                  İleri
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              ) : (
+                <Button 
+                  onClick={handleSave}
+                  disabled={isSaving || codeError !== null}
+                  className="gap-2"
+                >
+                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {editingWidget ? 'Widget Güncelle' : 'Widget Oluştur'}
+                </Button>
+              )}
+            </div>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
