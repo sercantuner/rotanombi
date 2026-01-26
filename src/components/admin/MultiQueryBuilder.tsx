@@ -30,6 +30,7 @@ import * as LucideIcons from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { CompactSearchableFieldSelect } from './SearchableFieldSelect';
+import { MergeResultVisualization } from './MergeResultVisualization';
 
 interface MultiQueryBuilderProps {
   multiQuery: MultiQueryConfig | null;
@@ -284,22 +285,12 @@ function QueryEditor({
               </div>
             )}
             
-            {/* Seçili alanlar bilgisi */}
+            {/* Alan sayısı bilgisi - kompakt */}
             {query.testResult?.sampleFields && query.testResult.sampleFields.length > 0 && (
-              <div className="border rounded-md p-2 bg-muted/30">
-                <Label className="text-xs text-muted-foreground mb-1.5 block">Mevcut Alanlar</Label>
-                <div className="flex flex-wrap gap-1">
-                  {query.testResult.sampleFields.slice(0, 10).map(field => (
-                    <Badge key={field} variant="outline" className="text-[10px] py-0">
-                      {field}
-                    </Badge>
-                  ))}
-                  {query.testResult.sampleFields.length > 10 && (
-                    <Badge variant="secondary" className="text-[10px] py-0">
-                      +{query.testResult.sampleFields.length - 10} daha
-                    </Badge>
-                  )}
-                </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Badge variant="outline" className="text-[10px]">
+                  {query.testResult.sampleFields.length} alan
+                </Badge>
               </div>
             )}
 
@@ -636,23 +627,12 @@ export function MultiQueryBuilder({ multiQuery, onChange }: MultiQueryBuilderPro
           </div>
         )}
         
-        {/* Birleştirilmiş Alanlar Önizleme */}
-        {allFields.size > 0 && (
-          <div className="border rounded-md p-2">
-            <Label className="text-xs text-muted-foreground mb-1.5 block">Birleştirilmiş Alanlar</Label>
-            <div className="flex flex-wrap gap-1">
-              {Array.from(allFields).slice(0, 15).map(field => (
-                <Badge key={field} variant="outline" className="text-[10px] py-0">
-                  {field}
-                </Badge>
-              ))}
-              {allFields.size > 15 && (
-                <Badge variant="secondary" className="text-[10px] py-0">
-                  +{allFields.size - 15} daha
-                </Badge>
-              )}
-            </div>
-          </div>
+        {/* Birleştirme Sonucu Görselleştirmesi */}
+        {multiQuery.queries.length >= 1 && (
+          <MergeResultVisualization
+            queries={multiQuery.queries}
+            merges={multiQuery.merges}
+          />
         )}
       </CardContent>
     </Card>

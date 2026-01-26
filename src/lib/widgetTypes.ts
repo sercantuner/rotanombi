@@ -7,6 +7,13 @@ export type WidgetType = 'kpi' | 'chart' | 'table' | 'list' | 'summary';
 export type WidgetSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 export type DataSource = 'genel' | 'satis' | 'finans' | 'mock';
 
+// Filtreleme alanı yapılandırması
+export interface FilterFieldConfig {
+  key: string;
+  label: string;
+  type?: 'string' | 'number' | 'date' | 'boolean';
+}
+
 export interface WidgetFilter {
   gorunumModu?: 'hepsi' | 'cari' | 'potansiyel';
   durum?: 'hepsi' | 'aktif' | 'pasif';
@@ -39,6 +46,10 @@ export interface Widget {
   created_at: string;
   updated_at: string;
   created_by: string | null;
+  // Yeni alanlar - çoklu boyut ve sayfa desteği
+  available_sizes?: WidgetSize[];
+  target_pages?: WidgetCategory[];
+  filter_fields?: FilterFieldConfig[];
   builder_config: WidgetBuilderConfig | null; // Widget Builder yapılandırması
 }
 
@@ -74,6 +85,10 @@ export interface WidgetFormData {
   is_default?: boolean; // Varsayılan widget mi?
   sort_order: number;
   builder_config?: WidgetBuilderConfig | null; // Widget Builder yapılandırması
+  // Yeni alanlar - çoklu boyut ve sayfa desteği
+  available_sizes?: WidgetSize[];
+  target_pages?: WidgetCategory[];
+  filter_fields?: FilterFieldConfig[];
 }
 
 // Sayfa kategorileri
