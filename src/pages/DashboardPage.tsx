@@ -19,10 +19,17 @@ import { Plug, RefreshCw, Database } from 'lucide-react';
 
 function DashboardContent() {
   const navigate = useNavigate();
+  
+  // ===============================
+  // HOOK CALLS - TÜM HOOK'LAR EN ÜSTTE, KONDİSYONSUZ
+  // ===============================
   const { user } = useAuth();
   const { setSharedData, invalidateCache, setDiaConnected } = useDiaDataCache();
   const { refreshSettings } = useUserSettings();
-  const { filters, setFilterOptions } = useGlobalFilters();
+  const globalFilters = useGlobalFilters();
+  const { filterOptions: diaFilterOptions, isLoading: filterOptionsLoading } = useDiaFilterOptions();
+  
+  // State hooks
   const [genelRapor, setGenelRapor] = useState<DiaGenelRapor | null>(null);
   const [finansRapor, setFinansRapor] = useState<DiaFinansRapor | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -30,17 +37,11 @@ function DashboardContent() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [dashboardPageId, setDashboardPageId] = useState<string | null>(null);
 
-  // DIA filtre seçeneklerini çek
-  const { filterOptions: diaFilterOptions, isLoading: filterOptionsLoading } = useDiaFilterOptions();
-
-  // Filtre seçeneklerini context'e aktar
-  useEffect(() => {
-    if (diaFilterOptions && Object.keys(diaFilterOptions).length > 0) {
-      setFilterOptions(diaFilterOptions);
-    }
-  }, [diaFilterOptions, setFilterOptions]);
-
-  // Merkezi veri kaynağı loader - Sayfadaki tüm widget'ların veri kaynaklarını yükler
+  // DataSource loader hook - dashboardPageId null olsa bile çağrılmalı
+  const dataSourceLoader = useDataSourceLoader(dashboardPageId);
+  
+  // Destructure after hook call to maintain consistent hook order
+  const { filters, setFilterOptions } = globalFilters;
   const { 
     isLoading: dataSourcesLoading,
     isInitialLoad: dataSourcesInitialLoad,
@@ -50,7 +51,18 @@ function DashboardContent() {
     loadProgress,
     refresh: refreshDataSources,
     getSourceData 
-  } = useDataSourceLoader(dashboardPageId);
+  } = dataSourceLoader;
+
+  // ===============================
+  // EFFECTS
+  // ===============================
+  
+  // Filtre seçeneklerini context'e aktar
+  useEffect(() => {
+    if (diaFilterOptions && Object.keys(diaFilterOptions).length > 0) {
+      setFilterOptions(diaFilterOptions);
+    }
+  }, [diaFilterOptions, setFilterOptions]);
   // Dashboard sayfası ID'sini al veya oluştur + DIA bağlantı durumunu kontrol et
   useEffect(() => {
     const initializeDashboard = async () => {
