@@ -169,10 +169,10 @@ export function KritikStokUyarilari({ isLoading }: Props) {
         )}
       </div>
 
-      {/* Popup Modal - KPI Standartlarına Uygun */}
+      {/* Popup Modal - Ekranın Ortasında, KPI'dan Bağımsız */}
       <Dialog open={isPopupOpen} onOpenChange={setIsPopupOpen}>
         <DialogContent 
-          className="w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col p-0 gap-0 rounded border border-border"
+          className="fixed left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col p-0 gap-0 rounded border border-border bg-background shadow-lg z-[100]"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
@@ -200,7 +200,7 @@ export function KritikStokUyarilari({ isLoading }: Props) {
           </div>
 
           {/* Content - Scrollable */}
-          <div className="flex-1 overflow-y-auto p-3">
+          <div className="flex-1 overflow-y-auto p-3 min-h-0">
             <div className="space-y-1.5">
               {stokUyarilari.map((stok) => (
                 <div 
