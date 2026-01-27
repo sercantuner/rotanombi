@@ -287,131 +287,180 @@ React.createElement('div', {
 
 ═══════════════════════════════════════════════════════════════════════════════
 
-🔲 KPI POPUP/MODAL STANDARTLARI (ZORUNLU!)
+🔲 KPI POPUP/MODAL STANDARTLARI (ZORUNLU - UI.Dialog!)
 ───────────────────────────────────────────────────────────────────────────────
-KPI kartlarına tıklanınca açılan detay popup'ları için standart yapı:
+⚠️ ÖNEMLİ: Widget'lara UI scope'u otomatik olarak geçilir. Popup için UI.Dialog kullan!
+
+📦 UI SCOPE İÇERİĞİ (Kullanılabilir bileşenler):
+   - UI.Dialog: Ana modal wrapper
+   - UI.DialogContent: Modal içeriği
+   - UI.DialogHeader: Başlık alanı
+   - UI.DialogTitle: Başlık metni
+   - UI.DialogDescription: Açıklama metni
+   - UI.DialogFooter: Alt alan
 
 📐 BOYUT VE KONUM KURALLARI:
    - Genişlik: w-[50vw] veya max-w-[50%] (sayfanın yarısı)
    - Yükseklik: max-h-[80vh] (sayfayı geçmeyecek)
-   - Konum: Sayfa ortasında (fixed inset-0 + flex items-center justify-center)
+   - DialogContent otomatik ortalar (fixed inset-0)
    - Scroll: overflow-y-auto (liste uzarsa scroll)
 
-✅ ZORUNLU KPI POPUP YAPISI:
-var KPIPopup = function(props) {
-  var isOpen = props.isOpen;
-  var onClose = props.onClose;
-  var title = props.title;
-  var items = props.items;
+✅ ZORUNLU UI.Dialog POPUP YAPISI:
+function Widget({ data, colors, filters }) {
+  var showDetail = React.useState(false);
+  var isOpen = showDetail[0];
+  var setIsOpen = showDetail[1];
   
-  if (!isOpen) return null;
+  // Veri hesaplamaları...
+  var filteredItems = data.filter(function(item) {
+    return parseFloat(item.bakiye) < 0;
+  });
   
-  return React.createElement('div', {
-    className: 'fixed inset-0 z-50 flex items-center justify-center',
-    onClick: onClose
-  },
-    // Backdrop
-    React.createElement('div', { 
-      className: 'absolute inset-0 bg-background/80 backdrop-blur-sm' 
-    }),
-    // Modal Container
+  return React.createElement('div', { className: 'h-full' },
+    // Tıklanabilir KPI Kartı
     React.createElement('div', {
-      className: 'relative w-[50vw] max-h-[80vh] bg-card rounded border border-border shadow-lg flex flex-col overflow-hidden',
-      onClick: function(e) { e.stopPropagation(); }
+      className: 'h-full p-2 md:p-3 bg-card rounded border border-border cursor-pointer hover:bg-muted/50 transition-colors flex flex-col justify-between',
+      onClick: function() { setIsOpen(true); }
     },
-      // Header
-      React.createElement('div', { 
-        className: 'flex items-center justify-between p-3 border-b border-border flex-shrink-0' 
-      },
-        React.createElement('h3', { className: 'text-sm font-semibold text-foreground' }, title),
-        React.createElement('button', { 
-          className: 'w-6 h-6 rounded flex items-center justify-center hover:bg-muted text-muted-foreground',
-          onClick: onClose 
-        }, '✕')
+      React.createElement('div', { className: 'flex items-start justify-between' },
+        React.createElement('span', { className: 'text-xs text-muted-foreground' }, 'Başlık'),
+        React.createElement('span', { className: 'text-lg font-bold text-foreground' }, filteredItems.length)
       ),
-      // Content with Scroll
-      React.createElement('div', { 
-        className: 'flex-1 overflow-y-auto p-3' 
+      React.createElement('p', { className: 'text-[10px] text-muted-foreground' }, 'Detay için tıklayın')
+    ),
+    
+    // UI.Dialog Popup (Merkezi Portal)
+    React.createElement(UI.Dialog, { open: isOpen, onOpenChange: setIsOpen },
+      React.createElement(UI.DialogContent, { 
+        className: 'w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col overflow-hidden' 
       },
-        React.createElement('div', { className: 'space-y-1.5' },
-          items.map(function(item, idx) {
+        React.createElement(UI.DialogHeader, null,
+          React.createElement(UI.DialogTitle, null, 'Detay Başlığı'),
+          React.createElement(UI.DialogDescription, null, 
+            filteredItems.length + ' kayıt listeleniyor'
+          )
+        ),
+        // Scroll'lu içerik alanı
+        React.createElement('div', { className: 'flex-1 overflow-y-auto py-2 space-y-1.5' },
+          filteredItems.map(function(item, idx) {
             return React.createElement('div', {
               key: idx,
               className: 'flex items-center justify-between p-2 rounded border border-border hover:bg-muted/50'
             },
-              // Item content...
+              React.createElement('span', { className: 'text-sm text-foreground truncate' }, 
+                item.ad || item.aciklama
+              ),
+              React.createElement('span', { className: 'text-sm font-medium text-destructive' }, 
+                formatCurrency(item.bakiye)
+              )
             );
           })
-        )
-      ),
-      // Footer (optional)
-      React.createElement('div', { 
-        className: 'p-2 border-t border-border flex-shrink-0 text-center' 
-      },
-        React.createElement('span', { className: 'text-[10px] text-muted-foreground' }, 
-          items.length + ' kayıt'
+        ),
+        React.createElement(UI.DialogFooter, null,
+          React.createElement('span', { className: 'text-[10px] text-muted-foreground' },
+            'Toplam: ' + filteredItems.length + ' kayıt'
+          )
         )
       )
     )
   );
-};
+}
 
-📋 ÖRNEK: EKSİYE DÜŞEN STOKLAR KPI POPUP (REFERANS TASARIM)
+return Widget;
+
+📋 ÖRNEK: EKSİYE DÜŞEN STOKLAR - UI.Dialog İLE
 ───────────────────────────────────────────────────────────────────────────────
-// Stok uyarı durumları ve renkleri
-var getDurumStyle = function(durum) {
-  switch(durum) {
-    case 'kritik': return 'bg-destructive/20 text-destructive border-destructive/30';
-    case 'dusuk': return 'bg-warning/20 text-warning border-warning/30';
-    case 'yakin': return 'bg-yellow-500/20 text-yellow-600 border-yellow-500/30';
-    case 'siparis': return 'bg-primary/20 text-primary border-primary/30';
-    default: return 'bg-muted text-muted-foreground border-border';
-  }
-};
-
-// Özet pills (header altında)
-React.createElement('div', { className: 'flex flex-wrap gap-1.5 mb-2' },
-  React.createElement('div', { 
-    className: 'flex items-center gap-1 px-2 py-1 rounded bg-destructive/20 border border-destructive/30' 
-  },
-    React.createElement('span', { className: 'w-1.5 h-1.5 rounded-full bg-destructive animate-pulse' }),
-    React.createElement('span', { className: 'text-[10px] font-medium text-destructive' }, kritikSayisi + ' Kritik')
-  ),
-  React.createElement('div', { 
-    className: 'flex items-center gap-1 px-2 py-1 rounded bg-warning/20 border border-warning/30' 
-  },
-    React.createElement('span', { className: 'w-1.5 h-1.5 rounded-full bg-warning' }),
-    React.createElement('span', { className: 'text-[10px] font-medium text-warning' }, dusukSayisi + ' Düşük')
-  )
-)
-
-// Liste satırı yapısı
-React.createElement('div', {
-  className: 'flex items-center justify-between p-2 rounded border ' + getDurumStyle(item.durum)
-},
-  React.createElement('div', { className: 'flex items-center gap-2' },
-    React.createElement('div', { className: 'w-3.5 h-3.5 flex-shrink-0' }, '📦'), // ikon
-    React.createElement('div', { className: 'min-w-0' },
-      React.createElement('p', { className: 'text-xs font-medium line-clamp-1' }, item.stokAdi),
-      React.createElement('p', { className: 'text-[10px] opacity-80' }, item.stokKodu)
-    )
-  ),
-  React.createElement('div', { className: 'flex items-center gap-2 flex-shrink-0' },
-    React.createElement('div', { className: 'text-right' },
-      React.createElement('p', { className: 'text-xs font-bold' }, item.mevcut + ' / ' + item.min),
-      React.createElement('p', { className: 'text-[10px] opacity-80' }, item.birim)
+function Widget({ data, colors, filters }) {
+  var showDetail = React.useState(false);
+  var isOpen = showDetail[0];
+  var setIsOpen = showDetail[1];
+  
+  var negativeItems = React.useMemo(function() {
+    return (data || []).filter(function(item) {
+      var fiili = parseFloat(item.fiili_stok_irs) || 0;
+      var gercek = parseFloat(item.gercek_stok_irs) || 0;
+      return fiili < 0 || gercek < 0;
+    });
+  }, [data]);
+  
+  var getDurumStyle = function(fiili, gercek) {
+    if (fiili < 0 && gercek < 0) return 'bg-destructive/20 text-destructive border-destructive/30';
+    if (fiili < 0) return 'bg-warning/20 text-warning border-warning/30';
+    return 'bg-yellow-500/20 text-yellow-600 border-yellow-500/30';
+  };
+  
+  return React.createElement('div', { className: 'h-full' },
+    // KPI Kartı
+    React.createElement('div', {
+      className: 'h-full p-2 md:p-3 bg-card rounded border border-border cursor-pointer hover:bg-muted/50 transition-colors flex flex-col justify-between',
+      onClick: function() { setIsOpen(true); }
+    },
+      React.createElement('div', { className: 'flex items-start justify-between' },
+        React.createElement('span', { className: 'text-xs text-muted-foreground' }, 'Eksi Stok'),
+        React.createElement('div', { className: 'w-6 h-6 rounded flex items-center justify-center bg-destructive/10' },
+          React.createElement(LucideIcons.AlertTriangle, { className: 'w-4 h-4 text-destructive' })
+        )
+      ),
+      React.createElement('div', null,
+        React.createElement('div', { className: 'text-lg font-bold text-destructive' }, negativeItems.length),
+        React.createElement('p', { className: 'text-[10px] text-muted-foreground' }, 'Detay için tıklayın')
+      )
     ),
-    React.createElement('span', { 
-      className: 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-background/50' 
-    }, getDurumText(item.durum))
-  )
-)
+    
+    // UI.Dialog Popup
+    React.createElement(UI.Dialog, { open: isOpen, onOpenChange: setIsOpen },
+      React.createElement(UI.DialogContent, { 
+        className: 'w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col overflow-hidden' 
+      },
+        React.createElement(UI.DialogHeader, null,
+          React.createElement(UI.DialogTitle, { className: 'flex items-center gap-2' },
+            React.createElement(LucideIcons.AlertTriangle, { className: 'w-5 h-5 text-destructive' }),
+            'Eksi Stoktaki Ürünler'
+          ),
+          React.createElement(UI.DialogDescription, null, 
+            negativeItems.length + ' ürün eksi stokta'
+          )
+        ),
+        React.createElement('div', { className: 'flex-1 overflow-y-auto py-2 space-y-1.5' },
+          negativeItems.map(function(item, idx) {
+            var fiili = parseFloat(item.fiili_stok_irs) || 0;
+            var gercek = parseFloat(item.gercek_stok_irs) || 0;
+            return React.createElement('div', {
+              key: idx,
+              className: 'flex items-center justify-between p-2 rounded border ' + getDurumStyle(fiili, gercek)
+            },
+              React.createElement('div', { className: 'min-w-0 flex-1' },
+                React.createElement('p', { className: 'text-sm font-medium line-clamp-1' }, item.stok_adi),
+                React.createElement('p', { className: 'text-[10px] opacity-80' }, item.stokkodu)
+              ),
+              React.createElement('div', { className: 'text-right flex-shrink-0 ml-2' },
+                React.createElement('p', { className: 'text-sm font-bold' }, 
+                  'Fiili: ' + fiili.toFixed(0) + ' | Gerçek: ' + gercek.toFixed(0)
+                ),
+                React.createElement('p', { className: 'text-[10px] opacity-80' }, item.birim || 'Adet')
+              )
+            );
+          })
+        ),
+        React.createElement(UI.DialogFooter, null,
+          React.createElement('span', { className: 'text-[10px] text-muted-foreground' },
+            'Toplam: ' + negativeItems.length + ' ürün'
+          )
+        )
+      )
+    )
+  );
+}
+
+return Widget;
 
 ❌ POPUP YASAKLARI:
+   - Custom div+backdrop popup kullanma (UI.Dialog tercih et)
    - w-full veya çok geniş modal (50vw aşılmasın)
    - max-h olmadan modal (ekranı taşar)
    - overflow-hidden ile liste (scroll olmaz, veri kesilir)
    - rounded-xl, p-4+ (kompakt değil)
+   - Portal/createPortal kullanma (UI.Dialog otomatik portal kullanır)
 
 📌 TOOLTIP Z-INDEX KURALI (ZORUNLU!)
 ───────────────────────────────────────────────────────────────────────────────
