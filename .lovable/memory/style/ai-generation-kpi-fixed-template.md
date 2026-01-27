@@ -9,7 +9,7 @@ Tüm KPI widget'ları aşağıdaki şablonu BİREBİR kullanmalıdır:
 
 ```javascript
 React.createElement('div', {
-  className: 'h-full p-3 bg-card rounded border border-border cursor-pointer hover:bg-muted/50 transition-colors flex flex-col items-center justify-center text-center gap-2',
+  className: 'h-full p-3 bg-card rounded cursor-pointer hover:bg-muted/50 transition-colors flex flex-col items-center justify-center text-center gap-2',
   onClick: function() { setIsOpen(true); }
 },
   // 1. İkon (Üstte, Ortada - 48x48)
@@ -36,7 +36,7 @@ React.createElement('div', {
 ```
 
 ## Fixed KPI Layout Structure:
-- **Container**: `h-full p-3 bg-card rounded border border-border flex flex-col items-center justify-center text-center gap-2`
+- **Container**: `h-full p-3 bg-card rounded flex flex-col items-center justify-center text-center gap-2` (NO BORDER!)
 - **Icon**: Top-center, 48x48px (`w-12 h-12 rounded flex items-center justify-center`)
 - **Value**: Center, large and bold (`text-3xl md:text-4xl font-bold`)
 - **Label**: Center, small and muted (`text-xs text-muted-foreground`)
@@ -51,6 +51,7 @@ React.createElement('div', {
 | Info/Neutral | bg-primary/10 | text-primary |
 
 ## ⛔ YASAKLAR (KPI İÇİN):
+- **Dış çerçeve** (`border`, `border-border`) - DIŞ ÇERÇEVE KESİNLİKLE YASAK!
 - **Sol/sağ dekoratif çizgiler** (border-l-4 vb.)
 - **Flex-row layout** (yatay düzen)
 - **İkon sağda veya solda** (sadece üstte ortada olabilir)
