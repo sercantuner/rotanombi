@@ -166,15 +166,13 @@ export function useChartColorPalette(options: UseChartColorPaletteOptions = {}) 
   
   const widgetPaletteName = widgetFilters?.colorPalette as ColorPaletteName | undefined;
   
-  // ÖNEMLİ: Her widget SADECE kendi paletini kullanır - global fallback YOK
-  // Widget'a özel palet atanmadıysa varsayılan 'corporate' kullanılır
+  // Global palet varsayılan, widget'a özel palet varsa onu kullan
   const currentPaletteName = useMemo(() => {
-    // Widget ID varsa SADECE widget'ın kendi paletini kullan
-    if (widgetId) {
-      // Widget'a özel palet varsa onu kullan, yoksa varsayılan 'corporate'
-      return widgetPaletteName || 'corporate';
+    if (widgetId && widgetPaletteName) {
+      // Widget'a özel palet atanmışsa SADECE onu kullan
+      return widgetPaletteName;
     }
-    // Widget ID yoksa (örn: ayarlar sayfası) global paleti kullan
+    // Aksi halde global paleti kullan (ayarlardan seçilen)
     return globalPaletteName;
   }, [widgetId, widgetPaletteName, globalPaletteName]);
   
