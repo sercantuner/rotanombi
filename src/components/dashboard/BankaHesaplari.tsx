@@ -1,6 +1,7 @@
 import React from 'react';
 import { Building, Wallet } from 'lucide-react';
 import type { DiaBankaHesabi } from '@/lib/diaClient';
+import { Badge } from '@/components/ui/badge';
 
 interface Props {
   bankaHesaplari: DiaBankaHesabi[];
@@ -10,74 +11,138 @@ interface Props {
 
 export function BankaHesaplari({ bankaHesaplari, toplamBakiye, isLoading }: Props) {
   const formatCurrency = (value: number, doviz: string = 'TRY') => {
-    // TL ve TRY'yi aynı şekilde işle
     const symbol = doviz === 'USD' ? '$' : doviz === 'EUR' ? '€' : '₺';
-    return `${symbol}${Math.abs(value).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${value < 0 ? '-' : ''}${symbol}${Math.abs(value).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
+
+  // Döviz bazlı toplamları hesapla
+  const kpiTotals = React.useMemo(() => {
+    const totals = { TRY: 0, USD: 0, EUR: 0 };
+    bankaHesaplari.forEach(item => {
+      const rawCurrency = item.dovizCinsi?.toUpperCase() || 'TRY';
+      const currency = rawCurrency === 'TL' ? 'TRY' : rawCurrency;
+      
+      if (currency in totals) {
+        totals[currency as keyof typeof totals] += item.bakiye;
+      } else {
+        totals.TRY += item.bakiye; // Fallback to TRY
+      }
+    });
+    return totals;
+  }, [bankaHesaplari]);
+
+  const kpiCards = [
+    { label: 'TL Toplam', value: kpiTotals.TRY, currency: 'TRY', color: 'text-primary' },
+    { label: 'USD Toplam', value: kpiTotals.USD, currency: 'USD', color: 'text-success' },
+    { label: 'EUR Toplam', value: kpiTotals.EUR, currency: 'EUR', color: 'text-warning' },
+  ];
 
   if (isLoading) {
     return (
-      <div className="glass-card rounded p-2 md:p-3 animate-slide-up">
-        <div className="flex items-center justify-between mb-2">
-          <div>
-            <h3 className="text-xs font-semibold">Banka Hesapları</h3>
-            <p className="text-[10px] text-muted-foreground">Yükleniyor...</p>
-          </div>
-        </div>
-        <div className="space-y-1">
+      <div className="h-full flex flex-col gap-2">
+        {/* KPI Skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-10 bg-secondary/50 rounded animate-pulse" />
+            <div key={i} className="p-2 bg-card rounded-none border border-border animate-pulse">
+              <div className="h-3 bg-muted rounded w-16 mb-2" />
+              <div className="h-6 bg-muted rounded w-24" />
+            </div>
           ))}
+        </div>
+        {/* Table Skeleton */}
+        <div className="flex-1 bg-card rounded-none border border-border">
+          <div className="p-2 border-b border-border bg-muted/20">
+            <div className="h-4 bg-muted rounded w-32" />
+          </div>
+          <div className="space-y-1 p-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-10 bg-muted/50 rounded-none animate-pulse" />
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="glass-card rounded p-2 md:p-3 animate-slide-up">
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <h3 className="text-xs font-semibold">Banka Hesapları</h3>
-          <p className="text-[10px] text-muted-foreground">
-            Toplam: <span className="font-semibold text-primary">{formatCurrency(toplamBakiye)}</span>
-          </p>
-        </div>
-        <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center">
-          <Building className="w-3 h-3 text-primary" />
-        </div>
+    <div className="h-full flex flex-col gap-2">
+      {/* KPI Kartları */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        {kpiCards.map((kpi) => (
+          <div
+            key={kpi.label}
+            className="p-2 bg-card rounded-none border border-border"
+          >
+            <p className="text-xs font-medium text-muted-foreground">{kpi.label}</p>
+            <p className={`text-xl font-bold ${kpi.color}`}>
+              {formatCurrency(kpi.value, kpi.currency)}
+            </p>
+          </div>
+        ))}
       </div>
 
-      {bankaHesaplari.length === 0 ? (
-        <div className="text-center py-3 text-muted-foreground">
-          <Wallet className="w-6 h-6 mx-auto mb-1 opacity-50" />
-          <p className="text-[10px]">Banka hesabı bulunamadı</p>
+      {/* Tablo Listesi */}
+      <div className="flex flex-col flex-1 min-h-0 bg-card rounded-none border border-border">
+        {/* Header Bar */}
+        <div className="flex items-center justify-between p-2 border-b border-border bg-muted/20">
+          <div className="flex items-center gap-2">
+            <Building className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">Banka Hesap Listesi</span>
+          </div>
+          <Badge variant="secondary" className="rounded-none text-xs">
+            {bankaHesaplari.length} Hesap
+          </Badge>
         </div>
-      ) : (
-        <div className="space-y-1 max-h-40 overflow-y-auto">
-          {bankaHesaplari.map((banka, index) => (
-            <div 
-              key={banka.hesapKodu || index} 
-              className="flex items-center justify-between p-1.5 rounded bg-secondary/30 hover:bg-secondary/50 transition-colors"
-            >
-              <div className="flex items-center gap-1.5">
-                <div className="w-5 h-5 rounded bg-primary/10 flex items-center justify-center text-primary text-[8px] font-bold">
-                  {banka.bankaAdi?.substring(0, 2).toUpperCase() || 'BN'}
-                </div>
-                <div>
-                  <p className="font-medium text-[10px]">{banka.hesapAdi || banka.bankaAdi || 'Hesap'}</p>
-                  <p className="text-[9px] text-muted-foreground">{banka.bankaAdi}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className={`font-semibold text-[10px] ${banka.bakiye >= 0 ? 'text-success' : 'text-destructive'}`}>
-                  {formatCurrency(banka.bakiye, banka.dovizCinsi)}
-                </p>
-                <p className="text-[9px] text-muted-foreground">{banka.dovizCinsi}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+
+        {bankaHesaplari.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground py-8">
+            <Wallet className="w-8 h-8 mb-2 opacity-50" />
+            <p className="text-sm">Banka hesabı bulunamadı</p>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="sticky top-0 bg-muted/50 text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="p-2">Hesap Adı</th>
+                  <th className="p-2">Banka</th>
+                  <th className="p-2 text-right">Bakiye</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {bankaHesaplari.map((banka, index) => (
+                  <tr
+                    key={banka.hesapKodu || index}
+                    className="hover:bg-muted/50 transition-colors"
+                  >
+                    <td className="p-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-none flex items-center justify-center bg-secondary text-[10px] font-bold text-foreground">
+                          {banka.bankaAdi?.substring(0, 2).toUpperCase() || 'BN'}
+                        </div>
+                        <span className="text-sm font-medium text-foreground truncate">
+                          {banka.hesapAdi || banka.bankaAdi || 'Hesap'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="p-2 text-sm text-muted-foreground">
+                      {banka.bankaAdi || '-'}
+                    </td>
+                    <td className="p-2 text-right">
+                      <div>
+                        <p className={`text-sm font-semibold ${banka.bakiye >= 0 ? 'text-success' : 'text-destructive'}`}>
+                          {formatCurrency(banka.bakiye, banka.dovizCinsi)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">{banka.dovizCinsi}</p>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
