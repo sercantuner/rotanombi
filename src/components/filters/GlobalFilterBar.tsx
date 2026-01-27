@@ -1,6 +1,6 @@
 // Global Filter Bar - Üst filtre barı bileşeni (Dinamik filtre yönetimi)
-import React, { useMemo, useState } from 'react';
-import { Calendar, Users, Filter, X, ChevronDown, RotateCcw, Settings2, Lock, Building2, Warehouse, MapPin, Hash } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Calendar, Users, Filter, X, ChevronDown, ChevronUp, RotateCcw, Settings2, Lock, Building2, Warehouse, MapPin, Hash, PanelTopClose, PanelTop } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
 import { useFilterPreferences, ALL_AVAILABLE_FILTERS } from '@/hooks/useFilterPreferences';
@@ -15,6 +15,11 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { DatePeriod, datePeriodLabels, cariKartTipiLabels } from '@/lib/filterTypes';
 import { cn } from '@/lib/utils';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 
 type OptionItem = { value: string; label: string };
 
@@ -49,6 +54,17 @@ export function GlobalFilterBar({
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [managerModalOpen, setManagerModalOpen] = useState(false);
   const [activePopover, setActivePopover] = useState<string | null>(null);
+  
+  // Filtre barı açık/kapalı durumu - localStorage'dan başlat
+  const [isExpanded, setIsExpanded] = useState(() => {
+    const stored = localStorage.getItem('filterBarExpanded');
+    return stored !== null ? stored === 'true' : true; // Varsayılan açık
+  });
+  
+  // Değişiklikleri localStorage'a kaydet
+  useEffect(() => {
+    localStorage.setItem('filterBarExpanded', String(isExpanded));
+  }, [isExpanded]);
 
   // Kilitli filtre var mı kontrol et
   const hasLockedSalesRep = filters._diaAutoFilters.some(f => f.field === 'satiselemani');
@@ -174,29 +190,64 @@ export function GlobalFilterBar({
 
   return (
     <>
-      <div className={cn(
-        'glass-card rounded-xl p-3 animate-fade-in',
-        compact ? 'p-2' : 'p-3 md:p-4',
-        className
-      )}>
-        <div className="flex flex-wrap items-center gap-2 md:gap-3">
-          {/* Date Filter - Her zaman görünür */}
-          {showDateFilter && (
-            <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
-              <PopoverTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size={compact ? 'sm' : 'default'}
-                  className={cn(
-                    'gap-2',
-                    filters.tarihAraligi && 'border-primary bg-primary/5'
-                  )}
+      <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+        <div className={cn(
+          'glass-card rounded-xl animate-fade-in',
+          compact ? 'p-2' : 'p-3 md:p-4',
+          className
+        )}>
+          {/* Header - Her zaman görünür */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-muted-foreground hover:text-foreground -ml-1"
                 >
-                  <Calendar className="w-4 h-4" />
-                  <span className="hidden sm:inline">{currentDateLabel}</span>
-                  <ChevronDown className="w-3 h-3 opacity-50" />
+                  {isExpanded ? (
+                    <PanelTopClose className="w-4 h-4" />
+                  ) : (
+                    <PanelTop className="w-4 h-4" />
+                  )}
+                  <span className="text-sm font-medium">Filtreler</span>
+                  {!isExpanded && activeFilterCount > 0 && (
+                    <Badge variant="secondary" className="ml-1 h-5 px-1.5">
+                      {activeFilterCount}
+                    </Badge>
+                  )}
                 </Button>
-              </PopoverTrigger>
+              </CollapsibleTrigger>
+            </div>
+            
+            {/* Kapalıyken özet göster */}
+            {!isExpanded && activeFilterCount > 0 && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <span>{activeFilterCount} filtre aktif</span>
+              </div>
+            )}
+          </div>
+
+          {/* Collapsible Content - Filtre butonları */}
+          <CollapsibleContent className="mt-3">
+            <div className="flex flex-wrap items-center gap-2 md:gap-3">
+              {/* Date Filter - Her zaman görünür */}
+              {showDateFilter && (
+                <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size={compact ? 'sm' : 'default'}
+                      className={cn(
+                        'gap-2',
+                        filters.tarihAraligi && 'border-primary bg-primary/5'
+                      )}
+                    >
+                      <Calendar className="w-4 h-4" />
+                      <span className="hidden sm:inline">{currentDateLabel}</span>
+                      <ChevronDown className="w-3 h-3 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
               <PopoverContent className="w-48 p-2" align="start">
                 <div className="space-y-1">
                   {(['all', 'today', 'this_week', 'this_month', 'this_quarter', 'this_year', 'last_month', 'last_30_days'] as DatePeriod[]).map((period) => (
@@ -373,154 +424,121 @@ export function GlobalFilterBar({
               <X className="w-4 h-4" />
               <span className="hidden sm:inline">Temizle</span>
             </Button>
-          )}
-        </div>
-
-        {/* Active Filter Badges */}
-        {activeFilterCount > 0 && (
-          <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-border">
-            {filters.tarihAraligi && filters.tarihAraligi.period !== 'all' && (
-              <Badge variant="secondary" className="gap-1 pr-1">
-                📅 {datePeriodLabels[filters.tarihAraligi.period]}
-                <button 
-                  onClick={() => setFilter('tarihAraligi', null)}
-                  className="ml-1 hover:bg-muted rounded-full p-0.5"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
             )}
-            
-            {filters.cariKartTipi.map((tip) => (
-              <Badge key={tip} variant="secondary" className="gap-1 pr-1 bg-accent/20">
-                {cariKartTipiLabels[tip]}
-                <button 
-                  onClick={() => toggleArrayFilter('cariKartTipi', tip)}
-                  className="ml-1 hover:bg-accent/30 rounded-full p-0.5"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            ))}
-            
-            {filters.satisTemsilcisi.map((rep) => (
-              <Badge key={rep} variant="secondary" className="gap-1 pr-1 bg-success/10 text-success">
-                {rep}
-                <button 
-                  onClick={() => toggleArrayFilter('satisTemsilcisi', rep)}
-                  className="ml-1 hover:bg-success/20 rounded-full p-0.5"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            ))}
-
-            {filters.sube.map((s) => (
-              <Badge key={s} variant="secondary" className="gap-1 pr-1">
-                🏢 {lookupLabel.get(`sube:${s}`) || s}
-                <button 
-                  onClick={() => toggleArrayFilter('sube', s)}
-                  className="ml-1 hover:bg-muted rounded-full p-0.5"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            ))}
-
-            {filters.depo.map((d) => (
-              <Badge key={d} variant="secondary" className="gap-1 pr-1">
-                📦 {lookupLabel.get(`depo:${d}`) || d}
-                <button 
-                  onClick={() => toggleArrayFilter('depo', d)}
-                  className="ml-1 hover:bg-muted rounded-full p-0.5"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            ))}
-
-            {filters.sehir.map((s) => (
-              <Badge key={s} variant="secondary" className="gap-1 pr-1">
-                📍 {s}
-                <button 
-                  onClick={() => toggleArrayFilter('sehir', s)}
-                  className="ml-1 hover:bg-muted rounded-full p-0.5"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            ))}
-
-            {filters.ozelkod1.map((k) => (
-              <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-primary/10 text-primary">
-                #1 {lookupLabel.get(`ozelkod1:${k}`) || k}
-                <button 
-                  onClick={() => toggleArrayFilter('ozelkod1', k)}
-                  className="ml-1 hover:bg-primary/20 rounded-full p-0.5"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            ))}
-
-            {filters.ozelkod2.map((k) => (
-              <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-accent/20">
-                #2 {lookupLabel.get(`ozelkod2:${k}`) || k}
-                <button 
-                  onClick={() => toggleArrayFilter('ozelkod2', k)}
-                  className="ml-1 hover:bg-accent/30 rounded-full p-0.5"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            ))}
-
-            {filters.ozelkod3.map((k) => (
-              <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-secondary/70">
-                #3 {lookupLabel.get(`ozelkod3:${k}`) || k}
-                <button 
-                  onClick={() => toggleArrayFilter('ozelkod3', k)}
-                  className="ml-1 hover:bg-muted rounded-full p-0.5"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            ))}
-
-            {filters.gorunumModu !== 'hepsi' && (
-              <Badge variant="secondary" className="gap-1 pr-1">
-                👁️ {filters.gorunumModu === 'potansiyel' ? 'Potansiyel' : 'Cari'}
-                <button
-                  onClick={() => setFilter('gorunumModu', 'hepsi')}
-                  className="ml-1 hover:bg-muted rounded-full p-0.5"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            )}
-
-            {filters.durum !== 'hepsi' && (
-              <Badge variant="secondary" className="gap-1 pr-1">
-                ⏺️ {filters.durum === 'aktif' ? 'Aktif' : 'Pasif'}
-                <button
-                  onClick={() => setFilter('durum', 'hepsi')}
-                  className="ml-1 hover:bg-muted rounded-full p-0.5"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            )}
-            
-            {/* Locked DIA filters */}
-            {filters._diaAutoFilters.map((f, idx) => (
-              <Badge key={idx} variant="outline" className="gap-1 bg-warning/10 text-warning border-warning/30">
-                <Lock className="w-3 h-3" />
-                {f.label || f.value}
-              </Badge>
-            ))}
           </div>
-        )}
-      </div>
+
+          {/* Active Filter Badges */}
+          {activeFilterCount > 0 && (
+            <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-border">
+              {filters.tarihAraligi && filters.tarihAraligi.period !== 'all' && (
+                <Badge variant="secondary" className="gap-1 pr-1">
+                  📅 {datePeriodLabels[filters.tarihAraligi.period]}
+                  <button 
+                    onClick={() => setFilter('tarihAraligi', null)}
+                    className="ml-1 hover:bg-muted rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
+              
+              {filters.cariKartTipi.map((tip) => (
+                <Badge key={tip} variant="secondary" className="gap-1 pr-1 bg-accent/20">
+                  {cariKartTipiLabels[tip]}
+                  <button 
+                    onClick={() => toggleArrayFilter('cariKartTipi', tip)}
+                    className="ml-1 hover:bg-accent/30 rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              ))}
+              
+              {filters.satisTemsilcisi.map((rep) => (
+                <Badge key={rep} variant="secondary" className="gap-1 pr-1 bg-success/10 text-success">
+                  {rep}
+                  <button 
+                    onClick={() => toggleArrayFilter('satisTemsilcisi', rep)}
+                    className="ml-1 hover:bg-success/20 rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              ))}
+
+              {filters.sube.map((s) => (
+                <Badge key={s} variant="secondary" className="gap-1 pr-1">
+                  🏢 {lookupLabel.get(`sube:${s}`) || s}
+                  <button 
+                    onClick={() => toggleArrayFilter('sube', s)}
+                    className="ml-1 hover:bg-muted rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              ))}
+
+              {filters.depo.map((d) => (
+                <Badge key={d} variant="secondary" className="gap-1 pr-1">
+                  📦 {lookupLabel.get(`depo:${d}`) || d}
+                  <button 
+                    onClick={() => toggleArrayFilter('depo', d)}
+                    className="ml-1 hover:bg-muted rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              ))}
+
+              {filters.ozelkod1.map((k) => (
+                <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-info/10">
+                  {lookupLabel.get(`ozelkod1:${k}`) || k}
+                  <button 
+                    onClick={() => toggleArrayFilter('ozelkod1', k)}
+                    className="ml-1 hover:bg-info/20 rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              ))}
+
+              {filters.ozelkod2.map((k) => (
+                <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-info/10">
+                  {lookupLabel.get(`ozelkod2:${k}`) || k}
+                  <button 
+                    onClick={() => toggleArrayFilter('ozelkod2', k)}
+                    className="ml-1 hover:bg-info/20 rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              ))}
+
+              {filters.ozelkod3.map((k) => (
+                <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-info/10">
+                  {lookupLabel.get(`ozelkod3:${k}`) || k}
+                  <button 
+                    onClick={() => toggleArrayFilter('ozelkod3', k)}
+                    className="ml-1 hover:bg-info/20 rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              ))}
+
+
+              {/* Locked DIA filters */}
+              {filters._diaAutoFilters.map((f, idx) => (
+                <Badge key={idx} variant="outline" className="gap-1 bg-warning/10 text-warning border-warning/30">
+                  <Lock className="w-3 h-3" />
+                  {f.label || f.value}
+                </Badge>
+              ))}
+            </div>
+          )}
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
 
       {/* Filtre Yönetimi Modal */}
       <FilterManagerModal
