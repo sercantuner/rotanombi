@@ -354,8 +354,7 @@ export function DataSourceManager() {
               </Button>
             </div>
           ) : (
-            <div className="h-[400px] overflow-y-auto">
-              <div className="space-y-2">
+            <div className="space-y-2">
                 {dataSources.map(source => (
                   <div 
                     key={source.id} 
@@ -431,7 +430,6 @@ export function DataSourceManager() {
                     </div>
                   </div>
                 ))}
-              </div>
             </div>
           )}
         </CardContent>
