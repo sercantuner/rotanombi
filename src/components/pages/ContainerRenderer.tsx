@@ -427,7 +427,22 @@ export function ContainerRenderer({
               </Button>
             </div>
           )}
-          <div className={cn('grid gap-1 md:gap-2 items-stretch [&>*]:h-full', template.gridClass)}>
+          {/* 
+            Grafik container'ları için minimum yükseklik:
+            - chart_full, chart_half, chart_third: min-h-[280px] (donut/pie için gerekli)
+            - info_cards: min-h-[200px]
+            - KPI satırları: min-h yok (auto)
+          */}
+          <div className={cn(
+            'grid gap-1 md:gap-2 items-stretch [&>*]:h-full',
+            template.gridClass,
+            // Grafik container'ları için minimum yükseklik
+            (container.container_type === 'chart_full' || 
+             container.container_type === 'chart_half' || 
+             container.container_type === 'chart_third') && '[&>*]:min-h-[280px]',
+            (container.container_type === 'info_cards_2' ||
+             container.container_type === 'info_cards_3') && '[&>*]:min-h-[200px]'
+          )}>
             {renderSlots()}
           </div>
         </CardContent>
