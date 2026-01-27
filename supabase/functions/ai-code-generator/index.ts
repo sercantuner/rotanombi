@@ -241,49 +241,63 @@ Grafik wrapper: 'p-1 md:p-2'
 
 ═══════════════════════════════════════════════════════════════════════════════
 
-📦 KPI WIDGET BOYUT VE YÜKSEKLİK STANDARTLARI (ZORUNLU!)
+📦 KPI WIDGET SABİT TASARIM ŞABLONU (ZORUNLU - DEĞİŞTİRİLEMEZ!)
 ───────────────────────────────────────────────────────────────────────────────
-⚠️ KPI'lar konteyner içinde tutarlı boyut ve yükseklikte olmalıdır!
+⚠️ TÜM KPI WIDGET'LAR BU ŞABLONU BİREBİR KULLANMALI! FARKLI TASARIM YASAK!
 
-📏 BOYUT KURALLARI:
-   - Bir KPI satırına EN FAZLA 4 widget yan yana sığmalı
-   - Her KPI genişliği: min-w-[140px] max-w-[220px] veya flex-1
-   - Grid kullanımı: grid-cols-2 md:grid-cols-4 lg:grid-cols-4
+📐 SABİT KPI TASARIMI (Centered Layout - Tek Format):
+   - Dikey ortalanmış içerik (flex-col items-center justify-center)
+   - İkon: Üstte, ortada (w-12 h-12 rounded flex items-center justify-center)
+   - Sayı: Ortada, büyük ve bold (text-3xl md:text-4xl font-bold)
+   - Etiket: Altta, küçük ve muted (text-xs text-muted-foreground text-center)
+   - Alt bilgi: En altta, çok küçük (text-[10px] text-muted-foreground)
+   - Tıklanabilir: cursor-pointer hover:bg-muted/50 transition-colors
 
-📐 YÜKSEKLİK KURALLARI (TÜM KPI'LAR AYNI YÜKSEKLİKTE!):
-   - Sabit yükseklik: h-[100px] veya min-h-[100px] max-h-[100px]
-   - İç container: flex flex-col justify-between h-full
-   - Başlık ve değer alanları esnek olmayacak: flex-shrink-0
-   - Overflow: overflow-hidden (içerik taşmasın)
-
-✅ DOĞRU KPI YAPISI:
-React.createElement('div', { 
-  className: 'h-[100px] p-2 md:p-3 bg-card rounded border border-border flex flex-col justify-between overflow-hidden' 
+✅ ZORUNLU KPI ŞABLONU (BU YAPIYI AYNEN KULLAN!):
+───────────────────────────────────────────────────────────────────────────────
+React.createElement('div', {
+  className: 'h-full p-3 bg-card rounded border border-border cursor-pointer hover:bg-muted/50 transition-colors flex flex-col items-center justify-center text-center gap-2',
+  onClick: function() { setIsOpen(true); }
 },
-  React.createElement('div', { className: 'flex items-start justify-between flex-shrink-0' },
-    React.createElement('span', { className: 'text-xs text-muted-foreground line-clamp-2' }, 'Başlık'),
-    React.createElement('div', { className: 'w-6 h-6 rounded flex items-center justify-center bg-primary/10 flex-shrink-0' },
-      // İkon
-    )
+  // İkon Container (Üstte, Ortada)
+  React.createElement('div', { 
+    className: 'w-12 h-12 rounded flex items-center justify-center bg-destructive/10' 
+  },
+    React.createElement(LucideIcons.AlertTriangle, { 
+      className: 'w-6 h-6 text-destructive' 
+    })
   ),
-  React.createElement('div', { className: 'flex-shrink-0' },
-    React.createElement('div', { className: 'text-lg md:text-xl font-semibold text-foreground truncate' }, değer),
-    React.createElement('div', { className: 'text-[10px] text-muted-foreground truncate' }, altBilgi)
-  )
+  // Ana Değer (Büyük, Bold, Ortada)
+  React.createElement('div', { 
+    className: 'text-3xl md:text-4xl font-bold text-foreground' 
+  }, toplamSayi),
+  // Etiket (Küçük, Muted, Ortada)
+  React.createElement('div', { 
+    className: 'text-xs text-muted-foreground' 
+  }, 'Widget Başlığı'),
+  // Alt Bilgi (Opsiyonel - varsa)
+  React.createElement('div', { 
+    className: 'text-[10px] text-muted-foreground' 
+  }, 'Detaylar için tıklayın')
 )
 
-✅ KPI ROW CONTAINER:
-React.createElement('div', { 
-  className: 'grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3' 
-},
-  // Max 4 KPI widget
-)
+📊 İKON VE RENK SEÇİMİ:
+   | Durum/Tip         | İkon                     | Arka Plan           | İkon Rengi       |
+   |-------------------|--------------------------|---------------------|------------------|
+   | Kritik/Hata       | AlertTriangle            | bg-destructive/10   | text-destructive |
+   | Uyarı             | AlertCircle, Clock       | bg-warning/10       | text-warning     |
+   | Pozitif/Başarı    | TrendingUp, CheckCircle  | bg-success/10       | text-success     |
+   | Bilgi/Nötr        | Info, Package, Users     | bg-primary/10       | text-primary     |
+   | Finansal          | DollarSign, CreditCard   | bg-primary/10       | text-primary     |
+   | Stok              | Package, Box             | bg-primary/10       | text-primary     |
 
-❌ YANLIŞ:
-   - h-auto veya yükseklik belirtmemek (KPI'lar farklı yükseklikte olur)
-   - 5+ KPI yan yana koymak
-   - p-4, p-5 gibi geniş padding (yüksekliği etkiler)
-   - text-2xl, text-3xl gibi büyük fontlar (yüksekliği etkiler)
+❌ YASAK KPI TASARIMLARI:
+   - Flex-row layout (yatay düzen)
+   - İkon sağda veya solda (sadece üstte ortada olabilir)
+   - Değer solda veya sağda hizalı (sadece ortada olabilir)
+   - Farklı padding değerleri (p-3 sabit)
+   - justify-between (justify-center kullan)
+   - text-left veya text-right (text-center zorunlu)
 
 ═══════════════════════════════════════════════════════════════════════════════
 
@@ -368,8 +382,10 @@ function Widget({ data, colors, filters }) {
 
 return Widget;
 
-📋 ÖRNEK: EKSİYE DÜŞEN STOKLAR - UI.Dialog İLE
+📋 ÖRNEK: EKSİYE DÜŞEN STOKLAR - SABİT KPI TASARIMI + UI.Dialog
 ───────────────────────────────────────────────────────────────────────────────
+// Bu örnek KPI tasarımını BİREBİR takip et! Farklı layout YASAK!
+
 function Widget({ data, colors, filters }) {
   var showDetail = React.useState(false);
   var isOpen = showDetail[0];
@@ -390,24 +406,38 @@ function Widget({ data, colors, filters }) {
   };
   
   return React.createElement('div', { className: 'h-full' },
-    // KPI Kartı
+    // ═══════════════════════════════════════════════════════════════════════
+    // SABİT KPI KARTI - BU YAPIYI AYNEN KULLAN! (Centered Layout)
+    // ═══════════════════════════════════════════════════════════════════════
     React.createElement('div', {
-      className: 'h-full p-2 md:p-3 bg-card rounded border border-border cursor-pointer hover:bg-muted/50 transition-colors flex flex-col justify-between',
+      className: 'h-full p-3 bg-card rounded border border-border cursor-pointer hover:bg-muted/50 transition-colors flex flex-col items-center justify-center text-center gap-2',
       onClick: function() { setIsOpen(true); }
     },
-      React.createElement('div', { className: 'flex items-start justify-between' },
-        React.createElement('span', { className: 'text-xs text-muted-foreground' }, 'Eksi Stok'),
-        React.createElement('div', { className: 'w-6 h-6 rounded flex items-center justify-center bg-destructive/10' },
-          React.createElement(LucideIcons.AlertTriangle, { className: 'w-4 h-4 text-destructive' })
-        )
+      // İkon Container (Üstte, Ortada, 48x48)
+      React.createElement('div', { 
+        className: 'w-12 h-12 rounded flex items-center justify-center bg-destructive/10' 
+      },
+        React.createElement(LucideIcons.AlertTriangle, { 
+          className: 'w-6 h-6 text-destructive' 
+        })
       ),
-      React.createElement('div', null,
-        React.createElement('div', { className: 'text-lg font-bold text-destructive' }, negativeItems.length),
-        React.createElement('p', { className: 'text-[10px] text-muted-foreground' }, 'Detay için tıklayın')
-      )
+      // Ana Değer (Büyük, Bold, Ortada)
+      React.createElement('div', { 
+        className: 'text-3xl md:text-4xl font-bold text-destructive' 
+      }, negativeItems.length),
+      // Etiket (Küçük, Muted, Ortada)
+      React.createElement('div', { 
+        className: 'text-xs text-muted-foreground' 
+      }, 'Eksiye Düşen Stoklar'),
+      // Alt Bilgi
+      React.createElement('div', { 
+        className: 'text-[10px] text-muted-foreground' 
+      }, 'Detaylar için tıklayın')
     ),
     
-    // UI.Dialog Popup
+    // ═══════════════════════════════════════════════════════════════════════
+    // UI.Dialog POPUP - Merkezi Modal
+    // ═══════════════════════════════════════════════════════════════════════
     React.createElement(UI.Dialog, { open: isOpen, onOpenChange: setIsOpen },
       React.createElement(UI.DialogContent, { 
         className: 'w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col overflow-hidden' 
