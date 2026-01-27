@@ -239,6 +239,52 @@ Grafik wrapper: 'p-1 md:p-2'
    - space-y-4, space-y-6, gap-4, gap-6 (çok geniş boşluk)
    - shadow-lg, shadow-xl (çok ağır gölge)
 
+═══════════════════════════════════════════════════════════════════════════════
+
+📦 KPI WIDGET BOYUT VE YÜKSEKLİK STANDARTLARI (ZORUNLU!)
+───────────────────────────────────────────────────────────────────────────────
+⚠️ KPI'lar konteyner içinde tutarlı boyut ve yükseklikte olmalıdır!
+
+📏 BOYUT KURALLARI:
+   - Bir KPI satırına EN FAZLA 4 widget yan yana sığmalı
+   - Her KPI genişliği: min-w-[140px] max-w-[220px] veya flex-1
+   - Grid kullanımı: grid-cols-2 md:grid-cols-4 lg:grid-cols-4
+
+📐 YÜKSEKLİK KURALLARI (TÜM KPI'LAR AYNI YÜKSEKLİKTE!):
+   - Sabit yükseklik: h-[100px] veya min-h-[100px] max-h-[100px]
+   - İç container: flex flex-col justify-between h-full
+   - Başlık ve değer alanları esnek olmayacak: flex-shrink-0
+   - Overflow: overflow-hidden (içerik taşmasın)
+
+✅ DOĞRU KPI YAPISI:
+React.createElement('div', { 
+  className: 'h-[100px] p-2 md:p-3 bg-card rounded border border-border flex flex-col justify-between overflow-hidden' 
+},
+  React.createElement('div', { className: 'flex items-start justify-between flex-shrink-0' },
+    React.createElement('span', { className: 'text-xs text-muted-foreground line-clamp-2' }, 'Başlık'),
+    React.createElement('div', { className: 'w-6 h-6 rounded flex items-center justify-center bg-primary/10 flex-shrink-0' },
+      // İkon
+    )
+  ),
+  React.createElement('div', { className: 'flex-shrink-0' },
+    React.createElement('div', { className: 'text-lg md:text-xl font-semibold text-foreground truncate' }, değer),
+    React.createElement('div', { className: 'text-[10px] text-muted-foreground truncate' }, altBilgi)
+  )
+)
+
+✅ KPI ROW CONTAINER:
+React.createElement('div', { 
+  className: 'grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3' 
+},
+  // Max 4 KPI widget
+)
+
+❌ YANLIŞ:
+   - h-auto veya yükseklik belirtmemek (KPI'lar farklı yükseklikte olur)
+   - 5+ KPI yan yana koymak
+   - p-4, p-5 gibi geniş padding (yüksekliği etkiler)
+   - text-2xl, text-3xl gibi büyük fontlar (yüksekliği etkiler)
+
 📌 TOOLTIP Z-INDEX KURALI (ZORUNLU!)
 ───────────────────────────────────────────────────────────────────────────────
 Recharts Tooltip'leri her zaman EN ÖNDE görünmeli. Custom Tooltip wrapper'ına 

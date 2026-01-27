@@ -63,11 +63,11 @@ export function KritikStokUyarilari({ isLoading }: Props) {
 
   if (isLoading) {
     return (
-      <div className="glass-card rounded-xl p-5 animate-pulse">
-        <div className="h-6 bg-muted rounded w-48 mb-4" />
-        <div className="space-y-3">
+      <div className="bg-card rounded border border-border p-2 md:p-3 animate-pulse">
+        <div className="h-5 bg-muted rounded w-40 mb-2" />
+        <div className="space-y-1.5">
           {[1, 2, 3].map(i => (
-            <div key={i} className="h-16 bg-muted rounded" />
+            <div key={i} className="h-12 bg-muted rounded" />
           ))}
         </div>
       </div>
@@ -77,66 +77,66 @@ export function KritikStokUyarilari({ isLoading }: Props) {
   const displayList = showAll ? stokUyarilari : stokUyarilari.slice(0, 5);
 
   return (
-    <div className="glass-card rounded-xl p-5">
+    <div className="bg-card rounded border border-border p-2 md:p-3">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-destructive/20 flex items-center justify-center">
-            <AlertTriangle className="w-5 h-5 text-destructive" />
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded flex items-center justify-center bg-destructive/20">
+            <AlertTriangle className="w-4 h-4 text-destructive" />
           </div>
           <div>
-            <h3 className="font-semibold">Kritik Stok Uyarıları</h3>
-            <p className="text-xs text-muted-foreground">Stok durumu düşük ürünler</p>
+            <h3 className="text-sm font-semibold">Kritik Stok Uyarıları</h3>
+            <p className="text-[10px] text-muted-foreground">Stok durumu düşük ürünler</p>
           </div>
         </div>
-        <button className="text-xs text-primary hover:underline flex items-center gap-1">
+        <button className="text-[10px] text-primary hover:underline flex items-center gap-1">
           Stok Yönetimi <ExternalLink className="w-3 h-3" />
         </button>
       </div>
 
       {/* Summary Pills */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-destructive/20 border border-destructive/30">
-          <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
-          <span className="text-xs font-medium text-destructive">{kritikSayisi} Kritik</span>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        <div className="flex items-center gap-1 px-2 py-1 rounded bg-destructive/20 border border-destructive/30">
+          <span className="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse" />
+          <span className="text-[10px] font-medium text-destructive">{kritikSayisi} Kritik</span>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-warning/20 border border-warning/30">
-          <span className="w-2 h-2 rounded-full bg-warning" />
-          <span className="text-xs font-medium text-warning">{dusukSayisi} Düşük</span>
+        <div className="flex items-center gap-1 px-2 py-1 rounded bg-warning/20 border border-warning/30">
+          <span className="w-1.5 h-1.5 rounded-full bg-warning" />
+          <span className="text-[10px] font-medium text-warning">{dusukSayisi} Düşük</span>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-yellow-500/20 border border-yellow-500/30">
-          <span className="w-2 h-2 rounded-full bg-yellow-500" />
-          <span className="text-xs font-medium text-yellow-600 dark:text-yellow-400">{yakinSayisi} Yakında</span>
+        <div className="flex items-center gap-1 px-2 py-1 rounded bg-yellow-500/20 border border-yellow-500/30">
+          <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+          <span className="text-[10px] font-medium text-yellow-600 dark:text-yellow-400">{yakinSayisi} Yakında</span>
         </div>
         {siparisSayisi > 0 && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/20 border border-primary/30">
+          <div className="flex items-center gap-1 px-2 py-1 rounded bg-primary/20 border border-primary/30">
             <ShoppingCart className="w-3 h-3 text-primary" />
-            <span className="text-xs font-medium text-primary">{siparisSayisi} Siparişte</span>
+            <span className="text-[10px] font-medium text-primary">{siparisSayisi} Siparişte</span>
           </div>
         )}
       </div>
 
       {/* Stock List */}
-      <ScrollArea className={showAll ? 'h-64' : 'max-h-64'}>
-        <div className="space-y-2">
+      <ScrollArea className={showAll ? 'h-48' : 'max-h-48'}>
+        <div className="space-y-1.5">
           {displayList.map((stok) => (
             <div 
               key={stok.stokKodu}
-              className={`flex items-center justify-between p-3 rounded-lg border ${getDurumStyle(stok.durum)} transition-all hover:scale-[1.01]`}
+              className={`flex items-center justify-between p-2 rounded border ${getDurumStyle(stok.durum)} transition-all hover:scale-[1.005]`}
             >
-              <div className="flex items-center gap-3">
-                <Package className="w-4 h-4" />
-                <div>
-                  <p className="text-sm font-medium line-clamp-1">{stok.stokAdi}</p>
-                  <p className="text-xs opacity-80">{stok.stokKodu}</p>
+              <div className="flex items-center gap-2">
+                <Package className="w-3.5 h-3.5 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-medium line-clamp-1">{stok.stokAdi}</p>
+                  <p className="text-[10px] opacity-80">{stok.stokKodu}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <div className="text-right">
-                  <p className="text-sm font-bold">{stok.mevcutStok} / {stok.minStok}</p>
-                  <p className="text-xs opacity-80">{stok.birim}</p>
+                  <p className="text-xs font-bold">{stok.mevcutStok} / {stok.minStok}</p>
+                  <p className="text-[10px] opacity-80">{stok.birim}</p>
                 </div>
-                <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-background/50">
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-background/50">
                   {getDurumText(stok.durum)}
                 </span>
               </div>
@@ -149,7 +149,7 @@ export function KritikStokUyarilari({ isLoading }: Props) {
       {stokUyarilari.length > 5 && (
         <button 
           onClick={() => setShowAll(!showAll)}
-          className="w-full mt-3 py-2 text-xs text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 transition-colors"
+          className="w-full mt-2 py-1.5 text-[10px] text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 transition-colors"
         >
           {showAll ? 'Daha az göster' : `Tümünü göster (${stokUyarilari.length})`}
           <ChevronRight className={`w-3 h-3 transition-transform ${showAll ? 'rotate-90' : ''}`} />
