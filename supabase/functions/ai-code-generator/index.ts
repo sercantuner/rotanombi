@@ -285,6 +285,134 @@ React.createElement('div', {
    - p-4, p-5 gibi geniş padding (yüksekliği etkiler)
    - text-2xl, text-3xl gibi büyük fontlar (yüksekliği etkiler)
 
+═══════════════════════════════════════════════════════════════════════════════
+
+🔲 KPI POPUP/MODAL STANDARTLARI (ZORUNLU!)
+───────────────────────────────────────────────────────────────────────────────
+KPI kartlarına tıklanınca açılan detay popup'ları için standart yapı:
+
+📐 BOYUT VE KONUM KURALLARI:
+   - Genişlik: w-[50vw] veya max-w-[50%] (sayfanın yarısı)
+   - Yükseklik: max-h-[80vh] (sayfayı geçmeyecek)
+   - Konum: Sayfa ortasında (fixed inset-0 + flex items-center justify-center)
+   - Scroll: overflow-y-auto (liste uzarsa scroll)
+
+✅ ZORUNLU KPI POPUP YAPISI:
+var KPIPopup = function(props) {
+  var isOpen = props.isOpen;
+  var onClose = props.onClose;
+  var title = props.title;
+  var items = props.items;
+  
+  if (!isOpen) return null;
+  
+  return React.createElement('div', {
+    className: 'fixed inset-0 z-50 flex items-center justify-center',
+    onClick: onClose
+  },
+    // Backdrop
+    React.createElement('div', { 
+      className: 'absolute inset-0 bg-background/80 backdrop-blur-sm' 
+    }),
+    // Modal Container
+    React.createElement('div', {
+      className: 'relative w-[50vw] max-h-[80vh] bg-card rounded border border-border shadow-lg flex flex-col overflow-hidden',
+      onClick: function(e) { e.stopPropagation(); }
+    },
+      // Header
+      React.createElement('div', { 
+        className: 'flex items-center justify-between p-3 border-b border-border flex-shrink-0' 
+      },
+        React.createElement('h3', { className: 'text-sm font-semibold text-foreground' }, title),
+        React.createElement('button', { 
+          className: 'w-6 h-6 rounded flex items-center justify-center hover:bg-muted text-muted-foreground',
+          onClick: onClose 
+        }, '✕')
+      ),
+      // Content with Scroll
+      React.createElement('div', { 
+        className: 'flex-1 overflow-y-auto p-3' 
+      },
+        React.createElement('div', { className: 'space-y-1.5' },
+          items.map(function(item, idx) {
+            return React.createElement('div', {
+              key: idx,
+              className: 'flex items-center justify-between p-2 rounded border border-border hover:bg-muted/50'
+            },
+              // Item content...
+            );
+          })
+        )
+      ),
+      // Footer (optional)
+      React.createElement('div', { 
+        className: 'p-2 border-t border-border flex-shrink-0 text-center' 
+      },
+        React.createElement('span', { className: 'text-[10px] text-muted-foreground' }, 
+          items.length + ' kayıt'
+        )
+      )
+    )
+  );
+};
+
+📋 ÖRNEK: EKSİYE DÜŞEN STOKLAR KPI POPUP (REFERANS TASARIM)
+───────────────────────────────────────────────────────────────────────────────
+// Stok uyarı durumları ve renkleri
+var getDurumStyle = function(durum) {
+  switch(durum) {
+    case 'kritik': return 'bg-destructive/20 text-destructive border-destructive/30';
+    case 'dusuk': return 'bg-warning/20 text-warning border-warning/30';
+    case 'yakin': return 'bg-yellow-500/20 text-yellow-600 border-yellow-500/30';
+    case 'siparis': return 'bg-primary/20 text-primary border-primary/30';
+    default: return 'bg-muted text-muted-foreground border-border';
+  }
+};
+
+// Özet pills (header altında)
+React.createElement('div', { className: 'flex flex-wrap gap-1.5 mb-2' },
+  React.createElement('div', { 
+    className: 'flex items-center gap-1 px-2 py-1 rounded bg-destructive/20 border border-destructive/30' 
+  },
+    React.createElement('span', { className: 'w-1.5 h-1.5 rounded-full bg-destructive animate-pulse' }),
+    React.createElement('span', { className: 'text-[10px] font-medium text-destructive' }, kritikSayisi + ' Kritik')
+  ),
+  React.createElement('div', { 
+    className: 'flex items-center gap-1 px-2 py-1 rounded bg-warning/20 border border-warning/30' 
+  },
+    React.createElement('span', { className: 'w-1.5 h-1.5 rounded-full bg-warning' }),
+    React.createElement('span', { className: 'text-[10px] font-medium text-warning' }, dusukSayisi + ' Düşük')
+  )
+)
+
+// Liste satırı yapısı
+React.createElement('div', {
+  className: 'flex items-center justify-between p-2 rounded border ' + getDurumStyle(item.durum)
+},
+  React.createElement('div', { className: 'flex items-center gap-2' },
+    React.createElement('div', { className: 'w-3.5 h-3.5 flex-shrink-0' }, '📦'), // ikon
+    React.createElement('div', { className: 'min-w-0' },
+      React.createElement('p', { className: 'text-xs font-medium line-clamp-1' }, item.stokAdi),
+      React.createElement('p', { className: 'text-[10px] opacity-80' }, item.stokKodu)
+    )
+  ),
+  React.createElement('div', { className: 'flex items-center gap-2 flex-shrink-0' },
+    React.createElement('div', { className: 'text-right' },
+      React.createElement('p', { className: 'text-xs font-bold' }, item.mevcut + ' / ' + item.min),
+      React.createElement('p', { className: 'text-[10px] opacity-80' }, item.birim)
+    ),
+    React.createElement('span', { 
+      className: 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-background/50' 
+    }, getDurumText(item.durum))
+  )
+)
+
+❌ POPUP YASAKLARI:
+   - w-full veya çok geniş modal (50vw aşılmasın)
+   - max-h olmadan modal (ekranı taşar)
+   - overflow-hidden ile liste (scroll olmaz, veri kesilir)
+   - rounded-xl, p-4+ (kompakt değil)
+
 📌 TOOLTIP Z-INDEX KURALI (ZORUNLU!)
 ───────────────────────────────────────────────────────────────────────────────
 Recharts Tooltip'leri her zaman EN ÖNDE görünmeli. Custom Tooltip wrapper'ına 
