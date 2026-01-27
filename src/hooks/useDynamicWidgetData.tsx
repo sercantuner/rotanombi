@@ -413,12 +413,20 @@ function applyPostFetchFilters(data: any[], filters: PostFetchFilter[]): any[] {
 
 // ============= GLOBAL FİLTRELERİ UYGULAMA =============
 
+// Helper: Veri setinde belirli alanlardan en az biri var mı kontrol et
+function dataHasField(data: any[], fields: string[]): boolean {
+  if (!data || data.length === 0) return false;
+  const sample = data[0];
+  return fields.some(f => f in sample && sample[f] !== undefined);
+}
+
 function applyGlobalFilters(data: any[], globalFilters: GlobalFilters): any[] {
   if (!globalFilters) return data;
+  if (!data || data.length === 0) return data;
   
   let filtered = [...data];
   
-  // Arama terimi
+  // Arama terimi - tüm verilere uygulanabilir
   if (globalFilters.searchTerm && globalFilters.searchTerm.trim()) {
     const term = globalFilters.searchTerm.toLowerCase();
     filtered = filtered.filter(row => {
@@ -429,71 +437,80 @@ function applyGlobalFilters(data: any[], globalFilters: GlobalFilters): any[] {
     });
   }
   
-  // Cari kart tipi (AL, AS, ST)
-  if (globalFilters.cariKartTipi.length > 0) {
+  // Cari kart tipi (AL, AS, ST) - SADECE cari verilere uygulanmalı
+  // Banka, Kasa, Stok gibi verilere uygulanmamalı
+  const cariKartTipiFields = ['carikarttipi', 'carikarttip', 'karttipi', 'cari_kart_tipi'];
+  if (globalFilters.cariKartTipi.length > 0 && dataHasField(data, cariKartTipiFields)) {
     filtered = filtered.filter(row => {
-      // DIA'dan gelen alan adları: carikarttipi, carikarttip, karttipi vb.
       const kartTipi = row.carikarttipi || row.carikarttip || row.karttipi || row.cari_kart_tipi;
       return kartTipi && globalFilters.cariKartTipi.includes(String(kartTipi).toUpperCase());
     });
   }
   
-  // Satış temsilcisi
-  if (globalFilters.satisTemsilcisi.length > 0) {
+  // Satış temsilcisi - SADECE ilgili alan varsa uygulanmalı
+  const satisTemsilcisiFields = ['satiselemani', 'satis_elemani', 'temsilci'];
+  if (globalFilters.satisTemsilcisi.length > 0 && dataHasField(data, satisTemsilcisiFields)) {
     filtered = filtered.filter(row => {
       const eleman = row.satiselemani || row.satis_elemani || row.temsilci;
       return eleman && globalFilters.satisTemsilcisi.includes(String(eleman));
     });
   }
   
-  // Şube
-  if (globalFilters.sube.length > 0) {
+  // Şube - SADECE ilgili alan varsa uygulanmalı
+  const subeFields = ['subekodu', 'sube_kodu', 'sube'];
+  if (globalFilters.sube.length > 0 && dataHasField(data, subeFields)) {
     filtered = filtered.filter(row => {
       const sube = row.subekodu || row.sube_kodu || row.sube;
       return sube && globalFilters.sube.includes(String(sube));
     });
   }
   
-  // Depo
-  if (globalFilters.depo.length > 0) {
+  // Depo - SADECE ilgili alan varsa uygulanmalı
+  const depoFields = ['depokodu', 'depo_kodu', 'depo'];
+  if (globalFilters.depo.length > 0 && dataHasField(data, depoFields)) {
     filtered = filtered.filter(row => {
       const depo = row.depokodu || row.depo_kodu || row.depo;
       return depo && globalFilters.depo.includes(String(depo));
     });
   }
   
-  // Özel kodlar
-  if (globalFilters.ozelkod1.length > 0) {
+  // Özel kodlar - SADECE ilgili alan varsa uygulanmalı
+  const ozelkod1Fields = ['ozelkod1kod', 'ozelkod1', 'ozel_kod_1'];
+  if (globalFilters.ozelkod1.length > 0 && dataHasField(data, ozelkod1Fields)) {
     filtered = filtered.filter(row => {
       const kod = row.ozelkod1kod || row.ozelkod1 || row.ozel_kod_1;
       return kod && globalFilters.ozelkod1.includes(String(kod));
     });
   }
   
-  if (globalFilters.ozelkod2.length > 0) {
+  const ozelkod2Fields = ['ozelkod2kod', 'ozelkod2', 'ozel_kod_2'];
+  if (globalFilters.ozelkod2.length > 0 && dataHasField(data, ozelkod2Fields)) {
     filtered = filtered.filter(row => {
       const kod = row.ozelkod2kod || row.ozelkod2 || row.ozel_kod_2;
       return kod && globalFilters.ozelkod2.includes(String(kod));
     });
   }
   
-  if (globalFilters.ozelkod3.length > 0) {
+  const ozelkod3Fields = ['ozelkod3kod', 'ozelkod3', 'ozel_kod_3'];
+  if (globalFilters.ozelkod3.length > 0 && dataHasField(data, ozelkod3Fields)) {
     filtered = filtered.filter(row => {
       const kod = row.ozelkod3kod || row.ozelkod3 || row.ozel_kod_3;
       return kod && globalFilters.ozelkod3.includes(String(kod));
     });
   }
   
-  // Şehir
-  if (globalFilters.sehir.length > 0) {
+  // Şehir - SADECE ilgili alan varsa uygulanmalı
+  const sehirFields = ['sehir', 'city'];
+  if (globalFilters.sehir.length > 0 && dataHasField(data, sehirFields)) {
     filtered = filtered.filter(row => {
       const sehir = row.sehir || row.city;
       return sehir && globalFilters.sehir.includes(String(sehir));
     });
   }
   
-  // Durum (aktif/pasif)
-  if (globalFilters.durum !== 'hepsi') {
+  // Durum (aktif/pasif) - SADECE ilgili alan varsa uygulanmalı
+  const durumFields = ['durum', 'status'];
+  if (globalFilters.durum !== 'hepsi' && dataHasField(data, durumFields)) {
     filtered = filtered.filter(row => {
       const durum = row.durum || row.status;
       if (globalFilters.durum === 'aktif') {
@@ -504,9 +521,9 @@ function applyGlobalFilters(data: any[], globalFilters: GlobalFilters): any[] {
     });
   }
   
-  // Görünüm modu (potansiyel/cari)
-  // DIA'da potansiyel alanı: "E" (Evet - potansiyel), "H" (Hayır - gerçek cari)
-  if (globalFilters.gorunumModu !== 'hepsi') {
+  // Görünüm modu (potansiyel/cari) - SADECE ilgili alan varsa uygulanmalı
+  const potansiyelFields = ['potansiyel'];
+  if (globalFilters.gorunumModu !== 'hepsi' && dataHasField(data, potansiyelFields)) {
     filtered = filtered.filter(row => {
       const potansiyel = row.potansiyel;
       const potansiyelStr = String(potansiyel || '').toUpperCase();
@@ -533,19 +550,23 @@ function applyGlobalFilters(data: any[], globalFilters: GlobalFilters): any[] {
   }
   
   // DIA zorunlu filtreler (kullanıcıya ait kilitli filtreler)
+  // Bu filtreler de SADECE ilgili alan varsa uygulanmalı
   if (globalFilters._diaAutoFilters && globalFilters._diaAutoFilters.length > 0) {
     for (const autoFilter of globalFilters._diaAutoFilters) {
-      filtered = filtered.filter(row => {
-        const val = row[autoFilter.field];
-        if (autoFilter.operator === '=' || autoFilter.operator === '') {
-          return String(val).toLowerCase() === String(autoFilter.value).toLowerCase();
-        }
-        if (autoFilter.operator === 'IN') {
-          const values = autoFilter.value.split(',').map(v => v.trim().toLowerCase());
-          return values.includes(String(val).toLowerCase());
-        }
-        return true;
-      });
+      // İlgili alan verinin içinde var mı kontrol et
+      if (dataHasField(data, [autoFilter.field])) {
+        filtered = filtered.filter(row => {
+          const val = row[autoFilter.field];
+          if (autoFilter.operator === '=' || autoFilter.operator === '') {
+            return String(val).toLowerCase() === String(autoFilter.value).toLowerCase();
+          }
+          if (autoFilter.operator === 'IN') {
+            const values = autoFilter.value.split(',').map(v => v.trim().toLowerCase());
+            return values.includes(String(val).toLowerCase());
+          }
+          return true;
+        });
+      }
     }
   }
   
