@@ -10,6 +10,7 @@ import { DrillDownModal } from './DrillDownModal';
 import { WidgetDateFilter, getDateRangeForPeriod } from './WidgetDateFilter';
 import { StatCard } from './StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertCircle, Hash, Code, BarChart3 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
@@ -25,6 +26,16 @@ const RechartsScope = {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   PieChart: RechartsPieChart, Pie, Cell, ReferenceLine,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+};
+
+// Custom widget'lar için UI scope (portal/modal gibi bileşenler)
+const UIScope = {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
 };
 
 // Error Boundary bileşeni
@@ -309,11 +320,12 @@ export function BuilderWidgetRenderer({
         'Recharts',
         'colors',
         'filters',  // Global filtreler - widget'lar aktif filtreleri görebilir
+        'UI',       // UI bileşenleri (Dialog vb.)
         customCode
       );
       
       // Custom widget'a colors ve filters prop'ları geç
-      const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters);
+      const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters, UIScope);
       
       if (typeof WidgetComponent !== 'function') {
         return (
