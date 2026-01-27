@@ -197,12 +197,12 @@ Kullanıcı isterse birleşik widget yap:
    - Altta zaman serisi grafiği
 
 Yapı örneği:
-React.createElement('div', { className: 'p-4 space-y-4 bg-card rounded-xl border border-border' },
+React.createElement('div', { className: 'p-2 md:p-3 space-y-2 bg-card rounded border border-border' },
   // KPI Header
   React.createElement('div', { className: 'flex items-center justify-between' },
     React.createElement('div', null,
-      React.createElement('div', { className: 'text-2xl font-bold text-foreground' }, formatCurrency(toplam)),
-      React.createElement('div', { className: 'text-sm text-muted-foreground' }, kayitSayisi + ' kayıt')
+      React.createElement('div', { className: 'text-lg md:text-xl font-semibold text-foreground' }, formatCurrency(toplam)),
+      React.createElement('div', { className: 'text-xs md:text-sm text-muted-foreground' }, kayitSayisi + ' kayıt')
     ),
     React.createElement('div', { className: değişim >= 0 ? 'text-success' : 'text-destructive' }, 
       (değişim >= 0 ? '↑' : '↓') + ' %' + Math.abs(değişim).toFixed(1)
@@ -213,17 +213,31 @@ React.createElement('div', { className: 'p-4 space-y-4 bg-card rounded-xl border
 
 ═══════════════════════════════════════════════════════════════════════════════
 
-🎯 TAILWIND STİL STANDARTLARI
+🎯 TAILWIND STİL STANDARTLARI (ZORUNLU!)
 ───────────────────────────────────────────────────────────────────────────────
-Ana kart:       'p-4 space-y-4 bg-card rounded-xl border border-border shadow-sm'
-Başlık:         'text-xl font-bold text-foreground'
+⚠️ KÖŞELİ ÇERÇEVE VE MİNİMAL PADDİNG KURALLARI:
+   - rounded-xl YASAK! Sadece rounded veya rounded-md kullan (kurumsal köşeli görünüm)
+   - p-4 yerine p-2 veya p-3 tercih et (kompakt tasarım)
+   - space-y-4 yerine space-y-2 veya gap-2 kullan
+   - Mobilde daha da kompakt: md:p-3 p-2
+
+📐 STANDART STİL TANIMLARI:
+Ana kart:       'p-2 md:p-3 space-y-2 bg-card rounded border border-border'
+Başlık:         'text-base md:text-lg font-semibold text-foreground'
 Alt başlık:     'text-sm font-medium text-foreground'
-Açıklama:       'text-sm text-muted-foreground'
-Liste satırı:   'flex items-center justify-between p-3 rounded-lg hover:bg-muted/50'
-Badge:          'px-2 py-0.5 rounded-full text-xs font-medium'
+Açıklama:       'text-xs md:text-sm text-muted-foreground'
+Liste satırı:   'flex items-center justify-between p-2 rounded hover:bg-muted/50'
+Badge:          'px-1.5 py-0.5 rounded text-xs font-medium'
 Pozitif badge:  'bg-success/20 text-success'
 Negatif badge:  'bg-destructive/20 text-destructive'
-İkon container: 'w-10 h-10 rounded-lg flex items-center justify-center bg-primary/10'
+İkon container: 'w-8 h-8 rounded flex items-center justify-center bg-primary/10'
+Grafik wrapper: 'p-1 md:p-2'
+
+❌ YASAK STİLLER:
+   - rounded-xl, rounded-2xl, rounded-3xl (çok yuvarlak)
+   - p-4, p-5, p-6 (çok geniş padding)
+   - space-y-4, space-y-6, gap-4, gap-6 (çok geniş boşluk)
+   - shadow-lg, shadow-xl (çok ağır gölge)
 
 📌 TOOLTIP Z-INDEX KURALI (ZORUNLU!)
 ───────────────────────────────────────────────────────────────────────────────
@@ -331,11 +345,11 @@ function Widget({ data, colors, filters }) {
     : null;
 
   return React.createElement('div', 
-    { className: 'p-4 space-y-4 bg-card rounded-xl border border-border' },
-    React.createElement('div', { className: 'text-2xl font-bold text-foreground' }, 
+    { className: 'p-2 md:p-3 space-y-2 bg-card rounded border border-border' },
+    React.createElement('div', { className: 'text-lg md:text-xl font-semibold text-foreground' }, 
       formatCurrency(toplam)
     ),
-    React.createElement('div', { className: 'text-sm text-muted-foreground' }, 
+    React.createElement('div', { className: 'text-xs md:text-sm text-muted-foreground' }, 
       data.length + ' kayıt'
     ),
     activeFilterInfo 
