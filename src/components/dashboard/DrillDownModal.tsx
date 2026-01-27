@@ -1,12 +1,11 @@
-// DrillDown Modal - Grafik elemanına tıklandığında detay listesi gösterir
+// DrillDown Modal - KPI kartlarına tıklandığında detay listesi gösterir
+// Standart: w-[50vw] genişlik, max-h-[80vh] yükseklik, kompakt tasarım
 
 import { useState, useMemo } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Search, X, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -133,131 +132,132 @@ export function DrillDownModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
-            <span>{title}</span>
-            <Badge variant="secondary" className="ml-2">
+      <DialogContent className="w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col p-0 gap-0 rounded border border-border">
+        {/* Header */}
+        <div className="flex items-center justify-between p-3 border-b border-border flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <DialogTitle className="text-sm font-semibold">{title}</DialogTitle>
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">
               {filteredData.length} kayıt
             </Badge>
-          </DialogTitle>
+          </div>
           {subtitle && (
-            <DialogDescription>{subtitle}</DialogDescription>
+            <DialogDescription className="text-[10px] text-muted-foreground sr-only">{subtitle}</DialogDescription>
           )}
-        </DialogHeader>
-
-        {/* Özet Bilgi */}
-        {totalValue !== null && (
-          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-            <span className="text-sm text-muted-foreground">Toplam Değer:</span>
-            <span className="text-lg font-semibold">{formatValue(totalValue)}</span>
-          </div>
-        )}
-
-        {/* Arama ve Export */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Ara..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="pl-9"
-            />
-            {searchQuery && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                onClick={() => setSearchQuery('')}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-          <Button variant="outline" size="sm" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-1" />
-            CSV
-          </Button>
         </div>
 
-        {/* Veri Listesi */}
-        <ScrollArea className="flex-1 -mx-6 px-6">
-          <div className="space-y-2">
+        {/* Content Area with Scroll */}
+        <div className="flex-1 overflow-y-auto p-3">
+          {/* Özet Bilgi */}
+          {totalValue !== null && (
+            <div className="flex items-center justify-between p-2 bg-muted/50 rounded mb-2">
+              <span className="text-xs text-muted-foreground">Toplam Değer:</span>
+              <span className="text-sm font-semibold">{formatValue(totalValue)}</span>
+            </div>
+          )}
+
+          {/* Arama ve Export */}
+          <div className="flex items-center gap-2 mb-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Ara..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="pl-8 h-8 text-xs"
+              />
+              {searchQuery && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+                  onClick={() => setSearchQuery('')}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+            <Button variant="outline" size="sm" onClick={handleExport} className="h-8 text-xs px-2">
+              <Download className="h-3.5 w-3.5 mr-1" />
+              CSV
+            </Button>
+          </div>
+
+          {/* Veri Listesi */}
+          <div className="space-y-1.5">
             {paginatedData.map((item, idx) => (
-              <Card key={idx} className="hover:bg-muted/50 transition-colors">
-                <CardContent className="py-3 px-4">
-                  <div className="flex items-start justify-between gap-4">
-                    {/* Ana Bilgi */}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">
-                        {item[primaryField] || `Kayıt ${idx + 1}`}
-                      </p>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
-                        {fieldsToDisplay
-                          .filter(f => f !== primaryField && f !== valueField)
-                          .slice(0, 4)
-                          .map(field => (
-                            <span key={field} className="text-xs text-muted-foreground">
-                              <span className="font-medium">{formatFieldName(field)}:</span>{' '}
-                              {String(item[field] || '-')}
-                            </span>
-                          ))}
-                      </div>
-                    </div>
-                    {/* Değer */}
-                    {valueField && item[valueField] !== undefined && (
-                      <div className="text-right shrink-0">
-                        <p className={cn(
-                          'font-semibold',
-                          typeof item[valueField] === 'number' && item[valueField] < 0 
-                            ? 'text-destructive' 
-                            : 'text-foreground'
-                        )}>
-                          {formatValue(item[valueField])}
-                        </p>
-                      </div>
-                    )}
+              <div 
+                key={idx} 
+                className="flex items-start justify-between p-2 rounded border border-border hover:bg-muted/50 transition-colors"
+              >
+                {/* Ana Bilgi */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium truncate">
+                    {item[primaryField] || `Kayıt ${idx + 1}`}
+                  </p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                    {fieldsToDisplay
+                      .filter(f => f !== primaryField && f !== valueField)
+                      .slice(0, 4)
+                      .map(field => (
+                        <span key={field} className="text-[10px] text-muted-foreground">
+                          <span className="font-medium">{formatFieldName(field)}:</span>{' '}
+                          {String(item[field] || '-')}
+                        </span>
+                      ))}
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+                {/* Değer */}
+                {valueField && item[valueField] !== undefined && (
+                  <div className="text-right shrink-0 ml-2">
+                    <p className={cn(
+                      'text-xs font-semibold',
+                      typeof item[valueField] === 'number' && item[valueField] < 0 
+                        ? 'text-destructive' 
+                        : 'text-foreground'
+                    )}>
+                      {formatValue(item[valueField])}
+                    </p>
+                  </div>
+                )}
+              </div>
             ))}
 
             {paginatedData.length === 0 && (
-              <div className="py-8 text-center text-muted-foreground">
+              <div className="py-6 text-center text-muted-foreground text-xs">
                 Kayıt bulunamadı
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
-        {/* Sayfalama */}
+        {/* Footer - Sayfalama */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between pt-2 border-t">
-            <span className="text-sm text-muted-foreground">
+          <div className="flex items-center justify-between p-2 border-t border-border flex-shrink-0">
+            <span className="text-[10px] text-muted-foreground">
               Sayfa {currentPage} / {totalPages}
             </span>
             <div className="flex items-center gap-1">
               <Button
                 variant="outline"
                 size="icon"
-                className="h-8 w-8"
+                className="h-6 w-6"
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(p => p - 1)}
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-3 w-3" />
               </Button>
               <Button
                 variant="outline"
                 size="icon"
-                className="h-8 w-8"
+                className="h-6 w-6"
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage(p => p + 1)}
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-3 w-3" />
               </Button>
             </div>
           </div>
