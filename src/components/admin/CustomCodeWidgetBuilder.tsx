@@ -47,6 +47,16 @@ const RechartsScope = {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 };
 
+// Custom widget kodlarının kullanabilmesi için UI scope (Dialog vb.)
+const UIScope = {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+};
+
 // Error Boundary bileşeni
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -807,6 +817,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
         'Recharts',
         'colors',
         'filters',
+        'UI',
         customCode
       );
       
@@ -821,7 +832,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
         'hsl(280, 70%, 55%)',
       ];
       
-      const WidgetComponent = fn(React, sampleData, LucideIcons, RechartsScope, previewColors, {});
+      const WidgetComponent = fn(React, sampleData, LucideIcons, RechartsScope, previewColors, {}, UIScope);
       
       if (typeof WidgetComponent !== 'function') {
         return { 
