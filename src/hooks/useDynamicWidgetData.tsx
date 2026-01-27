@@ -570,6 +570,7 @@ export function useDynamicWidgetData(
     getDataSourceDataWithStale,
     setDataSourceData,
     isDataSourceLoading,
+    isPageDataReady, // Veri kaynakları hazır mı?
     sharedData, 
     incrementCacheHit, 
     incrementCacheMiss 
@@ -809,11 +810,15 @@ export function useDynamicWidgetData(
     } finally {
       setIsLoading(false);
     }
-  }, [config, globalFilters, getCachedData, setCachedData, sharedData, incrementCacheHit, incrementCacheMiss]);
+  }, [config, globalFilters, getCachedData, setCachedData, getDataSourceDataWithStale, isDataSourceLoading, sharedData, incrementCacheHit, incrementCacheMiss]);
 
+  // isPageDataReady değiştiğinde widget'lar yeniden veri çeksin
+  // Bu, DataSourceLoader tüm veri kaynaklarını yüklediğinde widget'ların güncel veriyi görmesini sağlar
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (isPageDataReady) {
+      fetchData();
+    }
+  }, [isPageDataReady, fetchData]);
 
   return { data, rawData, isLoading, error, refetch: fetchData };
 }
