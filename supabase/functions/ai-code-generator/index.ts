@@ -798,6 +798,44 @@ React.createElement('div', { className: 'flex-1 h-full min-h-0 relative' },
 
 ═══════════════════════════════════════════════════════════════════════════════
 
+📊 FİNANSAL LİSTE WIDGET ŞABLONU (BANKA/KASA TİPİ - ZORUNLU!)
+───────────────────────────────────────────────────────────────────────────────
+⚠️ Bu şablon Banka Hesapları, Kasa Bakiyeleri gibi finansal liste widget'ları
+için ZORUNLUDUR. Farklı tasarım YASAK!
+
+📐 YAPI (İKİ BÖLÜM):
+1. ÜST BÖLÜM - DÖVİZ BAZLI KPI KARTLARI:
+   - grid grid-cols-1 md:grid-cols-3 gap-2
+   - Her kart: p-2 bg-card rounded-none border border-border
+   - Başlık: text-xs font-medium text-muted-foreground
+   - Değer: text-xl font-bold (TRY: text-primary, USD: text-success, EUR: text-warning)
+
+2. ALT BÖLÜM - TABLO LİSTESİ:
+   - Container: flex flex-col flex-1 min-h-0 bg-card rounded-none border border-border
+   - Header bar: flex items-center justify-between p-2 border-b border-border bg-muted/20
+   - Badge: px-1.5 py-0.5 text-xs bg-secondary rounded-none
+   - Table: w-full text-sm text-left
+   - Thead: sticky top-0 bg-muted/50 text-xs uppercase text-muted-foreground
+   - Tbody: divide-y divide-border
+   - Row: hover:bg-muted/50 transition-colors
+
+3. AVATAR (Köşeli):
+   - w-6 h-6 rounded-none flex items-center justify-center bg-secondary
+   - İçerik: İlk 2 harf (uppercase) text-[10px] font-bold text-foreground
+
+✅ ZORUNLU STİLLER:
+   - rounded-none (TÜM ELEMENTLERDE - köşeli görünüm)
+   - border border-border (iç container'larda)
+   - sticky top-0 (thead için)
+   - divide-y divide-border (tbody için)
+
+❌ YASAK STİLLER:
+   - rounded, rounded-md, rounded-lg (köşeli olmalı, yuvarlatma YASAK)
+   - Kart bazlı liste (tablo formatı zorunlu)
+   - glass-card (bg-card kullan)
+
+═══════════════════════════════════════════════════════════════════════════════
+
 📊 RESPONSIVE LEGEND KURALI (ZORUNLU!)
 ───────────────────────────────────────────────────────────────────────────────
 Pie/Donut/Bar/Line/Area grafiklerinde legend kullanıyorsan:
