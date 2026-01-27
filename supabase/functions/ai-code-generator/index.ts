@@ -222,11 +222,11 @@ React.createElement('div', { className: 'p-2 md:p-3 space-y-2 bg-card rounded bo
    - Mobilde daha da kompakt: md:p-3 p-2
 
 📐 STANDART STİL TANIMLARI:
-Ana kart:       'p-2 md:p-3 space-y-2 bg-card rounded border border-border'
+Ana kart:       'p-2 md:p-3 space-y-2 bg-card rounded'  (DIŞ ÇERÇEVE YASAK!)
 Başlık:         'text-base md:text-lg font-semibold text-foreground'
 Alt başlık:     'text-sm font-medium text-foreground'
 Açıklama:       'text-xs md:text-sm text-muted-foreground'
-Liste satırı:   'flex items-center justify-between p-2 rounded hover:bg-muted/50'
+Liste satırı:   'flex items-center justify-between p-2 rounded border border-border hover:bg-muted/50'
 Badge:          'px-1.5 py-0.5 rounded text-xs font-medium'
 Pozitif badge:  'bg-success/20 text-success'
 Negatif badge:  'bg-destructive/20 text-destructive'
@@ -234,6 +234,7 @@ Negatif badge:  'bg-destructive/20 text-destructive'
 Grafik wrapper: 'p-1 md:p-2'
 
 ❌ YASAK STİLLER:
+   - border, border-border (DIŞ ÇERÇEVE - KESİNLİKLE YASAK! İç öğelerde border kullanılabilir)
    - rounded-xl, rounded-2xl, rounded-3xl (çok yuvarlak)
    - p-4, p-5, p-6 (çok geniş padding)
    - space-y-4, space-y-6, gap-4, gap-6 (çok geniş boşluk)
@@ -256,7 +257,7 @@ Grafik wrapper: 'p-1 md:p-2'
 ✅ ZORUNLU KPI ŞABLONU (BU YAPIYI AYNEN KULLAN!):
 ───────────────────────────────────────────────────────────────────────────────
 React.createElement('div', {
-  className: 'h-full p-3 bg-card rounded border border-border cursor-pointer hover:bg-muted/50 transition-colors flex flex-col items-center justify-center text-center gap-2',
+  className: 'h-full p-3 bg-card rounded cursor-pointer hover:bg-muted/50 transition-colors flex flex-col items-center justify-center text-center gap-2',
   onClick: function() { setIsOpen(true); }
 },
   // İkon Container (Üstte, Ortada)
@@ -292,6 +293,7 @@ React.createElement('div', {
    | Stok              | Package, Box             | bg-primary/10       | text-primary     |
 
 ❌ YASAK KPI TASARIMLARI:
+   - border, border-border (DIŞ ÇERÇEVE KESİNLİKLE YASAK!)
    - Flex-row layout (yatay düzen)
    - İkon sağda veya solda (sadece üstte ortada olabilir)
    - Değer solda veya sağda hizalı (sadece ortada olabilir)
@@ -331,9 +333,9 @@ function Widget({ data, colors, filters }) {
   });
   
   return React.createElement('div', { className: 'h-full' },
-    // Tıklanabilir KPI Kartı
+    // Tıklanabilir KPI Kartı (DIŞ ÇERÇEVE YOK!)
     React.createElement('div', {
-      className: 'h-full p-2 md:p-3 bg-card rounded border border-border cursor-pointer hover:bg-muted/50 transition-colors flex flex-col justify-between',
+      className: 'h-full p-2 md:p-3 bg-card rounded cursor-pointer hover:bg-muted/50 transition-colors flex flex-col justify-between',
       onClick: function() { setIsOpen(true); }
     },
       React.createElement('div', { className: 'flex items-start justify-between' },
