@@ -373,11 +373,14 @@ export function SettingsPage() {
                 </h3>
 
                 <div className="space-y-6">
-                  {/* Chart Color Palette */}
+                  {/* Chart Color Palette - Varsayılan (yeni widgetlar için) */}
                   <div>
-                    <label className="block text-sm font-medium text-muted-foreground mb-3">
-                      Grafik Renk Paleti
+                    <label className="block text-sm font-medium text-muted-foreground mb-1">
+                      Varsayılan Grafik Renk Paleti
                     </label>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Yeni eklenen widgetlar için varsayılan palet. Her widget kendi paletini ayrıca seçebilir.
+                    </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       {palettes.map((palette) => (
                         <button
