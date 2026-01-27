@@ -3,7 +3,7 @@ import { Header } from '@/components/layout/Header';
 import { VadeDetayListesi } from '@/components/dashboard/VadeDetayListesi';
 import { ContainerBasedDashboard } from '@/components/dashboard/ContainerBasedDashboard';
 import { DashboardLoadingScreen } from '@/components/dashboard/DashboardLoadingScreen';
-import { GlobalFilterProvider, useGlobalFilters } from '@/contexts/GlobalFilterContext';
+import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
 import { GlobalFilterBar } from '@/components/filters/GlobalFilterBar';
 import { useDiaDataCache } from '@/contexts/DiaDataCacheContext';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
@@ -330,10 +330,8 @@ function DashboardContent() {
   );
 }
 
+// DashboardPage artık App.tsx'teki tek GlobalFilterProvider'ı kullanıyor
+// İç içe provider filtre kaybına neden oluyordu
 export function DashboardPage() {
-  return (
-    <GlobalFilterProvider pageId="main-dashboard">
-      <DashboardContent />
-    </GlobalFilterProvider>
-  );
+  return <DashboardContent />;
 }
