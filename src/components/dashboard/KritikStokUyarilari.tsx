@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
-import { AlertTriangle, Package, ShoppingCart, ChevronRight, ExternalLink } from 'lucide-react';
+import { AlertTriangle, Package, ShoppingCart, ChevronRight, X } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface StokUyari {
   stokKodu: string;
@@ -29,6 +35,7 @@ interface Props {
 
 export function KritikStokUyarilari({ isLoading }: Props) {
   const [showAll, setShowAll] = useState(false);
+  const [isPopupOpen, setIsPopupOpen] = useState(false);
   const stokUyarilari = mockStokUyarilari;
 
   const kritikSayisi = stokUyarilari.filter(s => s.durum === 'kritik').length;
@@ -77,84 +84,164 @@ export function KritikStokUyarilari({ isLoading }: Props) {
   const displayList = showAll ? stokUyarilari : stokUyarilari.slice(0, 5);
 
   return (
-    <div className="bg-card rounded border border-border p-2 md:p-3">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded flex items-center justify-center bg-destructive/20">
-            <AlertTriangle className="w-4 h-4 text-destructive" />
+    <>
+      <div className="bg-card rounded border border-border p-2 md:p-3">
+        {/* Header - Tıklanabilir */}
+        <div 
+          className="flex items-center justify-between mb-2 cursor-pointer hover:bg-muted/50 -mx-2 -mt-2 px-2 pt-2 pb-1 rounded transition-colors"
+          onClick={() => setIsPopupOpen(true)}
+        >
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded flex items-center justify-center bg-destructive/20">
+              <AlertTriangle className="w-4 h-4 text-destructive" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">Kritik Stok Uyarıları</h3>
+              <p className="text-[10px] text-muted-foreground">Tıkla: Tüm stokları görüntüle</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-sm font-semibold">Kritik Stok Uyarıları</h3>
-            <p className="text-[10px] text-muted-foreground">Stok durumu düşük ürünler</p>
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <span className="font-medium">{stokUyarilari.length} ürün</span>
+            <ChevronRight className="w-3 h-3" />
           </div>
         </div>
-        <button className="text-[10px] text-primary hover:underline flex items-center gap-1">
-          Stok Yönetimi <ExternalLink className="w-3 h-3" />
-        </button>
-      </div>
 
-      {/* Summary Pills */}
-      <div className="flex flex-wrap gap-1.5 mb-2">
-        <div className="flex items-center gap-1 px-2 py-1 rounded bg-destructive/20 border border-destructive/30">
-          <span className="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse" />
-          <span className="text-[10px] font-medium text-destructive">{kritikSayisi} Kritik</span>
-        </div>
-        <div className="flex items-center gap-1 px-2 py-1 rounded bg-warning/20 border border-warning/30">
-          <span className="w-1.5 h-1.5 rounded-full bg-warning" />
-          <span className="text-[10px] font-medium text-warning">{dusukSayisi} Düşük</span>
-        </div>
-        <div className="flex items-center gap-1 px-2 py-1 rounded bg-yellow-500/20 border border-yellow-500/30">
-          <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
-          <span className="text-[10px] font-medium text-yellow-600 dark:text-yellow-400">{yakinSayisi} Yakında</span>
-        </div>
-        {siparisSayisi > 0 && (
-          <div className="flex items-center gap-1 px-2 py-1 rounded bg-primary/20 border border-primary/30">
-            <ShoppingCart className="w-3 h-3 text-primary" />
-            <span className="text-[10px] font-medium text-primary">{siparisSayisi} Siparişte</span>
+        {/* Summary Pills */}
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          <div className="flex items-center gap-1 px-2 py-1 rounded bg-destructive/20 border border-destructive/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse" />
+            <span className="text-[10px] font-medium text-destructive">{kritikSayisi} Kritik</span>
           </div>
+          <div className="flex items-center gap-1 px-2 py-1 rounded bg-warning/20 border border-warning/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-warning" />
+            <span className="text-[10px] font-medium text-warning">{dusukSayisi} Düşük</span>
+          </div>
+          <div className="flex items-center gap-1 px-2 py-1 rounded bg-yellow-500/20 border border-yellow-500/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+            <span className="text-[10px] font-medium text-yellow-600 dark:text-yellow-400">{yakinSayisi} Yakında</span>
+          </div>
+          {siparisSayisi > 0 && (
+            <div className="flex items-center gap-1 px-2 py-1 rounded bg-primary/20 border border-primary/30">
+              <ShoppingCart className="w-3 h-3 text-primary" />
+              <span className="text-[10px] font-medium text-primary">{siparisSayisi} Siparişte</span>
+            </div>
+          )}
+        </div>
+
+        {/* Stock List */}
+        <ScrollArea className={showAll ? 'h-48' : 'max-h-48'}>
+          <div className="space-y-1.5">
+            {displayList.map((stok) => (
+              <div 
+                key={stok.stokKodu}
+                className={`flex items-center justify-between p-2 rounded border ${getDurumStyle(stok.durum)} transition-all hover:scale-[1.005]`}
+              >
+                <div className="flex items-center gap-2">
+                  <Package className="w-3.5 h-3.5 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium line-clamp-1">{stok.stokAdi}</p>
+                    <p className="text-[10px] opacity-80">{stok.stokKodu}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="text-right">
+                    <p className="text-xs font-bold">{stok.mevcutStok} / {stok.minStok}</p>
+                    <p className="text-[10px] opacity-80">{stok.birim}</p>
+                  </div>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-background/50">
+                    {getDurumText(stok.durum)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+
+        {/* Show More */}
+        {stokUyarilari.length > 5 && (
+          <button 
+            onClick={() => setShowAll(!showAll)}
+            className="w-full mt-2 py-1.5 text-[10px] text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 transition-colors"
+          >
+            {showAll ? 'Daha az göster' : `Tümünü göster (${stokUyarilari.length})`}
+            <ChevronRight className={`w-3 h-3 transition-transform ${showAll ? 'rotate-90' : ''}`} />
+          </button>
         )}
       </div>
 
-      {/* Stock List */}
-      <ScrollArea className={showAll ? 'h-48' : 'max-h-48'}>
-        <div className="space-y-1.5">
-          {displayList.map((stok) => (
-            <div 
-              key={stok.stokKodu}
-              className={`flex items-center justify-between p-2 rounded border ${getDurumStyle(stok.durum)} transition-all hover:scale-[1.005]`}
-            >
-              <div className="flex items-center gap-2">
-                <Package className="w-3.5 h-3.5 flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-xs font-medium line-clamp-1">{stok.stokAdi}</p>
-                  <p className="text-[10px] opacity-80">{stok.stokKodu}</p>
-                </div>
+      {/* Popup Modal - KPI Standartlarına Uygun */}
+      <Dialog open={isPopupOpen} onOpenChange={setIsPopupOpen}>
+        <DialogContent 
+          className="w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col p-0 gap-0 rounded border border-border"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between p-3 border-b border-border bg-muted/30">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded flex items-center justify-center bg-destructive/20">
+                <AlertTriangle className="w-4 h-4 text-destructive" />
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <div className="text-right">
-                  <p className="text-xs font-bold">{stok.mevcutStok} / {stok.minStok}</p>
-                  <p className="text-[10px] opacity-80">{stok.birim}</p>
-                </div>
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-background/50">
-                  {getDurumText(stok.durum)}
+              <div>
+                <DialogTitle className="text-sm font-semibold">Kritik Stok Uyarıları</DialogTitle>
+                <p className="text-[10px] text-muted-foreground">{stokUyarilari.length} ürün listeleniyor</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Summary Pills in Header */}
+              <div className="hidden md:flex items-center gap-1.5">
+                <span className="text-[10px] px-2 py-0.5 rounded bg-destructive/20 text-destructive font-medium">
+                  {kritikSayisi} Kritik
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-warning/20 text-warning font-medium">
+                  {dusukSayisi} Düşük
                 </span>
               </div>
             </div>
-          ))}
-        </div>
-      </ScrollArea>
+          </div>
 
-      {/* Show More */}
-      {stokUyarilari.length > 5 && (
-        <button 
-          onClick={() => setShowAll(!showAll)}
-          className="w-full mt-2 py-1.5 text-[10px] text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 transition-colors"
-        >
-          {showAll ? 'Daha az göster' : `Tümünü göster (${stokUyarilari.length})`}
-          <ChevronRight className={`w-3 h-3 transition-transform ${showAll ? 'rotate-90' : ''}`} />
-        </button>
-      )}
-    </div>
+          {/* Content - Scrollable */}
+          <div className="flex-1 overflow-y-auto p-3">
+            <div className="space-y-1.5">
+              {stokUyarilari.map((stok) => (
+                <div 
+                  key={stok.stokKodu}
+                  className={`flex items-center justify-between p-2 rounded border ${getDurumStyle(stok.durum)} transition-all hover:scale-[1.005]`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Package className="w-3.5 h-3.5 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium">{stok.stokAdi}</p>
+                      <p className="text-[10px] opacity-80">{stok.stokKodu}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <div className="text-right">
+                      <p className="text-xs font-bold">{stok.mevcutStok} / {stok.minStok}</p>
+                      <p className="text-[10px] opacity-80">{stok.birim}</p>
+                    </div>
+                    <span className={`text-[9px] font-bold px-2 py-1 rounded ${getDurumStyle(stok.durum)}`}>
+                      {getDurumText(stok.durum)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between p-2 border-t border-border bg-muted/30">
+            <p className="text-[10px] text-muted-foreground">
+              Toplam: {kritikSayisi} kritik, {dusukSayisi} düşük, {yakinSayisi} yakında, {siparisSayisi} siparişte
+            </p>
+            <button 
+              onClick={() => setIsPopupOpen(false)}
+              className="text-[10px] px-3 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              Kapat
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
