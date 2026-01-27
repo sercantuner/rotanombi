@@ -2,7 +2,7 @@
 // Her widget'ı saran konteyner, ayarlar ve kaldırma butonları içerir
 
 import React, { useState } from 'react';
-import { Settings, X, MoveRight, Filter, RotateCcw, Palette, Check, Globe } from 'lucide-react';
+import { Settings, X, MoveRight, Filter, RotateCcw, Palette, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -47,10 +47,7 @@ export function WidgetWrapper({
   const paletteWidgetId = widgetDbId || widgetId;
   const { 
     currentPaletteName, 
-    globalPaletteName,
-    hasWidgetPalette,
     setWidgetPalette,
-    setGlobalPalette,
   } = useChartColorPalette({ widgetId: paletteWidgetId });
   
   const widget = getWidgetById(widgetId);
@@ -77,14 +74,6 @@ export function WidgetWrapper({
   
   const handleSetWidgetPalette = async (paletteName: ColorPaletteName) => {
     await setWidgetPalette(paletteName);
-  };
-  
-  const handleUseGlobalPalette = async () => {
-    await setWidgetPalette(null); // Widget paletini kaldır, global'e dön
-  };
-  
-  const handleSetGlobalPalette = async (paletteName: ColorPaletteName) => {
-    await setGlobalPalette(paletteName);
   };
 
   return (
@@ -136,29 +125,10 @@ export function WidgetWrapper({
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger className="gap-2">
                   <Palette className="w-4 h-4" />
-                  Widget Paleti
-                  {hasWidgetPalette && (
-                    <span className="ml-auto text-[10px] px-1 py-0.5 rounded bg-primary/20 text-primary">
-                      Özel
-                    </span>
-                  )}
+                  Renk Paleti
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="w-48">
-                  {/* Global paleti kullan seçeneği */}
-                  <DropdownMenuItem
-                    onClick={handleUseGlobalPalette}
-                    className="gap-2"
-                  >
-                    <Globe className="w-3.5 h-3.5" />
-                    <span className="text-xs">Global Paleti Kullan</span>
-                    {!hasWidgetPalette && (
-                      <Check className="w-3 h-3 text-primary ml-auto" />
-                    )}
-                  </DropdownMenuItem>
-                  
-                  <DropdownMenuSeparator />
-                  
-                  {/* Widget için özel palet seçenekleri */}
+                  {/* Widget için palet seçenekleri - her widget kendi paletini seçer */}
                   {COLOR_PALETTES.map(palette => (
                     <DropdownMenuItem
                       key={palette.name}
@@ -177,40 +147,7 @@ export function WidgetWrapper({
                         </div>
                         <span className="text-xs">{palette.label}</span>
                       </div>
-                      {hasWidgetPalette && currentPaletteName === palette.name && (
-                        <Check className="w-3 h-3 text-primary" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-              
-              {/* Global Palette Submenu */}
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger className="gap-2">
-                  <Globe className="w-4 h-4" />
-                  Global Palet
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="w-44">
-                  {COLOR_PALETTES.map(palette => (
-                    <DropdownMenuItem
-                      key={palette.name}
-                      onClick={() => handleSetGlobalPalette(palette.name)}
-                      className="gap-2"
-                    >
-                      <div className="flex items-center gap-1.5 flex-1">
-                        <div className="flex gap-0.5">
-                          {palette.colors.slice(0, 4).map((color, i) => (
-                            <div
-                              key={i}
-                              className="w-2.5 h-2.5 rounded-sm"
-                              style={{ backgroundColor: color }}
-                            />
-                          ))}
-                        </div>
-                        <span className="text-xs">{palette.label}</span>
-                      </div>
-                      {globalPaletteName === palette.name && (
+                      {currentPaletteName === palette.name && (
                         <Check className="w-3 h-3 text-primary" />
                       )}
                     </DropdownMenuItem>
