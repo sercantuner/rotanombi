@@ -218,23 +218,31 @@ export function useDiaFilterOptions(): DiaFilterOptionsResult {
       }
 
       // Fetch şehirler from cari kartlar (distinct)
-      const cariResult = await makeDiaApiCall(
-        session,
-        'scf',
-        'carikart_listele',
-        ['sehir'],
-        undefined,
-        0 // Tümünü çek
-      );
+      // NOT: limit: 0 yerine 500 kullanıyoruz - bazı DIA sunucuları limit:0'a 404 döndürebiliyor
+      try {
+        const cariResult = await makeDiaApiCall(
+          session,
+          'scf',
+          'carikart_listele',
+          ['sehir'],
+          undefined,
+          500 // Güvenli limit - 0 yerine
+        );
 
-      if (cariResult?.success && cariResult?.sampleData) {
-        const uniqueCities = [...new Set(
-          cariResult.sampleData
-            .map((c: any) => c.sehir || '')
-            .filter((s: string) => s && s.trim())
-        )] as string[];
-        result.sehirler = uniqueCities.sort();
-        console.log(`[DiaFilterOptions] Fetched ${result.sehirler?.length} unique cities`);
+        if (cariResult?.success && cariResult?.sampleData) {
+          const uniqueCities = [...new Set(
+            cariResult.sampleData
+              .map((c: any) => c.sehir || '')
+              .filter((s: string) => s && s.trim())
+          )] as string[];
+          result.sehirler = uniqueCities.sort();
+          console.log(`[DiaFilterOptions] Fetched ${result.sehirler?.length} unique cities`);
+        } else if (cariResult?.error) {
+          console.warn(`[DiaFilterOptions] Şehir listesi alınamadı: ${cariResult.error}`);
+        }
+      } catch (cityError) {
+        console.warn('[DiaFilterOptions] Şehir listesi çekilirken hata:', cityError);
+        // Hata durumunda boş dizi bırak, dashboard çökmesin
       }
 
       // Fetch markalar from stok kartlar
