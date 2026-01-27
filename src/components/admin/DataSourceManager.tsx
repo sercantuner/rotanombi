@@ -354,7 +354,7 @@ export function DataSourceManager() {
               </Button>
             </div>
           ) : (
-            <ScrollArea className="h-[400px]">
+            <div className="h-[400px] overflow-y-auto">
               <div className="space-y-2">
                 {dataSources.map(source => (
                   <div 
@@ -432,7 +432,7 @@ export function DataSourceManager() {
                   </div>
                 ))}
               </div>
-            </ScrollArea>
+            </div>
           )}
         </CardContent>
       </Card>
