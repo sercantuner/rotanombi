@@ -7,12 +7,21 @@ interface Props {
   bankaHesaplari: DiaBankaHesabi[];
   toplamBakiye: number;
   isLoading?: boolean;
+  colors?: string[];
 }
 
-export function BankaHesaplari({ bankaHesaplari, toplamBakiye, isLoading }: Props) {
+export function BankaHesaplari({ bankaHesaplari, toplamBakiye, isLoading, colors }: Props) {
   const formatCurrency = (value: number, doviz: string = 'TRY') => {
     const symbol = doviz === 'USD' ? '$' : doviz === 'EUR' ? '€' : '₺';
-    return `${value < 0 ? '-' : ''}${symbol}${Math.abs(value).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const formatted = Math.abs(value).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return `${symbol} ${value < 0 ? '-' : ''}${formatted}`;
+  };
+
+  const getColor = (index: number) => {
+    if (colors && colors[index % colors.length]) {
+      return colors[index % colors.length];
+    }
+    return ['hsl(var(--primary))', 'hsl(var(--success))', 'hsl(var(--warning))'][index];
   };
 
   // Döviz bazlı toplamları hesapla
@@ -25,16 +34,16 @@ export function BankaHesaplari({ bankaHesaplari, toplamBakiye, isLoading }: Prop
       if (currency in totals) {
         totals[currency as keyof typeof totals] += item.bakiye;
       } else {
-        totals.TRY += item.bakiye; // Fallback to TRY
+        totals.TRY += item.bakiye;
       }
     });
     return totals;
   }, [bankaHesaplari]);
 
   const kpiCards = [
-    { label: 'TL Toplam', value: kpiTotals.TRY, currency: 'TRY', color: 'text-primary' },
-    { label: 'USD Toplam', value: kpiTotals.USD, currency: 'USD', color: 'text-success' },
-    { label: 'EUR Toplam', value: kpiTotals.EUR, currency: 'EUR', color: 'text-warning' },
+    { label: 'TL Toplam', value: kpiTotals.TRY, currency: 'TRY', colorIndex: 0 },
+    { label: 'USD Toplam', value: kpiTotals.USD, currency: 'USD', colorIndex: 1 },
+    { label: 'EUR Toplam', value: kpiTotals.EUR, currency: 'EUR', colorIndex: 2 },
   ];
 
   if (isLoading) {
@@ -74,7 +83,7 @@ export function BankaHesaplari({ bankaHesaplari, toplamBakiye, isLoading }: Prop
             className="p-2 bg-card rounded-none border border-border"
           >
             <p className="text-xs font-medium text-muted-foreground">{kpi.label}</p>
-            <p className={`text-xl font-bold ${kpi.color}`}>
+            <p className="text-xl font-bold" style={{ color: getColor(kpi.colorIndex) }}>
               {formatCurrency(kpi.value, kpi.currency)}
             </p>
           </div>
