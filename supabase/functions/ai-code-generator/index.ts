@@ -197,7 +197,7 @@ Kullanıcı isterse birleşik widget yap:
    - Altta zaman serisi grafiği
 
 Yapı örneği:
-React.createElement('div', { className: 'p-2 md:p-3 space-y-2 bg-card rounded border border-border' },
+React.createElement('div', { className: 'h-full flex flex-col' },
   // KPI Header
   React.createElement('div', { className: 'flex items-center justify-between' },
     React.createElement('div', null,
@@ -494,18 +494,26 @@ return Widget;
    - rounded-xl, p-4+ (kompakt değil)
    - Portal/createPortal kullanma (UI.Dialog otomatik portal kullanır)
 
-📌 TOOLTIP Z-INDEX KURALI (ZORUNLU!)
+📌 TOOLTIP Z-INDEX KURALI (ZORUNLU - İKİ ADIM!)
 ───────────────────────────────────────────────────────────────────────────────
-Recharts Tooltip'leri her zaman EN ÖNDE görünmeli. Custom Tooltip wrapper'ına 
-z-index eklenmeli:
+Recharts Tooltip'leri her zaman EN ÖNDE görünmeli. İKİ Z-INDEX GEREKLİ:
 
-✅ ZORUNLU CUSTOM TOOLTIP YAPISI:
+1️⃣ Recharts.Tooltip'e wrapperStyle ZORUNLU:
+React.createElement(Recharts.Tooltip, {
+  content: CustomTooltip,
+  wrapperStyle: { zIndex: 9999 }  // ← BU SATIR ZORUNLU!
+})
+
+❌ YANLIŞ: wrapperStyle olmadan Tooltip kullanmak
+React.createElement(Recharts.Tooltip, { content: CustomTooltip })
+
+2️⃣ Custom Tooltip div'ine de style ZORUNLU:
 var CustomTooltip = function(props) {
   if (!props.active || !props.payload || props.payload.length === 0) return null;
   
   return React.createElement('div', {
     className: 'bg-popover border border-border rounded-lg shadow-lg p-3',
-    style: { zIndex: 9999 }  // ← ZORUNLU: En önde görünsün
+    style: { zIndex: 9999 }  // ← İçerik z-index
   },
     React.createElement('p', { className: 'font-medium text-foreground text-sm mb-1' }, props.label),
     props.payload.map(function(entry, index) {
