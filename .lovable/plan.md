@@ -1,111 +1,115 @@
 
-# Banka Hesapları Tasarımını Kasa Tasarımına Eşitleme Planı
+# Banka Hesapları Widget'ının Kasa Tasarımına Eşitlenmesi
 
-Ekran görüntüsüne göre Banka listesinde fazladan dış çerçeve var ve KPI renkleri renk paletinden gelmiyor. Bu planla Banka tasarımı Kasa tasarımına tam olarak eşitlenecek.
+## Tespit Edilen Farklar
 
----
+Ekran görüntüsü analizi:
 
-## Mevcut Durum Karşılaştırması
-
-| Özellik | Banka (Şu An) | Kasa (Hedef) |
-|---------|---------------|--------------|
-| Dış Container | `gap-2` (çerçevesiz) ✅ | `gap-2 p-2` |
-| KPI Kartları | `text-primary/success/warning` (sabit) ❌ | `colors[index]` (dinamik palet) ✅ |
-| KPI Border | `border border-border` ✅ | `border border-border` ✅ |
-| Liste Container | `border border-border` ✅ | `border border-border` ✅ |
-
-**Tespit Edilen Farklar:**
-1. Banka KPI değerleri sabit Tailwind renkleri kullanıyor → `colors` prop'undan dinamik renk almalı
-2. Kasa'da formatCurrency fonksiyonu sembol ile değer arasında boşluk koyuyor → Banka'da yok
+| Özellik | Banka (Mevcut) | Kasa (Hedef) |
+|---------|----------------|--------------|
+| Ana container padding | Yok | `p-2` |
+| KPI değer renkleri | Renk paletten gelmiyor | `colors` array'inden dinamik |
+| KPI etiket önü | Yalnız metin | Renkli nokta (●) + metin |
+| Dış Card çerçevesi | Var (fazladan) | Yok |
+| colors prop kullanımı | Tanımlı ama render'da geçirilmiyor | Aktif kullanılıyor |
 
 ---
 
 ## Yapılacak Değişiklikler
 
-### Dosya: `src/components/dashboard/BankaHesaplari.tsx`
+### 1. `DynamicWidgetRenderer.tsx` - colors prop geçirme
 
-**Değişiklik 1: colors prop'u ekleme**
+`BankaHesaplari` bileşenine `colors` prop'unun geçirilmesi gerekiyor:
+
 ```typescript
-interface Props {
-  bankaHesaplari: DiaBankaHesabi[];
-  toplamBakiye: number;
-  isLoading?: boolean;
-  colors?: string[]; // Renk paleti desteği
-}
+case 'liste_banka_hesaplari':
+  return (
+    <BankaHesaplari 
+      bankaHesaplari={bankaHesaplari || []} 
+      toplamBakiye={toplamBankaBakiye || 0}
+      isLoading={isLoading}
+      colors={colors} // EKLENMESİ GEREKEN
+    />
+  );
 ```
 
-**Değişiklik 2: Dinamik renk fonksiyonu ekleme**
+Bunun için `DynamicWidgetRenderer` bileşenine `colors` prop'u eklenmeli.
+
+### 2. `BankaHesaplari.tsx` - Kasa ile aynı tasarım
+
+**Değişiklik 2.1: Ana container'a padding ekleme**
 ```typescript
-const getColor = (index: number) => {
-  return colors && colors[index % colors.length] 
-    ? colors[index % colors.length] 
-    : ['hsl(var(--primary))', 'hsl(var(--success))', 'hsl(var(--warning))'][index];
-};
+// Mevcut:
+<div className="h-full flex flex-col gap-2">
+
+// Hedef:
+<div className="h-full flex flex-col gap-2 p-2">
 ```
 
-**Değişiklik 3: KPI kartlarında dinamik renk kullanımı**
+**Değişiklik 2.2: KPI etiketlerinin önüne renkli nokta ekleme**
 ```typescript
-const kpiCards = [
-  { label: 'Toplam TL', value: kpiTotals.TRY, currency: 'TRY', colorIndex: 0 },
-  { label: 'Toplam USD', value: kpiTotals.USD, currency: 'USD', colorIndex: 1 },
-  { label: 'Toplam EUR', value: kpiTotals.EUR, currency: 'EUR', colorIndex: 2 },
-];
+// Mevcut:
+<p className="text-xs font-medium text-muted-foreground">{kpi.label}</p>
 
-// Render içinde:
-<p style={{ color: getColor(kpi.colorIndex) }} className="text-xl font-bold">
-  {formatCurrency(kpi.value, kpi.currency)}
-</p>
+// Hedef (Kasa tasarımı):
+<div className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+  <span 
+    className="w-2 h-2 rounded-full" 
+    style={{ backgroundColor: getColor(kpi.colorIndex) }} 
+  />
+  {kpi.label}
+</div>
 ```
 
-**Değişiklik 4: formatCurrency'de sembol-değer arası boşluk**
+**Değişiklik 2.3: KPI kartlarından shadow ekleme (tutarlılık)**
 ```typescript
-const formatCurrency = (value: number, doviz: string = 'TRY') => {
-  const symbol = doviz === 'USD' ? '$' : doviz === 'EUR' ? '€' : '₺';
-  const formatted = Math.abs(value).toLocaleString('tr-TR', { 
-    minimumFractionDigits: 2, 
-    maximumFractionDigits: 2 
-  });
-  return `${symbol} ${value < 0 ? '-' : ''}${formatted}`; // Sembol + boşluk
-};
+// Mevcut:
+className="p-2 bg-card rounded-none border border-border"
+
+// Hedef:
+className="p-2 bg-card rounded-none border border-border shadow-sm"
+```
+
+**Değişiklik 2.4: KPI etiket metinlerini güncelleme**
+```typescript
+// Mevcut:
+{ label: 'TL Toplam', ... }
+
+// Hedef (Kasa ile uyumlu):
+{ label: 'Toplam TL Varlığı', ... }
 ```
 
 ---
 
-## Güncelleme Sonrası Kod Yapısı
+## Etkilenecek Dosyalar
 
-```text
+| Dosya | Değişiklik |
+|-------|------------|
+| `src/components/dashboard/BankaHesaplari.tsx` | KPI renkli nokta, padding, shadow ekleme |
+| `src/components/dashboard/DynamicWidgetRenderer.tsx` | colors prop geçirme |
+
+---
+
+## Beklenen Görsel Sonuç
+
+```
 ┌─────────────────────────────────────────────────────┐
-│ (p-2 ile padding, dış çerçeve YOK)                 │
+│ (p-2 padding ile iç boşluk)                        │
+│                                                     │
 │  ┌───────────┐  ┌───────────┐  ┌───────────┐       │
-│  │ Toplam TL │  │ Toplam USD│  │ Toplam EUR│       │  
-│  │ ₺ 101.1K  │  │ $ 0,00    │  │ € 0,00    │       │  ← colors[0], colors[1], colors[2]
-│  │ (primary) │  │ (success) │  │ (warning) │       │
+│  │ ● Toplam  │  │ ● Toplam  │  │ ● Toplam  │       │  ← Renkli nokta
+│  │   TL      │  │   USD     │  │   EUR     │       │
+│  │ ₺ 101.1K  │  │ $ 0,00    │  │ € 0,00    │       │  ← Palette renkleri
 │  └───────────┘  └───────────┘  └───────────┘       │
 │                                                     │
 │  ┌─────────────────────────────────────────────┐   │
-│  │ Banka Hesap Listesi             [5 Hesap]   │   │  ← Köşeli çerçeve
+│  │ Banka Hesap Listesi             [5 Hesap]   │   │
 │  ├─────────────────────────────────────────────┤   │
-│  │ HESAP ADI      │ IBAN         │ BAKİYE     │   │
+│  │ HESAP ADI        │ BANKA      │ BAKİYE     │   │
 │  ├─────────────────────────────────────────────┤   │
-│  │ [EN] Enpara TL │ TR24 0015... │ ₺ 101.1K   │   │
-│  │ ...                                          │   │
+│  │ [EN] Enpara TL   │ QNB        │ ₺ 101.1K   │   │
 │  └─────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────┘
 ```
 
----
-
-## Etkilenecek Dosya
-
-| Dosya | Değişiklik |
-|-------|------------|
-| `src/components/dashboard/BankaHesaplari.tsx` | colors prop, dinamik renk, format düzeltmesi |
-
----
-
-## Beklenen Sonuç
-
-1. KPI kartlarındaki değerler renk paletinden dinamik renk alacak
-2. Sembol ve değer arasında boşluk olacak (₺ 101.1K)
-3. Banka ve Kasa widget'ları görsel olarak tam eşitlenecek
-4. Tutarlı, kurumsal görünüm sağlanacak
+Banka widget'ı artık Kasa widget'ı ile tam görsel uyum sağlayacak.
