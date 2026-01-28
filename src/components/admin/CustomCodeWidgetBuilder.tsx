@@ -244,6 +244,10 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   const [newCustomRule, setNewCustomRule] = useState('');
   const [showAiRequirements, setShowAiRequirements] = useState(false);
   
+  // Örnek Widget Seçimi
+  const [showExampleWidgets, setShowExampleWidgets] = useState(false);
+  const [selectedExampleWidget, setSelectedExampleWidget] = useState<string | null>(null);
+  
   // Tam Prompt Görüntüleme Modal
   const [showFullPromptModal, setShowFullPromptModal] = useState(false);
   const [fullPromptContent, setFullPromptContent] = useState('');
@@ -1210,9 +1214,21 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
     toast.success('Kural eklendi');
   };
 
-  // AI prompt'unu zenginleştir (DIA linkleri + zorunluluklar)
+  // AI prompt'unu zenginleştir (DIA linkleri + zorunluluklar + örnek widget)
   const buildEnhancedPrompt = useCallback(() => {
     let prompt = aiPrompt;
+    
+    // Seçili örnek widget kodu
+    if (selectedExampleWidget) {
+      const exampleWidget = customWidgetTemplates.find(w => w.widget_key === selectedExampleWidget);
+      const builderConfig = exampleWidget?.builder_config as any;
+      if (builderConfig?.customCode) {
+        prompt += '\n\n📋 ÖRNEK REFERANS WIDGET:\n';
+        prompt += 'Aşağıdaki widget kodunu yapı ve stil açısından örnek al:\n';
+        prompt += '```javascript\n' + builderConfig.customCode + '\n```\n';
+        prompt += 'Bu widget\'ın responsive legend, renk paleti kullanımı ve container yapısını benzer şekilde uygula.';
+      }
+    }
     
     // DIA Model linkleri ekle
     if (diaModelLinks.length > 0) {
@@ -1236,7 +1252,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
     }
     
     return prompt;
-  }, [aiPrompt, diaModelLinks, aiRequirements, customRules]);
+  }, [aiPrompt, selectedExampleWidget, customWidgetTemplates, diaModelLinks, aiRequirements, customRules]);
 
   // Tam prompt oluşturma - AI'ye gönderilen tüm içerik
   const generateFullPromptPreview = useCallback(() => {
@@ -1362,6 +1378,64 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
         </CardHeader>
         <CardContent className="flex-1 flex flex-col gap-3 overflow-hidden">
           <ScrollArea className="flex-1">
+            {/* Örnek Widget Seç */}
+            <Collapsible open={showExampleWidgets} onOpenChange={setShowExampleWidgets} className="mb-3">
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full justify-between h-8">
+                  <span className="flex items-center gap-2 text-xs">
+                    <LucideIcons.Layers className="h-3.5 w-3.5" />
+                    Örnek Widget Seç
+                    {selectedExampleWidget && (
+                      <Badge variant="secondary" className="text-[10px] h-4">1</Badge>
+                    )}
+                  </span>
+                  <LucideIcons.ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showExampleWidgets && "rotate-180")} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2 p-3 border rounded-lg bg-muted/30 space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Mevcut widget'lardan birini seçerek AI'ye örnek olarak gönderin
+                </p>
+                <ScrollArea className="max-h-[150px]">
+                  <div className="space-y-1">
+                    {customWidgetTemplates.map(widget => (
+                      <div
+                        key={widget.id}
+                        onClick={() => setSelectedExampleWidget(
+                          selectedExampleWidget === widget.widget_key ? null : widget.widget_key
+                        )}
+                        className={cn(
+                          "flex items-center gap-2 p-2 rounded cursor-pointer text-xs transition-colors",
+                          selectedExampleWidget === widget.widget_key 
+                            ? "bg-primary/10 border border-primary/30" 
+                            : "hover:bg-muted"
+                        )}
+                      >
+                        <DynamicIcon iconName={widget.icon || 'Code'} className="h-4 w-4 shrink-0" />
+                        <span className="flex-1 truncate">{widget.name}</span>
+                        {selectedExampleWidget === widget.widget_key && (
+                          <Check className="h-3.5 w-3.5 text-primary" />
+                        )}
+                      </div>
+                    ))}
+                    {customWidgetTemplates.length === 0 && (
+                      <p className="text-xs text-muted-foreground text-center py-2">
+                        Henüz örnek olabilecek widget yok
+                      </p>
+                    )}
+                  </div>
+                </ScrollArea>
+                {selectedExampleWidget && (
+                  <div className="pt-2 border-t">
+                    <Badge variant="outline" className="text-xs gap-1">
+                      <Check className="h-3 w-3" />
+                      {customWidgetTemplates.find(w => w.widget_key === selectedExampleWidget)?.name}
+                    </Badge>
+                  </div>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
+
             {/* DIA Model Referansları */}
             <Collapsible open={showModelLinks} onOpenChange={setShowModelLinks} className="mb-3">
               <CollapsibleTrigger asChild>
