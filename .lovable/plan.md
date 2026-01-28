@@ -1,221 +1,183 @@
 
-# Cari Sektör Dağılımı Widget İyileştirmesi ve AI Örnek Widget Seçici
+Amaç: (1) AI üretilen / custom code grafiklerde “çerçeve” (border) oluşmasını kalıcı olarak engellemek, (2) Recharts tooltip’lerinin her zaman en önde görünmesini garanti etmek.
 
-## Bölüm 1: Widget Karşılaştırması ve Eksiklikler
+## 1) Teşhis (neden hâlâ çerçeve görüyorum?)
+Bu durumun aynı anda iki kaynağı var:
 
-### Cari Kaynak Dağılımı (Referans - Doğru Yapı) ✅
-```javascript
-// Responsive legend için state'ler
-var containerRef = React.useRef(null);
-var legendExpanded = React.useState(false);
-var hasEnoughSpace = React.useState(true);
-var contentHeight = React.useState(200);
+1) **Cari Sektör Dağılımı widget’ının customCode’u hâlâ root container’da border çiziyor**
+- DB’deki mevcut customCode’da şu satır var:
+  - `className: 'h-full flex flex-col p-2 md:p-3 bg-card rounded border border-border'`
+- Yani AI kurallarına “çerçeve çizme” demiş olsan da, kaydedilen kod bunu bizzat yapıyor.
 
-// Alan hesaplama effect'i
-React.useEffect(function() {
-  if (containerRef.current) {
-    var containerH = containerRef.current.offsetHeight;
-    var legendH = chartData.length * 28;
-    var threshold = containerH * 0.40; // %40 kuralı
-    hasEnoughSpace[1](legendH <= threshold);
-  }
-}, [chartData]);
+2) **Dashboard’daki sistem-level Card bileşeni de varsayılan border ekliyor**
+- `src/components/ui/card.tsx` içinde:
+  - `className="rounded border bg-card text-card-foreground"`
+- Bu da widget’ın etrafında ayrıca ikinci bir çerçeve oluşturabiliyor (double-frame hissi).
 
-// Container: h-full flex flex-col (border yok!)
-// Legend toggle butonu: hasEnoughSpace[0] kontrolü
-// Responsive legend: hasEnoughSpace[0] || legendExpanded[0]
-```
+## 2) Teşhis (tooltip neden ortadaki yazının altında kalıyor?)
+Cari Sektör Dağılımı customCode’unda:
+- `Recharts.Tooltip` şu an `wrapperStyle` verm **emiyor** — Cari Kaynak Dağılımı'nda yeni eklediğimiz `wrapperStyle: { zIndex: 9999 }` burada yok.
+- Sadece CustomTooltip içinde inline `style: { zIndex: 9999 }` var ama Recharts tooltip wrapper'ının kendisi bu z-index'i görmüyor, bu yüzden ortadaki overlay (pointer-events-none) daha yüksek z-index'de kalabilir.
 
-### Cari Sektör Dağılımı (Mevcut - Eksik Yapı) ❌
-```javascript
-// ❌ containerRef yok
-// ❌ hasEnoughSpace kontrolü yok
-// ❌ legendExpanded toggle yok
-// ❌ Fazladan border ve padding var: 
-//    'p-2 md:p-3 space-y-2 bg-card rounded border border-border'
-```
+## 3) Önerilen Çözümler
 
----
+### A) Edge Function: AI Kod Üreticiye Ek Satır Ekle
+`supabase/functions/ai-code-generator/index.ts` dosyasındaki kuralların **iki** yerinde güncelleştirme:
 
-## Bölüm 2: Cari Sektör Dağılımı Düzeltmeleri
+1) **Ana Kart Stili (Satır ~225-226)**
+   - Mevcut:
+     ```
+     Ana kart:       'p-2 md:p-3 space-y-2 bg-card rounded'  (DIŞ ÇERÇEVE YASAK!)
+     ```
+   - Kural metni zaten **Satır 237** üzerinde: `- border, border-border (DIŞ ÇERÇEVE - KESİNLİKLE YASAK! ...)`  
+   Bu anlık açıktır. Ancak birleşik (composite) yapılar için örnek kodda (Satır 200) **yanlışlıkla** şu gösterilmiş:  
+     ```javascript
+     React.createElement('div', { className: 'p-2 md:p-3 space-y-2 bg-card rounded border border-border' }, ...
+     ```
+   **Satır 200'de bu çizgiyi tamamen kaldırmak gerekiyor**:
+     ```javascript
+     React.createElement('div', { className: 'p-2 md:p-3 space-y-2 bg-card rounded' }, ...
+     ```
 
-Veritabanındaki `builder_config.customCode` aşağıdaki değişikliklerle güncellenecek:
+2) **Tooltip Z-Index - ZORUNLU (Yeni Kural)**
+   Recharts ile çalışan tüm widgetlar için "wrapperStyle: { zIndex: 9999 }" zorunlu hale getirilmeli. Şu an var olan Tooltip örneklerinde (örneğin Satır ~507) inline style { zIndex: 9999 } yazılmış ama wrapperStyle yok. **Örnek bloklara wrapperStyle eklenmelidir**:
 
-### 2.1 Eklenecek State'ler (Satır 173 sonrası)
-```javascript
-var containerRef = React.useRef(null);
-var legendExpanded = React.useState(false);
-var hasEnoughSpace = React.useState(true);
-var contentHeight = React.useState(200);
-```
+   - Satır ~507 civarındaki örnekte:
+     ```javascript
+     React.createElement('div', {
+       className: 'bg-popover border border-border rounded-lg shadow-lg p-3',
+       style: { zIndex: 9999 }  // ← içerik z-index
+     }, ...)
+     ```
+     üzerine ayrı bir **ZORUNLU** kural bloğu açılmalı:
+     ```
+     📊 RECHARTS TOOLTIP Z-INDEX (ZORUNLU - HER GRAFİK İÇİN!)
+     ─────────────────────────────────────────────────────────────────────────
+     ⚠️ Tooltip'in grafiğin merkez overlay'inin (pointer-events-none) altında kalmaması için
+        wrapperStyle: { zIndex: 9999 } eklemek ZORUNLUDUR!
+     
+     ✅ DOĞRU KULLANIM:
+     React.createElement(Recharts.Tooltip, {
+       content: CustomTooltip,
+       wrapperStyle: { zIndex: 9999 }
+     })
+     
+     ❌ YANLIŞ: wrapperStyle vermemek
+     React.createElement(Recharts.Tooltip, { content: CustomTooltip })
+     ```
 
-### 2.2 Eklenecek Effect (Satır 212 sonrası)
-```javascript
-React.useEffect(function() {
-  if (containerRef.current) {
-    var containerH = containerRef.current.offsetHeight;
-    var headerH = 56;
-    var computedContentHeight = Math.max(0, containerH - headerH);
-    contentHeight[1](computedContentHeight);
-    
-    var legendH = chartData.length * 28;
-    var threshold = computedContentHeight * 0.40;
-    hasEnoughSpace[1](legendH <= threshold);
-  }
-}, [chartData]);
-```
+### B) Veritabanı: Mevcut Widget'ı Düzelt (Cari Sektör Dağılımı)
+**Widget ID:** 553ea3b7-6312-482c-9e40-8661882eceaa
 
-### 2.3 Ana Container Değişikliği
-```javascript
-// Eski:
-'p-2 md:p-3 space-y-2 bg-card rounded border border-border h-full flex flex-col'
+Kod içinde iki değişiklik:
+1) **Satır 117-118** (Ana container):
+   - Mevcut: `className: 'h-full flex flex-col p-2 md:p-3 bg-card rounded border border-border'`
+   - Yeni: `className: 'h-full flex flex-col'`  (border, padding kaldırıldı)
 
-// Yeni (memory kurallarına uygun - border yok):
-ref: containerRef,
-className: 'h-full flex flex-col'
-```
+2) **Satır 146-149** (Tooltip):
+   - Mevcut:
+     ```javascript
+     React.createElement(Recharts.Tooltip, { 
+       content: CustomTooltip,
+       cursor: { fill: 'transparent' }
+     })
+     ```
+   - Yeni:
+     ```javascript
+     React.createElement(Recharts.Tooltip, { 
+       content: CustomTooltip,
+       cursor: { fill: 'transparent' },
+       wrapperStyle: { zIndex: 9999 }
+     })
+     ```
 
-### 2.4 Legend Toggle Butonu Eklenmesi
-```javascript
-// Grafik alanından sonra, liste öncesinde
-!hasEnoughSpace[0] && React.createElement('div', { 
-  className: 'w-full flex items-center justify-center flex-shrink-0 mt-2' 
-},
-  React.createElement('button', {
-    type: 'button',
-    onClick: function() { legendExpanded[1](!legendExpanded[0]); },
-    className: 'flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded hover:bg-muted/50'
-  },
-    legendExpanded[0] ? 'Gizle' : 'Detaylar',
-    React.createElement('span', { 
-      className: 'transform transition-transform ' + (legendExpanded[0] ? 'rotate-180' : '')
-    }, '▼')
-  )
+SQL (Çözüm B):
+```sql
+UPDATE public.widgets
+SET builder_config = builder_config || jsonb_set(
+  builder_config::jsonb,
+  '{customCode}',
+  to_jsonb(
+    regexp_replace(
+      regexp_replace(
+        builder_config->>'customCode',
+        'className: ''h-full flex flex-col p-2 md:p-3 bg-card rounded border border-border''',
+        'className: ''h-full flex flex-col''',
+        'g'
+      ),
+      'cursor: \{ fill: ''transparent'' \}\n\s*\}\)',
+      'cursor: { fill: ''transparent'' },\n            wrapperStyle: { zIndex: 9999 }\n          })',
+      'g'
+    )
+  ),
+  TRUE
 )
+WHERE id = '553ea3b7-6312-482c-9e40-8661882eceaa'::uuid;
 ```
 
-### 2.5 Legend Görünürlük Kontrolü
-```javascript
-// Eski:
-React.createElement('div', { className: 'h-[30%] min-h-[80px] overflow-y-auto...' }, ...)
+> **Dikkat:** Regex güvenli değilse manual veya tool-based güncelleme gerekebilir.
 
-// Yeni (koşullu render):
-(hasEnoughSpace[0] || legendExpanded[0]) && React.createElement('div', { 
-  className: 'w-full flex-shrink-0 ' + (!hasEnoughSpace[0] && legendExpanded[0] ? 'mt-2 pt-2 border-t border-border' : ''),
-  style: !hasEnoughSpace[0] && legendExpanded[0] && contentHeight[0] > 0
-    ? { maxHeight: Math.max(96, Math.floor(contentHeight[0] * 0.5)), overflowY: 'auto' }
-    : undefined
-},
-  React.createElement('div', { className: 'grid grid-cols-2 gap-x-4 gap-y-1' }, ...)
-)
-```
-
----
-
-## Bölüm 3: AI Örnek Widget Seçici
-
-`CustomCodeWidgetBuilder.tsx` dosyasında AI Kod Üret (Step 2) bölümüne yeni bir alan eklenecek.
-
-### 3.1 Yeni State (Satır 246 civarına)
+### C) UI Tarafında: BuilderWidgetRenderer "border" sınıfını zorla kaldır
+`src/components/dashboard/BuilderWidgetRenderer.tsx` Satır 347-362:
 ```typescript
-const [selectedExampleWidget, setSelectedExampleWidget] = useState<string | null>(null);
+return (
+  <Card className={cn(isolatedClassName, 'h-full flex flex-col')}>
+    <ChartHeader />
+    <CardContent className="flex-1 flex flex-col min-h-0 p-4 pt-3">
+      ...
+    </CardContent>
+  </Card>
+);
 ```
 
-### 3.2 Yeni Collapsible Bölümü (DIA Model Referansları'ndan önce, satır 1366 civarı)
+Burada `<Card>` bileşeni `src/components/ui/card.tsx` varsayılan olarak `border bg-card` sınıfı ekliyor. Custom widget'larda **border istemediğimizden** `Card` yerine düz `div` kullanmalıyız — ya da Card'ın border'ını override etmeliyiz:
+
 ```typescript
-{/* Örnek Widget Seç */}
-<Collapsible open={showExampleWidgets} onOpenChange={setShowExampleWidgets} className="mb-3">
-  <CollapsibleTrigger asChild>
-    <Button variant="outline" size="sm" className="w-full justify-between h-8">
-      <span className="flex items-center gap-2 text-xs">
-        <LucideIcons.Layers className="h-3.5 w-3.5" />
-        Örnek Widget Seç
-        {selectedExampleWidget && (
-          <Badge variant="secondary" className="text-[10px] h-4">1</Badge>
-        )}
-      </span>
-      <LucideIcons.ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showExampleWidgets && "rotate-180")} />
-    </Button>
-  </CollapsibleTrigger>
-  <CollapsibleContent className="mt-2 p-3 border rounded-lg bg-muted/30 space-y-2">
-    <p className="text-xs text-muted-foreground">
-      Mevcut widget'lardan birini seçerek AI'ye örnek olarak gönderin
-    </p>
-    <ScrollArea className="max-h-[150px]">
-      <div className="space-y-1">
-        {customWidgetTemplates.map(widget => (
-          <div
-            key={widget.id}
-            onClick={() => setSelectedExampleWidget(
-              selectedExampleWidget === widget.widget_key ? null : widget.widget_key
-            )}
-            className={cn(
-              "flex items-center gap-2 p-2 rounded cursor-pointer text-xs transition-colors",
-              selectedExampleWidget === widget.widget_key 
-                ? "bg-primary/10 border border-primary/30" 
-                : "hover:bg-muted"
-            )}
-          >
-            <DynamicIcon iconName={widget.icon || 'Code'} className="h-4 w-4 shrink-0" />
-            <span className="flex-1 truncate">{widget.name}</span>
-            {selectedExampleWidget === widget.widget_key && (
-              <Check className="h-3.5 w-3.5 text-primary" />
-            )}
-          </div>
-        ))}
-      </div>
-    </ScrollArea>
-    {selectedExampleWidget && (
-      <div className="pt-2 border-t">
-        <Badge variant="outline" className="text-xs gap-1">
-          <Check className="h-3 w-3" />
-          {customWidgetTemplates.find(w => w.widget_key === selectedExampleWidget)?.name}
-        </Badge>
-      </div>
-    )}
-  </CollapsibleContent>
-</Collapsible>
+<Card className={cn(isolatedClassName, 'h-full flex flex-col !border-0')}>
 ```
 
-### 3.3 buildEnhancedPrompt Güncelleme (Satır 1214 civarı)
+> **Not:** Bu yaklaşım tüm custom widget'lar için global bir çözüm olup, KPI widget'ları için soruna neden olmaz (onlar zaten `StatCard` kullanıyor).
+
+### D) CustomCodeWidgetBuilder: buildEnhancedPrompt'ta Hatırlatıcı Cümle
+`src/components/admin/CustomCodeWidgetBuilder.tsx` Satır ~1218'de:
 ```typescript
 const buildEnhancedPrompt = useCallback(() => {
   let prompt = aiPrompt;
-  
-  // Seçili örnek widget kodu
-  if (selectedExampleWidget) {
-    const exampleWidget = customWidgetTemplates.find(w => w.widget_key === selectedExampleWidget);
-    if (exampleWidget?.builder_config?.customCode) {
-      prompt += '\n\n📋 ÖRNEK REFERANS WIDGET:\n';
-      prompt += 'Aşağıdaki widget kodunu yapı ve stil açısından örnek al:\n';
-      prompt += '```javascript\n' + exampleWidget.builder_config.customCode + '\n```\n';
-      prompt += 'Bu widget\'ın responsive legend, renk paleti kullanımı ve container yapısını benzer şekilde uygula.';
-    }
+  // ...
+  if (activeRules.length > 0 || customRules.length > 0) {
+    prompt += '\n\n⚙️ EK ZORUNLU KURALLAR:\n';
+    activeRules.forEach(rule => {
+      prompt += `- ${rule.promptAddition}\n`;
+    });
+    customRules.forEach(rule => {
+      prompt += `- ${rule}\n`;
+    });
   }
   
-  // ... mevcut DIA Model linkleri ve kurallar kodu ...
-}, [aiPrompt, selectedExampleWidget, customWidgetTemplates, diaModelLinks, aiRequirements, customRules]);
+  // Tooltip ve border hatırlatıcı
+  prompt += '\n\n🔴 HATIRLATMA:\n';
+  prompt += '- Ana container\'da "border border-border" kullanma. Sadece "bg-card rounded" yeterli.\n';
+  prompt += '- Recharts.Tooltip her zaman wrapperStyle: { zIndex: 9999 } ile kullanılmalı.\n';
+  
+  return prompt;
+}, [aiPrompt, ...]);
 ```
 
----
-
-## Teknik Özet
-
-| Dosya | Değişiklik |
-|-------|------------|
-| `widgets` tablosu (SQL UPDATE) | Cari Sektör Dağılımı customCode güncelleme |
-| `CustomCodeWidgetBuilder.tsx` | Örnek Widget Seçici UI ve prompt entegrasyonu |
+Bu yolla hem prompt içinde açıkça yasaklanmış olur, hem de AI kurallarına uyum sağlanır.
 
 ---
 
-## Beklenen Sonuç
+## 4) Adım Adım Uygulanacak Değişiklikler
+1. **Edge Function**: `ai-code-generator/index.ts`
+   - Satır 200'deki örnek koddan `border border-border` kaldır.
+   - Tooltip z-index kuralını ekle.
+2. **Veritabanı Widget**: SQL ile `cari_sektor_dagilimi` customCode'unu güncelle veya builder UI'da manuel düzenle.
+3. **BuilderWidgetRenderer**: Card'ı `!border-0` ile override et.
+4. **CustomCodeWidgetBuilder**: buildEnhancedPrompt'a hatırlatıcı ekle.
 
-1. **Cari Sektör Dağılımı** widget'ı artık:
-   - Responsive legend toggle'a sahip olacak
-   - Fazladan border/padding olmayacak (memory kurallarına uygun)
-   - Alan yetersizse "Detaylar" butonu gösterecek
+---
 
-2. **AI Kod Üret** bölümünde:
-   - Mevcut widget'lar listeden seçilebilecek
-   - Seçilen widget'ın kodu AI'ye örnek olarak gönderilecek
-   - AI, seçilen widget'ın yapısını referans alarak yeni widget üretecek
+## 5) Beklenen Sonuç
+- Custom widget'larda **çift çerçeve** (double border) kaybolacak.
+- Grafiğin **ortadaki label** (pointer-events-none) tooltip'lerin z-index'inden **düşük** kalacak, tooltip her zaman üstte görünecek.
+- Yeni üretilen widget kodlarında **AI tarafından border/border-border kullanılmayacak** ve **wrapperStyle: { zIndex: 9999 }** varsayılan hale gelecek.
