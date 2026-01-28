@@ -60,6 +60,8 @@ interface DynamicWidgetRendererProps {
   onFiltersChange?: (filters: KpiFilter) => void;
   // Widget düzenleme modu
   isWidgetEditMode?: boolean;
+  // Renk paleti
+  colors?: string[];
 }
 
 // Format large numbers
@@ -86,6 +88,7 @@ export function DynamicWidgetRenderer({
   widgetFilters,
   onFiltersChange,
   isWidgetEditMode = false,
+  colors,
 }: DynamicWidgetRendererProps) {
   const widget = getWidgetById(widgetId);
   
@@ -402,6 +405,7 @@ export function DynamicWidgetRenderer({
             bankaHesaplari={bankaHesaplari || []} 
             toplamBakiye={toplamBankaBakiye || 0}
             isLoading={isLoading}
+            colors={colors}
           />
         );
       
