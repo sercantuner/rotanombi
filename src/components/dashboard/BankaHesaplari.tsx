@@ -41,9 +41,9 @@ export function BankaHesaplari({ bankaHesaplari, toplamBakiye, isLoading, colors
   }, [bankaHesaplari]);
 
   const kpiCards = [
-    { label: 'TL Toplam', value: kpiTotals.TRY, currency: 'TRY', colorIndex: 0 },
-    { label: 'USD Toplam', value: kpiTotals.USD, currency: 'USD', colorIndex: 1 },
-    { label: 'EUR Toplam', value: kpiTotals.EUR, currency: 'EUR', colorIndex: 2 },
+    { label: 'Toplam TL Varlığı', value: kpiTotals.TRY, currency: 'TRY', colorIndex: 0 },
+    { label: 'Toplam USD Varlığı', value: kpiTotals.USD, currency: 'USD', colorIndex: 1 },
+    { label: 'Toplam EUR Varlığı', value: kpiTotals.EUR, currency: 'EUR', colorIndex: 2 },
   ];
 
   if (isLoading) {
@@ -74,15 +74,21 @@ export function BankaHesaplari({ bankaHesaplari, toplamBakiye, isLoading, colors
   }
 
   return (
-    <div className="h-full flex flex-col gap-2">
+    <div className="h-full flex flex-col gap-2 p-2">
       {/* KPI Kartları */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
         {kpiCards.map((kpi) => (
           <div
             key={kpi.label}
-            className="p-2 bg-card rounded-none border border-border"
+            className="p-2 bg-card rounded-none border border-border shadow-sm"
           >
-            <p className="text-xs font-medium text-muted-foreground">{kpi.label}</p>
+            <div className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <span 
+                className="w-2 h-2 rounded-full" 
+                style={{ backgroundColor: getColor(kpi.colorIndex) }} 
+              />
+              {kpi.label}
+            </div>
             <p className="text-xl font-bold" style={{ color: getColor(kpi.colorIndex) }}>
               {formatCurrency(kpi.value, kpi.currency)}
             </p>
