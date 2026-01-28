@@ -172,18 +172,26 @@ export function useDiaFilterOptions(): DiaFilterOptionsResult {
       if (!session?.access_token) return result;
 
       // Fetch satış temsilcileri from sis_satiselemani
-      const satisElemaniResult = await makeDiaApiCall(
-        session,
-        'sis',
-        'satiselemani_listele',
-        ['satiselemani', 'aciklama']
-      );
+      // NOT: Bu endpoint bazı DIA sunucularında mevcut olmayabilir (404)
+      try {
+        const satisElemaniResult = await makeDiaApiCall(
+          session,
+          'sis',
+          'satiselemani_listele',
+          ['satiselemani', 'aciklama']
+        );
 
-      if (satisElemaniResult?.success && satisElemaniResult?.sampleData) {
-        result.satisTemsilcileri = satisElemaniResult.sampleData
-          .map((s: any) => s.satiselemani || s.aciklama || '')
-          .filter((s: string) => s && s.trim());
-        console.log(`[DiaFilterOptions] Fetched ${result.satisTemsilcileri?.length} sales reps`);
+        if (satisElemaniResult?.success && satisElemaniResult?.sampleData) {
+          result.satisTemsilcileri = satisElemaniResult.sampleData
+            .map((s: any) => s.satiselemani || s.aciklama || '')
+            .filter((s: string) => s && s.trim());
+          console.log(`[DiaFilterOptions] Fetched ${result.satisTemsilcileri?.length} sales reps`);
+        } else if (satisElemaniResult?.error) {
+          console.warn(`[DiaFilterOptions] Satış temsilcisi listesi alınamadı: ${satisElemaniResult.error}`);
+        }
+      } catch (salesRepError) {
+        console.warn('[DiaFilterOptions] Satış temsilcisi listesi çekilirken hata (endpoint mevcut olmayabilir):', salesRepError);
+        // Hata durumunda boş dizi bırak, dashboard çökmesin
       }
 
       // Fetch özel kodlar (sis_ozelkod) - bunlar cari kartlara ait özel kodlar
