@@ -1251,6 +1251,12 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
       });
     }
     
+    // Tooltip ve border hatırlatıcı - HER ZAMAN EKLE
+    prompt += '\n\n🔴 MUTLAKA UYULMASI GEREKEN KURALLAR:\n';
+    prompt += '- Ana container\'da "border border-border" KULLANMA! Sadece "h-full flex flex-col" yeterli.\n';
+    prompt += '- Recharts.Tooltip her zaman wrapperStyle: { zIndex: 9999 } ile kullanılmalı.\n';
+    prompt += '- Custom Tooltip div\'ine de style: { zIndex: 9999 } ekle.\n';
+    
     return prompt;
   }, [aiPrompt, selectedExampleWidget, customWidgetTemplates, diaModelLinks, aiRequirements, customRules]);
 
