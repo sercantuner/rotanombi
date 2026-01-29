@@ -6,9 +6,18 @@ import { ContainerBasedDashboard } from '@/components/dashboard/ContainerBasedDa
 import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
 import { DiaDataCacheProvider, useDiaDataCache } from '@/contexts/DiaDataCacheContext';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
-import { Loader2, AlertCircle, RefreshCw, Wifi, WifiOff, CheckCircle } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, WifiOff, CheckCircle, LayoutDashboard, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
+
+interface UserPage {
+  id: string;
+  name: string;
+  slug: string;
+  icon?: string;
+}
 
 interface ImpersonatedDashboardProps {
   userId: string;
@@ -19,7 +28,8 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
   const { impersonatedProfile, isDiaConfigured } = useImpersonation();
   const { setDiaConnected, clearAllCache, isDiaConnected } = useDiaDataCache();
   
-  const [pageId, setPageId] = useState<string | null>(null);
+  const [userPages, setUserPages] = useState<UserPage[]>([]);
+  const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [diaStatus, setDiaStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [diaError, setDiaError] = useState<string | null>(null);
@@ -85,6 +95,26 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
     }
   }, [impersonatedProfile, isDiaConfigured, userId, setDiaConnected]);
 
+  // Kullanıcının tüm sayfalarını yükle
+  const loadUserPages = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('user_pages')
+      .select('id, name, slug, icon')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
+
+    if (!error && data) {
+      setUserPages(data);
+      // Varsayılan olarak main-dashboard veya ilk sayfayı seç
+      const mainPage = data.find(p => p.slug === 'main-dashboard');
+      setSelectedPageId(mainPage?.id || data[0]?.id || null);
+    } else {
+      setUserPages([]);
+      setSelectedPageId(null);
+    }
+  }, [userId]);
+
   // Sayfa ve DIA bağlantısını yükle
   useEffect(() => {
     const loadUserDashboard = async () => {
@@ -93,19 +123,8 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
       // Cache'i temizle - yeni kullanıcı verisi için
       clearAllCache();
       
-      // Kullanıcının main-dashboard sayfasını bul
-      const { data, error } = await supabase
-        .from('user_pages')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('slug', 'main-dashboard')
-        .single();
-
-      if (!error && data) {
-        setPageId(data.id);
-      } else {
-        setPageId(null);
-      }
+      // Kullanıcının tüm sayfalarını yükle
+      await loadUserPages();
       
       // DIA bağlantısını başlat
       await initializeDiaConnection();
@@ -114,7 +133,7 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
     };
 
     loadUserDashboard();
-  }, [userId, clearAllCache, initializeDiaConnection]);
+  }, [userId, clearAllCache, initializeDiaConnection, loadUserPages]);
 
   // Manuel DIA bağlantı yenileme
   const handleReconnect = async () => {
@@ -123,6 +142,11 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
     if (diaStatus === 'connected') {
       toast.success('DIA bağlantısı yenilendi');
     }
+  };
+
+  // Sayfa değiştir
+  const handlePageChange = (pageId: string) => {
+    setSelectedPageId(pageId);
   };
 
   if (loading) {
@@ -205,7 +229,38 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
     return null;
   };
 
-  if (!pageId) {
+  // Sayfa seçici render
+  const renderPageSelector = () => {
+    if (userPages.length <= 1) return null;
+
+    return (
+      <div className="mb-4">
+        <ScrollArea className="w-full whitespace-nowrap">
+          <Tabs value={selectedPageId || ''} onValueChange={handlePageChange}>
+            <TabsList className="inline-flex h-9 gap-1 bg-muted/50 p-1">
+              {userPages.map(page => (
+                <TabsTrigger 
+                  key={page.id} 
+                  value={page.id}
+                  className="gap-1.5 text-xs px-3"
+                >
+                  {page.slug === 'main-dashboard' ? (
+                    <LayoutDashboard className="w-3.5 h-3.5" />
+                  ) : (
+                    <FileText className="w-3.5 h-3.5" />
+                  )}
+                  {page.name}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
+      </div>
+    );
+  };
+
+  if (userPages.length === 0) {
     return (
       <div className="p-6">
         {renderDiaStatus()}
@@ -223,10 +278,14 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
     <DashboardFilterProvider>
       <div className="p-6 h-full overflow-auto">
         {renderDiaStatus()}
-        <ContainerBasedDashboard 
-          pageId={pageId} 
-          widgetData={{}} 
-        />
+        {renderPageSelector()}
+        
+        {selectedPageId && (
+          <ContainerBasedDashboard 
+            pageId={selectedPageId} 
+            widgetData={{}} 
+          />
+        )}
       </div>
     </DashboardFilterProvider>
   );
