@@ -1,183 +1,130 @@
 
-Amaç: (1) AI üretilen / custom code grafiklerde “çerçeve” (border) oluşmasını kalıcı olarak engellemek, (2) Recharts tooltip’lerinin her zaman en önde görünmesini garanti etmek.
+# İki Grafik Yan Yana Koyunca Büyüme Sorunu - Analiz ve Çözüm
 
-## 1) Teşhis (neden hâlâ çerçeve görüyorum?)
-Bu durumun aynı anda iki kaynağı var:
+## Teşhis Özeti
 
-1) **Cari Sektör Dağılımı widget’ının customCode’u hâlâ root container’da border çiziyor**
-- DB’deki mevcut customCode’da şu satır var:
-  - `className: 'h-full flex flex-col p-2 md:p-3 bg-card rounded border border-border'`
-- Yani AI kurallarına “çerçeve çizme” demiş olsan da, kaydedilen kod bunu bizzat yapıyor.
+Ekran görüntüsünde **Cari Kaynak Dağılımı** (12 kaynak) ve **Sektörel Dağılım** (81 sektör) widget'ları yan yana konulduğunda her ikisinin de anormal şekilde büyüdüğü görülüyor.
 
-2) **Dashboard’daki sistem-level Card bileşeni de varsayılan border ekliyor**
-- `src/components/ui/card.tsx` içinde:
-  - `className="rounded border bg-card text-card-foreground"`
-- Bu da widget’ın etrafında ayrıca ikinci bir çerçeve oluşturabiliyor (double-frame hissi).
+### Kök Nedenler
 
-## 2) Teşhis (tooltip neden ortadaki yazının altında kalıyor?)
-Cari Sektör Dağılımı customCode’unda:
-- `Recharts.Tooltip` şu an `wrapperStyle` verm **emiyor** — Cari Kaynak Dağılımı'nda yeni eklediğimiz `wrapperStyle: { zIndex: 9999 }` burada yok.
-- Sadece CustomTooltip içinde inline `style: { zIndex: 9999 }` var ama Recharts tooltip wrapper'ının kendisi bu z-index'i görmüyor, bu yüzden ortadaki overlay (pointer-events-none) daha yüksek z-index'de kalabilir.
-
-## 3) Önerilen Çözümler
-
-### A) Edge Function: AI Kod Üreticiye Ek Satır Ekle
-`supabase/functions/ai-code-generator/index.ts` dosyasındaki kuralların **iki** yerinde güncelleştirme:
-
-1) **Ana Kart Stili (Satır ~225-226)**
-   - Mevcut:
-     ```
-     Ana kart:       'p-2 md:p-3 space-y-2 bg-card rounded'  (DIŞ ÇERÇEVE YASAK!)
-     ```
-   - Kural metni zaten **Satır 237** üzerinde: `- border, border-border (DIŞ ÇERÇEVE - KESİNLİKLE YASAK! ...)`  
-   Bu anlık açıktır. Ancak birleşik (composite) yapılar için örnek kodda (Satır 200) **yanlışlıkla** şu gösterilmiş:  
-     ```javascript
-     React.createElement('div', { className: 'p-2 md:p-3 space-y-2 bg-card rounded border border-border' }, ...
-     ```
-   **Satır 200'de bu çizgiyi tamamen kaldırmak gerekiyor**:
-     ```javascript
-     React.createElement('div', { className: 'p-2 md:p-3 space-y-2 bg-card rounded' }, ...
-     ```
-
-2) **Tooltip Z-Index - ZORUNLU (Yeni Kural)**
-   Recharts ile çalışan tüm widgetlar için "wrapperStyle: { zIndex: 9999 }" zorunlu hale getirilmeli. Şu an var olan Tooltip örneklerinde (örneğin Satır ~507) inline style { zIndex: 9999 } yazılmış ama wrapperStyle yok. **Örnek bloklara wrapperStyle eklenmelidir**:
-
-   - Satır ~507 civarındaki örnekte:
-     ```javascript
-     React.createElement('div', {
-       className: 'bg-popover border border-border rounded-lg shadow-lg p-3',
-       style: { zIndex: 9999 }  // ← içerik z-index
-     }, ...)
-     ```
-     üzerine ayrı bir **ZORUNLU** kural bloğu açılmalı:
-     ```
-     📊 RECHARTS TOOLTIP Z-INDEX (ZORUNLU - HER GRAFİK İÇİN!)
-     ─────────────────────────────────────────────────────────────────────────
-     ⚠️ Tooltip'in grafiğin merkez overlay'inin (pointer-events-none) altında kalmaması için
-        wrapperStyle: { zIndex: 9999 } eklemek ZORUNLUDUR!
-     
-     ✅ DOĞRU KULLANIM:
-     React.createElement(Recharts.Tooltip, {
-       content: CustomTooltip,
-       wrapperStyle: { zIndex: 9999 }
-     })
-     
-     ❌ YANLIŞ: wrapperStyle vermemek
-     React.createElement(Recharts.Tooltip, { content: CustomTooltip })
-     ```
-
-### B) Veritabanı: Mevcut Widget'ı Düzelt (Cari Sektör Dağılımı)
-**Widget ID:** 553ea3b7-6312-482c-9e40-8661882eceaa
-
-Kod içinde iki değişiklik:
-1) **Satır 117-118** (Ana container):
-   - Mevcut: `className: 'h-full flex flex-col p-2 md:p-3 bg-card rounded border border-border'`
-   - Yeni: `className: 'h-full flex flex-col'`  (border, padding kaldırıldı)
-
-2) **Satır 146-149** (Tooltip):
-   - Mevcut:
-     ```javascript
-     React.createElement(Recharts.Tooltip, { 
-       content: CustomTooltip,
-       cursor: { fill: 'transparent' }
-     })
-     ```
-   - Yeni:
-     ```javascript
-     React.createElement(Recharts.Tooltip, { 
-       content: CustomTooltip,
-       cursor: { fill: 'transparent' },
-       wrapperStyle: { zIndex: 9999 }
-     })
-     ```
-
-SQL (Çözüm B):
-```sql
-UPDATE public.widgets
-SET builder_config = builder_config || jsonb_set(
-  builder_config::jsonb,
-  '{customCode}',
-  to_jsonb(
-    regexp_replace(
-      regexp_replace(
-        builder_config->>'customCode',
-        'className: ''h-full flex flex-col p-2 md:p-3 bg-card rounded border border-border''',
-        'className: ''h-full flex flex-col''',
-        'g'
-      ),
-      'cursor: \{ fill: ''transparent'' \}\n\s*\}\)',
-      'cursor: { fill: ''transparent'' },\n            wrapperStyle: { zIndex: 9999 }\n          })',
-      'g'
-    )
-  ),
-  TRUE
-)
-WHERE id = '553ea3b7-6312-482c-9e40-8661882eceaa'::uuid;
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                      chart_half Container                        │
+│  ┌─────────────────────────┐  ┌─────────────────────────────┐   │
+│  │   Cari Kaynak (12)      │  │   Sektör Dağılımı (81!)     │   │
+│  │   ├── Header            │  │   ├── Header                │   │
+│  │   ├── Donut (flex-1)    │  │   ├── Donut (flex-1)        │   │
+│  │   └── Legend (shrink-0) │  │   └── Legend (shrink-0)     │   │
+│  │       12 satır ~336px   │  │       81 satır ~2268px ❌   │   │
+│  └─────────────────────────┘  └─────────────────────────────┘   │
+│                                                                  │
+│  [&>*]:h-full + items-stretch = Her iki slot aynı yüksekliğe    │
+│  zorlanıyor, en büyük öğeye göre eşitleniyor!                   │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-> **Dikkat:** Regex güvenli değilse manual veya tool-based güncelleme gerekebilir.
+| Sorun | Kaynak | Etki |
+|-------|--------|------|
+| **81 sektör legend** | Sektör Dağılımı widget'ı | Legend listeye göre container büyüyor |
+| **CSS `items-stretch`** | ContainerRenderer satır 437 | İki slot birbirine eşitleniyor |
+| **İlk render sorunu** | `hasEnoughSpace` effect | Başlangıçta legend gizlenmesi gecikmeli |
+| **`flex-shrink-0`** | Widget customCode | Legend kendi boyutuna göre yer kaplıyor |
 
-### C) UI Tarafında: BuilderWidgetRenderer "border" sınıfını zorla kaldır
-`src/components/dashboard/BuilderWidgetRenderer.tsx` Satır 347-362:
-```typescript
-return (
-  <Card className={cn(isolatedClassName, 'h-full flex flex-col')}>
-    <ChartHeader />
-    <CardContent className="flex-1 flex flex-col min-h-0 p-4 pt-3">
-      ...
-    </CardContent>
-  </Card>
-);
+## Önerilen Çözüm
+
+### 1. Widget Düzeyinde: Maksimum Görünür Kategori Limiti
+
+Her iki widget'ın customCode'unda legend için sabit üst sınır:
+
+```javascript
+// Mevcut - Sınırsız legend
+var LegendItems = function() {
+  return chartData.map(function(entry, index) { ... });
+};
+
+// Yeni - İlk 8 kategori + "Diğerleri" butonu
+var MAX_VISIBLE_LEGEND = 8;
+var visibleData = chartData.slice(0, MAX_VISIBLE_LEGEND);
+var hiddenCount = chartData.length - MAX_VISIBLE_LEGEND;
+
+var LegendItems = function() {
+  return [
+    ...visibleData.map(function(entry, index) { ... }),
+    hiddenCount > 0 && React.createElement('button', {
+      onClick: function() { legendExpanded[1](true); },
+      className: 'text-xs text-primary hover:underline'
+    }, '+' + hiddenCount + ' daha...')
+  ];
+};
 ```
 
-Burada `<Card>` bileşeni `src/components/ui/card.tsx` varsayılan olarak `border bg-card` sınıfı ekliyor. Custom widget'larda **border istemediğimizden** `Card` yerine düz `div` kullanmalıyız — ya da Card'ın border'ını override etmeliyiz:
+### 2. Widget Düzeyinde: İlk Render'da Legend Gizleme
+
+```javascript
+// Mevcut
+var hasEnoughSpace = React.useState(true);
+
+// Yeni - Çok fazla kategori varsa baştan gizle
+var hasEnoughSpace = React.useState(chartData.length <= 12);
+```
+
+### 3. Widget Düzeyinde: Legend Container Max-Height
+
+```javascript
+// Legend listesi için sabit max-height ekle
+React.createElement('div', { 
+  className: 'w-full flex-shrink-0 overflow-y-auto',
+  style: { maxHeight: '150px' }  // ~5-6 satır
+}, ...)
+```
+
+### 4. ContainerRenderer: Slot'lara Max-Height Ekle (Opsiyonel)
 
 ```typescript
-<Card className={cn(isolatedClassName, 'h-full flex flex-col !border-0')}>
+// Satır 436-445 civarı
+<div className={cn(
+  'grid gap-1 md:gap-2 items-stretch [&>*]:h-full',
+  template.gridClass,
+  // Grafik container'ları için min ve MAX yükseklik
+  (container.container_type === 'chart_half' || 
+   container.container_type === 'chart_third') && 
+   '[&>*]:min-h-[280px] [&>*]:max-h-[400px]',  // ✅ max-h eklendi
+)}>
 ```
-
-> **Not:** Bu yaklaşım tüm custom widget'lar için global bir çözüm olup, KPI widget'ları için soruna neden olmaz (onlar zaten `StatCard` kullanıyor).
-
-### D) CustomCodeWidgetBuilder: buildEnhancedPrompt'ta Hatırlatıcı Cümle
-`src/components/admin/CustomCodeWidgetBuilder.tsx` Satır ~1218'de:
-```typescript
-const buildEnhancedPrompt = useCallback(() => {
-  let prompt = aiPrompt;
-  // ...
-  if (activeRules.length > 0 || customRules.length > 0) {
-    prompt += '\n\n⚙️ EK ZORUNLU KURALLAR:\n';
-    activeRules.forEach(rule => {
-      prompt += `- ${rule.promptAddition}\n`;
-    });
-    customRules.forEach(rule => {
-      prompt += `- ${rule}\n`;
-    });
-  }
-  
-  // Tooltip ve border hatırlatıcı
-  prompt += '\n\n🔴 HATIRLATMA:\n';
-  prompt += '- Ana container\'da "border border-border" kullanma. Sadece "bg-card rounded" yeterli.\n';
-  prompt += '- Recharts.Tooltip her zaman wrapperStyle: { zIndex: 9999 } ile kullanılmalı.\n';
-  
-  return prompt;
-}, [aiPrompt, ...]);
-```
-
-Bu yolla hem prompt içinde açıkça yasaklanmış olur, hem de AI kurallarına uyum sağlanır.
 
 ---
 
-## 4) Adım Adım Uygulanacak Değişiklikler
-1. **Edge Function**: `ai-code-generator/index.ts`
-   - Satır 200'deki örnek koddan `border border-border` kaldır.
-   - Tooltip z-index kuralını ekle.
-2. **Veritabanı Widget**: SQL ile `cari_sektor_dagilimi` customCode'unu güncelle veya builder UI'da manuel düzenle.
-3. **BuilderWidgetRenderer**: Card'ı `!border-0` ile override et.
-4. **CustomCodeWidgetBuilder**: buildEnhancedPrompt'a hatırlatıcı ekle.
+## Uygulama Planı
+
+### Adım 1: Sektör Dağılımı Widget Güncellemesi (SQL)
+- İlk 10 kategoriyi göster, geri kalanı "Detaylar" butonuyla aç
+- Legend başlangıçta gizli (chartData.length > 12 ise)
+- Legend container'a `maxHeight: 150px` ekle
+
+### Adım 2: Cari Kaynak Dağılımı Widget Güncellemesi (SQL)
+- Aynı mantık uygulanacak (zaten 12 kaynak olduğu için daha az etkili)
+- Tutarlılık için aynı yapı
+
+### Adım 3: ContainerRenderer Güncellemesi
+- `chart_half` ve `chart_third` container'lara `max-h-[400px]` ekle
+- Bu, widgetların sonsuz büyümesini engelleyecek
+
+### Adım 4: AI Kod Üretici Kuralı (Edge Function)
+- Yeni widget'larda legend'ın max-height ile sınırlandırılması zorunlu kılınacak
 
 ---
 
-## 5) Beklenen Sonuç
-- Custom widget'larda **çift çerçeve** (double border) kaybolacak.
-- Grafiğin **ortadaki label** (pointer-events-none) tooltip'lerin z-index'inden **düşük** kalacak, tooltip her zaman üstte görünecek.
-- Yeni üretilen widget kodlarında **AI tarafından border/border-border kullanılmayacak** ve **wrapperStyle: { zIndex: 9999 }** varsayılan hale gelecek.
+## Teknik Değişiklikler
+
+| Dosya | Değişiklik |
+|-------|------------|
+| `widgets` tablosu (SQL) | Sektör Dağılımı customCode: legend max-height + limit |
+| `widgets` tablosu (SQL) | Cari Kaynak Dağılımı customCode: legend max-height |
+| `ContainerRenderer.tsx` | chart_half/third için max-h-[400px] |
+| `ai-code-generator/index.ts` | Legend sınırlama kuralı ekleme |
+
+## Beklenen Sonuç
+
+- İki grafik yan yana koyulduğunda her biri ~280-400px arasında kalacak
+- Legend'lar scroll ile görüntülenecek (max 150px)
+- Çok fazla kategori olduğunda "Detaylar" butonu ile açılabilir modal
