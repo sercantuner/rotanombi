@@ -848,49 +848,62 @@ için ZORUNLUDUR. Farklı tasarım YASAK!
 ───────────────────────────────────────────────────────────────────────────────
 Pie/Donut/Bar/Line/Area grafiklerinde legend kullanıyorsan:
 
+⚠️ ÖNCELİKLİ KURAL - MAX VISIBLE LEGEND:
+Çok sayıda kategori (>8) varsa tamamını legend'da gösterme! Sonsuz büyüme sorununa yol açar.
+
+var MAX_VISIBLE_LEGEND = 8;
+var visibleData = chartData.slice(0, MAX_VISIBLE_LEGEND);
+var hiddenCount = chartData.length - MAX_VISIBLE_LEGEND;
+// Legend'da sadece visibleData göster, hiddenCount > 0 ise "+X daha..." butonu ekle
+
 1. Container yüksekliğini ölç ve legend'ın sığıp sığmayacağını kontrol et:
 
 var containerRef = React.useRef(null);
 var legendExpanded = React.useState(false);
-var hasEnoughSpace = React.useState(true);
+var hasEnoughSpace = React.useState(chartData.length <= 12); // Baştan gizle
 
 React.useEffect(function() {
   if (containerRef.current) {
     var containerHeight = containerRef.current.offsetHeight;
-    var headerHeight = 56; // Başlık alanı
+    var headerHeight = 56;
     var contentHeight = containerHeight - headerHeight;
     
-    // Legend için tahmini yükseklik (item sayısı * 24px)
-    var legendHeight = chartData.length * 24;
-    var threshold = contentHeight * 0.40; // %40 eşik
+    var legendHeight = MAX_VISIBLE_LEGEND * 24;
+    var threshold = contentHeight * 0.40;
     
     hasEnoughSpace[1](legendHeight <= threshold);
   }
 }, [chartData]);
 
-2. Toggle butonu ekle (legend sığmıyorsa):
+2. Legend container'a maxHeight ZORUNLU ekle:
+
+React.createElement('div', {
+  className: 'flex flex-col overflow-y-auto',
+  style: { maxHeight: '140px' }  // ZORUNLU - taşmayı önler
+}, legendItems)
+
+3. Toggle butonu ekle (legend sığmıyorsa):
 
 !hasEnoughSpace[0] && React.createElement('button', {
   onClick: function() { legendExpanded[1](!legendExpanded[0]); },
-  className: 'flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded hover:bg-muted/50'
+  className: 'flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground py-1 px-2 rounded hover:bg-muted/50'
 },
   legendExpanded[0] ? 'Gizle' : 'Detaylar',
-  React.createElement('span', { 
-    className: 'transform transition-transform ' + (legendExpanded[0] ? 'rotate-180' : '') 
-  }, '▼')
+  React.createElement(LucideIcons.ChevronDown, { 
+    className: 'h-3 w-3 ' + (legendExpanded[0] ? 'rotate-180' : '') 
+  })
 )
 
-3. Legend'ı koşullu göster:
+4. Legend'ı koşullu göster:
 
 (hasEnoughSpace[0] || legendExpanded[0]) && React.createElement('div', {
-  className: 'grid grid-cols-2 gap-1',
-  style: !hasEnoughSpace[0] && legendExpanded[0] 
-    ? { maxHeight: Math.floor(contentHeight * 0.6), overflowY: 'auto' }
-    : undefined
+  className: 'flex flex-col overflow-y-auto',
+  style: { maxHeight: '140px' }
 }, legendItems)
 
-❌ YANLIŞ: Legend'ı sabit yükseklikle göstermek (max-h-[120px] vb.)
-✅ DOĞRU: Container yüksekliğinin %40'ından fazla yer kaplıyorsa gizle, toggle ile aç
+❌ YANLIŞ: Tüm kategorileri legend'da göstermek (81 sektör = 2000px!)
+❌ YANLIŞ: maxHeight olmadan legend container
+✅ DOĞRU: MAX_VISIBLE_LEGEND=8, maxHeight: 140px, overflow-y: auto
 
 ═══════════════════════════════════════════════════════════════════════════════
 
