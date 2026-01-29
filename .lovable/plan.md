@@ -1,130 +1,140 @@
 
-# İki Grafik Yan Yana Koyunca Büyüme Sorunu - Analiz ve Çözüm
+# Dinamik Sayfa Düzenleme Butonları ve Super Admin Kullanıcı Yönetimi
 
-## Teşhis Özeti
+## Sorun Analizi
 
-Ekran görüntüsünde **Cari Kaynak Dağılımı** (12 kaynak) ve **Sektörel Dağılım** (81 sektör) widget'ları yan yana konulduğunda her ikisinin de anormal şekilde büyüdüğü görülüyor.
+### Sorun 1: Dinamik Sayfalarda Düzenleme Butonları Eksik
+**Mevcut Durum:**
+- Dashboard sayfası `ContainerBasedDashboard` bileşenini kullanıyor
+- Bu bileşen `FloatingActions` içeriyor (Container Ekle, Widget Düzenle, Container Sırala butonları)
+- `DynamicPage` ise `ContainerRenderer`'ı doğrudan kullanıyor, `FloatingActions` yok
 
-### Kök Nedenler
+**Çözüm:**
+- `DynamicPage` bileşenini `ContainerBasedDashboard` kullanacak şekilde güncellemek
+- Veya `FloatingActions` bileşenini ayrı export edip `DynamicPage`'e eklemek
+
+### Sorun 2: Super Admin Müşteri Sayfalarını Göremiyor
+**Mevcut Durum:**
+- `ImpersonatedDashboard` sadece `main-dashboard` slug'ını arıyor
+- Kullanıcının diğer özel sayfaları (örn: `crm-cari-xxx`) gösterilmiyor
+
+**Çözüm:**
+- ImpersonatedDashboard'a sayfa seçici eklemek
+- Impersonated kullanıcının tüm sayfalarını listelemek
+- Sayfa değiştirme özelliği eklemek
+
+### Sorun 3: Kullanıcı Listesi DataGrid Olarak Ayrı Sayfada
+**Mevcut Durum:**
+- Kullanıcılar SuperAdminPanel içinde sol panelde listeleniyor
+- Filtreleme ve arama sınırlı
+
+**Çözüm:**
+- Yeni `/super-admin/users` route'u oluşturmak
+- Full-page DataGrid ile kullanıcı listesi
+- Gelişmiş filtreleme (rol, lisans durumu, DIA bağlantı durumu)
+- Arama ve sıralama özellikleri
+
+---
+
+## Teknik Uygulama Planı
+
+### Adım 1: DynamicPage Düzenleme Butonları
+
+**Dosya:** `src/components/pages/DynamicPage.tsx`
+
+Değişiklikler:
+1. `ContainerBasedDashboard` bileşenini import et
+2. Manuel container render yerine `ContainerBasedDashboard` kullan
+3. Bu sayede `FloatingActions` otomatik olarak gelecek
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│                      chart_half Container                        │
-│  ┌─────────────────────────┐  ┌─────────────────────────────┐   │
-│  │   Cari Kaynak (12)      │  │   Sektör Dağılımı (81!)     │   │
-│  │   ├── Header            │  │   ├── Header                │   │
-│  │   ├── Donut (flex-1)    │  │   ├── Donut (flex-1)        │   │
-│  │   └── Legend (shrink-0) │  │   └── Legend (shrink-0)     │   │
-│  │       12 satır ~336px   │  │       81 satır ~2268px ❌   │   │
-│  └─────────────────────────┘  └─────────────────────────────┘   │
-│                                                                  │
-│  [&>*]:h-full + items-stretch = Her iki slot aynı yüksekliğe    │
-│  zorlanıyor, en büyük öğeye göre eşitleniyor!                   │
-└─────────────────────────────────────────────────────────────────┘
+Önceki yapı:
+DynamicPage
+  └── ContainerRenderer (x N)
+  └── ContainerPicker
+
+Yeni yapı:
+DynamicPage
+  └── ContainerBasedDashboard (FloatingActions dahil)
 ```
 
-| Sorun | Kaynak | Etki |
-|-------|--------|------|
-| **81 sektör legend** | Sektör Dağılımı widget'ı | Legend listeye göre container büyüyor |
-| **CSS `items-stretch`** | ContainerRenderer satır 437 | İki slot birbirine eşitleniyor |
-| **İlk render sorunu** | `hasEnoughSpace` effect | Başlangıçta legend gizlenmesi gecikmeli |
-| **`flex-shrink-0`** | Widget customCode | Legend kendi boyutuna göre yer kaplıyor |
+### Adım 2: ImpersonatedDashboard Sayfa Seçici
 
-## Önerilen Çözüm
+**Dosya:** `src/components/admin/ImpersonatedDashboard.tsx`
 
-### 1. Widget Düzeyinde: Maksimum Görünür Kategori Limiti
+Değişiklikler:
+1. Kullanıcının tüm sayfalarını çekmek için sorgu ekle
+2. Sayfa seçici dropdown/tab ekle
+3. Seçilen sayfanın `pageId`'sini `ContainerBasedDashboard`'a geç
 
-Her iki widget'ın customCode'unda legend için sabit üst sınır:
-
-```javascript
-// Mevcut - Sınırsız legend
-var LegendItems = function() {
-  return chartData.map(function(entry, index) { ... });
-};
-
-// Yeni - İlk 8 kategori + "Diğerleri" butonu
-var MAX_VISIBLE_LEGEND = 8;
-var visibleData = chartData.slice(0, MAX_VISIBLE_LEGEND);
-var hiddenCount = chartData.length - MAX_VISIBLE_LEGEND;
-
-var LegendItems = function() {
-  return [
-    ...visibleData.map(function(entry, index) { ... }),
-    hiddenCount > 0 && React.createElement('button', {
-      onClick: function() { legendExpanded[1](true); },
-      className: 'text-xs text-primary hover:underline'
-    }, '+' + hiddenCount + ' daha...')
-  ];
-};
+```text
+Yeni yapı:
+ImpersonatedDashboard
+  ├── DIA Status Banner
+  ├── Page Selector Tabs/Dropdown
+  │     ├── main-dashboard
+  │     └── [user custom pages...]
+  └── ContainerBasedDashboard (seçili sayfa)
 ```
 
-### 2. Widget Düzeyinde: İlk Render'da Legend Gizleme
+### Adım 3: Super Admin Kullanıcı Yönetimi Sayfası
 
-```javascript
-// Mevcut
-var hasEnoughSpace = React.useState(true);
+**Yeni Dosya:** `src/pages/SuperAdminUsersPage.tsx`
 
-// Yeni - Çok fazla kategori varsa baştan gizle
-var hasEnoughSpace = React.useState(chartData.length <= 12);
-```
+Özellikler:
+1. Full-width DataGrid tablo
+2. Filtreleme paneli:
+   - Rol filtresi (Super Admin, Admin, Şirket Yetkilisi, Kullanıcı)
+   - Lisans durumu (Aktif, Süresi Yaklaşan, Süresi Dolmuş)
+   - DIA bağlantı durumu (Bağlı, Bağlı Değil)
+3. Arama: Email, isim, firma adı
+4. Sıralama: Tüm kolonlarda
+5. Aksiyonlar: Görüntüle, Lisans Düzenle, Sayfalara Git
 
-### 3. Widget Düzeyinde: Legend Container Max-Height
+**Dosya:** `src/App.tsx`
+- Yeni route ekle: `/super-admin/users`
 
-```javascript
-// Legend listesi için sabit max-height ekle
-React.createElement('div', { 
-  className: 'w-full flex-shrink-0 overflow-y-auto',
-  style: { maxHeight: '150px' }  // ~5-6 satır
-}, ...)
-```
-
-### 4. ContainerRenderer: Slot'lara Max-Height Ekle (Opsiyonel)
-
-```typescript
-// Satır 436-445 civarı
-<div className={cn(
-  'grid gap-1 md:gap-2 items-stretch [&>*]:h-full',
-  template.gridClass,
-  // Grafik container'ları için min ve MAX yükseklik
-  (container.container_type === 'chart_half' || 
-   container.container_type === 'chart_third') && 
-   '[&>*]:min-h-[280px] [&>*]:max-h-[400px]',  // ✅ max-h eklendi
-)}>
-```
+**Dosya:** `src/pages/SuperAdminPanel.tsx`
+- Users tab'ını yeni sayfaya yönlendir
+- Veya users tab içeriğini yeni sayfa component'ine taşı
 
 ---
 
-## Uygulama Planı
+## Veritabanı Değişiklikleri
 
-### Adım 1: Sektör Dağılımı Widget Güncellemesi (SQL)
-- İlk 10 kategoriyi göster, geri kalanı "Detaylar" butonuyla aç
-- Legend başlangıçta gizli (chartData.length > 12 ise)
-- Legend container'a `maxHeight: 150px` ekle
-
-### Adım 2: Cari Kaynak Dağılımı Widget Güncellemesi (SQL)
-- Aynı mantık uygulanacak (zaten 12 kaynak olduğu için daha az etkili)
-- Tutarlılık için aynı yapı
-
-### Adım 3: ContainerRenderer Güncellemesi
-- `chart_half` ve `chart_third` container'lara `max-h-[400px]` ekle
-- Bu, widgetların sonsuz büyümesini engelleyecek
-
-### Adım 4: AI Kod Üretici Kuralı (Edge Function)
-- Yeni widget'larda legend'ın max-height ile sınırlandırılması zorunlu kılınacak
+Bu plan için veritabanı değişikliği **gerekmemektedir**. Mevcut tablolar yeterli:
+- `profiles` - Kullanıcı bilgileri
+- `user_roles` - Roller
+- `user_pages` - Kullanıcı sayfaları
 
 ---
 
-## Teknik Değişiklikler
+## Etkilenen Dosyalar
 
-| Dosya | Değişiklik |
-|-------|------------|
-| `widgets` tablosu (SQL) | Sektör Dağılımı customCode: legend max-height + limit |
-| `widgets` tablosu (SQL) | Cari Kaynak Dağılımı customCode: legend max-height |
-| `ContainerRenderer.tsx` | chart_half/third için max-h-[400px] |
-| `ai-code-generator/index.ts` | Legend sınırlama kuralı ekleme |
+| Dosya | Değişiklik Türü |
+|-------|-----------------|
+| `src/components/pages/DynamicPage.tsx` | Güncelleme |
+| `src/components/admin/ImpersonatedDashboard.tsx` | Güncelleme |
+| `src/pages/SuperAdminUsersPage.tsx` | Yeni dosya |
+| `src/App.tsx` | Route ekleme |
+| `src/pages/SuperAdminPanel.tsx` | Tab yapısı güncelleme |
+| `src/components/layout/Sidebar.tsx` | (Opsiyonel) Super admin menü linki |
 
-## Beklenen Sonuç
+---
 
-- İki grafik yan yana koyulduğunda her biri ~280-400px arasında kalacak
-- Legend'lar scroll ile görüntülenecek (max 150px)
-- Çok fazla kategori olduğunda "Detaylar" butonu ile açılabilir modal
+## Uygulama Sırası
+
+1. **DynamicPage Düzeltmesi** - En kritik, kullanıcılar sayfa düzenleyemiyor
+2. **ImpersonatedDashboard Sayfa Seçici** - Super admin için gerekli
+3. **Kullanıcı Yönetimi Sayfası** - Daha kapsamlı, son adım
+
+---
+
+## Test Senaryoları
+
+1. ✅ Dinamik sayfada sağ altta FloatingActions görünüyor mu?
+2. ✅ Container Ekle, Widget Düzenle, Container Sırala butonları çalışıyor mu?
+3. ✅ Super Admin impersonation modunda kullanıcının tüm sayfalarını görebiliyor mu?
+4. ✅ Sayfa seçici ile sayfalar arası geçiş yapılabiliyor mu?
+5. ✅ Kullanıcı listesi sayfasında filtreleme çalışıyor mu?
+6. ✅ Arama fonksiyonu doğru sonuçlar döndürüyor mu?
