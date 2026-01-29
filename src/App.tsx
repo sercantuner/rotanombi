@@ -15,6 +15,7 @@ import { SettingsPage } from "@/pages/SettingsPage";
 import { TeamManagementPage } from "@/pages/TeamManagementPage";
 import AdminPage from "@/pages/AdminPage";
 import SuperAdminPanel from "@/pages/SuperAdminPanel";
+import SuperAdminUsersPage from "@/pages/SuperAdminUsersPage";
 import { DynamicPage } from "@/components/pages/DynamicPage";
 import NotFound from "./pages/NotFound";
 
@@ -53,6 +54,7 @@ const App = () => (
                   <Route path="/admin" element={<AppLayout><AdminPage /></AppLayout>} />
                   <Route path="/super-admin" element={<Navigate to="/super-admin-panel" replace />} />
                   <Route path="/super-admin-panel" element={<AppLayout><SuperAdminPanel /></AppLayout>} />
+                  <Route path="/super-admin/users" element={<AppLayout><SuperAdminUsersPage /></AppLayout>} />
                   <Route path="/takim" element={<AppLayout><TeamManagementPage /></AppLayout>} />
                   
                   {/* Dynamic user pages */}

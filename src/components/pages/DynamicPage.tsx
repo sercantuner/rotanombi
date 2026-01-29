@@ -1,17 +1,15 @@
 // Dinamik Sayfa Bileşeni - Kullanıcı tarafından oluşturulan sayfaları render eder
 // GLOBAL CACHE: Veri kaynakları tüm sayfalar arası paylaşılır
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
-import { ContainerPicker } from './ContainerPicker';
-import { ContainerRenderer } from './ContainerRenderer';
-import { usePageContainers } from '@/hooks/useUserPages';
+import { ContainerBasedDashboard } from '@/components/dashboard/ContainerBasedDashboard';
 import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
 import { DashboardLoadingScreen } from '@/components/dashboard/DashboardLoadingScreen';
-import { UserPage, ContainerType } from '@/lib/pageTypes';
+import { UserPage } from '@/lib/pageTypes';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -27,8 +25,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-// Widget verisi için import - ARTIK KULLANILMIYOR, global cache kullanıyoruz
-
 export function DynamicPage() {
   const { pageSlug } = useParams<{ pageSlug: string }>();
   const navigate = useNavigate();
@@ -36,7 +32,6 @@ export function DynamicPage() {
   
   const [page, setPage] = useState<UserPage | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showContainerPicker, setShowContainerPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // GLOBAL veri kaynağı loader - sayfa geçişlerinde sadece eksik sorguları tamamlar
@@ -49,9 +44,6 @@ export function DynamicPage() {
     loadProgress,
     refresh: refreshDataSources,
   } = useDataSourceLoader(page?.id || null);
-
-  const { containers, addContainer, deleteContainer, reorderContainers, refreshContainers } = 
-    usePageContainers(page?.id || null);
 
   // Sayfayı yükle
   useEffect(() => {
@@ -82,12 +74,6 @@ export function DynamicPage() {
 
     loadPage();
   }, [pageSlug, user, navigate]);
-
-  // Konteyner ekle
-  const handleAddContainer = async (containerType: ContainerType) => {
-    await addContainer(containerType);
-    refreshContainers();
-  };
 
   // Sayfayı sil
   const handleDeletePage = async () => {
@@ -162,50 +148,13 @@ export function DynamicPage() {
         />
 
         <main className="flex-1 p-2 md:p-4 overflow-auto">
-          {/* Containers */}
-          {containers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 border border-dashed rounded-lg">
-              <Plus className="h-12 w-12 text-muted-foreground/50 mb-4" />
-              <h3 className="text-lg font-medium mb-2">Bu sayfa henüz boş</h3>
-              <p className="text-sm text-muted-foreground mb-6">
-                Rapor konteynerleri ekleyerek başlayın
-              </p>
-              <Button onClick={() => setShowContainerPicker(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Konteyner Ekle
-              </Button>
-            </div>
-          ) : (
-            <>
-              {containers.map((container) => (
-              <ContainerRenderer
-                  key={container.id}
-                  container={container}
-                  onDelete={() => deleteContainer(container.id)}
-                  widgetData={{}}
-                  isLoading={dataSourcesLoading}
-                  pageId={page?.id}
-                />
-              ))}
-
-              {/* Add Container Button */}
-              <button
-                onClick={() => setShowContainerPicker(true)}
-                className="w-full py-4 border border-dashed rounded-lg text-muted-foreground hover:text-primary hover:border-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-1.5 text-sm"
-              >
-                <Plus className="h-5 w-5" />
-                <span className="font-medium">Konteyner Ekle</span>
-              </button>
-            </>
-          )}
+          {/* ContainerBasedDashboard - FloatingActions dahil */}
+          <ContainerBasedDashboard 
+            pageId={page.id} 
+            widgetData={{}} 
+            isLoading={dataSourcesLoading}
+          />
         </main>
-
-        {/* Container Picker Modal */}
-        <ContainerPicker
-          open={showContainerPicker}
-          onOpenChange={setShowContainerPicker}
-          onSelectContainer={handleAddContainer}
-        />
 
         {/* Delete Confirmation */}
         <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
