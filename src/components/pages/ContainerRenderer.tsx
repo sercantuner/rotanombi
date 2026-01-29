@@ -436,10 +436,10 @@ export function ContainerRenderer({
           <div className={cn(
             'grid gap-1 md:gap-2 items-stretch [&>*]:h-full',
             template.gridClass,
-            // Grafik container'ları için minimum yükseklik
+            // Grafik container'ları için min ve max yükseklik (legend overflow önleme)
             (container.container_type === 'chart_full' || 
              container.container_type === 'chart_half' || 
-             container.container_type === 'chart_third') && '[&>*]:min-h-[280px]',
+             container.container_type === 'chart_third') && '[&>*]:min-h-[280px] [&>*]:max-h-[400px]',
             (container.container_type === 'info_cards_2' ||
              container.container_type === 'info_cards_3') && '[&>*]:min-h-[200px]'
           )}>
