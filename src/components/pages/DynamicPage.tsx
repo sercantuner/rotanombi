@@ -7,6 +7,7 @@ import { Header } from '@/components/layout/Header';
 import { ContainerBasedDashboard } from '@/components/dashboard/ContainerBasedDashboard';
 import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
 import { DashboardLoadingScreen } from '@/components/dashboard/DashboardLoadingScreen';
+import { GlobalFilterBar } from '@/components/filters/GlobalFilterBar';
 import { UserPage } from '@/lib/pageTypes';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
@@ -148,6 +149,12 @@ export function DynamicPage() {
         />
 
         <main className="flex-1 p-2 md:p-4 overflow-auto">
+          {/* Global Filter Bar - Dashboard ile aynı */}
+          <GlobalFilterBar 
+            className="mb-3" 
+            showDateFilter={true}
+          />
+
           {/* ContainerBasedDashboard - FloatingActions dahil */}
           <ContainerBasedDashboard 
             pageId={page.id} 
