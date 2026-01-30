@@ -1402,7 +1402,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
                 <p className="text-xs text-muted-foreground">
                   Mevcut widget'lardan birini seçerek AI'ye örnek olarak gönderin
                 </p>
-                <ScrollArea className="max-h-[150px]">
+                <ScrollArea className="max-h-[280px]">
                   <div className="space-y-1">
                     {customWidgetTemplates.map(widget => (
                       <div
