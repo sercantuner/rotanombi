@@ -243,10 +243,11 @@ export function ContainerRenderer({
         );
       }
 
-      // Widget var ama detayları henüz yüklenmedi - skeleton göster
+      // Widget var ama detayları henüz yüklenmedi
+      // Kısa süreli yüklemelerde flicker önlemek için hafif placeholder kullan
       if (slotWidget && !widgetDetail) {
         return (
-          <Skeleton key={slotIndex} className="h-full w-full min-h-[80px] rounded" />
+          <div key={slotIndex} className="h-full w-full min-h-[80px] rounded bg-muted/20 transition-opacity" />
         );
       }
 

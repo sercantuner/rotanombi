@@ -204,7 +204,9 @@ export function BuilderWidgetRenderer({
     setDrillDownOpen(true);
   };
 
-  if (isLoading) {
+  // Sadece İLK yüklemede VE veri yoksa skeleton göster
+  // Cache'den gelen veri varsa (stale bile olsa) skeleton gösterme - flicker önleme
+  if (isLoading && (!data || (Array.isArray(data) && data.length === 0))) {
     return (
       <Card className={isolatedClassName}>
         <CardHeader>

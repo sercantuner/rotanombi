@@ -580,7 +580,7 @@ export function useDynamicWidgetData(
 ): DynamicWidgetDataResult {
   const [data, setData] = useState<any>(null);
   const [rawData, setRawData] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isFetching, setIsFetching] = useState(false); // İç fetch state
   const [error, setError] = useState<string | null>(null);
   
   // Cache context - Artık veri kaynağı bazlı cache kullanıyoruz (Cache-First strateji)
@@ -596,6 +596,11 @@ export function useDynamicWidgetData(
     incrementCacheHit, 
     incrementCacheMiss 
   } = useDiaDataCache();
+  
+  // Cache-first loading: Cache'de veri varsa isLoading false döner
+  // Bu sayede sayfa geçişlerinde skeleton gösterilmez
+  const cachedData = config?.dataSourceId ? getDataSourceData(config.dataSourceId) : null;
+  const isLoading = isFetching && !cachedData;
 
   const fetchData = useCallback(async () => {
     if (!config) {
@@ -604,7 +609,7 @@ export function useDynamicWidgetData(
       return;
     }
 
-    setIsLoading(true);
+    setIsFetching(true);
     setError(null);
 
     try {
@@ -637,7 +642,7 @@ export function useDynamicWidgetData(
             // DataSourceLoader yüklerken bekle
             if (isDataSourceLoading(query.dataSourceId)) {
               console.log(`[MultiQuery] DataSource ${query.dataSourceId} loading, waiting...`);
-              setIsLoading(true);
+              setIsFetching(true);
               return;
             }
 
@@ -679,7 +684,7 @@ export function useDynamicWidgetData(
           } else if (isDataSourceLoading(config.dataSourceId)) {
             // Veri kaynağı şu anda yükleniyor - bekle
             console.log(`[Widget] DataSource ${config.dataSourceId} loading, waiting...`);
-            setIsLoading(true);
+            setIsFetching(true);
             return; // fetchData tekrar çağrılacak
           } else {
             // Cache'de yok ve yüklenmiyor - uyarı ver ama API çağrısı YAPMA
@@ -829,7 +834,7 @@ export function useDynamicWidgetData(
       console.error('Dynamic widget data fetch error:', err);
       setError(err instanceof Error ? err.message : 'Veri yüklenemedi');
     } finally {
-      setIsLoading(false);
+      setIsFetching(false);
     }
   }, [config, globalFilters, getCachedData, setCachedData, getDataSourceDataWithStale, isDataSourceLoading, sharedData, incrementCacheHit, incrementCacheMiss]);
 
