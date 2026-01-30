@@ -111,8 +111,11 @@ export function DynamicPage() {
     );
   }
 
-  // İlk yüklemede loading screen göster
-  const showLoadingScreen = dataSourcesInitialLoad && totalSources > 0 && loadedSources.length < totalSources;
+  // Cache-first loading screen mantığı:
+  // Cache tamamen boşken VE ilk yüklemeyse loading screen göster
+  // Sayfa geçişlerinde cache dolu olacağından loading screen görünmeyecek
+  const hasCachedData = loadedSources.length > 0 || totalSources === 0;
+  const showLoadingScreen = dataSourcesInitialLoad && !hasCachedData && totalSources > 0;
 
   return (
     <DashboardFilterProvider>

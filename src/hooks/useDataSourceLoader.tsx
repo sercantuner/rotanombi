@@ -465,9 +465,33 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     if (pageId && dataSources.length > 0 && !hasInitialized && !loadingRef.current) {
       console.log(`[DataSourceLoader] Initial load for page ${pageId} (${dataSources.length} sources available)`);
       setHasInitialized(true);
-      loadAllDataSources();
+      
+      // Sayfa geçişlerinde cache kontrol et - tüm kaynaklar zaten cache'de mi?
+      (async () => {
+        const usedSourceIds = await findUsedDataSources();
+        const allSourcesCached = usedSourceIds.length === 0 || usedSourceIds.every(id => {
+          const cachedData = getDataSourceData(id);
+          return cachedData && cachedData.length > 0;
+        });
+        
+        if (allSourcesCached && usedSourceIds.length > 0) {
+          // Tüm kaynaklar cache'de - loading gösterme, hemen hazır
+          console.log(`[DataSourceLoader] All ${usedSourceIds.length} sources already in cache - skipping loading state`);
+          setIsLoading(false);
+          setIsInitialLoad(false);
+          setPageDataReady(true);
+          setLoadedSources(usedSourceIds.map(id => ({
+            id,
+            name: getDataSourceById(id)?.name || id
+          })));
+          setLoadProgress(100);
+        } else {
+          // Cache miss var - normal yükleme yap
+          loadAllDataSources();
+        }
+      })();
     }
-  }, [pageId, dataSources.length, hasInitialized, loadAllDataSources]);
+  }, [pageId, dataSources.length, hasInitialized, loadAllDataSources, findUsedDataSources, getDataSourceData, getDataSourceById, setPageDataReady]);
 
   // Manuel refresh (force) - TÜM verileri yeniden çeker
   const refresh = useCallback(async () => {

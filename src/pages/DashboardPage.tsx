@@ -226,9 +226,11 @@ function DashboardContent() {
     toplamBankaBakiye: finansRapor?.toplamBankaBakiyesi || 0,
   }), [genelRapor, finansRapor, cariler, yaslandirma]);
 
-  // İlk yüklemede loading screen göster (en az 1 kaynak ve henüz yükleme başlamışsa)
-  // totalSources 0 ise veya tüm kaynaklar yüklendiyse loading gösterme
-  const showLoadingScreen = dataSourcesInitialLoad && totalSources > 0 && loadedSources.length < totalSources;
+  // Cache-first loading screen mantığı:
+  // Cache tamamen boşken VE ilk yüklemeyse loading screen göster
+  // Sayfa geçişlerinde cache dolu olacağından loading screen görünmeyecek
+  const hasCachedData = loadedSources.length > 0 || totalSources === 0;
+  const showLoadingScreen = dataSourcesInitialLoad && !hasCachedData && totalSources > 0;
 
   return (
     <div className="flex-1 flex flex-col">
