@@ -133,14 +133,19 @@ export function DrillDownModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col p-0 gap-0 rounded border border-border">
-        {/* Header */}
-        <div className="flex items-center justify-between p-3 border-b border-border flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <DialogTitle className="text-sm font-semibold">{title}</DialogTitle>
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">
+        {/* Header - 3 bölgeli düzen: sol (başlık+badge) | orta (bilgiler) | sağ (X butonu - DialogContent tarafından sağlanır) */}
+        <div className="flex items-center justify-between p-3 border-b border-border flex-shrink-0 gap-4 pr-12">
+          <div className="flex items-center gap-2 min-w-0">
+            <DialogTitle className="text-sm font-semibold truncate">{title}</DialogTitle>
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 shrink-0">
               {filteredData.length} kayıt
             </Badge>
           </div>
+          {totalValue !== null && (
+            <div className="flex-1 text-right">
+              <span className="text-sm font-bold">{formatValue(totalValue)}</span>
+            </div>
+          )}
           {subtitle && (
             <DialogDescription className="text-[10px] text-muted-foreground sr-only">{subtitle}</DialogDescription>
           )}
@@ -148,14 +153,6 @@ export function DrillDownModal({
 
         {/* Content Area with Scroll */}
         <div className="flex-1 overflow-y-auto p-3">
-          {/* Özet Bilgi */}
-          {totalValue !== null && (
-            <div className="flex items-center justify-between p-2 bg-muted/50 rounded mb-2">
-              <span className="text-xs text-muted-foreground">Toplam Değer:</span>
-              <span className="text-sm font-semibold">{formatValue(totalValue)}</span>
-            </div>
-          )}
-
           {/* Arama ve Export */}
           <div className="flex items-center gap-2 mb-2">
             <div className="relative flex-1">
