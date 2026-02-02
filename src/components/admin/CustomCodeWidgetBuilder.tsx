@@ -1274,6 +1274,12 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
     prompt += '- Ana container\'da "border border-border" KULLANMA! Sadece "h-full flex flex-col" yeterli.\n';
     prompt += '- Recharts.Tooltip her zaman wrapperStyle: { zIndex: 9999 } ile kullanılmalı.\n';
     prompt += '- Custom Tooltip div\'ine de style: { zIndex: 9999 } ekle.\n';
+    prompt += '\n🪟 POPUP/MODAL HEADER DÜZENI:\n';
+    prompt += '- Header 3 bölgeden oluşmalı: sol (başlık), orta (bilgiler), sağ (kapatma butonu).\n';
+    prompt += '- Kapatma butonu (X) her zaman sabit genişlikte (shrink-0) ve ayrı div içinde olmalı.\n';
+    prompt += '- Header yapısı: flex items-center justify-between gap-4\n';
+    prompt += '- Örnek: div[sol: başlık+badge] → div[flex-1: tutar/bilgiler] → div[shrink-0: X butonu]\n';
+    prompt += '- Bilgi ve kapatma butonu ASLA üst üste binmemeli!\n';
     
     return prompt;
   }, [aiPrompt, selectedExampleWidget, exampleWidgetCode, diaModelLinks, aiRequirements, customRules]);
