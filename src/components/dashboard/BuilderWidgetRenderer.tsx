@@ -149,6 +149,16 @@ export function BuilderWidgetRenderer({
   // Veri çekme - global filtreler ile
   const { data, rawData, isLoading, error, refetch } = useDynamicWidgetData(builderConfig, filters);
   
+  // DEBUG: Widget veri durumu
+  console.log(`[BuilderWidgetRenderer] ${widgetName} (${widgetId})`, {
+    hasData: !!data,
+    rawDataLength: rawData?.length || 0,
+    isLoading,
+    error,
+    dataSourceId: builderConfig?.dataSourceId,
+    vizType: builderConfig?.visualization?.type,
+  });
+  
   // Widget bazında kullanıcı renk paleti
   const { colors: userColors } = useChartColorPalette({ widgetId });
   
