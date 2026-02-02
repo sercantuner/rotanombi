@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Checkbox } from '@/components/ui/checkbox';
 import { DataSourceSelector } from './DataSourceSelector';
 import { MultiQueryBuilder } from './MultiQueryBuilder';
+import { ExampleWidgetPickerModal } from './ExampleWidgetPickerModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -244,46 +245,13 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   const [newCustomRule, setNewCustomRule] = useState('');
   const [showAiRequirements, setShowAiRequirements] = useState(false);
   
-  // Örnek Widget Seçimi
-  const [showExampleWidgets, setShowExampleWidgets] = useState(false);
+  // Örnek Widget Seçimi Modal
+  const [showExampleWidgetModal, setShowExampleWidgetModal] = useState(false);
   const [selectedExampleWidget, setSelectedExampleWidget] = useState<string | null>(null);
-  const [exampleWidgets, setExampleWidgets] = useState<any[]>([]);
-  const [isLoadingExamples, setIsLoadingExamples] = useState(false);
   
   // Tam Prompt Görüntüleme Modal
   const [showFullPromptModal, setShowFullPromptModal] = useState(false);
   const [fullPromptContent, setFullPromptContent] = useState('');
-  
-  // Örnek widget'ları doğrudan veritabanından çek (collapsible açıldığında)
-  useEffect(() => {
-    if (!showExampleWidgets) return;
-    
-    const fetchExampleWidgets = async () => {
-      setIsLoadingExamples(true);
-      try {
-        const { data, error } = await supabase
-          .from('widgets')
-          .select('id, widget_key, name, icon, builder_config')
-          .eq('is_active', true)
-          .not('builder_config->customCode', 'is', null)
-          .order('name', { ascending: true });
-        
-        if (error) throw error;
-        
-        // Düzenlenen widget'ı listeden çıkar
-        const filtered = (data || []).filter(w => w.id !== editingWidget?.id);
-        setExampleWidgets(filtered);
-        console.log(`[ExampleWidgets] Loaded ${filtered.length} widgets from database`);
-      } catch (err: any) {
-        console.error('[ExampleWidgets] Error:', err);
-        toast.error('Örnek widget listesi yüklenemedi');
-      } finally {
-        setIsLoadingExamples(false);
-      }
-    };
-    
-    fetchExampleWidgets();
-  }, [showExampleWidgets, editingWidget?.id]);
 
   // Adım geçiş kontrolü
   const canProceed = useCallback((step: number) => {
@@ -1239,19 +1207,45 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
   };
 
   // AI prompt'unu zenginleştir (DIA linkleri + zorunluluklar + örnek widget)
+  // Seçili örnek widget kodunu veritabanından çek
+  const [exampleWidgetCode, setExampleWidgetCode] = useState<string | null>(null);
+  
+  useEffect(() => {
+    if (!selectedExampleWidget) {
+      setExampleWidgetCode(null);
+      return;
+    }
+    
+    const fetchExampleCode = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('widgets')
+          .select('builder_config')
+          .eq('widget_key', selectedExampleWidget)
+          .single();
+        
+        if (error) throw error;
+        
+        const code = (data?.builder_config as any)?.customCode;
+        setExampleWidgetCode(code || null);
+      } catch (err) {
+        console.error('Error fetching example widget code:', err);
+        setExampleWidgetCode(null);
+      }
+    };
+    
+    fetchExampleCode();
+  }, [selectedExampleWidget]);
+  
   const buildEnhancedPrompt = useCallback(() => {
     let prompt = aiPrompt;
     
     // Seçili örnek widget kodu
-    if (selectedExampleWidget) {
-      const exampleWidget = exampleWidgets.find(w => w.widget_key === selectedExampleWidget);
-      const builderConfig = exampleWidget?.builder_config as any;
-      if (builderConfig?.customCode) {
-        prompt += '\n\n📋 ÖRNEK REFERANS WIDGET:\n';
-        prompt += 'Aşağıdaki widget kodunu yapı ve stil açısından örnek al:\n';
-        prompt += '```javascript\n' + builderConfig.customCode + '\n```\n';
-        prompt += 'Bu widget\'ın responsive legend, renk paleti kullanımı ve container yapısını benzer şekilde uygula.';
-      }
+    if (selectedExampleWidget && exampleWidgetCode) {
+      prompt += '\n\n📋 ÖRNEK REFERANS WIDGET:\n';
+      prompt += 'Aşağıdaki widget kodunu yapı ve stil açısından örnek al:\n';
+      prompt += '```javascript\n' + exampleWidgetCode + '\n```\n';
+      prompt += 'Bu widget\'ın responsive legend, renk paleti kullanımı ve container yapısını benzer şekilde uygula.';
     }
     
     // DIA Model linkleri ekle
@@ -1282,7 +1276,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
     prompt += '- Custom Tooltip div\'ine de style: { zIndex: 9999 } ekle.\n';
     
     return prompt;
-  }, [aiPrompt, selectedExampleWidget, exampleWidgets, diaModelLinks, aiRequirements, customRules]);
+  }, [aiPrompt, selectedExampleWidget, exampleWidgetCode, diaModelLinks, aiRequirements, customRules]);
 
   // Tam prompt oluşturma - AI'ye gönderilen tüm içerik
   const generateFullPromptPreview = useCallback(() => {
@@ -1408,79 +1402,46 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
         </CardHeader>
         <CardContent className="flex-1 flex flex-col gap-3 overflow-hidden">
           <ScrollArea className="flex-1">
-            {/* Örnek Widget Seç */}
-            <Collapsible open={showExampleWidgets} onOpenChange={setShowExampleWidgets} className="mb-3">
-              <CollapsibleTrigger asChild>
-                <Button variant="outline" size="sm" className="w-full justify-between h-8">
-                  <span className="flex items-center gap-2 text-xs">
-                    <LucideIcons.Layers className="h-3.5 w-3.5" />
-                    Örnek Widget Seç
-                    {selectedExampleWidget && (
-                      <Badge variant="secondary" className="text-[10px] h-4">1</Badge>
-                    )}
-                  </span>
-                  <LucideIcons.ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showExampleWidgets && "rotate-180")} />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2 p-3 border rounded-lg bg-muted/30 space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  Mevcut widget'lardan birini seçerek AI'ye örnek olarak gönderin
-                </p>
-                
-                {isLoadingExamples ? (
-                  <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="text-xs">Widget listesi yükleniyor...</span>
-                  </div>
-                ) : (
-                  <>
-                    <ScrollArea className="max-h-[280px]">
-                      <div className="space-y-1">
-                        {exampleWidgets.map(widget => (
-                          <div
-                            key={widget.id}
-                            onClick={() => setSelectedExampleWidget(
-                              selectedExampleWidget === widget.widget_key ? null : widget.widget_key
-                            )}
-                            className={cn(
-                              "flex items-center gap-2 p-2 rounded cursor-pointer text-xs transition-colors",
-                              selectedExampleWidget === widget.widget_key 
-                                ? "bg-primary/10 border border-primary/30" 
-                                : "hover:bg-muted"
-                            )}
-                          >
-                            <DynamicIcon iconName={widget.icon || 'Code'} className="h-4 w-4 shrink-0" />
-                            <span className="flex-1 truncate">{widget.name}</span>
-                            {selectedExampleWidget === widget.widget_key && (
-                              <Check className="h-3.5 w-3.5 text-primary" />
-                            )}
-                          </div>
-                        ))}
-                        {exampleWidgets.length === 0 && (
-                          <p className="text-xs text-muted-foreground text-center py-2">
-                            Henüz örnek olabilecek widget yok
-                          </p>
-                        )}
-                      </div>
-                    </ScrollArea>
-                    
-                    {/* Toplam widget sayısı */}
-                    <div className="text-[10px] text-muted-foreground pt-1 border-t">
-                      Toplam: {exampleWidgets.length} widget
-                    </div>
-                  </>
-                )}
-                
-                {selectedExampleWidget && (
-                  <div className="pt-2 border-t">
-                    <Badge variant="outline" className="text-xs gap-1">
-                      <Check className="h-3 w-3" />
-                      {exampleWidgets.find(w => w.widget_key === selectedExampleWidget)?.name}
-                    </Badge>
-                  </div>
-                )}
-              </CollapsibleContent>
-            </Collapsible>
+            {/* Örnek Widget Seç - Büyüteç ile Modal */}
+            <div className="mb-3">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full justify-between h-8"
+                onClick={() => setShowExampleWidgetModal(true)}
+              >
+                <span className="flex items-center gap-2 text-xs">
+                  <LucideIcons.Layers className="h-3.5 w-3.5" />
+                  Örnek Widget Seç
+                  {selectedExampleWidget && (
+                    <Badge variant="secondary" className="text-[10px] h-4">1</Badge>
+                  )}
+                </span>
+                <LucideIcons.Search className="h-3.5 w-3.5 text-muted-foreground" />
+              </Button>
+              
+              {selectedExampleWidget && (
+                <div className="mt-2 p-2 border rounded-lg bg-muted/30">
+                  <Badge variant="outline" className="text-xs gap-1">
+                    <Check className="h-3 w-3" />
+                    {selectedExampleWidget}
+                    <X 
+                      className="h-3 w-3 cursor-pointer hover:text-destructive ml-1" 
+                      onClick={() => setSelectedExampleWidget(null)}
+                    />
+                  </Badge>
+                </div>
+              )}
+              
+              {/* Örnek Widget Seçim Modal */}
+              <ExampleWidgetPickerModal
+                open={showExampleWidgetModal}
+                onOpenChange={setShowExampleWidgetModal}
+                selectedWidgetKey={selectedExampleWidget}
+                onSelect={setSelectedExampleWidget}
+                excludeWidgetId={editingWidget?.id}
+              />
+            </div>
 
             {/* DIA Model Referansları */}
             <Collapsible open={showModelLinks} onOpenChange={setShowModelLinks} className="mb-3">
