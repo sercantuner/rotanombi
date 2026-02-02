@@ -127,6 +127,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   const [widgetIcon, setWidgetIcon] = useState('BarChart3');
   const [widgetSize, setWidgetSize] = useState<WidgetSize>('md');
   const [availableSizes, setAvailableSizes] = useState<WidgetSize[]>(['md']);
+  const [widgetCategory, setWidgetCategory] = useState<string>('dashboard');
   const [defaultPage, setDefaultPage] = useState<WidgetCategory>('dashboard');
   const [targetPages, setTargetPages] = useState<WidgetCategory[]>(['dashboard']);
   
@@ -209,6 +210,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
       setWidgetDescription(editWidget.description || '');
       setWidgetIcon(editWidget.icon || 'BarChart3');
       setWidgetSize(editWidget.size);
+      setWidgetCategory(editWidget.category || 'dashboard');
       setDefaultPage(editWidget.default_page);
       setActiveTab('api');
       
@@ -295,6 +297,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
     setWidgetIcon('BarChart3');
     setWidgetSize('md');
     setAvailableSizes(['md']);
+    setWidgetCategory('dashboard');
     setDefaultPage('dashboard');
     setTargetPages(['dashboard']);
     setFilterFields([]);
@@ -648,7 +651,7 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
       widget_key: widgetKey,
       name: widgetName,
       description: widgetDescription,
-      category: defaultPage,
+      category: widgetCategory as WidgetCategory,
       type: config.visualization.type === 'kpi' ? 'kpi' : 
             config.visualization.type === 'table' ? 'table' :
             config.visualization.type === 'list' ? 'list' : 'chart',
@@ -1177,9 +1180,8 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
               />
             </div>
             
-            {/* Sayfa Seçici */}
+            {/* Kategori ve Sayfa Seçici */}
             <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Sayfalar</Label>
               <WidgetPageSelector
                 selectedPages={targetPages}
                 defaultPage={defaultPage}
@@ -1187,6 +1189,11 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                   setTargetPages(pages);
                   setDefaultPage(def);
                 }}
+                selectedCategory={widgetCategory}
+                onCategoryChange={(categorySlug) => {
+                  setWidgetCategory(categorySlug);
+                }}
+                showCategorySelector={true}
               />
             </div>
           </div>
