@@ -178,8 +178,6 @@ export function WidgetPageSelector({
 
         {showCategorySelector && onCategoryChange && <Separator />}
 
-        {showCategorySelector && onCategoryChange && <Separator />}
-
         {/* Hedef Sayfalar */}
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground">Hedef Sayfalar</Label>
