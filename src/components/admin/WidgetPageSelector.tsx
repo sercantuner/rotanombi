@@ -1,10 +1,10 @@
 // WidgetPageSelector - Multi-select sayfa seçici bileşeni
 // Widget'ın hangi sayfalarda görüneceğini belirler
-// Dinamik kategoriler desteği eklendi
+// Dinamik kategoriler desteği + Kategori seçimi için büyüteç modal
 
 import React, { useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { Check, Plus, X, Star, LayoutDashboard, TrendingUp, Wallet, Users, Folder, Loader2 } from 'lucide-react';
+import { Check, Plus, X, Star, LayoutDashboard, TrendingUp, Wallet, Users, Folder, Loader2, Search } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { WidgetCategory, PAGE_CATEGORIES } from '@/lib/widgetTypes';
 import { useWidgetCategories, WidgetCategory as DbWidgetCategory } from '@/hooks/useWidgetCategories';
@@ -18,6 +18,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { CategoryPickerModal } from './CategoryPickerModal';
 
 interface WidgetPageSelectorProps {
   selectedPages: WidgetCategory[];
@@ -55,7 +56,7 @@ export function WidgetPageSelector({
   className,
 }: WidgetPageSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   
   // Dinamik kategorileri çek
   const { activeCategories, isLoading: isCategoriesLoading } = useWidgetCategories();
@@ -138,69 +139,44 @@ export function WidgetPageSelector({
         {showCategorySelector && onCategoryChange && (
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Widget Kategorisi</Label>
-            <Popover open={isCategoryOpen} onOpenChange={setIsCategoryOpen}>
-              <PopoverTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  className="w-full justify-start h-9"
-                  disabled={isCategoriesLoading}
-                >
-                  {isCategoriesLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Yükleniyor...
-                    </>
-                  ) : currentCategory ? (
-                    <>
-                      <DynamicIcon iconName={currentCategory.icon || 'Folder'} className="h-4 w-4 mr-2" />
-                      {currentCategory.name}
-                    </>
-                  ) : (
-                    <>
-                      <Folder className="h-4 w-4 mr-2 text-muted-foreground" />
-                      <span className="text-muted-foreground">Kategori seçin</span>
-                    </>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 p-2" align="start">
-                <div className="space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">
-                    Kategori Seç ({activeCategories.length})
-                  </p>
-                  {activeCategories.map((category) => (
-                    <button
-                      key={category.id}
-                      type="button"
-                      onClick={() => {
-                        onCategoryChange(category.slug);
-                        setIsCategoryOpen(false);
-                      }}
-                      className={cn(
-                        "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors",
-                        selectedCategory === category.slug
-                          ? "bg-primary text-primary-foreground"
-                          : "hover:bg-muted"
-                      )}
-                    >
-                      <DynamicIcon iconName={category.icon || 'Folder'} className="h-4 w-4" />
-                      <span className="flex-1 text-left">{category.name}</span>
-                      {selectedCategory === category.slug && (
-                        <Check className="h-4 w-4" />
-                      )}
-                    </button>
-                  ))}
-                  
-                  {activeCategories.length === 0 && (
-                    <p className="text-xs text-muted-foreground text-center py-2">
-                      Henüz kategori tanımlanmamış
-                    </p>
-                  )}
-                </div>
-              </PopoverContent>
-            </Popover>
+            <Button 
+              variant="outline" 
+              className="w-full justify-between h-9"
+              onClick={() => setShowCategoryModal(true)}
+              disabled={isCategoriesLoading}
+            >
+              <span className="flex items-center gap-2">
+                {isCategoriesLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Yükleniyor...
+                  </>
+                ) : currentCategory ? (
+                  <>
+                    <DynamicIcon iconName={currentCategory.icon || 'Folder'} className="h-4 w-4" />
+                    {currentCategory.name}
+                  </>
+                ) : (
+                  <>
+                    <Folder className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">Kategori seçin</span>
+                  </>
+                )}
+              </span>
+              <Search className="h-4 w-4 text-muted-foreground" />
+            </Button>
+
+            {/* Kategori Seçim Modal */}
+            <CategoryPickerModal
+              open={showCategoryModal}
+              onOpenChange={setShowCategoryModal}
+              selectedCategory={selectedCategory}
+              onSelect={(slug) => onCategoryChange(slug)}
+            />
           </div>
         )}
+
+        {showCategorySelector && onCategoryChange && <Separator />}
 
         {showCategorySelector && onCategoryChange && <Separator />}
 
