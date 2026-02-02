@@ -1050,9 +1050,68 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      profiles_safe: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          display_name: string | null
+          donem_yili: string | null
+          email: string | null
+          firma_adi: string | null
+          id: string | null
+          is_demo_account: boolean | null
+          is_team_admin: boolean | null
+          license_expires_at: string | null
+          license_type: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          donem_yili?: string | null
+          email?: string | null
+          firma_adi?: string | null
+          id?: string | null
+          is_demo_account?: boolean | null
+          is_team_admin?: boolean | null
+          license_expires_at?: string | null
+          license_type?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          donem_yili?: string | null
+          email?: string | null
+          firma_adi?: string | null
+          id?: string | null
+          is_demo_account?: boolean | null
+          is_team_admin?: boolean | null
+          license_expires_at?: string | null
+          license_type?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      get_safe_profile: {
+        Args: { _target_user_id: string }
+        Returns: {
+          avatar_url: string
+          display_name: string
+          email: string
+          firma_adi: string
+          is_team_admin: boolean
+          license_type: string
+          user_id: string
+        }[]
+      }
       get_team_members: { Args: { _admin_id: string }; Returns: string[] }
       get_user_team_admin: { Args: { _user_id: string }; Returns: string }
       has_module_permission: {
@@ -1067,6 +1126,10 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_profile_team_member: {
+        Args: { _profile_user_id: string; _viewer_id: string }
+        Returns: boolean
+      }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       is_team_admin: { Args: { _user_id: string }; Returns: boolean }
       is_team_member: {

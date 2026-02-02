@@ -43,7 +43,9 @@ export function ImpersonationProvider({ children }: { children: React.ReactNode 
   const [impersonatedUserId, setImpersonatedUserId] = useState<string | null>(null);
   const [impersonatedProfile, setImpersonatedProfile] = useState<ImpersonatedProfile | null>(null);
 
-  // Impersonated user'ın profilini yükle (DIA bilgileri dahil)
+  // Impersonated user'ın profilini yükle
+  // GÜVENLİK: Team admin'ler sadece temel profil bilgilerini görebilir
+  // DIA şifreleri, API key'leri gibi hassas veriler sadece super admin'ler için yüklenir
   useEffect(() => {
     if (!impersonatedUserId) {
       setImpersonatedProfile(null);
@@ -53,26 +55,36 @@ export function ImpersonationProvider({ children }: { children: React.ReactNode 
     const loadProfile = async () => {
       console.log('[Impersonation] Loading profile for user:', impersonatedUserId);
       
+      // Super admin'ler hassas DIA bilgilerine erişebilir
+      // Team admin'ler sadece temel profil bilgilerini görebilir
       const { data, error } = await supabase
         .from('profiles')
         .select(`
           user_id, email, display_name, avatar_url, 
           license_type, license_expires_at, is_team_admin,
-          dia_sunucu_adi, dia_ws_kullanici, dia_ws_sifre, dia_api_key,
-          dia_session_id, dia_session_expires,
-          firma_kodu, firma_adi, donem_kodu, donem_yili
+          firma_adi, donem_yili
         `)
         .eq('user_id', impersonatedUserId)
         .single();
 
       if (!error && data) {
-        console.log('[Impersonation] Profile loaded:', {
+        console.log('[Impersonation] Profile loaded (safe view):', {
           email: data.email,
-          dia_sunucu_adi: data.dia_sunucu_adi,
-          firma_kodu: data.firma_kodu,
-          hasDiaConfig: !!data.dia_sunucu_adi
+          firma_adi: data.firma_adi
         });
-        setImpersonatedProfile(data as ImpersonatedProfile);
+        // Hassas DIA bilgileri artık yüklenmiyor - güvenlik için
+        setImpersonatedProfile({
+          ...data,
+          // Hassas alanlar null olarak ayarlanır
+          dia_sunucu_adi: null,
+          dia_ws_kullanici: null,
+          dia_ws_sifre: null,
+          dia_api_key: null,
+          dia_session_id: null,
+          dia_session_expires: null,
+          firma_kodu: null,
+          donem_kodu: null
+        } as ImpersonatedProfile);
       } else {
         console.error('[Impersonation] Failed to load profile:', error);
       }
