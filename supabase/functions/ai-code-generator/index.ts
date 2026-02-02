@@ -321,6 +321,12 @@ React.createElement('div', {
    - DialogContent otomatik ortalar (fixed inset-0)
    - Scroll: overflow-y-auto (liste uzarsa scroll)
 
+⚠️ KRİTİK HEADER PADDİNG KURALI (ZORUNLU!):
+   - DialogContent X kapatma butonu sağ üstte ABSOLUTE pozisyonda otomatik eklenir!
+   - Header div'ine MUTLAKA "pr-12" (padding-right: 3rem) ekle!
+   - Bu padding X butonuna yer açar ve içerik çakışmasını önler
+   - Header yapısı: flex items-center justify-between p-3 border-b border-border gap-4 pr-12
+
 ✅ ZORUNLU UI.Dialog POPUP YAPISI:
 function Widget({ data, colors, filters }) {
   var showDetail = React.useState(false);
@@ -346,35 +352,40 @@ function Widget({ data, colors, filters }) {
     ),
     
     // UI.Dialog Popup (Merkezi Portal)
+    // ⚠️ KRİTİK: Header div'e "pr-12" ekle - X butonu sağ üstte absolute!
     React.createElement(UI.Dialog, { open: isOpen, onOpenChange: setIsOpen },
       React.createElement(UI.DialogContent, { 
-        className: 'w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col overflow-hidden' 
+        className: 'w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col p-0 gap-0 rounded border border-border' 
       },
-        React.createElement(UI.DialogHeader, null,
-          React.createElement(UI.DialogTitle, null, 'Detay Başlığı'),
-          React.createElement(UI.DialogDescription, null, 
-            filteredItems.length + ' kayıt listeleniyor'
-          )
+        // ⚠️ HEADER - "pr-12" ZORUNLU! X butonu sağ üstte absolute konumda!
+        React.createElement('div', { 
+          className: 'flex items-center justify-between p-3 border-b border-border flex-shrink-0 gap-4 pr-12'
+        },
+          React.createElement('div', { className: 'flex items-center gap-2 min-w-0' },
+            React.createElement(UI.DialogTitle, { className: 'text-sm font-semibold truncate' }, 'Detay Başlığı'),
+            React.createElement('span', { className: 'text-xs text-muted-foreground shrink-0' }, 
+              filteredItems.length + ' kayıt'
+            )
+          ),
+          React.createElement('span', { className: 'text-sm font-bold' }, formatCurrency(toplam))
         ),
+        React.createElement(UI.DialogDescription, { className: 'sr-only' }, 'Detay listesi'),
         // Scroll'lu içerik alanı
-        React.createElement('div', { className: 'flex-1 overflow-y-auto py-2 space-y-1.5' },
-          filteredItems.map(function(item, idx) {
-            return React.createElement('div', {
-              key: idx,
-              className: 'flex items-center justify-between p-2 rounded border border-border hover:bg-muted/50'
-            },
-              React.createElement('span', { className: 'text-sm text-foreground truncate' }, 
-                item.ad || item.aciklama
-              ),
-              React.createElement('span', { className: 'text-sm font-medium text-destructive' }, 
-                formatCurrency(item.bakiye)
-              )
-            );
-          })
-        ),
-        React.createElement(UI.DialogFooter, null,
-          React.createElement('span', { className: 'text-[10px] text-muted-foreground' },
-            'Toplam: ' + filteredItems.length + ' kayıt'
+        React.createElement('div', { className: 'flex-1 overflow-y-auto p-3' },
+          React.createElement('div', { className: 'space-y-1.5' },
+            filteredItems.map(function(item, idx) {
+              return React.createElement('div', {
+                key: idx,
+                className: 'flex items-center justify-between p-2 rounded border border-border hover:bg-muted/50'
+              },
+                React.createElement('span', { className: 'text-sm text-foreground truncate' }, 
+                  item.ad || item.aciklama
+                ),
+                React.createElement('span', { className: 'text-sm font-medium text-destructive' }, 
+                  formatCurrency(item.bakiye)
+                )
+              );
+            })
           )
         )
       )
@@ -965,6 +976,12 @@ const getRefinementSystemPrompt = () => `Sen bir React widget geliştirme uzman�
 2. Mevcut kod yapısını koru, sadece istenen değişiklikleri yap
 3. En sonda "return Widget;" olmalı
 4. Widget fonksiyonu "function Widget({ data, colors, filters })" formatında - colors ve filters ZORUNLU!
+
+⚠️ POPUP/MODAL HEADER KURALI (KRİTİK - BOZMA!):
+- UI.Dialog/DialogContent kullanan popup'larda X kapatma butonu sağ üstte ABSOLUTE pozisyonda!
+- Header div'inde "pr-12" (padding-right: 3rem) ZORUNLU - asla kaldırma!
+- Header yapısı: flex items-center justify-between p-3 border-b border-border gap-4 pr-12
+- Bu padding olmadan X butonu header içeriğiyle çakışır!
    - filters: Aktif global filtreler objesi (tarihAraligi, satisTemsilcisi, cariKartTipi, sube, depo, vb.)
    - "data" zaten filtrelenmiş gelir, filters sadece bilgi amaçlıdır
 
