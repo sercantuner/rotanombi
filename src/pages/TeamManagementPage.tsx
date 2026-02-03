@@ -15,8 +15,9 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, UserPlus, Trash2, Shield, User, Loader2, LayoutGrid } from 'lucide-react';
+import { Users, UserPlus, Trash2, Shield, User, Loader2, LayoutGrid, Search, CheckCircle2, AlertCircle } from 'lucide-react';
 import { WidgetPermissionsPanel } from '@/components/admin/WidgetPermissionsPanel';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface TeamMember {
   id: string;
@@ -29,14 +30,23 @@ interface TeamMember {
 
 export function TeamManagementPage() {
   const { user } = useAuth();
+  const { addTeamMember } = usePermissions();
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isTeamAdmin, setIsTeamAdmin] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [addMode, setAddMode] = useState<'new' | 'existing'>('existing');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserDisplayName, setNewUserDisplayName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  
+  // Existing user search state
+  const [searchEmail, setSearchEmail] = useState('');
+  const [searchResult, setSearchResult] = useState<{ user_id: string; email: string; display_name: string } | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [isAddingExisting, setIsAddingExisting] = useState(false);
 
   // Check if current user is a team admin
   useEffect(() => {
@@ -104,6 +114,120 @@ export function TeamManagementPage() {
 
     loadTeamMembers();
   }, [user]);
+
+  // Search for existing user by email
+  const handleSearchUser = async () => {
+    if (!searchEmail.trim()) {
+      setSearchError('Email adresi girin');
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchResult(null);
+    setSearchError(null);
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id, email, display_name')
+        .eq('email', searchEmail.trim())
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (!data) {
+        setSearchError('Bu email adresiyle kayıtlı kullanıcı bulunamadı');
+        return;
+      }
+
+      // Check if already in team
+      const isAlreadyInTeam = teamMembers.some(m => m.user_id === data.user_id);
+      if (isAlreadyInTeam) {
+        setSearchError('Bu kullanıcı zaten takımınızda');
+        return;
+      }
+
+      // Check if it's the current user
+      if (data.user_id === user?.id) {
+        setSearchError('Kendinizi takıma ekleyemezsiniz');
+        return;
+      }
+
+      setSearchResult(data);
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchError('Arama sırasında bir hata oluştu');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Add existing user to team
+  const handleAddExistingUser = async () => {
+    if (!searchResult || !user) return;
+
+    setIsAddingExisting(true);
+
+    try {
+      // Add to user_teams table
+      const { error: teamError } = await supabase
+        .from('user_teams')
+        .insert({
+          admin_id: user.id,
+          member_id: searchResult.user_id,
+        });
+
+      if (teamError) {
+        if (teamError.code === '23505') {
+          toast.error('Bu kullanıcı zaten takımınızda');
+        } else {
+          throw teamError;
+        }
+        return;
+      }
+
+      // Update profile to mark as non-admin (team member)
+      await supabase
+        .from('profiles')
+        .update({ is_team_admin: false })
+        .eq('user_id', searchResult.user_id);
+
+      // Add user role if not exists
+      await supabase
+        .from('user_roles')
+        .upsert({
+          user_id: searchResult.user_id,
+          role: 'user',
+          created_by: user.id,
+        }, {
+          onConflict: 'user_id,role',
+        });
+
+      // Add to local state
+      const newMember: TeamMember = {
+        id: searchResult.user_id,
+        user_id: searchResult.user_id,
+        email: searchResult.email || '',
+        display_name: searchResult.display_name || searchResult.email?.split('@')[0] || '',
+        created_at: new Date().toISOString(),
+        is_team_admin: false,
+      };
+
+      setTeamMembers(prev => [...prev, newMember]);
+      toast.success(`${searchResult.display_name || searchResult.email} takıma eklendi`);
+      
+      // Reset dialog state
+      setShowAddDialog(false);
+      setSearchEmail('');
+      setSearchResult(null);
+      setSearchError(null);
+    } catch (error: any) {
+      console.error('Error adding existing user:', error);
+      toast.error(error.message || 'Kullanıcı eklenemedi');
+    } finally {
+      setIsAddingExisting(false);
+    }
+  };
 
   const handleCreateUser = async () => {
     if (!user || !newUserEmail || !newUserPassword) {
@@ -274,53 +398,133 @@ export function TeamManagementPage() {
                         Kullanıcı Ekle
                       </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="sm:max-w-md">
                       <DialogHeader>
-                        <DialogTitle>Yeni Kullanıcı Oluştur</DialogTitle>
+                        <DialogTitle>Kullanıcı Ekle</DialogTitle>
                         <DialogDescription>
-                          Şirketinize yeni bir kullanıcı ekleyin. Bu kullanıcı sizin izin verdiğiniz widget'ları görebilir ancak DIA bağlantı ayarlarını değiştiremez.
+                          Mevcut bir kullanıcıyı email ile ekleyin veya yeni kullanıcı oluşturun.
                         </DialogDescription>
                       </DialogHeader>
-                      <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="displayName">İsim</Label>
-                          <Input
-                            id="displayName"
-                            placeholder="Kullanıcı adı"
-                            value={newUserDisplayName}
-                            onChange={(e) => setNewUserDisplayName(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="email">Email</Label>
-                          <Input
-                            id="email"
-                            type="email"
-                            placeholder="kullanici@sirket.com"
-                            value={newUserEmail}
-                            onChange={(e) => setNewUserEmail(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="password">Şifre</Label>
-                          <Input
-                            id="password"
-                            type="password"
-                            placeholder="••••••••"
-                            value={newUserPassword}
-                            onChange={(e) => setNewUserPassword(e.target.value)}
-                          />
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowAddDialog(false)}>
-                          İptal
-                        </Button>
-                        <Button onClick={handleCreateUser} disabled={isCreating}>
-                          {isCreating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                          Oluştur
-                        </Button>
-                      </DialogFooter>
+                      
+                      <Tabs value={addMode} onValueChange={(v) => setAddMode(v as 'new' | 'existing')} className="mt-2">
+                        <TabsList className="grid w-full grid-cols-2">
+                          <TabsTrigger value="existing">Mevcut Kullanıcı</TabsTrigger>
+                          <TabsTrigger value="new">Yeni Kullanıcı</TabsTrigger>
+                        </TabsList>
+                        
+                        <TabsContent value="existing" className="space-y-4 mt-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="searchEmail">Email Adresi</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                id="searchEmail"
+                                type="email"
+                                placeholder="kullanici@sirket.com"
+                                value={searchEmail}
+                                onChange={(e) => {
+                                  setSearchEmail(e.target.value);
+                                  setSearchError(null);
+                                  setSearchResult(null);
+                                }}
+                                onKeyDown={(e) => e.key === 'Enter' && handleSearchUser()}
+                              />
+                              <Button 
+                                variant="outline" 
+                                onClick={handleSearchUser}
+                                disabled={isSearching}
+                              >
+                                {isSearching ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Search className="w-4 h-4" />
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                          
+                          {searchError && (
+                            <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+                              <AlertCircle className="w-4 h-4 shrink-0" />
+                              {searchError}
+                            </div>
+                          )}
+                          
+                          {searchResult && (
+                            <div className="flex items-center gap-3 p-3 rounded-md border border-border bg-muted/50">
+                              <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center">
+                                <CheckCircle2 className="w-5 h-5 text-success" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-foreground truncate">
+                                  {searchResult.display_name || searchResult.email?.split('@')[0]}
+                                </p>
+                                <p className="text-sm text-muted-foreground truncate">
+                                  {searchResult.email}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                          
+                          <DialogFooter className="pt-2">
+                            <Button variant="outline" onClick={() => {
+                              setShowAddDialog(false);
+                              setSearchEmail('');
+                              setSearchResult(null);
+                              setSearchError(null);
+                            }}>
+                              İptal
+                            </Button>
+                            <Button 
+                              onClick={handleAddExistingUser} 
+                              disabled={!searchResult || isAddingExisting}
+                            >
+                              {isAddingExisting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                              Takıma Ekle
+                            </Button>
+                          </DialogFooter>
+                        </TabsContent>
+                        
+                        <TabsContent value="new" className="space-y-4 mt-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="displayName">İsim</Label>
+                            <Input
+                              id="displayName"
+                              placeholder="Kullanıcı adı"
+                              value={newUserDisplayName}
+                              onChange={(e) => setNewUserDisplayName(e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="email">Email</Label>
+                            <Input
+                              id="email"
+                              type="email"
+                              placeholder="kullanici@sirket.com"
+                              value={newUserEmail}
+                              onChange={(e) => setNewUserEmail(e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="password">Şifre</Label>
+                            <Input
+                              id="password"
+                              type="password"
+                              placeholder="••••••••"
+                              value={newUserPassword}
+                              onChange={(e) => setNewUserPassword(e.target.value)}
+                            />
+                          </div>
+                          <DialogFooter className="pt-2">
+                            <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+                              İptal
+                            </Button>
+                            <Button onClick={handleCreateUser} disabled={isCreating}>
+                              {isCreating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                              Oluştur
+                            </Button>
+                          </DialogFooter>
+                        </TabsContent>
+                      </Tabs>
                     </DialogContent>
                   </Dialog>
                 </CardHeader>
