@@ -452,8 +452,8 @@ export function BuilderWidgetRenderer({
                 Widget render hatası
               </div>
             }>
-              {/* Custom widget'a data, colors ve filters prop'ları geçirilir - h-full wrapper ile */}
-              <div className="flex-1 h-full min-h-0 flex flex-col">
+              {/* Custom widget'a data, colors ve filters prop'ları geçirilir - Leaflet için min-h zorunlu */}
+              <div className="flex-1 h-full min-h-0 flex flex-col [&_.leaflet-container]:min-h-[350px]">
                 <WidgetComponent data={filteredData} colors={userColors} filters={filters} />
               </div>
             </ErrorBoundary>

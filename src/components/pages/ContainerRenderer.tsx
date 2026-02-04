@@ -437,6 +437,9 @@ export function ContainerRenderer({
           <div className={cn(
             'grid gap-1 md:gap-2 items-stretch [&>*]:h-full',
             template.gridClass,
+            // Harita container'ları - max-h yok, daha büyük min-h (Leaflet için gerekli)
+            (container.container_type === 'map_full' || 
+             container.container_type === 'map_half') && '[&>*]:min-h-[400px]',
             // Grafik container'ları için min ve max yükseklik (legend overflow önleme)
             (container.container_type === 'chart_full' || 
              container.container_type === 'chart_half' || 
