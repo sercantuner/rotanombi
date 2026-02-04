@@ -141,9 +141,29 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       const usedSourceIds = new Set<string>();
       
       for (const widget of widgets) {
-        const config = widget.builder_config as WidgetWithDataSource['builder_config'];
+        const config = widget.builder_config as any;
+        
+        // 1. Tek sorgu - üst düzey dataSourceId
         if (config?.dataSourceId) {
           usedSourceIds.add(config.dataSourceId);
+        }
+        
+        // 2. MultiQuery - her sorgunun dataSourceId'sini kontrol et
+        if (config?.multiQuery?.queries && Array.isArray(config.multiQuery.queries)) {
+          for (const query of config.multiQuery.queries) {
+            if (query.dataSourceId) {
+              usedSourceIds.add(query.dataSourceId);
+            }
+          }
+        }
+        
+        // 3. isMultiQuery flag'i varsa ama multiQuery objesi yoksa - eski format
+        if (config?.isMultiQuery && config?.queries && Array.isArray(config.queries)) {
+          for (const query of config.queries) {
+            if (query.dataSourceId) {
+              usedSourceIds.add(query.dataSourceId);
+            }
+          }
         }
       }
 
