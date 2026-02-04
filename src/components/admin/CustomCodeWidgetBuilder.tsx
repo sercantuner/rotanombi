@@ -42,13 +42,88 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  // Ek bileşenler (Custom Code widget'larda kullanılıyor)
+  ComposedChart,
+  ScatterChart, Scatter,
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  FunnelChart, Funnel, LabelList,
+  ReferenceLine, ReferenceDot, ReferenceArea,
+  Treemap
 } from 'recharts';
 
 // Recharts bileşenlerini scope'a ekle
 const RechartsScope = {
-  BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
+  // Temel grafikler
+  BarChart, Bar, LineChart, Line, AreaChart, Area,
+  PieChart, Pie, Cell,
+  // Composed (karma) grafik
+  ComposedChart,
+  // Scatter (dağılım) grafik
+  ScatterChart, Scatter,
+  // Radar grafik
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  // Funnel (huni) grafik
+  FunnelChart, Funnel, LabelList,
+  // Treemap
+  Treemap,
+  // Referans çizgileri ve işaretleyiciler
+  ReferenceLine, ReferenceDot, ReferenceArea,
+  // Ortak bileşenler
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+};
+
+// Leaflet harita bileşenleri - Builder preview'da opsiyonel (lazy)
+let MapScope: any = null;
+
+const EmptyMapScope = {
+  MapContainer: () => null,
+  TileLayer: () => null,
+  Marker: () => null,
+  Popup: () => null,
+  CircleMarker: () => null,
+  Polyline: () => null,
+  Polygon: () => null,
+  L: null,
+};
+
+const initMapScope = async () => {
+  if (MapScope) return MapScope;
+
+  try {
+    const [reactLeaflet, L] = await Promise.all([
+      import('react-leaflet'),
+      import('leaflet'),
+    ]);
+
+    // Leaflet CSS
+    await import('leaflet/dist/leaflet.css');
+
+    // Default marker icon fix
+    // @ts-ignore
+    delete L.default.Icon.Default.prototype._getIconUrl;
+    L.default.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    });
+
+    MapScope = {
+      MapContainer: reactLeaflet.MapContainer,
+      TileLayer: reactLeaflet.TileLayer,
+      Marker: reactLeaflet.Marker,
+      Popup: reactLeaflet.Popup,
+      CircleMarker: reactLeaflet.CircleMarker,
+      Polyline: reactLeaflet.Polyline,
+      Polygon: reactLeaflet.Polygon,
+      L: L.default,
+    };
+
+    return MapScope;
+  } catch (e) {
+    console.warn('Leaflet yüklenemedi (builder preview):', e);
+    return null;
+  }
 };
 
 // Custom widget kodlarının kullanabilmesi için UI scope (Dialog vb.)
@@ -225,6 +300,24 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   const [customCode, setCustomCode] = useState(getDefaultCodeTemplate());
   const [jsonPreviewCount, setJsonPreviewCount] = useState(10);
   const [codeError, setCodeError] = useState<string | null>(null);
+
+  // Custom code preview'da Map scope (opsiyonel)
+  const [mapScope, setMapScope] = useState<any>(EmptyMapScope);
+
+  useEffect(() => {
+    let cancelled = false;
+    const needsMap = /(^|[^a-zA-Z0-9_])Map\./.test(customCode);
+    if (!needsMap) {
+      setMapScope(EmptyMapScope);
+      return;
+    }
+    initMapScope().then((scope) => {
+      if (!cancelled) setMapScope(scope || EmptyMapScope);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [customCode]);
   
   // AI kod üretimi
   const [aiPrompt, setAiPrompt] = useState('');
@@ -822,6 +915,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
         'colors',
         'filters',
         'UI',
+        'Map',
         customCode
       );
       
@@ -836,7 +930,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
         'hsl(280, 70%, 55%)',
       ];
       
-      const WidgetComponent = fn(React, sampleData, LucideIcons, RechartsScope, previewColors, {}, UIScope);
+      const WidgetComponent = fn(React, sampleData, LucideIcons, RechartsScope, previewColors, {}, UIScope, mapScope);
       
       if (typeof WidgetComponent !== 'function') {
         return { 
@@ -849,7 +943,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
     } catch (err: any) {
       return { component: null, error: err.message };
     }
-  }, [customCode, sampleData]);
+  }, [customCode, sampleData, mapScope]);
 
   // Error state'i güncelle
   useEffect(() => {
