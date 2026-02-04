@@ -1215,7 +1215,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-3-pro-preview",
         messages,
-        max_tokens: 16000,
+        max_tokens: 64000,
         temperature: 0.7,
       }),
     });
