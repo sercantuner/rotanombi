@@ -1180,20 +1180,13 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
               />
             </div>
             
-            {/* Kategori ve Sayfa Seçici */}
+            {/* Kategori Seçici */}
             <div className="space-y-2">
               <WidgetPageSelector
-                selectedPages={targetPages}
-                defaultPage={defaultPage}
-                onChange={(pages, def) => {
-                  setTargetPages(pages);
-                  setDefaultPage(def);
-                }}
                 selectedCategory={widgetCategory}
                 onCategoryChange={(categorySlug) => {
                   setWidgetCategory(categorySlug);
                 }}
-                showCategorySelector={true}
               />
             </div>
           </div>
