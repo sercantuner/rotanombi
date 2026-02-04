@@ -1,17 +1,19 @@
 // Custom Code Widget Builder - Wizard Tabanlı Widget Oluşturma
 // 4 Adım: 1) Veri Kaynağı 2) AI Kod Üret 3) Kod Düzenle 4) Önizle & Kaydet
-// v2.0 - Wizard/Stepper yapısı
+// v2.1 - Wizard/Stepper yapısı + Kategori seçimi
 
 import React, { useState, useEffect, useMemo, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import { useDataSources, DataSource as DataSourceType } from '@/hooks/useDataSources';
 import { useWidgetAdmin, useWidgets } from '@/hooks/useWidgets';
-import { WidgetFormData, PAGE_CATEGORIES, WIDGET_SIZES } from '@/lib/widgetTypes';
+import { useWidgetCategories } from '@/hooks/useWidgetCategories';
+import { WidgetFormData, WIDGET_SIZES } from '@/lib/widgetTypes';
 import { MultiQueryConfig, DiaModelReference, AIRequirement, DEFAULT_AI_REQUIREMENTS, extractModelNameFromUrl } from '@/lib/widgetBuilderTypes';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DataSourceSelector } from './DataSourceSelector';
 import { MultiQueryBuilder } from './MultiQueryBuilder';
 import { ExampleWidgetPickerModal } from './ExampleWidgetPickerModal';
+import { CategoryPickerModal } from './CategoryPickerModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,7 +31,8 @@ import {
   Code, Database, Eye, Save, Play, Copy, Check, 
   LayoutGrid, AlertCircle, FileJson, Wand2, X,
   RefreshCw, Loader2, Download, Sparkles, Send, MessageSquare, 
-  Link2, Layers, ChevronLeft, ChevronRight, CheckCircle2, Circle
+  Link2, Layers, ChevronLeft, ChevronRight, CheckCircle2, Circle,
+  Search, Folder
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -188,6 +191,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   const { widgets } = useWidgets();
   const { createWidget, updateWidget, isLoading: isSaving } = useWidgetAdmin();
   const { activeDataSources, getDataSourceById } = useDataSources();
+  const { activeCategories, isLoading: isCategoriesLoading, getCategoryBySlug } = useWidgetCategories();
   const { user } = useAuth();
   const { impersonatedUserId, isImpersonating } = useImpersonation();
   
@@ -201,7 +205,10 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   const [widgetDescription, setWidgetDescription] = useState('');
   const [widgetIcon, setWidgetIcon] = useState('Code');
   const [widgetSize, setWidgetSize] = useState<'sm' | 'md' | 'lg' | 'xl' | 'full'>('lg');
-  const [defaultPage, setDefaultPage] = useState<'dashboard' | 'satis' | 'finans' | 'cari'>('dashboard');
+  const [widgetCategory, setWidgetCategory] = useState<string>('dashboard');
+  
+  // Kategori seçim modal
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   
   // Veri kaynağı (tek kaynak modu)
   const [selectedDataSourceId, setSelectedDataSourceId] = useState<string | null>(null);
@@ -307,7 +314,8 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       setWidgetDescription(editingWidget.description || '');
       setWidgetIcon(editingWidget.icon || 'Code');
       setWidgetSize((editingWidget.size as any) || 'lg');
-      setDefaultPage((editingWidget.default_page as any) || 'dashboard');
+      // Kategori olarak yükle (eski default_page değerini kullan)
+      setWidgetCategory(editingWidget.default_page || 'dashboard');
       
       if (config?.customCode) {
         setCustomCode(config.customCode);
@@ -357,7 +365,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       setWidgetDescription('');
       setWidgetIcon('Code');
       setWidgetSize('lg');
-      setDefaultPage('dashboard');
+      setWidgetCategory('dashboard');
       setCustomCode(getDefaultCodeTemplate());
       setSelectedDataSourceId(null);
       setIsMultiQueryMode(false);
@@ -765,12 +773,12 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
       widget_key: widgetKey,
       name: widgetName,
       description: widgetDescription,
-      category: defaultPage,
+      category: widgetCategory as any,
       type: 'chart',
       data_source: 'genel',
       size: widgetSize,
       icon: widgetIcon,
-      default_page: defaultPage,
+      default_page: widgetCategory as any,
       default_visible: true,
       available_filters: [],
       default_filters: {},
@@ -962,17 +970,33 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Sayfa</Label>
-                <Select value={defaultPage} onValueChange={(v: any) => setDefaultPage(v)}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAGE_CATEGORIES.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs">Kategori</Label>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-between h-9 text-sm"
+                  onClick={() => setShowCategoryModal(true)}
+                  disabled={isCategoriesLoading}
+                >
+                  <span className="flex items-center gap-2">
+                    {isCategoriesLoading ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Yükleniyor...
+                      </>
+                    ) : getCategoryBySlug(widgetCategory) ? (
+                      <>
+                        <DynamicIcon iconName={getCategoryBySlug(widgetCategory)?.icon || 'Folder'} className="h-3.5 w-3.5" />
+                        {getCategoryBySlug(widgetCategory)?.name}
+                      </>
+                    ) : (
+                      <>
+                        <Folder className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-muted-foreground">Kategori seçin</span>
+                      </>
+                    )}
+                  </span>
+                  <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
               </div>
             </div>
 
@@ -1946,8 +1970,8 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
               <Badge variant="outline">{widgetSize}</Badge>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Sayfa:</span>
-              <Badge variant="outline">{defaultPage}</Badge>
+              <span className="text-muted-foreground">Kategori:</span>
+              <Badge variant="outline">{getCategoryBySlug(widgetCategory)?.name || widgetCategory}</Badge>
             </div>
             <Separator />
             <div className="flex justify-between">
@@ -2089,6 +2113,14 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    
+    {/* Kategori Seçim Modal */}
+    <CategoryPickerModal
+      open={showCategoryModal}
+      onOpenChange={setShowCategoryModal}
+      selectedCategory={widgetCategory}
+      onSelect={(slug) => setWidgetCategory(slug)}
+    />
     </>
   );
 }
