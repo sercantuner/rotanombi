@@ -268,7 +268,8 @@ export function usePageContainers(pageId: string | null) {
         .from('page_containers')
         .insert({
           page_id: pageId,
-          container_type: containerType,
+          // DB enum tipleri cache'lenmiş olabilir; yeni container tipleri için dar TS union'a takılmamak adına cast
+          container_type: containerType as any,
           title,
           sort_order: containers.length,
         })

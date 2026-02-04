@@ -1,7 +1,7 @@
 // BuilderWidgetRenderer - Widget Builder ile oluşturulan widget'ları render eder
 // v3.1 - KPI, Custom Code, Recharts tam destek + Leaflet harita desteği
 
-import React, { useState, useMemo, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState, useMemo, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { WidgetBuilderConfig, AggregationType, DatePeriod } from '@/lib/widgetBuilderTypes';
 import { useDynamicWidgetData } from '@/hooks/useDynamicWidgetData';
 import { useChartColorPalette } from '@/hooks/useChartColorPalette';
@@ -247,6 +247,34 @@ export function BuilderWidgetRenderer({
   
   // Widget bazında kullanıcı renk paleti
   const { colors: userColors } = useChartColorPalette({ widgetId });
+
+  // Custom code (opsiyonel) + Map kullanımı tespiti (hook'lar koşulsuz çağrılmalı)
+  const customCode = (builderConfig as any).customCode as string | undefined;
+  const needsMap = useMemo(() => {
+    if (!customCode) return false;
+    return /(^|[^a-zA-Z0-9_])Map\./.test(customCode);
+  }, [customCode]);
+
+  // Harita scope'u: ihtiyaç varsa lazy yükle, yoksa boş scope kullan
+  const [mapScope, setMapScope] = useState<any>(() => MapScope || EmptyMapScope);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!needsMap) {
+      setMapScope(EmptyMapScope);
+      return;
+    }
+
+    initMapScope().then((scope) => {
+      if (cancelled) return;
+      setMapScope(scope || EmptyMapScope);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [needsMap]);
   
   // Tarih filtresi state
   const [selectedDatePeriod, setSelectedDatePeriod] = useState<DatePeriod>(
@@ -407,8 +435,7 @@ export function BuilderWidgetRenderer({
   }
 
   // Custom Code Widget - Tüm grafik/tablo widget'ları artık burada render ediliyor
-  if (vizType === 'custom' && (builderConfig as any).customCode) {
-    const customCode = (builderConfig as any).customCode;
+  if (vizType === 'custom' && customCode) {
     
     try {
       const fn = new Function(
@@ -424,7 +451,7 @@ export function BuilderWidgetRenderer({
       );
       
       // Custom widget'a colors, filters ve Map prop'ları geç
-      const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters, UIScope, MapScope || EmptyMapScope);
+      const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters, UIScope, mapScope);
       
       if (typeof WidgetComponent !== 'function') {
         return (
