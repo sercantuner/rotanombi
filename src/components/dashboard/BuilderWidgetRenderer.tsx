@@ -59,9 +59,12 @@ const initMapScope = async () => {
       TileLayer: reactLeaflet.TileLayer,
       Marker: reactLeaflet.Marker,
       Popup: reactLeaflet.Popup,
+      Tooltip: reactLeaflet.Tooltip,  // Harita tooltip'i eklendi
       CircleMarker: reactLeaflet.CircleMarker,
       Polyline: reactLeaflet.Polyline,
       Polygon: reactLeaflet.Polygon,
+      Rectangle: reactLeaflet.Rectangle,
+      Circle: reactLeaflet.Circle,
       // Hooks
       useMap: reactLeaflet.useMap,
       useMapEvents: reactLeaflet.useMapEvents,
@@ -82,9 +85,12 @@ const EmptyMapScope = {
   TileLayer: () => null,
   Marker: () => null,
   Popup: () => null,
+  Tooltip: () => null,  // Harita tooltip placeholder
   CircleMarker: () => null,
   Polyline: () => null,
   Polygon: () => null,
+  Rectangle: () => null,
+  Circle: () => null,
   // Hooks - boş placeholder (harita yüklenene kadar)
   useMap: () => null,
   useMapEvents: () => null,
