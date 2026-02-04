@@ -341,28 +341,41 @@ export function DiaDataCacheProvider({ children, userId }: DiaDataCacheProviderP
     });
   }, []);
 
-  const incrementCacheHit = useCallback(() => {
+  // İstatistik güncellemeleri - STABILIZED: Boş dependency array ile stabil referans
+  const incrementCacheHitRef = useRef<() => void>(() => {
     setStats(prev => ({
       ...prev,
       totalQueries: prev.totalQueries + 1,
       cacheHits: prev.cacheHits + 1,
     }));
-  }, []);
-
-  const incrementCacheMiss = useCallback(() => {
+  });
+  
+  const incrementCacheMissRef = useRef<() => void>(() => {
     setStats(prev => ({
       ...prev,
       totalQueries: prev.totalQueries + 1,
       cacheMisses: prev.cacheMisses + 1,
     }));
-  }, []);
-
-  const recordApiCall = useCallback(() => {
+  });
+  
+  const recordApiCallRef = useRef<() => void>(() => {
     setStats(prev => ({
       ...prev,
       realApiCalls: prev.realApiCalls + 1,
       lastApiCallTime: Date.now(),
     }));
+  });
+
+  const incrementCacheHit = useCallback(() => {
+    incrementCacheHitRef.current();
+  }, []);
+
+  const incrementCacheMiss = useCallback(() => {
+    incrementCacheMissRef.current();
+  }, []);
+
+  const recordApiCall = useCallback(() => {
+    recordApiCallRef.current();
   }, []);
 
   const value = useMemo(() => ({
