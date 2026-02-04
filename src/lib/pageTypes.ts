@@ -19,6 +19,8 @@ export type ContainerType =
   | 'chart_full'
   | 'chart_half'
   | 'chart_third'
+  | 'map_full'
+  | 'map_half'
   | 'info_cards_3'
   | 'info_cards_2'
   | 'table_full'
@@ -112,6 +114,22 @@ export const CONTAINER_TEMPLATES: {
     icon: 'Activity',
     slots: 3,
     gridClass: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0.5 md:gap-1',
+  },
+  {
+    id: 'map_full',
+    name: 'Tam Genişlik Harita',
+    description: 'Tek harita, tam genişlik',
+    icon: 'Map',
+    slots: 1,
+    gridClass: 'grid-cols-1 gap-0.5',
+  },
+  {
+    id: 'map_half',
+    name: '2 Harita Yan Yana',
+    description: '2 harita yan yana',
+    icon: 'MapPin',
+    slots: 2,
+    gridClass: 'grid-cols-1 md:grid-cols-2 gap-0.5 md:gap-1',
   },
   {
     id: 'info_cards_3',

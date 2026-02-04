@@ -1151,6 +1151,8 @@ export type Database = {
         | "table_full"
         | "list_full"
         | "custom_grid"
+        | "map_full"
+        | "map_half"
       widget_category: "dashboard" | "satis" | "finans" | "cari"
     }
     CompositeTypes: {
@@ -1292,6 +1294,8 @@ export const Constants = {
         "table_full",
         "list_full",
         "custom_grid",
+        "map_full",
+        "map_half",
       ],
       widget_category: ["dashboard", "satis", "finans", "cari"],
     },
