@@ -323,6 +323,16 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
   }, [setDataSourceLoading, recordApiCall, setDataSourceData, markDataSourceFetched, updateLastFetch, targetUserId, getDiaErrorMessage]);
 
 
+  // Referansları ref'lerde tut - loadAllDataSources için
+  const isDataSourceFetchedRef = useRef(isDataSourceFetched);
+  isDataSourceFetchedRef.current = isDataSourceFetched;
+  
+  const clearFetchedRegistryRef = useRef(clearFetchedRegistry);
+  clearFetchedRegistryRef.current = clearFetchedRegistry;
+  
+  const incrementCacheHitRef = useRef(incrementCacheHit);
+  incrementCacheHitRef.current = incrementCacheHit;
+
   // Sayfa için veri kaynaklarını yükle - SADECE EKSİK OLANLARI
   const loadAllDataSources = useCallback(async (forceRefresh: boolean = false) => {
     if (!pageId || loadingRef.current) return;
@@ -335,7 +345,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     // Manuel yenileme ise global registry'i temizle
     if (forceRefresh) {
       console.log('[DataSourceLoader] Force refresh - clearing global registry');
-      clearFetchedRegistry();
+      clearFetchedRegistryRef.current();
     }
 
     try {
@@ -361,7 +371,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
 
       // FIX: Zaten sorgulanmış VE cache'de gerçekten veri olanları ayır
       const alreadyFetched = usedSourceIds.filter(id => {
-        const inRegistry = isDataSourceFetched(id);
+        const inRegistry = isDataSourceFetchedRef.current(id);
         const cachedData = getDataSourceData(id);
         // Registry'de var VE cache'de gerçekten veri var mı?
         return inRegistry && cachedData && cachedData.length > 0;
@@ -371,7 +381,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       const needToFetch = forceRefresh 
         ? usedSourceIds 
         : usedSourceIds.filter(id => {
-            const inRegistry = isDataSourceFetched(id);
+            const inRegistry = isDataSourceFetchedRef.current(id);
             const cachedData = getDataSourceData(id);
             // Registry'de yok VEYA cache boş/geçersiz
             return !inRegistry || !cachedData || cachedData.length === 0;
@@ -393,7 +403,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
         if (data) {
           newDataMap.set(sourceId, data);
           successfulSources.push({ id: sourceId, name: ds?.name || sourceId });
-          incrementCacheHit();
+          incrementCacheHitRef.current();
         }
       }
 
@@ -447,16 +457,13 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     } catch (err) {
       console.error('[DataSourceLoader] Error:', err);
       setError(err instanceof Error ? err.message : 'Veri kaynakları yüklenemedi');
-      if (!hasInitialized) {
-        toast.error('Veri kaynakları yüklenirken hata oluştu');
-      }
+      toast.error('Veri kaynakları yüklenirken hata oluştu');
     } finally {
       setIsLoading(false);
       setIsInitialLoad(false);
       loadingRef.current = false;
     }
-  }, [pageId, findUsedDataSources, getDataSourceById, loadDataSource, setPageDataReady, 
-      isDataSourceFetched, getDataSourceData, clearFetchedRegistry, incrementCacheHit, hasInitialized]);
+  }, [pageId, findUsedDataSources, getDataSourceById, loadDataSource, setPageDataReady, getDataSourceData]);
 
   // Veri kaynağı verisini al (önce local, sonra global cache)
   const getSourceData = useCallback((dataSourceId: string): any[] | null => {
@@ -471,26 +478,71 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     return null;
   }, [sourceDataMap, getDataSourceData]);
 
-  // pageId değiştiğinde hasInitialized'ı sıfırla
+  // Referansları ref'lerde tut - dependency döngüsü kırılsın
+  const findUsedDataSourcesRef = useRef(findUsedDataSources);
+  findUsedDataSourcesRef.current = findUsedDataSources;
+  
+  const getDataSourceDataRef = useRef(getDataSourceData);
+  getDataSourceDataRef.current = getDataSourceData;
+  
+  const getDataSourceByIdRef = useRef(getDataSourceById);
+  getDataSourceByIdRef.current = getDataSourceById;
+  
+  const loadAllDataSourcesRef = useRef(loadAllDataSources);
+  loadAllDataSourcesRef.current = loadAllDataSources;
+  
+  // dataSources ref'i - dependency'den çıkarmak için
+  const dataSourcesRef = useRef(dataSources);
+  dataSourcesRef.current = dataSources;
+  
+  // Önceki pageId'yi takip et - sadece gerçek değişimlerde tetikle
+  const prevPageIdRef = useRef<string | null>(null);
+  
+  // Başlatma durumunu takip et - sadece bir kez çalışsın
+  const initCalledRef = useRef(false);
+  
+  // Önceki değerleri takip et - gereksiz tetiklemeleri önle
+  const prevInitStateRef = useRef({ pageId: null as string | null, dataSourcesReady: false });
+
+  // pageId değiştiğinde hasInitialized'ı sıfırla - SADECE gerçek değişimlerde
   useEffect(() => {
-    if (pageId) {
+    if (pageId && pageId !== prevPageIdRef.current) {
       console.log(`[DataSourceLoader] Page ID changed to ${pageId}, resetting initialization`);
       setHasInitialized(false);
+      initCalledRef.current = false;
+      prevPageIdRef.current = pageId;
     }
   }, [pageId]);
 
   // Sayfa değiştiğinde veya ilk yüklemede veri kaynaklarını kontrol et ve eksikleri yükle
   useEffect(() => {
+    // Değişiklik var mı kontrol et
+    const dataSourcesReady = dataSources.length > 0;
+    const stateChanged = prevInitStateRef.current.pageId !== pageId || 
+                          prevInitStateRef.current.dataSourcesReady !== dataSourcesReady;
+    
+    // State değişmediyse hiçbir şey yapma
+    if (!stateChanged && initCalledRef.current) return;
+    
+    // State'i güncelle
+    prevInitStateRef.current = { pageId, dataSourcesReady };
+    
+    // Zaten çağrıldıysa tekrar çağırma
+    if (initCalledRef.current) return;
+    
     // pageId hazır VE dataSources yüklendi VE henüz başlatılmadı VE yükleme devam etmiyor
     if (pageId && dataSources.length > 0 && !hasInitialized && !loadingRef.current) {
+      // Önce flag'i set et - race condition önleme
+      initCalledRef.current = true;
+      
       console.log(`[DataSourceLoader] Initial load for page ${pageId} (${dataSources.length} sources available)`);
       setHasInitialized(true);
       
       // Sayfa geçişlerinde cache kontrol et - tüm kaynaklar zaten cache'de mi?
       (async () => {
-        const usedSourceIds = await findUsedDataSources();
+        const usedSourceIds = await findUsedDataSourcesRef.current();
         const allSourcesCached = usedSourceIds.length === 0 || usedSourceIds.every(id => {
-          const cachedData = getDataSourceData(id);
+          const cachedData = getDataSourceDataRef.current(id);
           return cachedData && cachedData.length > 0;
         });
         
@@ -502,16 +554,17 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
           setPageDataReady(true);
           setLoadedSources(usedSourceIds.map(id => ({
             id,
-            name: getDataSourceById(id)?.name || id
+            name: getDataSourceByIdRef.current(id)?.name || id
           })));
           setLoadProgress(100);
         } else {
           // Cache miss var - normal yükleme yap
-          loadAllDataSources();
+          loadAllDataSourcesRef.current();
         }
       })();
     }
-  }, [pageId, dataSources.length, hasInitialized, loadAllDataSources, findUsedDataSources, getDataSourceData, getDataSourceById, setPageDataReady]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageId, dataSources.length, hasInitialized]);
 
   // Manuel refresh (force) - TÜM verileri yeniden çeker
   const refresh = useCallback(async () => {
