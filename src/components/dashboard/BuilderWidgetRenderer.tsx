@@ -11,6 +11,7 @@ import { WidgetDateFilter, getDateRangeForPeriod } from './WidgetDateFilter';
 import { StatCard } from './StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertCircle, Hash, Code, BarChart3 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
@@ -122,6 +123,7 @@ const UIScope = {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  Button,
 };
 
 // Error Boundary bileşeni
