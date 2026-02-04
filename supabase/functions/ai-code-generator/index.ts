@@ -1165,6 +1165,122 @@ Widget'a "Map" scope'u da geçilir. Leaflet harita bileşenleri:
 
 SADECE güncellenmiş JavaScript kodunu döndür, açıklama ekleme.`;
 
+// Kodun tamamlanıp tamamlanmadığını kontrol et
+function isCodeComplete(code: string): boolean {
+  if (!code || code.trim().length === 0) return false;
+  
+  // "return Widget;" kontrolü
+  if (!code.includes('return Widget;')) return false;
+  
+  // Süslü parantez dengesi kontrolü
+  const openBraces = (code.match(/{/g) || []).length;
+  const closeBraces = (code.match(/}/g) || []).length;
+  if (openBraces !== closeBraces) return false;
+  
+  // Normal parantez dengesi
+  const openParens = (code.match(/\(/g) || []).length;
+  const closeParens = (code.match(/\)/g) || []).length;
+  if (openParens !== closeParens) return false;
+  
+  // Köşeli parantez dengesi
+  const openBrackets = (code.match(/\[/g) || []).length;
+  const closeBrackets = (code.match(/\]/g) || []).length;
+  if (openBrackets !== closeBrackets) return false;
+  
+  return true;
+}
+
+// Yarım kalan kodu tamamlamak için devam isteği gönder
+async function continueGeneration(
+  partialCode: string, 
+  apiKey: string, 
+  attempt: number,
+  mode: string
+): Promise<{ code: string; finishReason: string }> {
+  // Son 3000 karakter context olarak gönder
+  const contextCode = partialCode.slice(-3000);
+  
+  const continuePrompt = `Aşağıdaki widget kodu yarım kaldı. AYNEN kaldığın yerden devam et.
+
+KURAL: 
+- Baştan BAŞLAMA, sadece DEVAM et!
+- Eksik fonksiyonları kapat
+- En sonda "return Widget;" olmalı
+- Açıklama yazma, sadece kod yaz
+
+YARIM KALAN KODUN SONU:
+\`\`\`javascript
+${contextCode}
+\`\`\`
+
+DEVAM KODUNU YAZ:`;
+
+  const systemPrompt = mode === 'refine' ? getRefinementSystemPrompt() : getGenerationSystemPrompt();
+
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-3-pro-preview",
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: continuePrompt }
+      ],
+      max_tokens: 32000,
+      temperature: 0.5,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`AI API hatası: ${response.status}`);
+  }
+
+  const result = await response.json();
+  const continuationCode = result.choices?.[0]?.message?.content || "";
+  const finishReason = result.choices?.[0]?.finish_reason || "unknown";
+
+  // Markdown temizle
+  const cleanedCode = continuationCode
+    .replace(/```javascript\n?/gi, "")
+    .replace(/```jsx\n?/gi, "")
+    .replace(/```js\n?/gi, "")
+    .replace(/```\n?/g, "")
+    .trim();
+
+  return { code: cleanedCode, finishReason };
+}
+
+// Kod parçalarını akıllıca birleştir
+function mergeCodeParts(originalCode: string, continuationCode: string): string {
+  // Eğer devam kodu zaten var olan bir kısımla başlıyorsa, overlap bul
+  const originalLast500 = originalCode.slice(-500);
+  
+  // Overlap tespiti - devam kodunun başındaki ilk 100 karakteri original'ın sonunda ara
+  const continuationFirst100 = continuationCode.slice(0, 100);
+  const overlapIndex = originalLast500.indexOf(continuationFirst100.slice(0, 50));
+  
+  if (overlapIndex !== -1 && overlapIndex > 0) {
+    // Overlap bulundu, tekrar eden kısmı atla
+    const overlapPoint = originalCode.length - 500 + overlapIndex;
+    return originalCode.slice(0, overlapPoint) + continuationCode;
+  }
+  
+  // Overlap yoksa, doğrudan ekle
+  // Eğer original yarım bir satırla bitiyorsa, bir önceki tam satıra kadar geri git
+  const lastNewline = originalCode.lastIndexOf('\n');
+  if (lastNewline > originalCode.length - 100) {
+    // Son satır muhtemelen yarım, devam koduyla birleştir
+    return originalCode + '\n' + continuationCode;
+  }
+  
+  return originalCode + '\n' + continuationCode;
+}
+
+const MAX_CONTINUE_ATTEMPTS = 3;
+
 serve(async (req) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -1183,7 +1299,7 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY yapılandırılmamış");
     }
 
-    console.log("[AI Code Generator v2.0] Mod:", mode || 'generate', "- Kod üretiliyor...");
+    console.log("[AI Code Generator v2.1] Mod:", mode || 'generate', "- Kod üretiliyor...");
 
     // Mesajları oluştur
     let messages: Array<{ role: string; content: string }>;
@@ -1240,6 +1356,7 @@ serve(async (req) => {
 
     const result = await response.json();
     let generatedCode = result.choices?.[0]?.message?.content || "";
+    let finishReason = result.choices?.[0]?.finish_reason || "unknown";
 
     // Markdown code block'larını temizle
     generatedCode = generatedCode
@@ -1249,12 +1366,66 @@ serve(async (req) => {
       .replace(/```\n?/g, "")
       .trim();
 
-    console.log("[AI Code Generator v2.0] Kod üretildi, uzunluk:", generatedCode.length);
+    console.log("[AI Code Generator v2.1] İlk yanıt - uzunluk:", generatedCode.length, "finish_reason:", finishReason);
+
+    // Auto-continue mekanizması
+    let attempts = 0;
+    let wasPartial = false;
+    
+    while (
+      (finishReason === "length" || !isCodeComplete(generatedCode)) && 
+      attempts < MAX_CONTINUE_ATTEMPTS
+    ) {
+      attempts++;
+      wasPartial = true;
+      console.log(`[AI Code Generator v2.1] Kod yarım, devam ediliyor (${attempts}/${MAX_CONTINUE_ATTEMPTS})...`);
+      
+      try {
+        const continuation = await continueGeneration(
+          generatedCode, 
+          LOVABLE_API_KEY, 
+          attempts,
+          mode || 'generate'
+        );
+        
+        // Kodları birleştir
+        generatedCode = mergeCodeParts(generatedCode, continuation.code);
+        finishReason = continuation.finishReason;
+        
+        console.log(`[AI Code Generator v2.1] Devam ${attempts} - yeni uzunluk:`, generatedCode.length);
+        
+        // Eğer kod tamamlandıysa çık
+        if (isCodeComplete(generatedCode)) {
+          console.log("[AI Code Generator v2.1] Kod tamamlandı!");
+          break;
+        }
+      } catch (continueError) {
+        console.error(`[AI Code Generator v2.1] Devam hatası (${attempts}):`, continueError);
+        // Hata olsa bile mevcut kodla devam et
+        break;
+      }
+    }
+
+    // Son kontrol
+    const codeIsComplete = isCodeComplete(generatedCode);
+    
+    if (!codeIsComplete && attempts >= MAX_CONTINUE_ATTEMPTS) {
+      console.warn("[AI Code Generator v2.1] Maksimum deneme sayısına ulaşıldı, kod hala tamamlanmadı");
+    }
+
+    console.log("[AI Code Generator v2.1] Sonuç - uzunluk:", generatedCode.length, "tamamlandı:", codeIsComplete, "toplam deneme:", attempts + 1);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         code: generatedCode,
+        metadata: {
+          totalAttempts: attempts + 1,
+          wasPartial,
+          isComplete: codeIsComplete,
+          codeLength: generatedCode.length,
+          finishReason,
+        }
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
