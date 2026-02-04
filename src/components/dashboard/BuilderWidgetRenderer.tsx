@@ -17,14 +17,35 @@ import * as LucideIcons from 'lucide-react';
 import { 
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   PieChart as RechartsPieChart, Pie, Cell, ReferenceLine,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  // Ek bileşenler - ComposedChart ve diğerleri
+  ComposedChart,
+  ScatterChart, Scatter,
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  FunnelChart, Funnel, LabelList,
+  ReferenceDot, ReferenceArea,
+  Treemap
 } from 'recharts';
 import { cn } from '@/lib/utils';
 
 // Recharts bileşenlerini scope'a ekle (customCode için)
 const RechartsScope = {
+  // Temel grafikler
   BarChart, Bar, LineChart, Line, AreaChart, Area,
-  PieChart: RechartsPieChart, Pie, Cell, ReferenceLine,
+  PieChart: RechartsPieChart, Pie, Cell,
+  // Composed (karma) grafik
+  ComposedChart,
+  // Scatter (dağılım) grafik
+  ScatterChart, Scatter,
+  // Radar grafik
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  // Funnel (huni) grafik
+  FunnelChart, Funnel, LabelList,
+  // Treemap
+  Treemap,
+  // Referans çizgileri ve işaretleyiciler
+  ReferenceLine, ReferenceDot, ReferenceArea,
+  // Ortak bileşenler
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 };
 
