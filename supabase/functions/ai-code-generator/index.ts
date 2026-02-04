@@ -955,6 +955,127 @@ React.createElement(Recharts.XAxis, {
 
 ═══════════════════════════════════════════════════════════════════════════════
 
+🗺️ HARİTA BİLEŞENLERİ (Map SCOPE - Leaflet)
+───────────────────────────────────────────────────────────────────────────────
+Widget'a otomatik olarak "Map" scope'u geçilir. Bu scope Leaflet harita bileşenlerini içerir:
+
+📦 MAP SCOPE İÇERİĞİ:
+   - Map.MapContainer: Ana harita container'ı
+   - Map.TileLayer: Harita arka plan katmanı (OpenStreetMap, vb.)
+   - Map.Marker: Konum işaretleyici
+   - Map.Popup: Marker popup'ı (Recharts Tooltip ile KARISTIRMA!)
+   - Map.CircleMarker: Daire işaretleyici (değer boyutuna göre büyüklük)
+   - Map.Polyline: Çizgi çizme (rota, bağlantı)
+   - Map.Polygon: Alan çizme
+   - Map.L: Leaflet utility (custom icons, bounds vb.)
+
+✅ ZORUNLU HARİTA YAPISI:
+function Widget({ data, colors, filters }) {
+  // Merkez koordinat hesapla
+  var center = React.useMemo(function() {
+    if (!data || data.length === 0) return [39.9334, 32.8597]; // Ankara default
+    var validPoints = data.filter(function(item) {
+      return item.lat && item.lng;
+    });
+    if (validPoints.length === 0) return [39.9334, 32.8597];
+    var avgLat = validPoints.reduce(function(acc, p) { return acc + parseFloat(p.lat); }, 0) / validPoints.length;
+    var avgLng = validPoints.reduce(function(acc, p) { return acc + parseFloat(p.lng); }, 0) / validPoints.length;
+    return [avgLat, avgLng];
+  }, [data]);
+
+  return React.createElement('div', { className: 'h-full w-full min-h-[300px]' },
+    React.createElement(Map.MapContainer, {
+      center: center,
+      zoom: 6,
+      style: { height: '100%', width: '100%', borderRadius: '0.375rem' },
+      scrollWheelZoom: true
+    },
+      // TileLayer - OpenStreetMap (ücretsiz, API key gerektirmez)
+      React.createElement(Map.TileLayer, {
+        attribution: '© OpenStreetMap contributors',
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+      }),
+      // Marker'lar
+      data.filter(function(item) { return item.lat && item.lng; }).map(function(item, idx) {
+        return React.createElement(Map.Marker, {
+          key: idx,
+          position: [parseFloat(item.lat), parseFloat(item.lng)]
+        },
+          React.createElement(Map.Popup, null,
+            React.createElement('div', { className: 'text-sm' },
+              React.createElement('strong', null, item.name || item.adi || 'Konum'),
+              item.value && React.createElement('p', null, formatCurrency(item.value))
+            )
+          )
+        );
+      })
+    )
+  );
+}
+
+📊 CİRCLE MARKER (Değer Bazlı Büyüklük):
+// Değere göre radius hesapla
+var getRadius = function(value, maxValue) {
+  var minR = 5, maxR = 25;
+  return minR + (value / maxValue) * (maxR - minR);
+};
+
+var maxVal = Math.max.apply(null, data.map(function(d) { return parseFloat(d.value) || 0; }));
+
+React.createElement(Map.CircleMarker, {
+  center: [item.lat, item.lng],
+  radius: getRadius(item.value, maxVal),
+  pathOptions: {
+    fillColor: getColor(0),
+    color: 'hsl(var(--border))',
+    weight: 1,
+    opacity: 0.8,
+    fillOpacity: 0.6
+  }
+},
+  React.createElement(Map.Popup, null, item.name + ': ' + formatCurrency(item.value))
+)
+
+📍 CUSTOM MARKER İKONU:
+var customIcon = Map.L.divIcon({
+  className: 'custom-marker',
+  html: '<div style="background:' + getColor(0) + ';width:24px;height:24px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>',
+  iconSize: [24, 24],
+  iconAnchor: [12, 12]
+});
+
+React.createElement(Map.Marker, {
+  position: [item.lat, item.lng],
+  icon: customIcon
+})
+
+🌐 FARKLI TİLE LAYER'LAR:
+// OpenStreetMap (varsayılan - ücretsiz)
+url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+
+// CartoDB Light (minimal tasarım)
+url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+
+// CartoDB Dark (koyu tema)
+url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+
+// Stamen Terrain (arazi)
+url: 'https://stamen-tiles.a.ssl.fastly.net/terrain/{z}/{x}/{y}.png'
+
+⚠️ ÖNEMLİ KURALLAR:
+1. Harita container'ına min-h-[300px] veya sabit yükseklik ver (aksi halde görünmez!)
+2. style: { height: '100%', width: '100%' } ZORUNLU
+3. Map.Popup ile Recharts.Tooltip'i KARIŞTIRMA - farklı bileşenler!
+4. Koordinat formatı: [lat, lng] (enlem, boylam) - DİZİ olarak!
+5. Veri içinde lat/lng alanları yoksa harita kullanma
+
+❌ YANLIŞ:
+   - position: { lat: 41, lng: 29 } (obje yerine dizi kullan)
+   - style: { height: 300 } (% veya px belirtilmeli)
+   - Container yüksekliği olmadan MapContainer
+
+═══════════════════════════════════════════════════════════════════════════════
+
 ⚠️ KRİTİK UYARI - KODU TAMAMLA!
 ───────────────────────────────────────────────────────────────────────────────
 - Kodu MUTLAKA tamamla, ASLA yarıda bırakma!
@@ -1019,6 +1140,13 @@ var getColor = function(index) {
 - ReferenceLine ile hedef çizgisi
 - Trend line için Line overlay (strokeDasharray)
 - Average line için ReferenceLine
+
+🗺️ HARİTA (Map SCOPE):
+Widget'a "Map" scope'u da geçilir. Leaflet harita bileşenleri:
+- Map.MapContainer, Map.TileLayer, Map.Marker, Map.Popup, Map.CircleMarker
+- Container'a min-h-[300px] ve style: { height: '100%', width: '100%' } ZORUNLU
+- Koordinat formatı: [lat, lng] (dizi olarak)
+- TileLayer için OpenStreetMap: url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 
 SADECE güncellenmiş JavaScript kodunu döndür, açıklama ekleme.`;
 
