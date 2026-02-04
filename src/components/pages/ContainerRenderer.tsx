@@ -60,7 +60,6 @@ export function ContainerRenderer({
   const [localContainer, setLocalContainer] = useState(container);
 
   const template = CONTAINER_TEMPLATES.find(t => t.id === container.container_type);
-  if (!template) return null;
 
   // Widget detaylarını yükle (builder_config dahil)
   // Ayrıca silinmiş widget'ları tespit et
@@ -202,6 +201,7 @@ export function ContainerRenderer({
   };
 
   // Slot'ların render'ını oluştur
+  if (!template) return null;
   const renderSlots = () => {
     return Array.from({ length: template.slots }).map((_, slotIndex) => {
       const slotWidget = containerWidgets.find(w => w.slot_index === slotIndex);
