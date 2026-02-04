@@ -968,6 +968,21 @@ Widget'a otomatik olarak "Map" scope'u geçilir. Bu scope Leaflet harita bileşe
    - Map.Polyline: Çizgi çizme (rota, bağlantı)
    - Map.Polygon: Alan çizme
    - Map.L: Leaflet utility (custom icons, bounds vb.)
+   - Map.useMap: Harita instance'ına erişim hook'u
+   - Map.useMapEvents: Harita olaylarını dinleme hook'u (zoom, click vb.)
+   - Map.useMapEvent: Tek olay dinleme hook'u
+
+🔧 HARİTA HOOKS KULLANIMI:
+// Zoom seviyesini takip etmek için:
+var ZoomTracker = function() {
+  var map = Map.useMapEvents({
+    zoomend: function() {
+      setZoomLevel(map.getZoom());
+    }
+  });
+  return null;
+};
+// MapContainer içinde: React.createElement(ZoomTracker)
 
 ✅ ZORUNLU HARİTA YAPISI:
 function Widget({ data, colors, filters }) {

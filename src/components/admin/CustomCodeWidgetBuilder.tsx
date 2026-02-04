@@ -84,6 +84,10 @@ const EmptyMapScope = {
   CircleMarker: () => null,
   Polyline: () => null,
   Polygon: () => null,
+  // Hooks - boş placeholder
+  useMap: () => null,
+  useMapEvents: () => null,
+  useMapEvent: () => null,
   L: null,
 };
 
@@ -116,6 +120,10 @@ const initMapScope = async () => {
       CircleMarker: reactLeaflet.CircleMarker,
       Polyline: reactLeaflet.Polyline,
       Polygon: reactLeaflet.Polygon,
+      // Hooks
+      useMap: reactLeaflet.useMap,
+      useMapEvents: reactLeaflet.useMapEvents,
+      useMapEvent: reactLeaflet.useMapEvent,
       L: L.default,
     };
 
