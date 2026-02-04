@@ -28,23 +28,60 @@ import {
 } from 'recharts';
 import { cn } from '@/lib/utils';
 
-// Leaflet harita bileşenleri
-import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Polyline, Polygon } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+// Leaflet harita bileşenleri - lazy import ile yüklenir
+let MapScope: any = null;
 
-// Leaflet default marker icon fix (webpack/vite issue)
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+// Leaflet'i lazy olarak yükle (sadece harita widget'ı kullanılırsa)
+const initMapScope = async () => {
+  if (MapScope) return MapScope;
+  
+  try {
+    const [reactLeaflet, L] = await Promise.all([
+      import('react-leaflet'),
+      import('leaflet')
+    ]);
+    
+    // Leaflet CSS
+    await import('leaflet/dist/leaflet.css');
+    
+    // Default marker icon fix
+    // @ts-ignore
+    delete L.default.Icon.Default.prototype._getIconUrl;
+    L.default.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    });
+    
+    MapScope = {
+      MapContainer: reactLeaflet.MapContainer,
+      TileLayer: reactLeaflet.TileLayer,
+      Marker: reactLeaflet.Marker,
+      Popup: reactLeaflet.Popup,
+      CircleMarker: reactLeaflet.CircleMarker,
+      Polyline: reactLeaflet.Polyline,
+      Polygon: reactLeaflet.Polygon,
+      L: L.default
+    };
+    
+    return MapScope;
+  } catch (e) {
+    console.warn('Leaflet yüklenemedi:', e);
+    return null;
+  }
+};
 
-// @ts-ignore
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-});
+// Başlangıçta boş bir placeholder - harita kullanılırsa yüklenir
+const EmptyMapScope = {
+  MapContainer: () => null,
+  TileLayer: () => null,
+  Marker: () => null,
+  Popup: () => null,
+  CircleMarker: () => null,
+  Polyline: () => null,
+  Polygon: () => null,
+  L: null
+};
 
 // Recharts bileşenlerini scope'a ekle (customCode için)
 const RechartsScope = {
@@ -67,17 +104,7 @@ const RechartsScope = {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 };
 
-// Leaflet harita bileşenlerini scope'a ekle (customCode için)
-const MapScope = {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Popup: Popup as any, // Leaflet Popup (Recharts Tooltip ile çakışmaması için)
-  CircleMarker,
-  Polyline,
-  Polygon,
-  L // Leaflet utility (custom icons, bounds vb. için)
-};
+// MapScope artık lazy olarak yukarıda tanımlandı - buradaki eski tanım kaldırıldı
 
 // Custom widget'lar için UI scope (portal/modal gibi bileşenler)
 const UIScope = {
@@ -389,7 +416,7 @@ export function BuilderWidgetRenderer({
       );
       
       // Custom widget'a colors, filters ve Map prop'ları geç
-      const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters, UIScope, MapScope);
+      const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters, UIScope, MapScope || EmptyMapScope);
       
       if (typeof WidgetComponent !== 'function') {
         return (
