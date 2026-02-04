@@ -6,8 +6,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { diaTestConnection, getDiaConnectionInfo } from '@/lib/diaClient';
 import { useFirmaPeriods } from '@/hooks/useFirmaPeriods';
 import { useChartColorPalette, COLOR_PALETTES } from '@/hooks/useChartColorPalette';
+import { useDiaProfile } from '@/hooks/useDiaProfile';
 import { toast } from 'sonner';
-import { 
+import {
   User, 
   Server, 
   Bell, 
@@ -40,6 +41,10 @@ export function SettingsPage() {
   const { user } = useAuth();
   const { useMockData, setUseMockData } = useUserSettings();
   const { currentPaletteName, setPalette, palettes } = useChartColorPalette();
+  
+  // Team member DIA bağlantı bilgilerini kontrol et
+  const diaProfile = useDiaProfile();
+  
   const [activeTab, setActiveTab] = useState('genel');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -84,12 +89,12 @@ export function SettingsPage() {
     refreshInterval: 5,
   });
 
-  // Tabs - DIA tab only visible for team admins
+  // Tabs - DIA tab always visible but with different content for team members
   const tabs = [
     { id: 'genel', label: 'Genel', icon: User },
     { id: 'gorunum', label: 'Görünüm', icon: Palette },
     { id: 'demo', label: 'Demo Modu', icon: FlaskConical },
-    ...(isTeamAdmin ? [{ id: 'dia', label: 'DIA Bağlantısı', icon: Plug }] : []),
+    { id: 'dia', label: 'DIA Bağlantısı', icon: Plug },
     { id: 'sunucu', label: 'Bağlantı', icon: Server },
     { id: 'bildirimler', label: 'Bildirimler', icon: Bell },
     { id: 'guvenlik', label: 'Güvenlik', icon: Shield },
@@ -512,153 +517,189 @@ export function SettingsPage() {
                   DIA ERP Bağlantısı
                 </h3>
 
-                {/* Connection Status */}
-                <div className={`p-4 rounded-lg mb-6 ${diaConnection.connected ? 'bg-success/10 border border-success/30' : 'bg-secondary/50'}`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {diaConnection.connected ? (
-                        <CheckCircle2 className="w-6 h-6 text-success" />
-                      ) : (
-                        <XCircle className="w-6 h-6 text-muted-foreground" />
-                      )}
+                {/* Team Member Info Banner */}
+                {diaProfile.isTeamMember && (
+                  <div className="p-4 rounded-lg mb-6 bg-primary/10 border border-primary/30">
+                    <div className="flex items-start gap-3">
+                      <Database className="w-5 h-5 text-primary mt-0.5" />
                       <div>
-                        <p className="font-medium">
-                          {diaConnection.connected ? 'Bağlı' : 'Bağlı Değil'}
+                        <p className="font-medium text-primary">Takım Üyesi Olarak Bağlısınız</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          DIA bağlantısı takım yöneticiniz ({diaProfile.teamAdminEmail || 'Yönetici'}) tarafından sağlanmaktadır.
+                          Tüm veriler yöneticinizin DIA hesabı üzerinden çekilir.
                         </p>
-                        {diaConnection.connected && diaConnection.sessionExpires && (
-                          <p className="text-xs text-muted-foreground">
-                            Oturum: {new Date(diaConnection.sessionExpires).toLocaleString('tr-TR')}
-                          </p>
+                        {diaProfile.isConfigured && (
+                          <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                            <div className="p-2 bg-secondary/50 rounded">
+                              <span className="text-muted-foreground">Sunucu:</span>{' '}
+                              <span className="font-medium">{diaProfile.sunucuAdi}</span>
+                            </div>
+                            <div className="p-2 bg-secondary/50 rounded">
+                              <span className="text-muted-foreground">Firma:</span>{' '}
+                              <span className="font-medium">{diaProfile.firmaAdi || diaProfile.firmaKodu}</span>
+                            </div>
+                            <div className="p-2 bg-secondary/50 rounded col-span-2">
+                              <span className="text-muted-foreground">Dönem:</span>{' '}
+                              <span className="font-medium">{diaProfile.donemYili || diaProfile.donemKodu}</span>
+                            </div>
+                          </div>
                         )}
                       </div>
                     </div>
-                    {diaConnection.connected && (
-                      <span className="px-3 py-1 text-xs rounded-full bg-success/20 text-success font-medium">
-                        Aktif
-                      </span>
-                    )}
                   </div>
-                </div>
+                )}
 
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-muted-foreground mb-2">
-                      DIA Sunucu Adı
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">https://</span>
-                      <input
-                        type="text"
-                        value={diaConnection.sunucuAdi}
-                        onChange={(e) => setDiaConnection({ ...diaConnection, sunucuAdi: e.target.value })}
-                        className="input-field flex-1"
-                        placeholder="rotayazilim"
-                      />
-                      <span className="text-muted-foreground">.ws.dia.com.tr</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Örnek: rotayazilim, demofirma
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-muted-foreground mb-2">
-                      API Key
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showApiKey ? 'text' : 'password'}
-                        value={diaConnection.apiKey}
-                        onChange={(e) => setDiaConnection({ ...diaConnection, apiKey: e.target.value })}
-                        className="input-field pr-10"
-                        placeholder="DIA API anahtarınız"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowApiKey(!showApiKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      >
-                        {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
+                {/* Connection Status - only show for team admins */}
+                {!diaProfile.isTeamMember && (
+                  <div className={`p-4 rounded-lg mb-6 ${diaConnection.connected ? 'bg-success/10 border border-success/30' : 'bg-secondary/50'}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {diaConnection.connected ? (
+                          <CheckCircle2 className="w-6 h-6 text-success" />
+                        ) : (
+                          <XCircle className="w-6 h-6 text-muted-foreground" />
+                        )}
+                        <div>
+                          <p className="font-medium">
+                            {diaConnection.connected ? 'Bağlı' : 'Bağlı Değil'}
+                          </p>
+                          {diaConnection.connected && diaConnection.sessionExpires && (
+                            <p className="text-xs text-muted-foreground">
+                              Oturum: {new Date(diaConnection.sessionExpires).toLocaleString('tr-TR')}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      {diaConnection.connected && (
+                        <span className="px-3 py-1 text-xs rounded-full bg-success/20 text-success font-medium">
+                          Aktif
+                        </span>
+                      )}
                     </div>
                   </div>
+                )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Form fields - only for team admins */}
+                {!diaProfile.isTeamMember && (
+                  <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-muted-foreground mb-2">
-                        Web Servis Kullanıcı Adı
+                        DIA Sunucu Adı
                       </label>
-                      <input
-                        type="text"
-                        value={diaConnection.wsKullanici}
-                        onChange={(e) => setDiaConnection({ ...diaConnection, wsKullanici: e.target.value })}
-                        className="input-field"
-                        placeholder="WS kullanıcı adı"
-                      />
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">https://</span>
+                        <input
+                          type="text"
+                          value={diaConnection.sunucuAdi}
+                          onChange={(e) => setDiaConnection({ ...diaConnection, sunucuAdi: e.target.value })}
+                          className="input-field flex-1"
+                          placeholder="rotayazilim"
+                        />
+                        <span className="text-muted-foreground">.ws.dia.com.tr</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Örnek: rotayazilim, demofirma
+                      </p>
                     </div>
+
                     <div>
                       <label className="block text-sm font-medium text-muted-foreground mb-2">
-                        Web Servis Şifresi
+                        API Key
                       </label>
                       <div className="relative">
                         <input
-                          type={showPassword ? 'text' : 'password'}
-                          value={diaConnection.wsSifre}
-                          onChange={(e) => setDiaConnection({ ...diaConnection, wsSifre: e.target.value })}
+                          type={showApiKey ? 'text' : 'password'}
+                          value={diaConnection.apiKey}
+                          onChange={(e) => setDiaConnection({ ...diaConnection, apiKey: e.target.value })}
                           className="input-field pr-10"
-                          placeholder="••••••••"
+                          placeholder="DIA API anahtarınız"
                         />
                         <button
                           type="button"
-                          onClick={() => setShowPassword(!showPassword)}
+                          onClick={() => setShowApiKey(!showApiKey)}
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                         >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-muted-foreground mb-2">
-                        Firma Kodu
-                      </label>
-                      <input
-                        type="text"
-                        value={profile.firmaKodu}
-                        onChange={(e) => setProfile({ ...profile, firmaKodu: e.target.value })}
-                        className="input-field"
-                        placeholder="1"
-                      />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-muted-foreground mb-2">
+                          Web Servis Kullanıcı Adı
+                        </label>
+                        <input
+                          type="text"
+                          value={diaConnection.wsKullanici}
+                          onChange={(e) => setDiaConnection({ ...diaConnection, wsKullanici: e.target.value })}
+                          className="input-field"
+                          placeholder="WS kullanıcı adı"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-muted-foreground mb-2">
+                          Web Servis Şifresi
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            value={diaConnection.wsSifre}
+                            onChange={(e) => setDiaConnection({ ...diaConnection, wsSifre: e.target.value })}
+                            className="input-field pr-10"
+                            placeholder="••••••••"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          >
+                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-muted-foreground mb-2">
-                        Aktif Dönem
-                      </label>
-                      {periods.length > 0 ? (
-                        <Select
-                          value={profile.donemKodu}
-                          onValueChange={async (value) => {
-                            setProfile({ ...profile, donemKodu: value });
-                            await selectPeriod(parseInt(value));
-                          }}
-                        >
-                          <SelectTrigger className="input-field">
-                            <SelectValue placeholder="Dönem seçin" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {periods.map((period) => (
-                              <SelectItem key={period.id} value={period.period_no.toString()}>
-                                <div className="flex items-center gap-2">
-                                  <span>{period.period_name || `Dönem ${period.period_no}`}</span>
-                                  {period.is_current && (
-                                    <span className="text-xs bg-success/20 text-success px-1.5 py-0.5 rounded">
-                                      Aktif
-                                    </span>
-                                  )}
-                                </div>
-                              </SelectItem>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-muted-foreground mb-2">
+                          Firma Kodu
+                        </label>
+                        <input
+                          type="text"
+                          value={profile.firmaKodu}
+                          onChange={(e) => setProfile({ ...profile, firmaKodu: e.target.value })}
+                          className="input-field"
+                          placeholder="1"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-muted-foreground mb-2">
+                          Aktif Dönem
+                        </label>
+                        {periods.length > 0 ? (
+                          <Select
+                            value={profile.donemKodu}
+                            onValueChange={async (value) => {
+                              setProfile({ ...profile, donemKodu: value });
+                              await selectPeriod(parseInt(value));
+                            }}
+                          >
+                            <SelectTrigger className="input-field">
+                              <SelectValue placeholder="Dönem seçin" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {periods.map((period) => (
+                                <SelectItem key={period.id} value={period.period_no.toString()}>
+                                  <div className="flex items-center gap-2">
+                                    <span>{period.period_name || `Dönem ${period.period_no}`}</span>
+                                    {period.is_current && (
+                                      <span className="text-xs bg-success/20 text-success px-1.5 py-0.5 rounded">
+                                        Aktif
+                                      </span>
+                                    )}
+                                  </div>
+                                </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -738,18 +779,19 @@ export function SettingsPage() {
                       Kaydet ve Bağlan
                     </button>
                   </div>
-                </div>
 
-                {/* Help Section */}
-                <div className="mt-6 p-4 rounded-lg bg-primary/10 border border-primary/20">
-                  <h4 className="font-medium text-primary mb-2">DIA Bağlantı Bilgileri</h4>
-                  <ul className="text-sm text-muted-foreground space-y-1">
-                    <li>• Sunucu adını DIA yöneticinizden öğrenebilirsiniz</li>
-                    <li>• API Key, DIA panelinden alınır</li>
-                    <li>• Web servis kullanıcısı DIA'da tanımlı olmalıdır</li>
-                    <li>• Bağlantı 30 dakika aktif kalır, otomatik yenilenir</li>
-                  </ul>
+                  {/* Help Section */}
+                  <div className="mt-6 p-4 rounded-lg bg-primary/10 border border-primary/20">
+                    <h4 className="font-medium text-primary mb-2">DIA Bağlantı Bilgileri</h4>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      <li>• Sunucu adını DIA yöneticinizden öğrenebilirsiniz</li>
+                      <li>• API Key, DIA panelinden alınır</li>
+                      <li>• Web servis kullanıcısı DIA'da tanımlı olmalıdır</li>
+                      <li>• Bağlantı 30 dakika aktif kalır, otomatik yenilenir</li>
+                    </ul>
+                  </div>
                 </div>
+                )}
               </div>
             )}
 
