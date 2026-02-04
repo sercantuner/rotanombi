@@ -214,12 +214,11 @@ serve(async (req) => {
 
     // returnAllData/returnAllSampleData istenip limit verilmezse,
     // büyük liste servisleri DIA tarafında CancelledError ile iptal olabiliyor.
-    // Bu yüzden güvenli bir üst limit uygula.
-    const SAFE_DEFAULT_LIMIT = 1000;
+    // Artık limit sınırlaması tamamen kaldırıldı - DIA'nın döndürdüğü tüm veri çekilir.
+    // NOT: Çok büyük veri setlerinde timeout olabilir - bu durumda kullanıcı limit belirlemeli.
     
     // Bazı servisler çok ağır veri döndürüyor (nested diziler vb.)
-    // Bu servisler için daha düşük limit gerekiyor
-    const HEAVY_DATA_LIMIT = 200; // carikart_vade_bakiye_listele gibi detaygoster ile çalışan servisler
+    // Bu servisler için hala dikkatli olunmalı ama zorunlu limit yok
     const HEAVY_DATA_METHODS = [
       'carikart_vade_bakiye_listele', // Her kayıtta __borchareketler dizisi var
       'carikart_hareket_listele',      // Hareket detayları
@@ -227,14 +226,11 @@ serve(async (req) => {
     ];
     
     const isHeavyMethod = HEAVY_DATA_METHODS.includes(method || '');
-    const defaultLimit = isHeavyMethod ? HEAVY_DATA_LIMIT : SAFE_DEFAULT_LIMIT;
     
     const wantsAllData = returnAllData || returnAllSampleData;
     const hasValidLimit = typeof limit === 'number' && limit > 0;
-    // Kullanıcı limit verdiyse onu kullan, ama heavy servisler için max HEAVY_DATA_LIMIT
-    const effectiveLimit = hasValidLimit 
-      ? (isHeavyMethod ? Math.min(limit, HEAVY_DATA_LIMIT) : limit)
-      : (wantsAllData ? defaultLimit : undefined);
+    // Kullanıcı limit verdiyse onu kullan, limit yoksa undefined = limitsiz
+    const effectiveLimit = hasValidLimit ? limit : undefined;
     
     // Hedef kullanıcı ID'sini belirle - impersonation varsa targetUserId, yoksa authenticated user
     const effectiveUserId = targetUserId || user.id;
