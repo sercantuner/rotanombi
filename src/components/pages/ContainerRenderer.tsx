@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useContainerWidgets } from '@/hooks/useUserPages';
-import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
+// NOT: useDataSourceLoader KALDIRILDI - her container için ayrı instance oluşturuyordu!
+// loadSingleDataSource artık prop olarak alınıyor
 import { useChartColorPalette, COLOR_PALETTES } from '@/hooks/useChartColorPalette';
 import { PageContainer, CONTAINER_TEMPLATES, ContainerType } from '@/lib/pageTypes';
 import { Widget } from '@/lib/widgetTypes';
@@ -38,7 +39,8 @@ interface ContainerRendererProps {
   widgetData?: any;
   isLoading?: boolean;
   isWidgetEditMode?: boolean;
-  pageId?: string | null; // Sayfa ID'si - veri kaynağı yüklemesi için
+  pageId?: string | null; // Sayfa ID'si - veri kaynağı yüklemesi için (artık kullanılmıyor)
+  loadSingleDataSource?: (dataSourceId: string) => Promise<any[] | null>; // Üst bileşenden prop olarak alınıyor
 }
 
 export function ContainerRenderer({ 
@@ -48,10 +50,10 @@ export function ContainerRenderer({
   widgetData = {},
   isLoading = false,
   isWidgetEditMode = false,
-  pageId = null
+  pageId = null,
+  loadSingleDataSource
 }: ContainerRendererProps) {
   const { widgets: containerWidgets, addWidget, removeWidget, refreshWidgets } = useContainerWidgets(container.id);
-  const { loadSingleDataSource } = useDataSourceLoader(pageId);
   const { currentPaletteName, setPalette } = useChartColorPalette();
   const [widgetPickerOpen, setWidgetPickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -145,9 +147,9 @@ export function ContainerRenderer({
     refreshWidgets();
     toast.success(`${widget.name} eklendi`);
     
-    // Widget'ın veri kaynağını hemen yükle (varsa)
+    // Widget'ın veri kaynağını hemen yükle (varsa ve loadSingleDataSource prop'u geçildiyse)
     const builderConfig = widget.builder_config as any;
-    if (builderConfig?.dataSourceId) {
+    if (builderConfig?.dataSourceId && loadSingleDataSource) {
       console.log(`[ContainerRenderer] Loading data source for new widget: ${builderConfig.dataSourceId}`);
       loadSingleDataSource(builderConfig.dataSourceId);
     }
