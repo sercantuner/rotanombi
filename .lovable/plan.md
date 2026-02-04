@@ -1,172 +1,155 @@
 
-# AI Kod Üretiminde Yarıda Kalma Sorunu - Çözüm Planı
+## Problem Analizi: Grafiklerin Sürekli Yeniden Render Edilmesi
 
-## Problem Analizi
+### Tespit Edilen Sorun
 
-AI modelinin cevap karakter/token limiti nedeniyle uzun kodlar yarıda kesiliyor. Bu durum `max_tokens: 64000` parametresinden bağımsız olarak modelin kendi output sınırından kaynaklanıyor.
-
-**Mevcut Durum:**
-- `ai-code-generator` edge function `max_tokens: 64000` ile çağrı yapıyor
-- Ancak AI modeli (google/gemini-3-pro-preview) kendi output limitine ulaştığında kodu yarım bırakıyor
-- `finish_reason: "length"` döndüğünde bu durum tespit edilebilir ama şu an kontrol edilmiyor
-
-## Çözüm Stratejisi
-
-### 1. Yarım Kalan Yanıtı Tespit Et (finish_reason kontrolü)
-
-AI API'den dönen yanıtı kontrol ederek kodun yarıda kalıp kalmadığını tespit et:
-
-```text
-finish_reason: "stop"   → Normal sonlanma, kod tam
-finish_reason: "length" → Token limiti aşıldı, kod yarım
+Console loglarında aynı widget'ın **20+ kez** render edildiği görülüyor:
+```
+[BuilderWidgetRenderer] Fatura Satış Grafiği (393666ee-...) {...}
+[BuilderWidgetRenderer] Fatura Satış Grafiği (393666ee-...) {...}
+... (20+ kez tekrar)
 ```
 
-### 2. Otomatik Devam Mekanizması (Auto-Continue)
+### Kök Neden: Sonsuz Render Döngüsü
 
-Kod yarım kaldığında otomatik olarak devam isteği gönder:
-
-```text
-Akış:
-1. AI'dan ilk yanıt al
-2. finish_reason == "length" ise:
-   a. Mevcut kodu sakla
-   b. "Kodun geri kalanını yaz, kaldığın yerden devam et:" promptu gönder
-   c. Dönen kodu mevcut koda ekle
-   d. Tekrar kontrol et (max 3 deneme)
-3. Tam kodu birleştir ve döndür
-```
-
-### 3. Akıllı Kod Parçalama (Code Chunking)
-
-Çok büyük widget'lar için kodu mantıksal parçalara böl:
-
-```text
-Bölüm 1: Helper fonksiyonlar (formatCurrency, getColor, vb.)
-Bölüm 2: Veri işleme ve state
-Bölüm 3: Ana render mantığı
-Bölüm 4: return Widget
-```
+Birden fazla kaynak bu soruna neden oluyor:
 
 ---
 
-## Teknik Değişiklikler
-
-### Dosya: `supabase/functions/ai-code-generator/index.ts`
-
-**Yeni fonksiyon: `isCodeComplete()`**
-```text
-Kodun tamamlanıp tamamlanmadığını kontrol eder:
-- "return Widget;" ile bitip bitmediği
-- Parantez/süslü parantez dengesi
-- Fonksiyon tanımının kapanıp kapanmadığı
-```
-
-**Yeni fonksiyon: `continueGeneration()`**
-```text
-Yarım kalan kodu tamamlamak için yeni istek gönderir:
-- Mevcut kodu context olarak verir
-- "Kaldığın yerden devam et" promptu kullanır
-- Dönen parçayı mevcut koda ekler
-```
-
-**Ana akış güncelleme:**
-```text
-1. İlk API çağrısını yap
-2. finish_reason'ı kontrol et
-3. "length" ise veya kod tamamlanmamışsa:
-   - continueGeneration() çağır (max 3 kez)
-   - Parçaları birleştir
-4. Son kontrolü yap ve döndür
-```
-
-### Dosya: `src/components/admin/CustomCodeWidgetBuilder.tsx`
-
-**UI Güncellemesi:**
-- Kod devam ediyor durumu için loading state ekle
-- "Kod uzun, devam ediliyor... (2/3)" gibi progress göster
-- Yarım kalan kod uyarısı göster (kullanıcı manuel devam edebilsin)
-
----
-
-## Uygulama Detayları
-
-### Edge Function Değişiklikleri
-
-```javascript
-// Yarım kod tespit fonksiyonu
-function isCodeComplete(code) {
-  // return Widget; kontrolü
-  if (!code.includes('return Widget;')) return false;
-  
-  // Parantez dengesi
-  const openBraces = (code.match(/{/g) || []).length;
-  const closeBraces = (code.match(/}/g) || []).length;
-  if (openBraces !== closeBraces) return false;
-  
-  // Fonksiyon tanımı kontrolü
-  if (!code.match(/function\s+Widget\s*\(\s*\{[^}]*\}\s*\)/)) return false;
-  
-  return true;
-}
-
-// Devam isteme fonksiyonu
-async function continueGeneration(partialCode, apiKey, attempt) {
-  const continuePrompt = `Aşağıdaki kod yarım kaldı. Kaldığın yerden AYNEN devam et:
-  
-\`\`\`javascript
-${partialCode.slice(-2000)}
-\`\`\`
-
-Sadece DEVAM kodunu yaz, baştan başlama!`;
-  
-  // API çağrısı...
-}
-
-// Ana fonksiyonda kullanım
-let fullCode = generatedCode;
-let attempts = 0;
-const MAX_ATTEMPTS = 3;
-
-while (!isCodeComplete(fullCode) && attempts < MAX_ATTEMPTS) {
-  attempts++;
-  console.log(`[AI Code Generator] Kod yarım, devam ediliyor (${attempts}/${MAX_ATTEMPTS})...`);
-  
-  const continuation = await continueGeneration(fullCode, LOVABLE_API_KEY, attempts);
-  fullCode += '\n' + continuation;
-}
-```
-
-### Frontend Güncellemeleri
+**1. `useDynamicWidgetData` Hook'undaki Dependency Array Sorunu (Satır 839)**
 
 ```typescript
-// Yeni state
-const [generationProgress, setGenerationProgress] = useState<{
-  isPartial: boolean;
-  attempt: number;
-  maxAttempts: number;
-} | null>(null);
+}, [config, globalFilters, getCachedData, setCachedData, getDataSourceDataWithStale, 
+    isDataSourceLoading, sharedData, incrementCacheHit, incrementCacheMiss]);
+```
 
-// API yanıtında progress bilgisi göster
-if (response.data?.isPartial) {
-  setGenerationProgress({
-    isPartial: true,
-    attempt: response.data.currentAttempt,
-    maxAttempts: response.data.maxAttempts
-  });
+**Problem:** Her render'da bu dependency'ler yeni referans alıyor (özellikle `globalFilters` ve `sharedData` objeleri). Bu, `fetchData` fonksiyonunun sürekli yeniden oluşturulmasına neden oluyor.
+
+---
+
+**2. `useEffect` + `fetchData` Zincirleme Tetiklemesi (Satır 843-847)**
+
+```typescript
+useEffect(() => {
+  if (isPageDataReady) {
+    fetchData();
+  }
+}, [isPageDataReady, fetchData]);
+```
+
+**Problem:** 
+- `fetchData` her render'da yeni referans alıyor (dependency array sorunu nedeniyle)
+- `isPageDataReady` true olduğunda `fetchData` çağrılıyor
+- `fetchData` state güncelliyor (`setData`, `setRawData`, `setIsFetching`)
+- State güncellemesi yeni render tetikliyor
+- Yeni render'da `fetchData` yeni referans alıyor
+- useEffect tekrar çalışıyor = **SONSUZ DÖNGÜ**
+
+---
+
+**3. `globalFilters` Referans Kararsızlığı**
+
+`GlobalFilterContext`'ten gelen `filters` objesi her render'da yeni referans alabilir. `useDynamicWidgetData` bu filtreleri dependency olarak alınca sürekli yeniden çalışıyor.
+
+---
+
+**4. Cache Context Fonksiyonları Referans Sorunu**
+
+`DiaDataCacheContext`'ten gelen `getDataSourceDataWithStale`, `incrementCacheHit`, `incrementCacheMiss` fonksiyonları `useMemo` ile sarılsa da, context state değiştiğinde yeniden oluşturuluyorlar.
+
+---
+
+## Çözüm Planı
+
+### Adım 1: fetchData Memoization Düzeltmesi
+`useDynamicWidgetData.tsx` dosyasında `fetchData` dependency array'ini düzelt:
+
+```typescript
+// ÖNCE (sorunlu)
+}, [config, globalFilters, getCachedData, setCachedData, ...]);
+
+// SONRA (düzeltilmiş)
+// 1. globalFilters'ı ref olarak tut
+const globalFiltersRef = useRef(globalFilters);
+globalFiltersRef.current = globalFilters;
+
+// 2. config'i JSON string olarak karşılaştır
+const configKey = useMemo(() => JSON.stringify(config), [config]);
+
+// 3. fetchData dependency'lerini minimize et
+}, [configKey]); // Sadece config değiştiğinde yeniden oluştur
+```
+
+### Adım 2: useEffect Tetikleyici Kontrolü
+`isPageDataReady` değişikliğini kontrollü yönet:
+
+```typescript
+// Önceki isPageDataReady değerini takip et
+const prevPageDataReadyRef = useRef(false);
+
+useEffect(() => {
+  // Sadece false -> true geçişinde çalış (ilk yükleme)
+  if (isPageDataReady && !prevPageDataReadyRef.current) {
+    fetchData();
+  }
+  prevPageDataReadyRef.current = isPageDataReady;
+}, [isPageDataReady]); // fetchData'yı dependency'den ÇIKAR
+```
+
+### Adım 3: GlobalFilters Stabilizasyonu
+`GlobalFilterContext.tsx` dosyasında filters objesini stabilize et:
+
+```typescript
+// filters state'ini memoize et
+const memoizedFilters = useMemo(() => filters, [
+  filters.searchTerm,
+  filters.cariKartTipi.join(','),
+  filters.satisTemsilcisi.join(','),
+  // ... diğer alanlar
+]);
+```
+
+### Adım 4: Cache Context Fonksiyonlarını Stabilize Et
+`DiaDataCacheContext.tsx` dosyasında callback'leri `useCallback` ile doğru şekilde memoize et:
+
+```typescript
+// Fonksiyonları cache state'inden bağımsız yap
+const incrementCacheHitRef = useRef(() => {
+  setStats(prev => ({ ...prev, cacheHits: prev.cacheHits + 1 }));
+});
+
+const incrementCacheHit = useCallback(() => {
+  incrementCacheHitRef.current();
+}, []); // Boş dependency - asla değişmez
+```
+
+### Adım 5: BuilderWidgetRenderer Console Log Temizliği
+Debug loglarını production'da devre dışı bırak:
+
+```typescript
+// Her render'da log yazmayı durdur
+if (process.env.NODE_ENV === 'development') {
+  console.log(`[BuilderWidgetRenderer] ${widgetName}...`);
 }
 ```
 
 ---
 
-## Beklenen Sonuçlar
+## Teknik Detaylar
 
-1. **Otomatik Tamamlama:** Uzun kodlar otomatik olarak birden fazla istekle tamamlanacak
-2. **Görsel Geri Bildirim:** Kullanıcı kodun devam ettiğini görecek
-3. **Fail-Safe:** 3 denemeden sonra bile tamamlanamazsa kullanıcıya bilgi verilecek
-4. **Manuel Seçenek:** Kullanıcı "Devam Et" butonuyla manuel olarak da devam isteyebilecek
+### Etkilenen Dosyalar
+1. `src/hooks/useDynamicWidgetData.tsx` - Ana düzeltme
+2. `src/contexts/GlobalFilterContext.tsx` - Filters stabilizasyonu
+3. `src/contexts/DiaDataCacheContext.tsx` - Callback stabilizasyonu
+4. `src/components/dashboard/BuilderWidgetRenderer.tsx` - Log temizliği
 
-## Risk ve Dikkat Edilecekler
+### Beklenen Sonuç
+- Widget'lar sayfa yüklendiğinde 1 kez render edilecek
+- Filtre değişikliğinde sadece 1 yeniden render olacak
+- Console loglarında tekrar eden satırlar olmayacak
+- Kullanıcı arayüzü daha akıcı/performanslı olacak
 
-- Her devam isteği ek AI kredisi harcar
-- Çok karmaşık widget'larda 3 deneme yetmeyebilir (ama nadir)
-- Kod parçaları birleştirilirken syntax hatası olabilir → validation gerekli
+### Risk Analizi
+- **Düşük Risk:** Değişiklikler sadece render optimizasyonu içeriyor
+- **Geriye Uyumluluk:** Mevcut widget davranışı korunacak
+- **Test Gerekliliği:** Tüm grafik widget'larının doğru render edildiği doğrulanmalı
