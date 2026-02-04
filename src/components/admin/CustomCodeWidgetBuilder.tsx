@@ -747,18 +747,38 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
       if (response.error) throw response.error;
       
       const generatedCode = response.data?.code || response.data?.content;
+      const metadata = response.data?.metadata;
+      
       if (generatedCode) {
         setCustomCode(generatedCode);
+        
+        // Metadata bilgisi ile toast göster
+        let toastMessage = 'Kod üretildi!';
+        if (metadata?.wasPartial) {
+          toastMessage = `Kod ${metadata.totalAttempts} parçada üretildi (${metadata.codeLength} karakter)`;
+          if (!metadata.isComplete) {
+            toastMessage += ' ⚠️ Kod tam olmayabilir';
+          }
+        }
+        
         setChatHistory([
           { role: 'user', content: aiPrompt },
-          { role: 'assistant', content: 'Kod üretildi!' }
+          { role: 'assistant', content: toastMessage }
         ]);
         // Otomatik olarak kod düzenleme adımına geç
         if (!completedSteps.includes(1)) {
           setCompletedSteps(prev => [...prev, 1]);
         }
         setCurrentStep(2);
-        toast.success('Kod üretildi! Kod düzenleme adımına geçildi.');
+        
+        // Tam olmayan kod uyarısı
+        if (metadata?.wasPartial && !metadata?.isComplete) {
+          toast.warning('Kod tamamlanamadı. Lütfen kontrol edip gerekirse Chat ile düzeltin.', {
+            duration: 5000,
+          });
+        } else {
+          toast.success(toastMessage + ' Kod düzenleme adımına geçildi.');
+        }
       } else {
         throw new Error('AI yanıtı alınamadı');
       }
