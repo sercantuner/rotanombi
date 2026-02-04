@@ -1,6 +1,6 @@
 // Global Filter Context - Sayfa ve widget bazlı filtreleme sistemi
-// v2.0 - Otomatik kaydetme/yükleme desteği eklendi
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
+// v2.1 - Stabilize edilmiş memoization + otomatik kaydetme/yükleme
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -371,14 +371,39 @@ export function GlobalFilterProvider({ children, pageId }: GlobalFilterProviderP
   // Filtreleme aktif mi?
   const isFiltering = activeFilterCount > 0 || filters._diaAutoFilters.length > 0;
 
+  // STABILIZED: Filters objesini memoize et - her render'da aynı referansı koru
+  // Sadece gerçekten değer değiştiğinde yeni obje oluştur
+  const stableFilters = useMemo(() => filters, [
+    filters.searchTerm,
+    filters.cariTipi.join(','),
+    filters.cariKartTipi.join(','),
+    filters.ozelkod1.join(','),
+    filters.ozelkod2.join(','),
+    filters.ozelkod3.join(','),
+    filters.sehir.join(','),
+    filters.satisTemsilcisi.join(','),
+    filters.sube.join(','),
+    filters.depo.join(','),
+    filters.urunGrubu.join(','),
+    filters.marka.join(','),
+    filters.kategori.join(','),
+    filters.tarihAraligi?.period,
+    filters.tarihAraligi?.customStart,
+    filters.tarihAraligi?.customEnd,
+    filters.vadeDilimi,
+    filters.durum,
+    filters.gorunumModu,
+    JSON.stringify(filters._diaAutoFilters),
+  ]);
+
   // DIA API formatına dönüştür
   const toDiaFilters = useCallback((): DiaApiFilter[] => {
-    return convertToDiaFilters(filters);
-  }, [filters]);
+    return convertToDiaFilters(stableFilters);
+  }, [stableFilters]);
 
   return (
     <GlobalFilterContext.Provider value={{
-      filters,
+      filters: stableFilters, // Stabil referans kullan
       filterOptions,
       pageConfig,
       setFilter,
