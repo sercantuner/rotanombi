@@ -1,5 +1,5 @@
 // BuilderWidgetRenderer - Widget Builder ile oluşturulan widget'ları render eder
-// v3.0 - Sadece KPI ve Custom Code destekli (tüm standart grafikler kaldırıldı)
+// v3.1 - KPI, Custom Code, Recharts tam destek + Leaflet harita desteği
 
 import React, { useState, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import { WidgetBuilderConfig, AggregationType, DatePeriod } from '@/lib/widgetBuilderTypes';
@@ -28,6 +28,24 @@ import {
 } from 'recharts';
 import { cn } from '@/lib/utils';
 
+// Leaflet harita bileşenleri
+import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Polyline, Polygon } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// Leaflet default marker icon fix (webpack/vite issue)
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
+// @ts-ignore
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
+});
+
 // Recharts bileşenlerini scope'a ekle (customCode için)
 const RechartsScope = {
   // Temel grafikler
@@ -47,6 +65,18 @@ const RechartsScope = {
   ReferenceLine, ReferenceDot, ReferenceArea,
   // Ortak bileşenler
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+};
+
+// Leaflet harita bileşenlerini scope'a ekle (customCode için)
+const MapScope = {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup: Popup as any, // Leaflet Popup (Recharts Tooltip ile çakışmaması için)
+  CircleMarker,
+  Polyline,
+  Polygon,
+  L // Leaflet utility (custom icons, bounds vb. için)
 };
 
 // Custom widget'lar için UI scope (portal/modal gibi bileşenler)
@@ -354,11 +384,12 @@ export function BuilderWidgetRenderer({
         'colors',
         'filters',  // Global filtreler - widget'lar aktif filtreleri görebilir
         'UI',       // UI bileşenleri (Dialog vb.)
+        'Map',      // Leaflet harita bileşenleri
         customCode
       );
       
-      // Custom widget'a colors ve filters prop'ları geç
-      const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters, UIScope);
+      // Custom widget'a colors, filters ve Map prop'ları geç
+      const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters, UIScope, MapScope);
       
       if (typeof WidgetComponent !== 'function') {
         return (
