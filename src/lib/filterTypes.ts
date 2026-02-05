@@ -1,4 +1,5 @@
-// Global Filter System - Tip Tanımları
+// Global Filter System - Tip Tanımları  
+// Power BI benzeri çapraz filtreleme desteği
 // DIA ERP entegrasyonlu sayfa ve widget bazlı filtreleme
 
 // Tarih periyotları
@@ -55,6 +56,22 @@ export interface DiaAutoFilter {
   label?: string;     // Gösterilecek etiket
 }
 
+// Çapraz filtre (Power BI tarzı widget tıklaması ile filtreleme)
+export interface CrossFilter {
+  sourceWidgetId: string;    // Filtreyi oluşturan widget
+  field: string;             // Global filtre key (örn: cariKartTipi)
+  value: string | string[];  // Seçilen değer(ler)
+  label?: string;            // Gösterilecek etiket
+}
+
+// Veri kaynağı filtrelenebilir alan tanımı
+export interface FilterableFieldDefinition {
+  field: string;           // Veri kaynağındaki alan adı
+  globalFilterKey: string; // Global filtre key'i (örn: cariKartTipi)
+  label: string;           // Görünen etiket
+  operator: 'IN' | '=' | 'contains';
+}
+
 // Tarih aralığı filtresi
 export interface DateRangeFilter {
   period: DatePeriod;
@@ -85,6 +102,20 @@ export interface PageFilterConfig {
   showFilterBar: boolean;
   filterableFields: FilterableFieldConfig[];
   lockedFilters?: Record<string, string>;  // DIA'dan gelen kilitli filtreler
+}
+
+// Widget'ın etkileneceği global filtreler (Power BI tarzı)
+export interface WidgetFilterBinding {
+  globalFilterKey: string;  // 'cariKartTipi', 'satisTemsilcisi', vb.
+  dataField: string;        // Verideki alan adı
+  operator: 'IN' | '=' | 'contains';
+}
+
+// Widget'ın oluşturacağı çapraz filtre
+export interface WidgetCrossFilterConfig {
+  dataField: string;        // Verideki alan adı
+  globalFilterKey: string;  // Global filtre key'i
+  label: string;            // Gösterilecek etiket
 }
 
 // Global filtreler (genişletilmiş)
@@ -124,6 +155,9 @@ export interface GlobalFilters {
   
   // DIA Zorunlu Filtreler (değiştirilemez)
   _diaAutoFilters: DiaAutoFilter[];
+  
+  // Çapraz Filtre (widget tıklamasından gelen geçici filtre)
+  _crossFilter: CrossFilter | null;
 }
 
 // Filtre preset (kayıtlı filtre)
@@ -186,6 +220,11 @@ export interface GlobalFilterContextType {
   
   // DIA sorgusu için filtre dizisi oluştur
   toDiaFilters: () => DiaApiFilter[];
+  
+  // Çapraz filtreleme (Power BI tarzı)
+  crossFilter: CrossFilter | null;
+  setCrossFilter: (filter: CrossFilter | null) => void;
+  clearCrossFilter: () => void;
 }
 
 // Varsayılan filtreler
@@ -208,6 +247,7 @@ export const defaultGlobalFilters: GlobalFilters = {
   durum: 'hepsi',
   gorunumModu: 'hepsi',
   _diaAutoFilters: [],
+  _crossFilter: null,
 };
 
 // Varsayılan filtre seçenekleri

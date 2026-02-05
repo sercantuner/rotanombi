@@ -1,6 +1,6 @@
 // useDynamicWidgetData - Widget Builder ile oluşturulan widget'lar için dinamik veri çekme
 // Global filtreler desteklenir - veriler cache'den okunduktan sonra post-fetch olarak uygulanır
-// OPTIMIZED v2.0 - Sonsuz render döngüsü düzeltmesi (useRef + stabil dependency'ler)
+// OPTIMIZED v3.0 - Power BI tarzı çapraz filtreleme desteği + filtre değişiklik izleme
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,7 +8,7 @@ import { useDiaDataCache, generateCacheKey, SHARED_CACHE_KEYS } from '@/contexts
 import { useDataSources } from './useDataSources';
 import { WidgetBuilderConfig, AggregationType, CalculatedField, CalculationExpression, QueryMerge, DatePeriod, DiaApiFilter, PostFetchFilter, FilterOperator } from '@/lib/widgetBuilderTypes';
 import { queuedDiaFetch, handleRateLimitError } from '@/lib/diaRequestQueue';
-import { GlobalFilters, convertToDiaFilters } from '@/lib/filterTypes';
+import { GlobalFilters, convertToDiaFilters, CrossFilter } from '@/lib/filterTypes';
 import { 
   startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, 
   startOfQuarter, endOfQuarter, startOfYear, endOfYear, 
@@ -571,6 +571,49 @@ function applyGlobalFilters(data: any[], globalFilters: GlobalFilters): any[] {
     }
   }
   
+  // Çapraz filtre (Power BI tarzı widget tıklaması)
+  // Bu filtre de SADECE ilgili alan varsa uygulanmalı
+  if (globalFilters._crossFilter) {
+    const crossFilter = globalFilters._crossFilter;
+    // crossFilter.field globalFilterKey olarak gelir, ilgili veri alanına eşleştirilmeli
+    // Şimdilik basit eşleştirme: globalFilterKey -> data field mapping
+    const crossFilterFieldMap: Record<string, string[]> = {
+      'cariKartTipi': ['carikarttipi', 'carikarttip', 'karttipi', 'cari_kart_tipi'],
+      'satisTemsilcisi': ['satiselemani', 'satis_elemani', 'temsilci'],
+      'sube': ['subekodu', 'sube_kodu', 'sube'],
+      'depo': ['depokodu', 'depo_kodu', 'depo'],
+      'sehir': ['sehir', 'city'],
+      'ozelkod1': ['ozelkod1kod', 'ozelkod1', 'ozel_kod_1'],
+      'ozelkod2': ['ozelkod2kod', 'ozelkod2', 'ozel_kod_2'],
+      'ozelkod3': ['ozelkod3kod', 'ozelkod3', 'ozel_kod_3'],
+    };
+    
+    const possibleFields = crossFilterFieldMap[crossFilter.field] || [crossFilter.field];
+    
+    if (dataHasField(data, possibleFields)) {
+      filtered = filtered.filter(row => {
+        // İlk eşleşen alanı bul
+        let fieldValue: any = null;
+        for (const f of possibleFields) {
+          if (row[f] !== undefined) {
+            fieldValue = row[f];
+            break;
+          }
+        }
+        
+        if (fieldValue === null || fieldValue === undefined) return true;
+        
+        const rowValue = String(fieldValue).toLowerCase();
+        
+        if (Array.isArray(crossFilter.value)) {
+          return crossFilter.value.map(v => String(v).toLowerCase()).includes(rowValue);
+        } else {
+          return rowValue === String(crossFilter.value).toLowerCase();
+        }
+      });
+    }
+  }
+  
   return filtered;
 }
 
@@ -583,6 +626,10 @@ export function useDynamicWidgetData(
   const [rawData, setRawData] = useState<any[]>([]);
   const [isFetching, setIsFetching] = useState(false); // İç fetch state
   const [error, setError] = useState<string | null>(null);
+  
+  // Raw veriyi tut (filtrelenmemiş) - filtre değişikliğinde yeniden API çağrısı yapmadan işle
+  const rawDataCacheRef = useRef<any[]>([]);
+  const hasInitialDataRef = useRef(false);
   
   // OPTIMIZATION: Config'i stabil JSON string'e çevir - dependency kontrolü için
   const configKey = useMemo(() => config ? JSON.stringify(config) : '', [config]);
@@ -632,10 +679,134 @@ export function useDynamicWidgetData(
   const cachedData = config?.dataSourceId ? getDataSourceData(config.dataSourceId) : null;
   const isLoading = isFetching && !cachedData;
 
+  // Veriyi görselleştirme formatına dönüştür (filtreleme sonrası)
+  const processVisualizationData = useCallback((fetchedData: any[], currentConfig: WidgetBuilderConfig) => {
+    const recordCount = fetchedData.length;
+    const vizType = currentConfig.visualization.type;
+    
+    if (vizType === 'kpi' && currentConfig.visualization.kpi) {
+      const kpiConfig = currentConfig.visualization.kpi;
+      let kpiValue = kpiConfig.aggregation === 'count' 
+        ? recordCount 
+        : calculateAggregation(fetchedData, kpiConfig.valueField, kpiConfig.aggregation);
+      
+      // isAbsoluteValue desteği (borç gibi negatif değerler için)
+      if ((kpiConfig as any).isAbsoluteValue && kpiValue < 0) {
+        kpiValue = Math.abs(kpiValue);
+      }
+      
+      setData({
+        value: kpiValue,
+        format: kpiConfig.format,
+        prefix: kpiConfig.prefix,
+        suffix: kpiConfig.suffix,
+        decimals: kpiConfig.decimals,
+        recordCount,
+      });
+    } else if (['bar', 'line', 'area'].includes(vizType) && currentConfig.visualization.chart) {
+      const chartConfig = currentConfig.visualization.chart;
+      const barAggType = chartConfig.yAxis?.aggregation || (chartConfig as any).aggregation || 'sum';
+      const chartData = groupDataForChart(
+        fetchedData, 
+        chartConfig.xAxis?.field || '', 
+        chartConfig.yAxis?.field || chartConfig.valueField || '', 
+        barAggType,
+        chartConfig.displayLimit || 10
+      );
+      setData({ 
+        chartData, 
+        xField: chartConfig.xAxis?.field, 
+        yField: chartConfig.yAxis?.field,
+        showGrid: chartConfig.showGrid !== false,
+        showLegend: chartConfig.showLegend !== false,
+      });
+    } else if (['pie', 'donut'].includes(vizType) && currentConfig.visualization.chart) {
+      const chartConfig = currentConfig.visualization.chart;
+      
+      // fieldWells öncelikli - sonra chartConfig
+      const groupField = currentConfig.fieldWells?.category?.field || chartConfig.legendField || '';
+      const valueField = currentConfig.fieldWells?.value?.field || chartConfig.valueField || '';
+      const aggType = currentConfig.fieldWells?.value?.aggregation || (chartConfig as any).aggregation || 'count';
+      
+      // displayLimit: chartSettings öncelikli, sonra chartConfig, sonra default 10
+      const effectiveDisplayLimit = currentConfig.chartSettings?.displayLimit || chartConfig.displayLimit || 10;
+      
+      const pieData = groupDataForChart(
+        fetchedData, 
+        groupField, 
+        valueField, 
+        aggType, 
+        effectiveDisplayLimit
+      );
+      setData({ 
+        chartData: pieData,
+        showLegend: chartConfig.showLegend !== false,
+      });
+    } else if (vizType === 'table') {
+      const tableConfig = currentConfig.visualization.table;
+      const columns = tableConfig?.columns || currentConfig.tableColumns || [];
+      const rowLimit = tableConfig?.pageSize || 50;
+      setData({ 
+        tableData: fetchedData.slice(0, rowLimit), 
+        columns,
+        recordCount,
+      });
+    } else if (vizType === 'list') {
+      const listConfig = (currentConfig.visualization as any).list;
+      let listData = [...fetchedData];
+      
+      // Sıralama
+      if (listConfig?.sortField) {
+        listData.sort((a, b) => {
+          const aVal = a[listConfig.sortField] || 0;
+          const bVal = b[listConfig.sortField] || 0;
+          return listConfig.sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
+        });
+      }
+      
+      // Limit
+      if (listConfig?.limit) {
+        listData = listData.slice(0, listConfig.limit);
+      }
+      
+      setData({ 
+        listData, 
+        listConfig,
+        recordCount,
+      });
+    } else {
+      setData({ rawData: fetchedData, recordCount });
+    }
+    
+    setRawData(fetchedData);
+  }, []);
+
+  // Global filtreleri raw veri üzerinde uygula (API çağrısı yapmadan)
+  const processDataWithFilters = useCallback(() => {
+    if (!config || rawDataCacheRef.current.length === 0) return;
+    
+    const currentFilters = globalFiltersRef.current;
+    let processedData = [...rawDataCacheRef.current];
+    
+    // Global filtreleri uygula
+    if (currentFilters) {
+      const beforeCount = processedData.length;
+      processedData = applyGlobalFilters(processedData, currentFilters);
+      if (processedData.length !== beforeCount) {
+        console.log(`[Filter Change] Applied: ${beforeCount} → ${processedData.length} records`);
+      }
+    }
+    
+    // Görselleştirme verisini güncelle
+    processVisualizationData(processedData, config);
+  }, [config, processVisualizationData]);
+
   const fetchData = useCallback(async () => {
     if (!config) {
       setData(null);
       setRawData([]);
+      rawDataCacheRef.current = [];
+      hasInitialDataRef.current = false;
       return;
     }
     
@@ -764,114 +935,22 @@ export function useDynamicWidgetData(
         console.log(`[Post-Fetch] Filtered to ${fetchedData.length} records`);
       }
 
-      // Global filtreleri uygula (UI'dan gelen filtreler) - REF'den oku
-      if (currentGlobalFilters) {
-        const beforeCount = fetchedData.length;
-        fetchedData = applyGlobalFilters(fetchedData, currentGlobalFilters);
-        if (fetchedData.length !== beforeCount) {
-          console.log(`[Global Filters] Applied: ${beforeCount} → ${fetchedData.length} records`);
-        }
-      }
-
-      const recordCount = fetchedData.length;
-      setRawData(fetchedData);
-
-      // Görselleştirme tipine göre veri işleme
-      const vizType = config.visualization.type;
+      // Raw veriyi cache'le (filtre değişikliklerinde yeniden kullanmak için)
+      rawDataCacheRef.current = fetchedData;
+      hasInitialDataRef.current = true;
       
-      if (vizType === 'kpi' && config.visualization.kpi) {
-        const kpiConfig = config.visualization.kpi;
-        let kpiValue = kpiConfig.aggregation === 'count' 
-          ? recordCount 
-          : calculateAggregation(fetchedData, kpiConfig.valueField, kpiConfig.aggregation);
-        
-        // isAbsoluteValue desteği (borç gibi negatif değerler için)
-        if ((kpiConfig as any).isAbsoluteValue && kpiValue < 0) {
-          kpiValue = Math.abs(kpiValue);
+      // Global filtreleri uygula ve görselleştir
+      let filteredData = [...fetchedData];
+      if (currentGlobalFilters) {
+        const beforeCount = filteredData.length;
+        filteredData = applyGlobalFilters(filteredData, currentGlobalFilters);
+        if (filteredData.length !== beforeCount) {
+          console.log(`[Global Filters] Applied: ${beforeCount} → ${filteredData.length} records`);
         }
-        
-        setData({
-          value: kpiValue,
-          format: kpiConfig.format,
-          prefix: kpiConfig.prefix,
-          suffix: kpiConfig.suffix,
-          decimals: kpiConfig.decimals,
-          recordCount,
-        });
-      } else if (['bar', 'line', 'area'].includes(vizType) && config.visualization.chart) {
-        const chartConfig = config.visualization.chart;
-        const barAggType = chartConfig.yAxis?.aggregation || (chartConfig as any).aggregation || 'sum';
-        const chartData = groupDataForChart(
-          fetchedData, 
-          chartConfig.xAxis?.field || '', 
-          chartConfig.yAxis?.field || chartConfig.valueField || '', 
-          barAggType,
-          chartConfig.displayLimit || 10
-        );
-        setData({ 
-          chartData, 
-          xField: chartConfig.xAxis?.field, 
-          yField: chartConfig.yAxis?.field,
-          showGrid: chartConfig.showGrid !== false,
-          showLegend: chartConfig.showLegend !== false,
-        });
-      } else if (['pie', 'donut'].includes(vizType) && config.visualization.chart) {
-        const chartConfig = config.visualization.chart;
-        
-        // fieldWells öncelikli - sonra chartConfig
-        const groupField = config.fieldWells?.category?.field || chartConfig.legendField || '';
-        const valueField = config.fieldWells?.value?.field || chartConfig.valueField || '';
-        const aggType = config.fieldWells?.value?.aggregation || (chartConfig as any).aggregation || 'count';
-        
-        // displayLimit: chartSettings öncelikli, sonra chartConfig, sonra default 10
-        const effectiveDisplayLimit = config.chartSettings?.displayLimit || chartConfig.displayLimit || 10;
-        
-        const pieData = groupDataForChart(
-          fetchedData, 
-          groupField, 
-          valueField, 
-          aggType, 
-          effectiveDisplayLimit
-        );
-        setData({ 
-          chartData: pieData,
-          showLegend: chartConfig.showLegend !== false,
-        });
-      } else if (vizType === 'table') {
-        const tableConfig = config.visualization.table;
-        const columns = tableConfig?.columns || config.tableColumns || [];
-        const rowLimit = tableConfig?.pageSize || 50;
-        setData({ 
-          tableData: fetchedData.slice(0, rowLimit), 
-          columns,
-          recordCount,
-        });
-      } else if (vizType === 'list') {
-        const listConfig = (config.visualization as any).list;
-        let listData = [...fetchedData];
-        
-        // Sıralama
-        if (listConfig?.sortField) {
-          listData.sort((a, b) => {
-            const aVal = a[listConfig.sortField] || 0;
-            const bVal = b[listConfig.sortField] || 0;
-            return listConfig.sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
-          });
-        }
-        
-        // Limit
-        if (listConfig?.limit) {
-          listData = listData.slice(0, listConfig.limit);
-        }
-        
-        setData({ 
-          listData, 
-          listConfig,
-          recordCount,
-        });
-      } else {
-        setData({ rawData: fetchedData, recordCount });
       }
+      
+      // Görselleştirme verisini oluştur
+      processVisualizationData(filteredData, config);
     } catch (err) {
       console.error('Dynamic widget data fetch error:', err);
       setError(err instanceof Error ? err.message : 'Veri yüklenemedi');
@@ -882,7 +961,7 @@ export function useDynamicWidgetData(
   // globalFilters ve sharedData ref'lerde tutulduğu için buraya eklenmiyor
   // config değiştiğinde veya cache fonksiyonları değiştiğinde yeniden oluştur
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configKey]);
+  }, [configKey, processVisualizationData]);
 
   // isPageDataReady değişikliğini takip et - SADECE false->true geçişinde fetch yap
   const prevPageDataReadyRef = useRef(false);
@@ -896,6 +975,41 @@ export function useDynamicWidgetData(
     // fetchData'yı dependency'den çıkarıyoruz - sonsuz döngüyü önlemek için
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPageDataReady]);
+
+  // Filtre değişikliklerini izle - raw veri üzerinde yeniden işle (API çağrısı yapmadan)
+  const globalFiltersKey = useMemo(() => {
+    if (!globalFilters) return '';
+    // Sadece değişen filtre değerlerini izle
+    return JSON.stringify({
+      searchTerm: globalFilters.searchTerm,
+      cariKartTipi: globalFilters.cariKartTipi,
+      satisTemsilcisi: globalFilters.satisTemsilcisi,
+      sube: globalFilters.sube,
+      depo: globalFilters.depo,
+      ozelkod1: globalFilters.ozelkod1,
+      ozelkod2: globalFilters.ozelkod2,
+      ozelkod3: globalFilters.ozelkod3,
+      sehir: globalFilters.sehir,
+      durum: globalFilters.durum,
+      gorunumModu: globalFilters.gorunumModu,
+      _diaAutoFilters: globalFilters._diaAutoFilters,
+      _crossFilter: globalFilters._crossFilter,
+    });
+  }, [globalFilters]);
+
+  const prevFiltersKeyRef = useRef<string>('');
+
+  useEffect(() => {
+    // İlk veri yüklendikten sonra filtre değişikliklerini izle
+    if (!hasInitialDataRef.current) return;
+    
+    // İlk render değilse VE filtre değiştiyse yeniden işle
+    if (prevFiltersKeyRef.current && prevFiltersKeyRef.current !== globalFiltersKey) {
+      console.log('[Filter Watch] Filters changed, reprocessing data...');
+      processDataWithFilters();
+    }
+    prevFiltersKeyRef.current = globalFiltersKey;
+  }, [globalFiltersKey, processDataWithFilters]);
 
   return { data, rawData, isLoading, error, refetch: fetchData };
 }

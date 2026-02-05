@@ -104,6 +104,7 @@ export type Database = {
           cache_ttl: number | null
           created_at: string | null
           description: string | null
+          filterable_fields: Json | null
           filters: Json | null
           id: string
           is_active: boolean | null
@@ -129,6 +130,7 @@ export type Database = {
           cache_ttl?: number | null
           created_at?: string | null
           description?: string | null
+          filterable_fields?: Json | null
           filters?: Json | null
           id?: string
           is_active?: boolean | null
@@ -154,6 +156,7 @@ export type Database = {
           cache_ttl?: number | null
           created_at?: string | null
           description?: string | null
+          filterable_fields?: Json | null
           filters?: Json | null
           id?: string
           is_active?: boolean | null

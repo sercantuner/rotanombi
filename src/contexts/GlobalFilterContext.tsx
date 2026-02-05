@@ -14,6 +14,7 @@ import {
   defaultGlobalFilters,
   defaultFilterOptions,
   convertToDiaFilters,
+  CrossFilter,
 } from '@/lib/filterTypes';
 
 const GlobalFilterContext = createContext<GlobalFilterContextType | undefined>(undefined);
@@ -40,6 +41,9 @@ export function GlobalFilterProvider({ children, pageId }: GlobalFilterProviderP
   const [presets, setPresets] = useState<FilterPreset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
+  
+  // Çapraz filtre state (Power BI tarzı)
+  const [crossFilter, setCrossFilterState] = useState<CrossFilter | null>(null);
 
   // Debounced save ref
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
@@ -281,6 +285,19 @@ export function GlobalFilterProvider({ children, pageId }: GlobalFilterProviderP
     setFilters(prev => ({ ...prev, _diaAutoFilters: autoFilters }));
   }, []);
 
+  // Çapraz filtre ayarla (Power BI tarzı widget tıklaması)
+  const setCrossFilter = useCallback((filter: CrossFilter | null) => {
+    setCrossFilterState(filter);
+    // Aynı zamanda filters içine de yaz
+    setFilters(prev => ({ ...prev, _crossFilter: filter }));
+  }, []);
+
+  // Çapraz filtreyi temizle
+  const clearCrossFilter = useCallback(() => {
+    setCrossFilterState(null);
+    setFilters(prev => ({ ...prev, _crossFilter: null }));
+  }, []);
+
   // Preset kaydet
   const savePreset = useCallback(async (name: string) => {
     if (!user) return;
@@ -394,6 +411,7 @@ export function GlobalFilterProvider({ children, pageId }: GlobalFilterProviderP
     filters.durum,
     filters.gorunumModu,
     JSON.stringify(filters._diaAutoFilters),
+    JSON.stringify(filters._crossFilter),
   ]);
 
   // DIA API formatına dönüştür
@@ -420,6 +438,9 @@ export function GlobalFilterProvider({ children, pageId }: GlobalFilterProviderP
       activeFilterCount,
       isFiltering,
       toDiaFilters,
+      crossFilter,
+      setCrossFilter,
+      clearCrossFilter,
     }}>
       {children}
     </GlobalFilterContext.Provider>
