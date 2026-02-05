@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 const PAGE_SIZE = 200, BATCH_SIZE = 25, MAX_RECORDS = 50000;
+const CLEANUP_TIMEOUT_MS = 15 * 60 * 1000; // 15 dakika (önceki 5dk yerine)
 const NON_DIA = ['takvim', '_system_calendar', 'system_calendar'];
 
 function parse(r: any, m: string): any[] {
@@ -19,8 +20,9 @@ function parse(r: any, m: string): any[] {
 }
 
 async function cleanup(sb: any) {
-  await sb.from('sync_history').update({ status: 'failed', error: 'Timeout', completed_at: new Date().toISOString() })
-    .eq('status', 'running').lt('started_at', new Date(Date.now() - 5*60*1000).toISOString());
+  // 15 dakikadan uzun süren "running" kayıtları temizle
+  await sb.from('sync_history').update({ status: 'failed', error: 'Timeout - işlem 15 dakikayı aştı', completed_at: new Date().toISOString() })
+    .eq('status', 'running').lt('started_at', new Date(Date.now() - CLEANUP_TIMEOUT_MS).toISOString());
 }
 
 async function write(sb: any, sun: string, fk: string, dk: number, slug: string, recs: any[], keys: Set<number>) {
