@@ -390,9 +390,9 @@ export function BulkDataSyncManager() {
                       </Badge>
                       
                       {userProgress && (
-                        <div className="flex items-center gap-2 min-w-[150px]">
+                        <div className="flex items-center gap-2 min-w-[200px] max-w-[350px]">
                           {getStatusIcon(userProgress.status)}
-                          <span className="text-xs text-muted-foreground truncate">
+                          <span className="text-xs text-muted-foreground">
                             {userProgress.status === 'running' && 'Senkronize ediliyor...'}
                             {userProgress.status === 'success' && (
                               <span className="text-success">
@@ -400,8 +400,8 @@ export function BulkDataSyncManager() {
                               </span>
                             )}
                             {userProgress.status === 'error' && (
-                              <span className="text-destructive" title={userProgress.message}>
-                                Hata
+                              <span className="text-destructive break-words whitespace-normal">
+                                {userProgress.message || 'Bilinmeyen hata'}
                               </span>
                             )}
                             {userProgress.status === 'pending' && 'Bekliyor'}

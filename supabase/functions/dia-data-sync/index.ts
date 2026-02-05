@@ -12,7 +12,7 @@ interface SyncRequest {
   forceRefresh?: boolean;
   periodNo?: number;
   targetUserId?: string;
-  syncAllPeriods?: boolean; // Tüm dönemler için sync
+  syncAllPeriods?: boolean;
 }
 
 // DIA dışı veri kaynakları (atlanacak)
@@ -29,24 +29,36 @@ interface SyncResult {
   syncHistoryId?: string;
 }
 
-// Bellek optimizasyonu: Sayfalı veri çekme (max 2000 kayıt per sync)
-const MAX_RECORDS_PER_SYNC = 2000;
+// Bellek optimizasyonu: Daha küçük sayfa boyutu
+const PAGE_SIZE = 250;
+const MAX_RECORDS = 50000; // Maksimum kayıt limiti
 
-// Sayfalı veri çekme - bellek optimizasyonu için
-const PAGE_SIZE = 500;
-const MAX_PAGES = 10; // Maximum 5000 kayıt per source per period
+// Sayfa bazlı veri çekme ve ANINDA yazma - bellek optimizasyonu
+async function fetchAndWritePageByPage(
+  supabase: any,
+  diaSession: any,
+  module: string,
+  method: string,
+  donemKodu: number,
+  sunucuAdi: string,
+  firmaKodu: string,
+  dataSourceSlug: string
+): Promise<{ success: boolean; totalFetched: number; totalWritten: number; error?: string }> {
+  const diaUrl = `https://${diaSession.sunucuAdi}.ws.dia.com.tr/api/v3/${module}/json`;
+  const fullMethod = method.startsWith(`${module}_`) ? method : `${module}_${method}`;
+  
+  let offset = 0;
+  let hasMore = true;
+  let totalFetched = 0;
+  let totalWritten = 0;
+  let pageCount = 0;
+  
+  // İşlenmiş key'leri takip et (soft delete için)
+  const processedKeys = new Set<number>();
 
-async function fetchFromDia(diaSession: any, module: string, method: string, donemKodu: number): Promise<{ success: boolean; data?: any[]; error?: string; totalFetched?: number }> {
   try {
-    const diaUrl = `https://${diaSession.sunucuAdi}.ws.dia.com.tr/api/v3/${module}/json`;
-    const fullMethod = method.startsWith(`${module}_`) ? method : `${module}_${method}`;
-    
-    let allData: any[] = [];
-    let offset = 0;
-    let hasMore = true;
-    let pageCount = 0;
-
-    while (hasMore && pageCount < MAX_PAGES) {
+    while (hasMore && totalFetched < MAX_RECORDS) {
+      // 1. DIA'dan bir sayfa çek
       const payload = { 
         [fullMethod]: { 
           session_id: diaSession.sessionId, 
@@ -57,19 +69,26 @@ async function fetchFromDia(diaSession: any, module: string, method: string, don
         } 
       };
       
-      console.log(`[DIA Sync] Fetching: ${diaUrl} method ${fullMethod} (offset: ${offset}, limit: ${PAGE_SIZE})`);
+      console.log(`[DIA Sync] Page ${pageCount + 1}: Fetching ${fullMethod} (offset: ${offset}, limit: ${PAGE_SIZE})`);
       
-      const response = await fetch(diaUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
+      const response = await fetch(diaUrl, { 
+        method: "POST", 
+        headers: { "Content-Type": "application/json" }, 
+        body: JSON.stringify(payload) 
+      });
+      
+      if (!response.ok) {
+        return { success: false, totalFetched, totalWritten, error: `HTTP ${response.status}` };
+      }
       
       const result = await response.json();
       
       // DIA hata kontrolü
       if (result.code && result.code !== "200") {
-        return { success: false, error: result.msg || `DIA Error: ${result.code}` };
+        return { success: false, totalFetched, totalWritten, error: result.msg || `DIA Error: ${result.code}` };
       }
       if (result.error || result.hata) {
-        return { success: false, error: result.error?.message || result.hata?.aciklama || "API hatası" };
+        return { success: false, totalFetched, totalWritten, error: result.error?.message || result.hata?.aciklama || "API hatası" };
       }
       
       // DIA API yanıt formatını parse et
@@ -93,8 +112,25 @@ async function fetchFromDia(diaSession: any, module: string, method: string, don
       if (!pageData || !Array.isArray(pageData)) {
         pageData = [];
       }
-
-      allData = allData.concat(pageData);
+      
+      console.log(`[DIA Sync] Page ${pageCount + 1}: Received ${pageData.length} records`);
+      
+      // 2. Bu sayfayı HEMEN veritabanına yaz (bellek biriktirme)
+      if (pageData.length > 0) {
+        const writeResult = await writePageToDatabase(
+          supabase, sunucuAdi, firmaKodu, donemKodu, dataSourceSlug, pageData, processedKeys
+        );
+        
+        if (!writeResult.success) {
+          console.error(`[DIA Sync] Page ${pageCount + 1}: Write failed - ${writeResult.error}`);
+          // Hata olsa bile devam et, bir sonraki sayfayı dene
+        } else {
+          totalWritten += writeResult.written;
+          console.log(`[DIA Sync] Page ${pageCount + 1}: Wrote ${writeResult.written} records to DB`);
+        }
+      }
+      
+      totalFetched += pageData.length;
       pageCount++;
       
       // Sonraki sayfa var mı?
@@ -103,43 +139,47 @@ async function fetchFromDia(diaSession: any, module: string, method: string, don
       } else {
         offset += PAGE_SIZE;
       }
+      
+      // Bellekten temizle
+      pageData = [];
     }
     
-    console.log(`[DIA Sync] Fetched ${allData.length} records for ${fullMethod} (period: ${donemKodu}, pages: ${pageCount})`);
+    console.log(`[DIA Sync] Completed: ${totalFetched} fetched, ${totalWritten} written (${pageCount} pages)`);
     
-    return { success: true, data: allData, totalFetched: allData.length };
+    // Soft delete: Artık olmayan kayıtları işaretle (sadece az kayıt varsa)
+    if (totalFetched < 10000) {
+      await softDeleteMissingRecords(supabase, sunucuAdi, firmaKodu, donemKodu, dataSourceSlug, processedKeys);
+    }
+    
+    return { success: true, totalFetched, totalWritten };
+    
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "Bilinmeyen hata" };
+    return { success: false, totalFetched, totalWritten, error: error instanceof Error ? error.message : "Bilinmeyen hata" };
   }
 }
 
-// Bellek-optimize edilmiş upsert: Daha küçük batch'ler, referansları temizle
-async function upsertData(supabase: any, sunucuAdi: string, firmaKodu: string, donemKodu: number, dataSourceSlug: string, records: any[]): Promise<{ inserted: number; updated: number; deleted: number }> {
-  const stats = { inserted: 0, updated: 0, deleted: 0 };
-  if (!records.length) return stats;
-
-  // Mevcut kayıtları küçük parçalar halinde al (bellek tasarrufu)
-  const { data: existingRecords } = await supabase
-    .from('company_data_cache')
-    .select('id, dia_key')
-    .eq('sunucu_adi', sunucuAdi)
-    .eq('firma_kodu', firmaKodu)
-    .eq('donem_kodu', donemKodu)
-    .eq('data_source_slug', dataSourceSlug)
-    .eq('is_deleted', false)
-    .limit(5000); // Mevcut kayıtları da limitli al
-
-  const existingMap = new Map<number, string>();
-  (existingRecords || []).forEach((r: any) => existingMap.set(r.dia_key, r.id));
-
-  const incomingKeys = new Set<number>();
-  const batchSize = 200; // Daha küçük batch (500 -> 200)
+// Tek sayfa veritabanına yaz - küçük batch'ler
+async function writePageToDatabase(
+  supabase: any,
+  sunucuAdi: string,
+  firmaKodu: string,
+  donemKodu: number,
+  dataSourceSlug: string,
+  records: any[],
+  processedKeys: Set<number>
+): Promise<{ success: boolean; written: number; error?: string }> {
+  if (!records.length) return { success: true, written: 0 };
+  
+  const batchSize = 100; // Çok küçük batch'ler (timeout önleme)
+  let written = 0;
   
   for (let i = 0; i < records.length; i += batchSize) {
     const batch = records.slice(i, i + batchSize);
+    
     const upsertPayload = batch.map(record => {
       const diaKey = record._key || record.id;
-      if (diaKey) incomingKeys.add(Number(diaKey));
+      if (diaKey) processedKeys.add(Number(diaKey));
+      
       return { 
         sunucu_adi: sunucuAdi, 
         firma_kodu: firmaKodu, 
@@ -162,27 +202,52 @@ async function upsertData(supabase: any, sunucuAdi: string, firmaKodu: string, d
       });
     
     if (error) { 
-      console.error(`[DIA Sync] Upsert error batch ${i}:`, error.message); 
-      continue; 
+      console.error(`[DIA Sync] Batch write error:`, error.message);
+      return { success: false, written, error: error.message };
     }
-
-    for (const record of batch) {
-      const diaKey = Number(record._key || record.id);
-      if (existingMap.has(diaKey)) { stats.updated++; } else { stats.inserted++; }
-    }
+    
+    written += upsertPayload.length;
   }
+  
+  return { success: true, written };
+}
 
-  // Soft delete - sadece ilk 500 için (bellek tasarrufu)
+// Artık olmayan kayıtları soft delete
+async function softDeleteMissingRecords(
+  supabase: any,
+  sunucuAdi: string,
+  firmaKodu: string,
+  donemKodu: number,
+  dataSourceSlug: string,
+  processedKeys: Set<number>
+): Promise<void> {
+  // Sadece mevcut kayıtları al
+  const { data: existingRecords } = await supabase
+    .from('company_data_cache')
+    .select('id, dia_key')
+    .eq('sunucu_adi', sunucuAdi)
+    .eq('firma_kodu', firmaKodu)
+    .eq('donem_kodu', donemKodu)
+    .eq('data_source_slug', dataSourceSlug)
+    .eq('is_deleted', false)
+    .limit(5000);
+
+  if (!existingRecords?.length) return;
+
   let deleteCount = 0;
-  for (const [diaKey, id] of existingMap) {
-    if (!incomingKeys.has(diaKey) && deleteCount < 500) {
-      await supabase.from('company_data_cache').update({ is_deleted: true, updated_at: new Date().toISOString() }).eq('id', id);
-      stats.deleted++;
+  for (const record of existingRecords) {
+    if (!processedKeys.has(record.dia_key) && deleteCount < 500) {
+      await supabase
+        .from('company_data_cache')
+        .update({ is_deleted: true, updated_at: new Date().toISOString() })
+        .eq('id', record.id);
       deleteCount++;
     }
   }
-
-  return stats;
+  
+  if (deleteCount > 0) {
+    console.log(`[DIA Sync] Soft deleted ${deleteCount} missing records`);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -248,7 +313,7 @@ Deno.serve(async (req) => {
     if (!sourcesToSync.length) return new Response(JSON.stringify({ success: false, error: `DIA veri kaynağı bulunamadı: ${dataSourceSlug}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     // Tüm dönemleri çek (syncAllPeriods aktifse)
-    const syncAllPeriods = body.syncAllPeriods ?? true; // Varsayılan: tüm dönemler
+    const syncAllPeriods = body.syncAllPeriods ?? true;
     let periodsToSync: number[] = [currentDonem];
     
     if (syncAllPeriods) {
@@ -330,8 +395,6 @@ Deno.serve(async (req) => {
       
       let totalFetched = 0;
       let totalInserted = 0;
-      let totalUpdated = 0;
-      let totalDeleted = 0;
       let hasError = false;
       let lastError = '';
 
@@ -360,28 +423,36 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          const fetchResult = await fetchFromDia(session, source.module, source.method, periodNo);
+          // Yeni streaming yaklaşımı: Sayfa sayfa çek ve yaz
+          const syncResult = await fetchAndWritePageByPage(
+            supabase,
+            session,
+            source.module,
+            source.method,
+            periodNo,
+            sunucuAdi,
+            firmaKodu,
+            source.slug
+          );
 
-          if (!fetchResult.success) {
+          if (!syncResult.success) {
             await supabase.from('sync_history').update({ 
               status: 'failed', 
-              error: fetchResult.error, 
+              error: syncResult.error, 
               completed_at: new Date().toISOString() 
             }).eq('id', historyRecord.id);
             hasError = true;
-            lastError = fetchResult.error || 'Bilinmeyen hata';
+            lastError = syncResult.error || 'Bilinmeyen hata';
             console.error(`[DIA Sync] Failed for ${source.slug} period ${periodNo}: ${lastError}`);
             continue;
           }
 
-          const stats = await upsertData(supabase, sunucuAdi, firmaKodu, periodNo, source.slug, fetchResult.data || []);
-
           await supabase.from('sync_history').update({ 
             status: 'completed', 
-            records_fetched: fetchResult.data?.length || 0, 
-            records_inserted: stats.inserted, 
-            records_updated: stats.updated, 
-            records_deleted: stats.deleted, 
+            records_fetched: syncResult.totalFetched, 
+            records_inserted: syncResult.totalWritten, 
+            records_updated: 0, 
+            records_deleted: 0, 
             completed_at: new Date().toISOString() 
           }).eq('id', historyRecord.id);
 
@@ -391,16 +462,14 @@ Deno.serve(async (req) => {
             donem_kodu: periodNo, 
             data_source_slug: source.slug, 
             last_incremental_sync: new Date().toISOString(), 
-            total_records: (fetchResult.data?.length || 0), 
+            total_records: syncResult.totalFetched, 
             updated_at: new Date().toISOString() 
           }, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug' });
 
-          totalFetched += fetchResult.data?.length || 0;
-          totalInserted += stats.inserted;
-          totalUpdated += stats.updated;
-          totalDeleted += stats.deleted;
+          totalFetched += syncResult.totalFetched;
+          totalInserted += syncResult.totalWritten;
 
-          console.log(`[DIA Sync] Period ${periodNo} for ${source.slug}: ${fetchResult.data?.length || 0} records`);
+          console.log(`[DIA Sync] Period ${periodNo} for ${source.slug}: ${syncResult.totalFetched} fetched, ${syncResult.totalWritten} written`);
 
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : "Bilinmeyen hata";
@@ -421,8 +490,8 @@ Deno.serve(async (req) => {
         dataSourceSlug: source.slug, 
         recordsFetched: totalFetched, 
         recordsInserted: totalInserted, 
-        recordsUpdated: totalUpdated, 
-        recordsDeleted: totalDeleted,
+        recordsUpdated: 0, 
+        recordsDeleted: 0,
         error: hasError ? lastError : undefined
       });
     }
