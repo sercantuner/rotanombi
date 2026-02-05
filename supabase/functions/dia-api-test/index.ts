@@ -90,7 +90,8 @@ function detectFieldType(value: any): string {
 }
 
 // Tüm alanları, tiplerini ve istatistiklerini çıkar
-function extractFieldsAndTypes(data: any[]): { 
+// MEMORY OPTIMIZATION: Nested dizileri (__borchareketler gibi) işleme - çok fazla bellek tüketirler
+function extractFieldsAndTypes(data: any[], maxSampleSize = 100): { 
   fields: string[]; 
   fieldTypes: Record<string, string>;
   fieldStats: Record<string, FieldStat>;
@@ -99,10 +100,47 @@ function extractFieldsAndTypes(data: any[]): {
   const fieldTypes: Record<string, string> = {};
   const fieldStats: Record<string, FieldStat> = {};
 
-  for (const item of data) {
+  // Sadece ilk maxSampleSize kaydı işle - bellek optimizasyonu
+  const sampleData = data.slice(0, maxSampleSize);
+
+  for (const item of sampleData) {
     if (typeof item !== 'object' || item === null) continue;
     
     for (const [key, value] of Object.entries(item)) {
+      // Nested dizi alanlarını atla (__ ile başlayan, örn: __borchareketler)
+      // Bu alanlar çok büyük olabilir ve bellek limitini aşabilir
+      if (key.startsWith('__') && Array.isArray(value)) {
+        if (!fieldSet.has(key)) {
+          fieldSet.add(key);
+          fieldTypes[key] = 'nested-array';
+          fieldStats[key] = {
+            type: 'nested-array',
+            nullable: false,
+            distinctCount: 0,
+            sampleValues: [`[${(value as any[]).length} kayıt]`],
+          };
+        }
+        continue;
+      }
+      
+      // Büyük objeleri atla
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        const objKeys = Object.keys(value);
+        if (objKeys.length > 10) {
+          if (!fieldSet.has(key)) {
+            fieldSet.add(key);
+            fieldTypes[key] = 'object';
+            fieldStats[key] = {
+              type: 'object',
+              nullable: false,
+              distinctCount: 0,
+              sampleValues: [`{${objKeys.length} alan}`],
+            };
+          }
+          continue;
+        }
+      }
+      
       if (!fieldSet.has(key)) {
         fieldSet.add(key);
         const type = detectFieldType(value);
@@ -145,10 +183,15 @@ function extractFieldsAndTypes(data: any[]): {
     }
   }
 
-  // Distinct değer sayısı ve örnekler
+  // Distinct değer sayısı ve örnekler - sadece sample üzerinde
   const fields = Array.from(fieldSet).sort();
   for (const field of fields) {
-    const values = data.map(item => item[field]).filter(v => v !== null && v !== undefined);
+    // Nested array ve object tiplerini atla
+    if (fieldTypes[field] === 'nested-array' || fieldTypes[field] === 'object') continue;
+    
+    const values = sampleData
+      .map(item => item[field])
+      .filter(v => v !== null && v !== undefined && typeof v !== 'object');
     const uniqueValues = [...new Set(values)];
     fieldStats[field].distinctCount = uniqueValues.length;
     fieldStats[field].sampleValues = uniqueValues.slice(0, 10); // İlk 10 benzersiz değer

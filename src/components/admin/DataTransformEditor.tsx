@@ -462,13 +462,17 @@ export function DataTransformEditor({
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session) throw new Error('Oturum bulunamadı');
 
+      // MEMORY OPTIMIZATION: Preview için çok düşük limit kullan
+      // Ağır sorgular (carikart_vade_bakiye_listele gibi) edge function bellek limitini aşabilir
+      const safeLimit = Math.min(limitCount, 20); // Preview için max 20
+      
       const payload = {
         module: dataSource.module,
         method: dataSource.method,
         filters: filters.length > 0 ? filters : undefined,
         sorts: sorts.length > 0 ? sorts : undefined,
         selectedcolumns: selectedColumns.length > 0 ? selectedColumns : undefined,
-        limit: Math.min(limitCount, 50), // Preview için max 50
+        limit: safeLimit,
       };
 
       const { data, error: fnError } = await supabase.functions.invoke('dia-api-test', {
