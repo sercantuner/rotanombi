@@ -7,7 +7,7 @@ import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
 import { DiaDataCacheProvider, useDiaDataCache } from '@/contexts/DiaDataCacheContext';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
-import { Loader2, AlertCircle, RefreshCw, WifiOff, CheckCircle, LayoutDashboard, FileText, ChevronLeft, ChevronRight, Plug, Calendar, User } from 'lucide-react';
+ import { Loader2, AlertCircle, RefreshCw, WifiOff, CheckCircle, LayoutDashboard, FileText, ChevronLeft, ChevronRight, Plug, Calendar, User, Plus, Move, Check, X, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -42,6 +42,18 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
   const [diaError, setDiaError] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+   // Floating actions state - ContainerBasedDashboard'dan gelecek
+   const [floatingActionsProps, setFloatingActionsProps] = useState<{
+     isDragMode: boolean;
+     isWidgetEditMode: boolean;
+     hasChanges: boolean;
+     onContainerAdd: () => void;
+     onDragModeToggle: () => void;
+     onWidgetEditModeToggle: () => void;
+     onSave: () => void;
+     onCancel: () => void;
+   } | null>(null);
+ 
   // Lisans durumu hesaplama
   const getLicenseStatus = () => {
     if (!impersonatedProfile?.license_expires_at) {
@@ -390,9 +402,91 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
              )}
            </div>
  
-           {/* Sağ - Bilgi */}
-           <div className="text-xs text-muted-foreground">
-             {impersonatedProfile?.display_name || impersonatedProfile?.email} izleniyor
+            {/* Orta - Kullanıcı Bilgisi */}
+            <div className="text-xs text-muted-foreground flex-1 text-center">
+              <span className="font-medium text-foreground">{impersonatedProfile?.display_name || impersonatedProfile?.email}</span> izleniyor
+            </div>
+ 
+            {/* Sağ - Widget Düzenleme Butonları */}
+            <div className="flex items-center gap-2">
+              {floatingActionsProps && (
+                <TooltipProvider delayDuration={0}>
+                  {floatingActionsProps.isDragMode ? (
+                    <>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={floatingActionsProps.onCancel}
+                            className="h-8 w-8"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>İptal</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            size="icon"
+                            onClick={floatingActionsProps.onSave} 
+                            disabled={!floatingActionsProps.hasChanges}
+                            className="h-8 w-8"
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Kaydet</TooltipContent>
+                      </Tooltip>
+                    </>
+                  ) : (
+                    <>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            variant={floatingActionsProps.isWidgetEditMode ? 'default' : 'ghost'}
+                            size="icon"
+                            onClick={floatingActionsProps.onWidgetEditModeToggle}
+                            className="h-8 w-8"
+                          >
+                            {floatingActionsProps.isWidgetEditMode ? <Check className="h-4 w-4" /> : <Edit className="h-4 w-4" />}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {floatingActionsProps.isWidgetEditMode ? 'Düzenlemeyi Bitir' : 'Widget Düzenle'}
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={floatingActionsProps.onContainerAdd}
+                            className="h-8 w-8"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Container Ekle</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={floatingActionsProps.onDragModeToggle}
+                            className="h-8 w-8"
+                          >
+                            <Move className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Container Sırala</TooltipContent>
+                      </Tooltip>
+                    </>
+                  )}
+                </TooltipProvider>
+              )}
            </div>
          </div>
        </div>
@@ -432,6 +526,8 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
              <ContainerBasedDashboard 
                pageId={selectedPageId} 
                widgetData={{}} 
+                hideFloatingActions={true}
+                onFloatingActionsRender={setFloatingActionsProps}
              />
            )}
         </div>
