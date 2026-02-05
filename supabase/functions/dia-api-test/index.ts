@@ -553,9 +553,13 @@ serve(async (req) => {
         console.log(`[DIA Filter] Applied ${diaFilters.length} filters:`, JSON.stringify(diaFilters.slice(0, 2)));
       }
 
-      // Seçili kolonları ekle
+      // Seçili kolonları ekle - DIA API formatı: params objesi içinde array
       if (selectedColumns.length > 0) {
-        payload[methodKey].selectedcolumns = selectedColumns.join(',');
+        if (!payload[methodKey].params) {
+          payload[methodKey].params = {};
+        }
+        payload[methodKey].params.selectedcolumns = selectedColumns;
+        console.log(`[DIA] Selected columns: ${selectedColumns.length} fields`);
       }
 
       // Sıralama ekle
