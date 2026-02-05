@@ -7,11 +7,14 @@ import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
 import { DiaDataCacheProvider, useDiaDataCache } from '@/contexts/DiaDataCacheContext';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
-import { Loader2, AlertCircle, RefreshCw, WifiOff, CheckCircle, LayoutDashboard, FileText } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, WifiOff, CheckCircle, LayoutDashboard, FileText, ChevronLeft, ChevronRight, Plug } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import rotanombiLogo from '@/assets/rotanombi-logo.png';
 
 interface UserPage {
   id: string;
@@ -34,6 +37,7 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [diaStatus, setDiaStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [diaError, setDiaError] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // KRİTİK: İzleme modunda widget'lar cache-first çalıştığı için
   // sayfanın veri kaynaklarını mutlaka DataSourceLoader ile yüklemeliyiz.
@@ -167,6 +171,120 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
   // (Grafikler cache'den besleneceği için bu süreç kritik)
   const isPageLoading = dataSourcesLoading;
 
+  // İzleme modu sidebar - kullanıcının sayfalarını listeler
+  const renderSidebar = () => {
+    return (
+      <TooltipProvider delayDuration={0}>
+        <aside className={cn(
+          "h-full flex flex-col border-r border-border bg-card/50 transition-all duration-300 relative shrink-0",
+          sidebarCollapsed ? "w-14" : "w-56"
+        )}>
+          {/* Toggle Button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute -right-3 top-4 z-10 h-6 w-6 rounded-full bg-background border shadow-md hover:bg-muted"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          >
+            {sidebarCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
+          </Button>
+
+          {/* Logo / Kullanıcı Bilgisi */}
+          {!sidebarCollapsed && (
+            <div className="p-3 border-b border-border">
+              <div className="flex items-center gap-2">
+                <img src={rotanombiLogo} alt="RotanomBI" className="h-5 w-auto" />
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">İzleme</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1 truncate">
+                {impersonatedProfile?.display_name || impersonatedProfile?.email}
+              </p>
+            </div>
+          )}
+
+          {/* Sayfa Listesi */}
+          <nav className={cn("flex-1 overflow-y-auto", sidebarCollapsed ? "p-1" : "p-2")}>
+            {userPages.map(page => {
+              const isActive = page.id === selectedPageId;
+              
+              if (sidebarCollapsed) {
+                return (
+                  <Tooltip key={page.id}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => handlePageChange(page.id)}
+                        className={cn(
+                          "w-full flex items-center justify-center p-2 rounded-lg mb-1 transition-colors",
+                          isActive 
+                            ? "bg-primary/10 text-primary" 
+                            : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {page.slug === 'main-dashboard' ? (
+                          <LayoutDashboard className="w-4 h-4" />
+                        ) : (
+                          <FileText className="w-4 h-4" />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">{page.name}</TooltipContent>
+                  </Tooltip>
+                );
+              }
+
+              return (
+                <button
+                  key={page.id}
+                  onClick={() => handlePageChange(page.id)}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2 rounded-lg mb-1 text-sm transition-colors",
+                    isActive 
+                      ? "bg-primary/10 text-primary font-medium" 
+                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {page.slug === 'main-dashboard' ? (
+                    <LayoutDashboard className="w-4 h-4 shrink-0" />
+                  ) : (
+                    <FileText className="w-4 h-4 shrink-0" />
+                  )}
+                  <span className="truncate">{page.name}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* DIA Durumu */}
+          <div className={cn("border-t border-border", sidebarCollapsed ? "p-2" : "p-3")}>
+            {sidebarCollapsed ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className={cn(
+                    "flex items-center justify-center p-2 rounded-lg",
+                    diaStatus === 'connected' ? "bg-green-500/10" : "bg-muted"
+                  )}>
+                    <Plug className={cn("w-4 h-4", diaStatus === 'connected' ? "text-green-600" : "text-muted-foreground")} />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {diaStatus === 'connected' ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <div className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded-lg text-xs",
+                diaStatus === 'connected' ? "bg-green-500/10 text-green-600" : "bg-muted text-muted-foreground"
+              )}>
+                <Plug className="w-3.5 h-3.5" />
+                <span>{diaStatus === 'connected' ? 'DIA Bağlı' : 'DIA Bağlı Değil'}</span>
+              </div>
+            )}
+          </div>
+        </aside>
+      </TooltipProvider>
+    );
+  };
+
   // DIA bağlantı durumu banner
   const renderDiaStatus = () => {
     if (!isDiaConfigured) {
@@ -236,46 +354,18 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
     return null;
   };
 
-  // Sayfa seçici render
-  const renderPageSelector = () => {
-    if (userPages.length <= 1) return null;
-
-    return (
-      <div className="mb-4">
-        <ScrollArea className="w-full whitespace-nowrap">
-          <Tabs value={selectedPageId || ''} onValueChange={handlePageChange}>
-            <TabsList className="inline-flex h-9 gap-1 bg-muted/50 p-1">
-              {userPages.map(page => (
-                <TabsTrigger 
-                  key={page.id} 
-                  value={page.id}
-                  className="gap-1.5 text-xs px-3"
-                >
-                  {page.slug === 'main-dashboard' ? (
-                    <LayoutDashboard className="w-3.5 h-3.5" />
-                  ) : (
-                    <FileText className="w-3.5 h-3.5" />
-                  )}
-                  {page.name}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
-      </div>
-    );
-  };
-
   if (userPages.length === 0) {
     return (
-      <div className="p-6">
-        {renderDiaStatus()}
-        <div className="flex flex-col items-center justify-center h-64 text-center">
-          <AlertCircle className="w-12 h-12 text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">
-            Bu kullanıcının henüz bir dashboard sayfası bulunmuyor.
-          </p>
+      <div className="flex h-full">
+        {renderSidebar()}
+        <div className="flex-1 p-6">
+          {renderDiaStatus()}
+          <div className="flex flex-col items-center justify-center h-64 text-center">
+            <AlertCircle className="w-12 h-12 text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">
+              Bu kullanıcının henüz bir dashboard sayfası bulunmuyor.
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -283,23 +373,25 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
 
   return (
     <DashboardFilterProvider>
-      <div className="p-6 h-full overflow-auto">
-        {renderDiaStatus()}
-        {renderPageSelector()}
+      <div className="flex h-full">
+        {renderSidebar()}
+        <div className="flex-1 p-6 overflow-auto">
+          {renderDiaStatus()}
 
-        {isPageLoading && (
-          <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            Veri kaynakları yükleniyor...
-          </div>
-        )}
-        
-        {selectedPageId && (
-          <ContainerBasedDashboard 
-            pageId={selectedPageId} 
-            widgetData={{}} 
-          />
-        )}
+          {isPageLoading && (
+            <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Veri kaynakları yükleniyor...
+            </div>
+          )}
+          
+          {selectedPageId && (
+            <ContainerBasedDashboard 
+              pageId={selectedPageId} 
+              widgetData={{}} 
+            />
+          )}
+        </div>
       </div>
     </DashboardFilterProvider>
   );
