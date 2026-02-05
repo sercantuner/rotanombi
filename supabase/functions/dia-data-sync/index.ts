@@ -252,12 +252,70 @@ Deno.serve(async (req) => {
     let periodsToSync: number[] = [currentDonem];
     
     if (syncAllPeriods) {
-      const { data: firmaPeriods } = await supabase
+      let { data: firmaPeriods } = await supabase
         .from('firma_periods')
         .select('period_no')
         .eq('sunucu_adi', sunucuAdi)
         .eq('firma_kodu', firmaKodu)
         .order('period_no', { ascending: false });
+      
+      // Eğer firma_periods tablosunda dönem yoksa, DIA'dan çek ve kaydet
+      if (!firmaPeriods?.length) {
+        console.log(`[DIA Sync] No periods found for ${sunucuAdi}/${firmaKodu}, fetching from DIA...`);
+        
+        const diaUrl = `https://${sunucuAdi}.ws.dia.com.tr/api/v3/sis/json`;
+        const periodsPayload = {
+          sis_yetkili_firma_donem_sube_depo: {
+            session_id: session.sessionId,
+          }
+        };
+        
+        try {
+          const periodsResponse = await fetch(diaUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(periodsPayload),
+          });
+          
+          const periodsData = await periodsResponse.json();
+          
+          if (periodsData?.code === "200" && Array.isArray(periodsData?.result)) {
+            const targetFirma = periodsData.result.find((f: any) => String(f.firmakodu) === firmaKodu);
+            
+            if (targetFirma?.donemler?.length) {
+              console.log(`[DIA Sync] Found ${targetFirma.donemler.length} periods from DIA`);
+              
+              // Dönemleri veritabanına kaydet
+              for (const donem of targetFirma.donemler) {
+                await supabase
+                  .from('firma_periods')
+                  .upsert({
+                    sunucu_adi: sunucuAdi,
+                    firma_kodu: firmaKodu,
+                    period_no: donem.donemkodu,
+                    period_name: donem.gorunendonemkodu || `Dönem ${donem.donemkodu}`,
+                    start_date: donem.baslangictarihi || null,
+                    end_date: donem.bitistarihi || null,
+                    is_current: donem.ontanimli === 't',
+                    fetched_at: new Date().toISOString(),
+                  }, { onConflict: 'sunucu_adi,firma_kodu,period_no' });
+              }
+              
+              // Yeniden oku
+              const { data: refreshedPeriods } = await supabase
+                .from('firma_periods')
+                .select('period_no')
+                .eq('sunucu_adi', sunucuAdi)
+                .eq('firma_kodu', firmaKodu)
+                .order('period_no', { ascending: false });
+              
+              firmaPeriods = refreshedPeriods;
+            }
+          }
+        } catch (periodFetchError) {
+          console.error(`[DIA Sync] Failed to fetch periods:`, periodFetchError);
+        }
+      }
       
       if (firmaPeriods?.length) {
         periodsToSync = firmaPeriods.map(p => p.period_no);

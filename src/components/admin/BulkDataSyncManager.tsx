@@ -46,8 +46,8 @@ export function BulkDataSyncManager() {
   const [progress, setProgress] = useState<Map<string, SyncProgress>>(new Map());
   const [currentIndex, setCurrentIndex] = useState(0);
   
-  // Acil stop için abort controller
-  const abortControllerRef = useRef<AbortController | null>(null);
+  // Acil stop için basit flag - useRef kullanarak render'lar arası kalıcılık
+  const stopRequestedRef = useRef(false);
   const [stopping, setStopping] = useState(false);
 
   // DIA yapılandırması olan kullanıcıları yükle
@@ -100,28 +100,52 @@ export function BulkDataSyncManager() {
       return;
     }
 
-    // Yeni abort controller oluştur
-    abortControllerRef.current = new AbortController();
+    // Stop flag'i sıfırla
     setStopping(false);
     setSyncing(true);
     setCurrentIndex(0);
     
-    const usersToSync = users.filter(u => selectedUsers.has(u.user_id));
-    const newProgress = new Map<string, SyncProgress>();
-    
     // Aynı sunucu için zaten sync yapılmış olanları takip et
     const syncedServers = new Set<string>();
+    
+    // Sync yapılacak kullanıcıları filtrele - aynı sunucu/firma için sadece bir kullanıcı al
+    const usersToSync: UserWithDiaConfig[] = [];
+    const allUsers = users.filter(u => selectedUsers.has(u.user_id));
+    
+    for (const user of allUsers) {
+      const serverKey = `${user.dia_sunucu_adi}:${user.firma_kodu}`;
+      if (!syncedServers.has(serverKey)) {
+        usersToSync.push(user);
+        syncedServers.add(serverKey);
+      }
+    }
+    
+    // Atlanacak kullanıcılar (aynı sunucu)
+    const skippedUsers = allUsers.filter(u => !usersToSync.includes(u));
+    
+    const newProgress = new Map<string, SyncProgress>();
     
     // Tümünü pending olarak işaretle
     usersToSync.forEach(u => {
       newProgress.set(u.user_id, { userId: u.user_id, status: 'pending' });
     });
-    setProgress(new Map(newProgress));
+    
+    // Atlanan kullanıcıları zaten senkronize olarak işaretle
+    skippedUsers.forEach(u => {
+      newProgress.set(u.user_id, { 
+        userId: u.user_id, 
+        status: 'success',
+        message: 'Aynı sunucu başka kullanıcı ile senkronize edildi',
+      });
+    });
+    
+    // Stop flag'i sıfırla
+    stopRequestedRef.current = false;
 
-    // Sırayla her kullanıcı için sync yap (aynı sunucu kontrolü ile)
+    // Sırayla her kullanıcı için sync yap
     for (let i = 0; i < usersToSync.length; i++) {
       // Acil stop kontrolü
-      if (abortControllerRef.current?.signal.aborted) {
+      if (stopRequestedRef.current) {
         // Kalan kullanıcıları "cancelled" olarak işaretle
         for (let j = i; j < usersToSync.length; j++) {
           const remainingUser = usersToSync[j];
@@ -140,18 +164,6 @@ export function BulkDataSyncManager() {
       const user = usersToSync[i];
       setCurrentIndex(i + 1);
       
-      // Aynı sunucu + firma için zaten sync yapıldıysa atla
-      const serverKey = `${user.dia_sunucu_adi}:${user.firma_kodu}`;
-      if (syncedServers.has(serverKey)) {
-        newProgress.set(user.user_id, { 
-          userId: user.user_id, 
-          status: 'success',
-          message: 'Aynı sunucu zaten senkronize edildi',
-        });
-        setProgress(new Map(newProgress));
-        continue;
-      }
-      
       // Running olarak güncelle
       newProgress.set(user.user_id, { userId: user.user_id, status: 'running' });
       setProgress(new Map(newProgress));
@@ -165,7 +177,7 @@ export function BulkDataSyncManager() {
         });
 
         // Stop sonrası response gelirse kontrol et
-        if (abortControllerRef.current?.signal.aborted) {
+        if (stopRequestedRef.current) {
           newProgress.set(user.user_id, { 
             userId: user.user_id, 
             status: 'error',
@@ -183,12 +195,10 @@ export function BulkDataSyncManager() {
         
         if (data.success) {
           const totalRecords = data.results?.reduce((sum: number, r: any) => sum + (r.recordsFetched || 0), 0) || 0;
-          // Bu sunucuyu sync edilmiş olarak işaretle
-          syncedServers.add(serverKey);
           newProgress.set(user.user_id, { 
             userId: user.user_id, 
             status: 'success',
-            message: `${data.totalSynced || 0} kaynak senkronize edildi`,
+            message: `${data.totalSynced || 0} kaynak, ${data.periodsProcessed || 1} dönem senkronize edildi`,
             recordsTotal: totalRecords,
           });
         } else {
@@ -209,14 +219,14 @@ export function BulkDataSyncManager() {
       setProgress(new Map(newProgress));
       
       // Rate limiting - her kullanıcı arasında 2 saniye bekle (stop edilmediyse)
-      if (i < usersToSync.length - 1 && !abortControllerRef.current?.signal.aborted) {
+      if (i < usersToSync.length - 1 && !stopRequestedRef.current) {
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
 
     setSyncing(false);
     setStopping(false);
-    abortControllerRef.current = null;
+    stopRequestedRef.current = false;
     
     const successCount = Array.from(newProgress.values()).filter(p => p.status === 'success').length;
     const errorCount = Array.from(newProgress.values()).filter(p => p.status === 'error').length;
@@ -225,18 +235,16 @@ export function BulkDataSyncManager() {
     if (cancelledCount > 0) {
       toast.info(`Senkronizasyon durduruldu. ${successCount} başarılı, ${cancelledCount} iptal edildi`);
     } else if (errorCount === 0) {
-      toast.success(`${successCount} kullanıcı için veri senkronizasyonu tamamlandı`);
+      toast.success(`${successCount} sunucu için veri senkronizasyonu tamamlandı`);
     } else {
       toast.warning(`${successCount} başarılı, ${errorCount} başarısız`);
     }
   };
 
   const stopSync = () => {
-    if (abortControllerRef.current) {
-      setStopping(true);
-      abortControllerRef.current.abort();
-      toast.info('Senkronizasyon durduruluyor...');
-    }
+    stopRequestedRef.current = true;
+    setStopping(true);
+    toast.info('Senkronizasyon durduruluyor... Mevcut işlem bittikten sonra duracak.');
   };
 
   const getProgressPercent = () => {
