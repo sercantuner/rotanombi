@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ success: true, message: `Period ${periodNo} locked` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     
-    const { data: ds } = await sb.from('data_sources').select('slug, module, method, name').eq('is_active', true);
+    const { data: ds } = await sb.from('data_sources').select('slug, module, method, name, is_period_independent').eq('is_active', true);
     if (!ds?.length) return new Response(JSON.stringify({ success: false, error: "No active data sources" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     const dias = ds.filter(d => !NON_DIA.includes(d.slug) && !d.slug.startsWith('_system'));
     const srcs = (action === 'syncAll' || action === 'syncAllForUser') ? dias : dias.filter(d => d.slug === dataSourceSlug);
@@ -160,7 +160,12 @@ Deno.serve(async (req) => {
     }
     
     const results: any[] = [];
-    for (const src of srcs) for (const pn of periods) results.push(await syncOne(sb, euid, session, src, pn, sun, fk, user.id));
+    for (const src of srcs) {
+      // Dönem bağımsız kaynaklar sadece aktif dönemde çekilir (bir kez yeterli)
+      const srcPeriods = src.is_period_independent ? [curDon] : periods;
+      console.log(`[DIA Sync] ${src.slug}: ${src.is_period_independent ? 'period-independent (1 period)' : `period-dependent (${srcPeriods.length} periods)`}`);
+      for (const pn of srcPeriods) results.push(await syncOne(sb, euid, session, src, pn, sun, fk, user.id));
+    }
     return new Response(JSON.stringify({ success: results.some(r=>r.success), results, totalSynced: results.filter(r=>r.success).length, totalFailed: results.filter(r=>!r.success).length, periodsProcessed: periods.length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) { return new Response(JSON.stringify({ success: false, error: e instanceof Error ? e.message : "Error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }); }
 });
