@@ -6,13 +6,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const PAGE_SIZE = 200, BATCH_SIZE = 25, MAX_RECORDS = 50000;
+const PAGE_SIZE = 200, MAX_RECORDS = 50000;
 const CLEANUP_TIMEOUT_MS = 15 * 60 * 1000; // 15 dakika
 const NON_DIA = ['takvim', '_system_calendar', 'system_calendar'];
 
-// Chunk sabitleri
-const DEFAULT_CHUNK_SIZE = 1000; // Her chunk'ta max kayıt
-const MAX_CHUNK_SIZE = 2000;    // Güvenlik limiti
+// Chunk sabitleri - 502 hatası için optimize edildi
+const DEFAULT_CHUNK_SIZE = 500;  // Her chunk'ta max kayıt (eskisi 1000)
+const MAX_CHUNK_SIZE = 1000;     // Güvenlik limiti
+const UPSERT_BATCH_SIZE = 200;   // Batch upsert kayıt sayısı
 
 function parse(r: any, m: string): any[] {
   if (r.result) {
@@ -29,20 +30,77 @@ async function cleanup(sb: any) {
     .eq('status', 'running').lt('started_at', new Date(Date.now() - CLEANUP_TIMEOUT_MS).toISOString());
 }
 
-async function write(sb: any, sun: string, fk: string, dk: number, slug: string, recs: any[], keys: Set<number>) {
-  let w = 0;
-  for (let i = 0; i < recs.length; i += BATCH_SIZE) {
-    for (const r of recs.slice(i, i + BATCH_SIZE)) {
-      const k = r._key || r.id; if (!k) continue;
-      keys.add(Number(k));
-      const { error } = await sb.from('company_data_cache').upsert({ 
-        sunucu_adi: sun, firma_kodu: fk, donem_kodu: dk, data_source_slug: slug, 
-        dia_key: Number(k), data: r, is_deleted: false, updated_at: new Date().toISOString() 
-      }, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug,dia_key' });
-      if (!error) w++;
-    }
+// Batch upsert - bellek ve DB optimizasyonu için
+async function writeBatch(sb: any, sun: string, fk: string, dk: number, slug: string, recs: any[]) {
+  let written = 0;
+  
+  for (let i = 0; i < recs.length; i += UPSERT_BATCH_SIZE) {
+    const batch = recs.slice(i, i + UPSERT_BATCH_SIZE)
+      .map(r => {
+        const k = r._key || r.id;
+        if (!k) return null;
+        return { 
+          sunucu_adi: sun, 
+          firma_kodu: fk, 
+          donem_kodu: dk, 
+          data_source_slug: slug, 
+          dia_key: Number(k), 
+          data: r, 
+          is_deleted: false, 
+          updated_at: new Date().toISOString() 
+        };
+      })
+      .filter(Boolean);
+    
+    if (batch.length === 0) continue;
+    
+    const { error } = await sb
+      .from('company_data_cache')
+      .upsert(batch, { 
+        onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug,dia_key' 
+      });
+    
+    if (!error) written += batch.length;
   }
-  return w;
+  
+  return written;
+}
+
+// Eski write fonksiyonu - syncOne için (keys set kullanır)
+async function write(sb: any, sun: string, fk: string, dk: number, slug: string, recs: any[], keys: Set<number>) {
+  let written = 0;
+  
+  for (let i = 0; i < recs.length; i += UPSERT_BATCH_SIZE) {
+    const batch = recs.slice(i, i + UPSERT_BATCH_SIZE)
+      .map(r => {
+        const k = r._key || r.id;
+        if (!k) return null;
+        keys.add(Number(k));
+        return { 
+          sunucu_adi: sun, 
+          firma_kodu: fk, 
+          donem_kodu: dk, 
+          data_source_slug: slug, 
+          dia_key: Number(k), 
+          data: r, 
+          is_deleted: false, 
+          updated_at: new Date().toISOString() 
+        };
+      })
+      .filter(Boolean);
+    
+    if (batch.length === 0) continue;
+    
+    const { error } = await sb
+      .from('company_data_cache')
+      .upsert(batch, { 
+        onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug,dia_key' 
+      });
+    
+    if (!error) written += batch.length;
+  }
+  
+  return written;
 }
 
 async function fetchPage(sb: any, uid: string, sess: any, mod: string, met: string, dk: number, off: number) {
@@ -72,21 +130,74 @@ async function fetchPage(sb: any, uid: string, sess: any, mod: string, met: stri
   } catch (e) { return { ok: false, data: [], err: e instanceof Error ? e.message : "Fetch error" }; }
 }
 
-// Chunk-bazlı streaming: Belirli sayıda kayıt çek ve yaz, sonra dön
+// Session kontrolsüz sayfa çekme - streamChunk için optimize edildi
+async function fetchPageSimple(sess: any, mod: string, met: string, dk: number, off: number) {
+  const url = `https://${sess.sunucuAdi}.ws.dia.com.tr/api/v3/${mod}/json`;
+  const fm = met.startsWith(`${mod}_`) ? met : `${mod}_${met}`;
+  const pl = { [fm]: { 
+    session_id: sess.sessionId, 
+    firma_kodu: sess.firmaKodu, 
+    donem_kodu: dk, 
+    limit: PAGE_SIZE, 
+    offset: off 
+  }};
+  
+  try {
+    const res = await fetch(url, { 
+      method: "POST", 
+      headers: { "Content-Type": "application/json" }, 
+      body: JSON.stringify(pl) 
+    });
+    
+    if (!res.ok) return { ok: false, data: [], err: `HTTP ${res.status}` };
+    const r = await res.json();
+    
+    if (r.msg === 'INVALID_SESSION' || r.code === '401') {
+      return { ok: false, data: [], err: 'INVALID_SESSION', needsRefresh: true };
+    }
+    
+    if (r.code && r.code !== "200") return { ok: false, data: [], err: r.msg || `Error ${r.code}` };
+    if (r.error || r.hata) return { ok: false, data: [], err: r.error?.message || r.hata?.aciklama || "API error" };
+    
+    return { ok: true, data: parse(r, fm) };
+  } catch (e) { 
+    return { ok: false, data: [], err: e instanceof Error ? e.message : "Fetch error" }; 
+  }
+}
+
+// Chunk-bazlı streaming: Session cache + batch upsert ile optimize edildi
 async function streamChunk(
   sb: any, uid: string, sess: any, mod: string, met: string, dk: number, 
   sun: string, fk: string, slug: string, startOffset: number, chunkSize: number
 ) {
+  // Chunk başında bir kez session doğrula
+  const sr = await ensureValidSession(sb, uid, sess);
+  if (!sr.success || !sr.session) {
+    console.log(`[syncChunk] Session validation failed`);
+    return { ok: false, fetched: 0, written: 0, hasMore: false, nextOffset: startOffset, err: sr.error || "Session fail" };
+  }
+  
+  let validSession = sr.session;
   let off = startOffset;
   let fetched = 0;
   let written = 0;
-  let cs = sess;
-  const keys = new Set<number>();
   
   console.log(`[syncChunk] Starting: ${slug}, offset=${startOffset}, chunkSize=${chunkSize}`);
   
   while (fetched < chunkSize) {
-    const r = await fetchPage(sb, uid, cs, mod, met, dk, off);
+    const r = await fetchPageSimple(validSession, mod, met, dk, off);
+    
+    // Session hatası - yenile ve tekrar dene
+    if (r.needsRefresh) {
+      console.log(`[syncChunk] Session expired, refreshing...`);
+      await invalidateSession(sb, uid);
+      const ns = await getDiaSession(sb, uid);
+      if (!ns.success || !ns.session) {
+        return { ok: false, fetched, written, hasMore: false, nextOffset: off, err: "Session refresh fail" };
+      }
+      validSession = ns.session;
+      continue; // Aynı sayfayı tekrar dene
+    }
     
     if (!r.ok) {
       // İlk sayfada hata varsa başarısız
@@ -99,13 +210,11 @@ async function streamChunk(
       break;
     }
     
-    if (r.sess) cs = r.sess;
-    
-    // Veri geldiyse hemen yaz
+    // Veri geldiyse hemen yaz (batch upsert ile)
     if (r.data.length > 0) {
-      written += await write(sb, sun, fk, dk, slug, r.data, keys);
+      written += await writeBatch(sb, sun, fk, dk, slug, r.data);
       fetched += r.data.length;
-      console.log(`[syncChunk] Page fetched: ${r.data.length} records, total=${fetched}`);
+      console.log(`[syncChunk] Page written: ${r.data.length} records, total=${fetched}`);
     }
     
     // Sayfa dolmadıysa = veri bitti
