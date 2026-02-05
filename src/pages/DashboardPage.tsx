@@ -4,7 +4,7 @@ import { VadeDetayListesi } from '@/components/dashboard/VadeDetayListesi';
 import { ContainerBasedDashboard } from '@/components/dashboard/ContainerBasedDashboard';
 import { DashboardLoadingScreen } from '@/components/dashboard/DashboardLoadingScreen';
 import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
-import { GlobalFilterBar } from '@/components/filters/GlobalFilterBar';
+import { FilterSidePanel } from '@/components/filters/FilterSidePanel';
 import { useDiaDataCache } from '@/contexts/DiaDataCacheContext';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -253,11 +253,8 @@ function DashboardContent() {
       />
 
       <main className="flex-1 p-2 md:p-4 overflow-auto">
-        {/* Global Filter Bar */}
-        <GlobalFilterBar 
-          className="mb-3" 
-          showDateFilter={true}
-        />
+          {/* Filter Side Panel - Sağda gizlenebilir */}
+          <FilterSidePanel />
 
         {/* DIA Connection Status */}
         {!diaConnectionInfo?.connected && !dataSourcesLoading && loadedSources.length === 0 && (

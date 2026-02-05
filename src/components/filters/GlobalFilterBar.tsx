@@ -27,6 +27,7 @@ interface GlobalFilterBarProps {
   showDateFilter?: boolean;
   className?: string;
   compact?: boolean;
+   sidePanelMode?: boolean;
 }
 
 // Dinamik ikon
@@ -39,6 +40,7 @@ export function GlobalFilterBar({
   showDateFilter = true,
   className,
   compact = false,
+   sidePanelMode = false,
 }: GlobalFilterBarProps) {
   const {
     filters,
@@ -58,16 +60,8 @@ export function GlobalFilterBar({
   const [managerModalOpen, setManagerModalOpen] = useState(false);
   const [activePopover, setActivePopover] = useState<string | null>(null);
   
-  // Filtre barı açık/kapalı durumu - localStorage'dan başlat
-  const [isExpanded, setIsExpanded] = useState(() => {
-    const stored = localStorage.getItem('filterBarExpanded');
-    return stored !== null ? stored === 'true' : true; // Varsayılan açık
-  });
-  
-  // Değişiklikleri localStorage'a kaydet
-  useEffect(() => {
-    localStorage.setItem('filterBarExpanded', String(isExpanded));
-  }, [isExpanded]);
+  // Filtre barı açık/kapalı durumu - sidePanelMode'da her zaman açık
+  const [isExpanded, setIsExpanded] = useState(true);
 
   // Kilitli filtre var mı kontrol et
   const hasLockedSalesRep = filters._diaAutoFilters.some(f => f.field === 'satiselemani');
@@ -193,69 +187,40 @@ export function GlobalFilterBar({
 
   return (
     <>
-      <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-        <div className={cn(
-          'glass-card rounded-xl animate-fade-in',
-          compact ? 'p-2' : 'p-3 md:p-4',
-          className
-        )}>
-          {/* Header - Her zaman görünür */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <CollapsibleTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1.5 text-muted-foreground hover:text-foreground -ml-1"
-                >
-                  {isExpanded ? (
-                    <PanelTopClose className="w-4 h-4" />
-                  ) : (
-                    <PanelTop className="w-4 h-4" />
-                  )}
-                  <span className="text-sm font-medium">Filtreler</span>
-                  {!isExpanded && activeFilterCount > 0 && (
-                    <Badge variant="secondary" className="ml-1 h-5 px-1.5">
-                      {activeFilterCount}
-                    </Badge>
-                  )}
-                </Button>
-              </CollapsibleTrigger>
+      <div className={cn(
+        sidePanelMode ? '' : 'glass-card rounded-xl animate-fade-in',
+        sidePanelMode ? '' : (compact ? 'p-2' : 'p-3 md:p-4'),
+        className
+      )}>
+        {/* Cross-Filter Göstergesi - Aktif çapraz filtre varsa göster */}
+        {crossFilter && (
+          <div className={cn(
+            "flex items-center gap-2 p-2 bg-primary/10 border border-primary/30 rounded-lg animate-in fade-in slide-in-from-top-1 duration-200",
+            sidePanelMode ? "mb-4" : "mb-2"
+          )}>
+            <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="text-xs text-muted-foreground">Çapraz Filtre: </span>
+              <span className="text-sm font-medium text-primary">
+                {crossFilter.label || (Array.isArray(crossFilter.value) ? crossFilter.value.join(', ') : crossFilter.value)}
+              </span>
             </div>
-            
-            {/* Kapalıyken özet göster */}
-            {!isExpanded && activeFilterCount > 0 && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <span>{activeFilterCount} filtre aktif</span>
-              </div>
-            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearCrossFilter}
+              className="h-6 px-2 text-xs text-primary hover:text-primary hover:bg-primary/20"
+            >
+              <X className="w-3 h-3 mr-1" />
+              Temizle
+            </Button>
           </div>
+        )}
 
-          {/* Cross-Filter Göstergesi - Aktif çapraz filtre varsa göster */}
-          {crossFilter && (
-            <div className="flex items-center gap-2 mt-2 p-2 bg-primary/10 border border-primary/30 rounded-lg animate-in fade-in slide-in-from-top-1 duration-200">
-              <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <span className="text-xs text-muted-foreground">Çapraz Filtre: </span>
-                <span className="text-sm font-medium text-primary">
-                  {crossFilter.label || (Array.isArray(crossFilter.value) ? crossFilter.value.join(', ') : crossFilter.value)}
-                </span>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearCrossFilter}
-                className="h-6 px-2 text-xs text-primary hover:text-primary hover:bg-primary/20"
-              >
-                <X className="w-3 h-3 mr-1" />
-                Temizle
-              </Button>
-            </div>
-          )}
-
-          {/* Collapsible Content - Filtre butonları */}
-          <CollapsibleContent className="mt-3">
-            <div className="flex flex-wrap items-center gap-2 md:gap-3">
+        {/* Filtre butonları */}
+        <div className={cn(
+          sidePanelMode ? "flex flex-col gap-3" : "flex flex-wrap items-center gap-2 md:gap-3"
+        )}>
               {/* Date Filter - Her zaman görünür */}
               {showDateFilter && (
                 <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
@@ -452,118 +417,119 @@ export function GlobalFilterBar({
             )}
           </div>
 
-          {/* Active Filter Badges */}
-          {activeFilterCount > 0 && (
-            <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-border">
-              {filters.tarihAraligi && filters.tarihAraligi.period !== 'all' && (
-                <Badge variant="secondary" className="gap-1 pr-1">
-                  📅 {datePeriodLabels[filters.tarihAraligi.period]}
-                  <button 
-                    onClick={() => setFilter('tarihAraligi', null)}
-                    className="ml-1 hover:bg-muted rounded-full p-0.5"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              )}
-              
-              {filters.cariKartTipi.map((tip) => (
-                <Badge key={tip} variant="secondary" className="gap-1 pr-1 bg-accent/20">
-                  {cariKartTipiLabels[tip]}
-                  <button 
-                    onClick={() => toggleArrayFilter('cariKartTipi', tip)}
-                    className="ml-1 hover:bg-accent/30 rounded-full p-0.5"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              ))}
-              
-              {filters.satisTemsilcisi.map((rep) => (
-                <Badge key={rep} variant="secondary" className="gap-1 pr-1 bg-success/10 text-success">
-                  {rep}
-                  <button 
-                    onClick={() => toggleArrayFilter('satisTemsilcisi', rep)}
-                    className="ml-1 hover:bg-success/20 rounded-full p-0.5"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              ))}
+        {/* Active Filter Badges */}
+        {activeFilterCount > 0 && (
+          <div className={cn(
+            "flex flex-wrap items-center gap-2",
+            sidePanelMode ? "mt-4 pt-4" : "mt-3 pt-3",
+            "border-t border-border"
+          )}>
+            {filters.tarihAraligi && filters.tarihAraligi.period !== 'all' && (
+              <Badge variant="secondary" className="gap-1 pr-1">
+                📅 {datePeriodLabels[filters.tarihAraligi.period]}
+                <button 
+                  onClick={() => setFilter('tarihAraligi', null)}
+                  className="ml-1 hover:bg-muted rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            )}
+            
+            {filters.cariKartTipi.map((tip) => (
+              <Badge key={tip} variant="secondary" className="gap-1 pr-1 bg-accent/20">
+                {cariKartTipiLabels[tip]}
+                <button 
+                  onClick={() => toggleArrayFilter('cariKartTipi', tip)}
+                  className="ml-1 hover:bg-accent/30 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
+            
+            {filters.satisTemsilcisi.map((rep) => (
+              <Badge key={rep} variant="secondary" className="gap-1 pr-1 bg-success/10 text-success">
+                {rep}
+                <button 
+                  onClick={() => toggleArrayFilter('satisTemsilcisi', rep)}
+                  className="ml-1 hover:bg-success/20 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
 
-              {filters.sube.map((s) => (
-                <Badge key={s} variant="secondary" className="gap-1 pr-1">
-                  🏢 {lookupLabel.get(`sube:${s}`) || s}
-                  <button 
-                    onClick={() => toggleArrayFilter('sube', s)}
-                    className="ml-1 hover:bg-muted rounded-full p-0.5"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              ))}
+            {filters.sube.map((s) => (
+              <Badge key={s} variant="secondary" className="gap-1 pr-1">
+                🏢 {lookupLabel.get(`sube:${s}`) || s}
+                <button 
+                  onClick={() => toggleArrayFilter('sube', s)}
+                  className="ml-1 hover:bg-muted rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
 
-              {filters.depo.map((d) => (
-                <Badge key={d} variant="secondary" className="gap-1 pr-1">
-                  📦 {lookupLabel.get(`depo:${d}`) || d}
-                  <button 
-                    onClick={() => toggleArrayFilter('depo', d)}
-                    className="ml-1 hover:bg-muted rounded-full p-0.5"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              ))}
+            {filters.depo.map((d) => (
+              <Badge key={d} variant="secondary" className="gap-1 pr-1">
+                📦 {lookupLabel.get(`depo:${d}`) || d}
+                <button 
+                  onClick={() => toggleArrayFilter('depo', d)}
+                  className="ml-1 hover:bg-muted rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
 
-              {filters.ozelkod1.map((k) => (
-                <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-info/10">
-                  {lookupLabel.get(`ozelkod1:${k}`) || k}
-                  <button 
-                    onClick={() => toggleArrayFilter('ozelkod1', k)}
-                    className="ml-1 hover:bg-info/20 rounded-full p-0.5"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              ))}
+            {filters.ozelkod1.map((k) => (
+              <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-info/10">
+                {lookupLabel.get(`ozelkod1:${k}`) || k}
+                <button 
+                  onClick={() => toggleArrayFilter('ozelkod1', k)}
+                  className="ml-1 hover:bg-info/20 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
 
-              {filters.ozelkod2.map((k) => (
-                <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-info/10">
-                  {lookupLabel.get(`ozelkod2:${k}`) || k}
-                  <button 
-                    onClick={() => toggleArrayFilter('ozelkod2', k)}
-                    className="ml-1 hover:bg-info/20 rounded-full p-0.5"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              ))}
+            {filters.ozelkod2.map((k) => (
+              <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-info/10">
+                {lookupLabel.get(`ozelkod2:${k}`) || k}
+                <button 
+                  onClick={() => toggleArrayFilter('ozelkod2', k)}
+                  className="ml-1 hover:bg-info/20 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
 
-              {filters.ozelkod3.map((k) => (
-                <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-info/10">
-                  {lookupLabel.get(`ozelkod3:${k}`) || k}
-                  <button 
-                    onClick={() => toggleArrayFilter('ozelkod3', k)}
-                    className="ml-1 hover:bg-info/20 rounded-full p-0.5"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              ))}
+            {filters.ozelkod3.map((k) => (
+              <Badge key={k} variant="secondary" className="gap-1 pr-1 bg-info/10">
+                {lookupLabel.get(`ozelkod3:${k}`) || k}
+                <button 
+                  onClick={() => toggleArrayFilter('ozelkod3', k)}
+                  className="ml-1 hover:bg-info/20 rounded-full p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
 
-
-              {/* Locked DIA filters */}
-              {filters._diaAutoFilters.map((f, idx) => (
-                <Badge key={idx} variant="outline" className="gap-1 bg-warning/10 text-warning border-warning/30">
-                  <Lock className="w-3 h-3" />
-                  {f.label || f.value}
-                </Badge>
-              ))}
-            </div>
-          )}
-          </CollapsibleContent>
-        </div>
-      </Collapsible>
+            {/* Locked DIA filters */}
+            {filters._diaAutoFilters.map((f, idx) => (
+              <Badge key={idx} variant="outline" className="gap-1 bg-warning/10 text-warning border-warning/30">
+                <Lock className="w-3 h-3" />
+                {f.label || f.value}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Filtre Yönetimi Modal */}
       <FilterManagerModal
