@@ -6,6 +6,7 @@ import { ContainerBasedDashboard } from '@/components/dashboard/ContainerBasedDa
 import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
 import { DiaDataCacheProvider, useDiaDataCache } from '@/contexts/DiaDataCacheContext';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
+import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
 import { Loader2, AlertCircle, RefreshCw, WifiOff, CheckCircle, LayoutDashboard, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -33,6 +34,10 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [diaStatus, setDiaStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [diaError, setDiaError] = useState<string | null>(null);
+
+  // KRİTİK: İzleme modunda widget'lar cache-first çalıştığı için
+  // sayfanın veri kaynaklarını mutlaka DataSourceLoader ile yüklemeliyiz.
+  const { isLoading: dataSourcesLoading, refresh: refreshDataSources } = useDataSourceLoader(selectedPageId);
 
   // DIA oturumu başlat - impersonated user'ın bilgileriyle
   const initializeDiaConnection = useCallback(async () => {
@@ -135,6 +140,8 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
   const handleReconnect = async () => {
     clearAllCache();
     await initializeDiaConnection();
+    // Veri kaynaklarını da yeniden yükle (cache-first widget'lar için gerekli)
+    await refreshDataSources();
     if (diaStatus === 'connected') {
       toast.success('DIA bağlantısı yenilendi');
     }
@@ -155,6 +162,10 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
       </div>
     );
   }
+
+  // DIA bağlantısı aktif olsa bile veri kaynakları yüklenirken hafif bir durum göstergesi verelim
+  // (Grafikler cache'den besleneceği için bu süreç kritik)
+  const isPageLoading = dataSourcesLoading;
 
   // DIA bağlantı durumu banner
   const renderDiaStatus = () => {
@@ -275,6 +286,13 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
       <div className="p-6 h-full overflow-auto">
         {renderDiaStatus()}
         {renderPageSelector()}
+
+        {isPageLoading && (
+          <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Veri kaynakları yükleniyor...
+          </div>
+        )}
         
         {selectedPageId && (
           <ContainerBasedDashboard 
