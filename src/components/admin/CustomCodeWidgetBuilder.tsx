@@ -75,6 +75,7 @@ const RechartsScope = {
 
 // Leaflet harita bileşenleri - Builder preview'da opsiyonel (lazy)
 let MapScope: any = null;
+ let NivoScope: any = null;
 
 const EmptyMapScope = {
   MapContainer: () => null,
@@ -90,6 +91,18 @@ const EmptyMapScope = {
   useMapEvent: () => null,
   L: null,
 };
+ 
+ // Nivo placeholder
+ const EmptyNivoScope = {
+   ResponsiveSankey: () => null,
+   ResponsiveSunburst: () => null,
+   ResponsiveChord: () => null,
+   ResponsiveRadar: () => null,
+   ResponsiveChoropleth: () => null,
+   ResponsiveGeoMap: () => null,
+   useTheme: () => ({}),
+   getTheme: () => ({})
+ };
 
 const initMapScope = async () => {
   if (MapScope) return MapScope;
@@ -133,6 +146,68 @@ const initMapScope = async () => {
     return null;
   }
 };
+ 
+ // Nivo lazy loading
+ const initNivoScope = async () => {
+   if (NivoScope) return NivoScope;
+   
+   try {
+     const [
+       nivoSankey,
+       nivoSunburst,
+       nivoChord,
+       nivoRadar,
+       nivoGeo,
+       _nivoCore
+     ] = await Promise.all([
+       import('@nivo/sankey'),
+       import('@nivo/sunburst'),
+       import('@nivo/chord'),
+       import('@nivo/radar'),
+       import('@nivo/geo'),
+       import('@nivo/core')
+     ]);
+     
+     NivoScope = {
+       ResponsiveSankey: nivoSankey.ResponsiveSankey,
+       ResponsiveSunburst: nivoSunburst.ResponsiveSunburst,
+       ResponsiveChord: nivoChord.ResponsiveChord,
+       ResponsiveRadar: nivoRadar.ResponsiveRadar,
+       ResponsiveChoropleth: nivoGeo.ResponsiveChoropleth,
+       ResponsiveGeoMap: nivoGeo.ResponsiveGeoMap,
+       getTheme: (isDark: boolean) => ({
+         background: 'transparent',
+         textColor: isDark ? 'hsl(0 0% 90%)' : 'hsl(0 0% 20%)',
+         fontSize: 11,
+         axis: {
+           domain: { line: { stroke: isDark ? 'hsl(0 0% 30%)' : 'hsl(0 0% 70%)', strokeWidth: 1 } },
+           ticks: { 
+             line: { stroke: isDark ? 'hsl(0 0% 30%)' : 'hsl(0 0% 70%)', strokeWidth: 1 },
+             text: { fill: isDark ? 'hsl(0 0% 60%)' : 'hsl(0 0% 40%)' }
+           },
+           legend: { text: { fill: isDark ? 'hsl(0 0% 70%)' : 'hsl(0 0% 30%)' } }
+         },
+         grid: { line: { stroke: isDark ? 'hsl(0 0% 20%)' : 'hsl(0 0% 90%)', strokeWidth: 1 } },
+         legends: { text: { fill: isDark ? 'hsl(0 0% 70%)' : 'hsl(0 0% 30%)' } },
+         tooltip: {
+           container: {
+             background: isDark ? 'hsl(220 10% 15%)' : 'hsl(0 0% 100%)',
+             color: isDark ? 'hsl(0 0% 90%)' : 'hsl(0 0% 20%)',
+             fontSize: 12,
+             borderRadius: 4,
+             boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+           }
+         },
+         labels: { text: { fill: isDark ? 'hsl(0 0% 90%)' : 'hsl(0 0% 20%)' } }
+       })
+     };
+     
+     return NivoScope;
+   } catch (e) {
+     console.warn('Nivo yüklenemedi (builder preview):', e);
+     return null;
+   }
+ };
 
 // Custom widget kodlarının kullanabilmesi için UI scope (Dialog vb.)
 const UIScope = {
@@ -311,6 +386,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
 
   // Custom code preview'da Map scope (opsiyonel)
   const [mapScope, setMapScope] = useState<any>(EmptyMapScope);
+   const [nivoScope, setNivoScope] = useState<any>(EmptyNivoScope);
 
   useEffect(() => {
     let cancelled = false;
@@ -326,6 +402,20 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       cancelled = true;
     };
   }, [customCode]);
+   
+   // Nivo lazy loading
+   useEffect(() => {
+     let cancelled = false;
+     if (!customCode || !/(^|[^a-zA-Z0-9_])Nivo\./.test(customCode)) {
+       setNivoScope(EmptyNivoScope);
+       return;
+     }
+     initNivoScope().then((scope) => {
+       if (cancelled) return;
+       setNivoScope(scope || EmptyNivoScope);
+     });
+     return () => { cancelled = true; };
+   }, [customCode]);
   
   // AI kod üretimi
   const [aiPrompt, setAiPrompt] = useState('');
@@ -944,6 +1034,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
         'filters',
         'UI',
         'Map',
+        'Nivo',
         customCode
       );
       
@@ -958,7 +1049,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
         'hsl(280, 70%, 55%)',
       ];
       
-      const WidgetComponent = fn(React, sampleData, LucideIcons, RechartsScope, previewColors, {}, UIScope, mapScope);
+       const WidgetComponent = fn(React, sampleData, LucideIcons, RechartsScope, previewColors, {}, UIScope, mapScope, nivoScope);
       
       if (typeof WidgetComponent !== 'function') {
         return { 
