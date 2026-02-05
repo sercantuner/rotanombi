@@ -352,7 +352,7 @@ interface ChatMessage {
 export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWidget }: CustomCodeWidgetBuilderProps) {
   const { widgets } = useWidgets();
   const { createWidget, updateWidget, isLoading: isSaving } = useWidgetAdmin();
-  const { activeDataSources, getDataSourceById } = useDataSources();
+  const { activeDataSources, getDataSourceById, isLoading: isDataSourcesLoading, dataSources } = useDataSources();
   const { activeCategories, isLoading: isCategoriesLoading, getCategoryBySlug } = useWidgetCategories();
   const { user } = useAuth();
   const { impersonatedUserId, isImpersonating } = useImpersonation();
@@ -502,7 +502,8 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
 
   // Düzenleme modunda widget verilerini yükle
   useEffect(() => {
-    if (editingWidget && open) {
+    // dataSources henüz yüklenmediyse bekle
+    if (editingWidget && open && !isDataSourcesLoading && dataSources.length > 0) {
       const config = editingWidget.builder_config;
       setWidgetKey(editingWidget.widget_key);
       setWidgetName(editingWidget.name);
@@ -578,7 +579,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       setNewCustomRule('');
       setSelectedFilterFields([]);
     }
-  }, [editingWidget, open]);
+  }, [editingWidget, open, isDataSourcesLoading, dataSources, getDataSourceById]);
 
   // Multi-query verilerini yükle
   const loadMultiQueryData = async (config: MultiQueryConfig) => {
@@ -591,8 +592,40 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       for (const query of config.queries) {
         if (query.dataSourceId) {
           const ds = getDataSourceById(query.dataSourceId);
-          if (ds?.last_sample_data) {
+          
+          if (ds?.last_sample_data && ds.last_sample_data.length > 0) {
+            // Cache'den oku
             dataMap[query.id] = ds.last_sample_data as any[];
+            console.log(`[BuilderPreview] Query ${query.id}: Cache HIT (${ds.last_sample_data.length} kayıt)`);
+          } else if (ds) {
+            // Cache boş - DIA API'den çek
+            console.log(`[BuilderPreview] Query ${query.id}: Cache MISS, fetching from DIA...`);
+            try {
+              const response = await supabase.functions.invoke('dia-api-test', {
+                body: {
+                  module: ds.module,
+                  method: ds.method,
+                  filters: ds.filters || [],
+                  sorts: ds.sorts || [],
+                  limit: Math.min(ds.limit_count || 100, 100),
+                  ...(isImpersonating && impersonatedUserId ? { targetUserId: impersonatedUserId } : {}),
+                },
+              });
+              
+              if (response.data?.success && response.data?.sampleData) {
+                dataMap[query.id] = response.data.sampleData;
+                console.log(`[BuilderPreview] Query ${query.id}: DIA returned ${response.data.sampleData.length} kayıt`);
+              } else {
+                console.warn(`[BuilderPreview] Query ${query.id}: DIA returned no data`, response.data?.error);
+                dataMap[query.id] = [];
+              }
+            } catch (err) {
+              console.error(`[BuilderPreview] Query ${query.id}: DIA fetch error`, err);
+              dataMap[query.id] = [];
+            }
+          } else {
+            console.warn(`[BuilderPreview] Query ${query.id}: DataSource not found`);
+            dataMap[query.id] = [];
           }
         }
       }
@@ -604,7 +637,8 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
         setSampleData(dataMap[primaryQuery.id]);
       }
       
-      toast.success(`${Object.keys(dataMap).length} kaynak verisi yüklendi`);
+      const totalRecords = Object.values(dataMap).reduce((sum, arr) => sum + arr.length, 0);
+      toast.success(`${Object.keys(dataMap).length} kaynak, toplam ${totalRecords} kayıt yüklendi`);
     } catch (err: any) {
       toast.error('Veri yükleme hatası: ' + err.message);
     } finally {
