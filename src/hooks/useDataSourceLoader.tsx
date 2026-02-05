@@ -1,13 +1,15 @@
 // useDataSourceLoader - Sayfa seviyesinde veri kaynaklarını merkezi olarak yükler
 // GLOBAL CACHE: Bir veri kaynağı bir kez sorgulandıktan sonra tüm sayfalarda kullanılır
 // LAZY LOADING: Sayfa geçişlerinde sadece eksik sorgular tamamlanır
+// _system modülü: Takvim gibi lokal üretilen veri kaynakları desteklenir
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useDiaDataCache } from '@/contexts/DiaDataCacheContext';
- import { useDataSources, DataSource } from './useDataSources';
+import { useDataSources, DataSource } from './useDataSources';
 import { queuedDiaFetch } from '@/lib/diaRequestQueue';
 import { toast } from 'sonner';
+import { getCachedCalendarData } from '@/lib/calendarDataGenerator';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -74,6 +76,23 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     // Impersonation için hedef kullanıcı ID'si
     targetUserId,
   } = useDiaDataCache();
+
+  // _system modülü için lokal veri üretimi (Takvim vb.)
+  const loadSystemDataSource = useCallback((dataSource: DataSource): any[] | null => {
+    if (dataSource.method === 'calendar') {
+      console.log(`[DataSourceLoader] SYSTEM: ${dataSource.name} - Takvim verisi üretiliyor`);
+      const calendarData = getCachedCalendarData();
+      
+      // Cache'e kaydet - 24 saat TTL (86400000 ms)
+      setDataSourceData(dataSource.id, calendarData, 86400000);
+      markDataSourceFetched(dataSource.id);
+      
+      return calendarData;
+    }
+    
+    console.warn(`[DataSourceLoader] Unknown system method: ${dataSource.method}`);
+    return [];
+  }, [setDataSourceData, markDataSourceFetched]);
 
   // Sayfadaki widget'ların kullandığı veri kaynaklarını bul
   const findUsedDataSources = useCallback(async (): Promise<string[]> => {
@@ -183,6 +202,11 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     accessToken: string,
     forceRefresh: boolean = false
   ): Promise<any[] | null> => {
+    // _system modülü - lokal üretilen veri kaynakları (takvim vb.)
+    if (dataSource.module === '_system') {
+      return loadSystemDataSource(dataSource);
+    }
+    
     // 1. Zaten global registry'de VE cache'de veri varsa - cache'den al
     if (!forceRefresh && isDataSourceFetched(dataSource.id)) {
       const cachedData = getDataSourceData(dataSource.id);
@@ -211,7 +235,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     incrementCacheMiss();
 
     return loadDataSourceFromApi(dataSource, accessToken);
-  }, [getDataSourceData, getDataSourceDataWithStale, isDataSourceFetched, incrementCacheHit, incrementCacheMiss]);
+  }, [getDataSourceData, getDataSourceDataWithStale, isDataSourceFetched, incrementCacheHit, incrementCacheMiss, loadSystemDataSource]);
 
   // DIA hata mesajlarını kullanıcı dostu hale getir
   const getDiaErrorMessage = useCallback((error: string): string => {
