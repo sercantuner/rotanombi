@@ -24,6 +24,8 @@ interface TestApiRequest {
   returnAllSampleData?: boolean; // Filtre önerileri için tüm veriyi döndür (sampleData olarak)
   // Impersonation için - super admin başka kullanıcının verisini çekebilir
   targetUserId?: string;
+  // Sadece bağlantı durumunu kontrol et (veri çekme)
+  checkConnectionOnly?: boolean;
   // Dönem loop için
   periodConfig?: {
     enabled: boolean;
@@ -209,8 +211,66 @@ serve(async (req) => {
       returnAllData = false, // Tüm veriyi döndür (widget renderer için)
       returnAllSampleData = false, // Filtre önerileri için tüm veriyi sampleData olarak döndür
       targetUserId, // Impersonation için - super admin başka kullanıcının verisini çekebilir
+      checkConnectionOnly = false, // Sadece bağlantı durumunu kontrol et
       periodConfig, // Dönem loop yapılandırması
     } = body;
+
+    // checkConnectionOnly modu - sadece DIA yapılandırmasını kontrol et, veri çekme
+    if (checkConnectionOnly) {
+      console.log('[checkConnectionOnly] Checking DIA configuration for user:', targetUserId || user.id);
+      
+      const effectiveUserId = targetUserId || user.id;
+      
+      // Super admin kontrolü - sadece super admin başka kullanıcının bilgisine erişebilir
+      if (targetUserId && targetUserId !== user.id) {
+        const { data: roleCheck } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('role', 'super_admin')
+          .single();
+        
+        if (!roleCheck) {
+          return new Response(
+            JSON.stringify({ success: false, diaConfigured: false, error: "Super Admin yetkisi gerekli" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+      
+      // Profil bilgilerini kontrol et
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('dia_sunucu_adi, firma_kodu, donem_kodu, dia_session_id, dia_session_expires')
+        .eq('user_id', effectiveUserId)
+        .single();
+      
+      if (profileError || !profile) {
+        return new Response(
+          JSON.stringify({ success: true, diaConfigured: false }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      const isDiaConfigured = !!(profile.dia_sunucu_adi && profile.firma_kodu);
+      const hasSession = !!(profile.dia_session_id && 
+        profile.dia_session_expires && 
+        new Date(profile.dia_session_expires) > new Date());
+      
+      console.log('[checkConnectionOnly] DIA configured:', isDiaConfigured, 'Has valid session:', hasSession);
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          diaConfigured: isDiaConfigured,
+          hasSession,
+          sunucuAdi: profile.dia_sunucu_adi,
+          firmaKodu: profile.firma_kodu,
+          donemKodu: profile.donem_kodu
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // returnAllData/returnAllSampleData istenip limit verilmezse,
     // büyük liste servisleri DIA tarafında CancelledError ile iptal olabiliyor.
