@@ -197,7 +197,7 @@ export default function SuperAdminPanel() {
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
       {/* Ana İçerik */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
         {/* Impersonation Banner */}
         {isImpersonating && impersonatedProfile && (
           <div className="bg-warning/10 border-b border-warning/30 px-4 py-2 flex items-center justify-between">
@@ -257,7 +257,7 @@ export default function SuperAdminPanel() {
         )}
 
         {/* Tab Navigation */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
           <div className="border-b border-border px-2 md:px-4 flex items-center justify-between gap-2 overflow-x-auto">
             <TabsList className="h-11 w-max gap-1">
               <TabsTrigger value="users" className="gap-1.5 text-xs md:text-sm px-2 md:px-3">
@@ -387,8 +387,8 @@ export default function SuperAdminPanel() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-hidden">
-            <TabsContent value="users" className="h-full m-0">
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <TabsContent value="users" className="h-full min-h-0 m-0">
               {isImpersonating && impersonatedUserId ? (
                 <ImpersonatedDashboard userId={impersonatedUserId} />
               ) : (
