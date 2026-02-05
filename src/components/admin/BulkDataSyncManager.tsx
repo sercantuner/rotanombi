@@ -17,7 +17,9 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
-  Layers
+  Layers,
+  Calendar,
+  Globe
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -43,6 +45,8 @@ interface DataSource {
   name: string;
   module: string;
   method: string;
+  is_period_independent: boolean;
+  is_non_dia: boolean;
 }
 
 interface Period {
@@ -60,6 +64,7 @@ interface SourceProgress {
   slug: string;
   name: string;
   periods: Map<number, SourcePeriodProgress>;
+  isPeriodIndependent: boolean;
 }
 
 interface UserProgress {
@@ -165,14 +170,18 @@ export function BulkDataSyncManager() {
   const fetchDataSources = async (): Promise<DataSource[]> => {
     const { data } = await supabase
       .from('data_sources')
-      .select('slug, name, module, method')
+      .select('slug, name, module, method, is_period_independent, is_non_dia')
       .eq('is_active', true);
     
     // DIA dışı kaynakları filtrele
-    const nonDiaSources = ['takvim', '_system_calendar', 'system_calendar'];
     return (data || []).filter(ds => 
-      !nonDiaSources.includes(ds.slug) && !ds.slug.startsWith('_system')
-    );
+      !ds.is_non_dia && 
+      !ds.slug.startsWith('_system')
+    ).map(ds => ({
+      ...ds,
+      is_period_independent: ds.is_period_independent ?? false,
+      is_non_dia: ds.is_non_dia ?? false,
+    }));
   };
 
   const fetchPeriods = async (userId: string, sunucuAdi: string, firmaKodu: string): Promise<Period[]> => {
@@ -218,10 +227,27 @@ export function BulkDataSyncManager() {
       const sourcesMap = new Map<string, SourceProgress>();
       for (const source of dataSources) {
         const periodsMap = new Map<number, SourcePeriodProgress>();
-        for (const period of periods) {
+        
+        // Dönem bağımsız kaynaklar sadece aktif dönem (en yüksek period_no) için çekilir
+        const relevantPeriods = source.is_period_independent 
+          ? [periods[0]] // En yüksek period_no (periods zaten DESC sıralı)
+          : periods;
+        
+        console.log(`[BulkSync] ${source.slug}: ${
+          source.is_period_independent 
+            ? 'dönem bağımsız (1 dönem)' 
+            : `dönem bağımlı (${relevantPeriods.length} dönem)`
+        }`);
+        
+        for (const period of relevantPeriods) {
           periodsMap.set(period.period_no, { status: 'pending' });
         }
-        sourcesMap.set(source.slug, { slug: source.slug, name: source.name, periods: periodsMap });
+        sourcesMap.set(source.slug, { 
+          slug: source.slug, 
+          name: source.name, 
+          periods: periodsMap,
+          isPeriodIndependent: source.is_period_independent
+        });
       }
       
       newProgress.set(user.user_id, {
@@ -262,10 +288,13 @@ export function BulkDataSyncManager() {
         const sourceProgress = userProgress.sources.get(source.slug);
         if (!sourceProgress) continue;
         
-        // Dönemleri güncelle (yeni dönemler çekilmiş olabilir)
-        for (const period of periods) {
-          if (!sourceProgress.periods.has(period.period_no)) {
-            sourceProgress.periods.set(period.period_no, { status: 'pending' });
+        // Dönem bağımsız kaynaklar için sadece mevcut dönemleri işle (zaten kısıtlanmış)
+        // Dönem bağımlı kaynaklar için yeni dönemleri ekle
+        if (!source.is_period_independent) {
+          for (const period of periods) {
+            if (!sourceProgress.periods.has(period.period_no)) {
+              sourceProgress.periods.set(period.period_no, { status: 'pending' });
+            }
           }
         }
         
@@ -390,6 +419,26 @@ export function BulkDataSyncManager() {
     if (!syncing) return 0;
     const total = selectedUsers.size;
     return Math.round((currentUserIndex / total) * 100);
+  };
+
+  // Hata mesajlarını kullanıcı dostu hale getir
+  const getUserFriendlyError = (error: string) => {
+    if (error.includes('INSUFFICIENT_PRIVILEGES')) {
+      return 'DIA yetkisi eksik';
+    }
+    if (error.includes('Timeout') || error.includes('timeout')) {
+      return 'Zaman aşımı - Veri çok büyük';
+    }
+    if (error.includes('INVALID_SESSION')) {
+      return 'Oturum geçersiz';
+    }
+    if (error.includes('CREDITS_ERROR') || error.includes('limit')) {
+      return 'API limiti aşıldı';
+    }
+    if (error.length > 50) {
+      return error.substring(0, 47) + '...';
+    }
+    return error;
   };
 
   const getStatusIcon = (status: string) => {
@@ -614,6 +663,15 @@ export function BulkDataSyncManager() {
                                     </CollapsibleTrigger>
                                     <FileText className="w-3 h-3 text-muted-foreground" />
                                     <span className="text-sm">{sourceProgress.name}</span>
+                                    
+                                    {/* Dönem bağımsız badge */}
+                                    {sourceProgress.isPeriodIndependent && (
+                                      <Badge variant="outline" className="text-xs py-0 px-1.5 h-5">
+                                        <Calendar className="w-3 h-3 mr-1" />
+                                        Dönem Bağımsız
+                                      </Badge>
+                                    )}
+                                    
                                     {isRunning ? (
                                       <RefreshCw className="w-3 h-3 text-primary animate-spin ml-auto" />
                                     ) : allSuccess ? (
@@ -641,7 +699,7 @@ export function BulkDataSyncManager() {
                                               <Tooltip>
                                                 <TooltipTrigger asChild>
                                                   <span className="text-destructive ml-auto truncate max-w-[200px] cursor-help">
-                                                    {periodProgress.error}
+                                                    {getUserFriendlyError(periodProgress.error)}
                                                   </span>
                                                 </TooltipTrigger>
                                                 <TooltipContent side="left" className="max-w-sm">
