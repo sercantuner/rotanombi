@@ -135,11 +135,12 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ success: true, message: `Period ${periodNo} locked` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     
-    const { data: ds } = await sb.from('data_sources').select('slug, module, method, name, is_period_independent').eq('is_active', true);
+    const { data: ds } = await sb.from('data_sources').select('slug, module, method, name, is_period_independent, is_non_dia').eq('is_active', true);
     if (!ds?.length) return new Response(JSON.stringify({ success: false, error: "No active data sources" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    const dias = ds.filter(d => !NON_DIA.includes(d.slug) && !d.slug.startsWith('_system'));
+    // DIA dışı kaynakları filtrele (is_non_dia=true olanlar senkronize edilmez)
+    const dias = ds.filter(d => !NON_DIA.includes(d.slug) && !d.slug.startsWith('_system') && !d.is_non_dia);
     const srcs = (action === 'syncAll' || action === 'syncAllForUser') ? dias : dias.filter(d => d.slug === dataSourceSlug);
-    if (!srcs.length) return new Response(JSON.stringify({ success: false, error: `Source not found: ${dataSourceSlug}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!srcs.length) return new Response(JSON.stringify({ success: false, error: `Source not found or non-DIA: ${dataSourceSlug}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     
     let periods = [curDon];
     if (syncAllPeriods ?? true) {

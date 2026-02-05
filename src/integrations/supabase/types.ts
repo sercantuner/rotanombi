@@ -204,6 +204,7 @@ export type Database = {
           filters: Json | null
           id: string
           is_active: boolean | null
+          is_non_dia: boolean | null
           is_period_independent: boolean | null
           is_shared: boolean | null
           last_fetched_at: string | null
@@ -232,6 +233,7 @@ export type Database = {
           filters?: Json | null
           id?: string
           is_active?: boolean | null
+          is_non_dia?: boolean | null
           is_period_independent?: boolean | null
           is_shared?: boolean | null
           last_fetched_at?: string | null
@@ -260,6 +262,7 @@ export type Database = {
           filters?: Json | null
           id?: string
           is_active?: boolean | null
+          is_non_dia?: boolean | null
           is_period_independent?: boolean | null
           is_shared?: boolean | null
           last_fetched_at?: string | null
