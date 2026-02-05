@@ -37,29 +37,61 @@ async function fetchFromDia(diaSession: any, module: string, method: string, don
     const diaUrl = `https://${diaSession.sunucuAdi}.ws.dia.com.tr/api/v3/${module}/json`;
     const fullMethod = method.startsWith(`${module}_`) ? method : `${module}_${method}`;
     
-    // Bellek tasarrufu için limit uygula
+    // DIA API payload - limit: 0 = sınırsız (DIA formatı)
     const payload = { 
       [fullMethod]: { 
         session_id: diaSession.sessionId, 
         firma_kodu: diaSession.firmaKodu, 
         donem_kodu: donemKodu, 
-        limit: MAX_RECORDS_PER_SYNC 
+        limit: 0 // DIA'da 0 = sınırsız, pozitif sayı bazen sorun çıkarıyor
       } 
     };
     
-    console.log(`[DIA Sync] Fetching: ${diaUrl} with method ${fullMethod} (limit: ${MAX_RECORDS_PER_SYNC})`);
+    console.log(`[DIA Sync] Fetching: ${diaUrl} with method ${fullMethod}`);
     
     const response = await fetch(diaUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
     
     const result = await response.json();
-    if (result.error || result.hata) return { success: false, error: result.error?.message || result.hata?.aciklama || "API hatası" };
     
-    const data = result[fullMethod] || result.data || [];
-    const recordCount = Array.isArray(data) ? data.length : 0;
-    console.log(`[DIA Sync] Fetched ${recordCount} records for ${fullMethod}`);
+    // DIA hata kontrolü
+    if (result.code && result.code !== "200") {
+      return { success: false, error: result.msg || `DIA Error: ${result.code}` };
+    }
+    if (result.error || result.hata) {
+      return { success: false, error: result.error?.message || result.hata?.aciklama || "API hatası" };
+    }
     
-    return { success: true, data: Array.isArray(data) ? data : [], totalFetched: recordCount };
+    // DIA API yanıt formatı: { code: "200", result: [...] } veya { code: "200", result: { key: [...] } }
+    let data: any[] = [];
+    
+    if (result.result) {
+      if (Array.isArray(result.result)) {
+        data = result.result;
+      } else if (typeof result.result === 'object' && result.result !== null) {
+        // Nested format: { result: { some_key: [...] } }
+        const firstKey = Object.keys(result.result)[0];
+        if (firstKey && Array.isArray(result.result[firstKey])) {
+          data = result.result[firstKey];
+        }
+      }
+    } else if (result.msg && Array.isArray(result.msg)) {
+      // Alternatif format
+      data = result.msg;
+    } else if (result[fullMethod] && Array.isArray(result[fullMethod])) {
+      // Legacy format
+      data = result[fullMethod];
+    }
+    
+    // Null koruması
+    if (!data || !Array.isArray(data)) {
+      data = [];
+    }
+    
+    const recordCount = data.length;
+    console.log(`[DIA Sync] Fetched ${recordCount} records for ${fullMethod} (period: ${donemKodu})`);
+    
+    return { success: true, data, totalFetched: recordCount };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Bilinmeyen hata" };
   }
