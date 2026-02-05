@@ -196,114 +196,6 @@ export default function SuperAdminPanel() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
-      {/* Üst Bar - Header */}
-      <div className="border-b border-border bg-card px-4 py-3 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Crown className="w-5 h-5 text-warning" />
-          <h2 className="font-semibold text-base hidden sm:block">Süper Admin Paneli</h2>
-        </div>
-        
-        {/* Kullanıcı Arama - Compact Combobox */}
-        <Popover open={userSearchOpen} onOpenChange={setUserSearchOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              role="combobox"
-              aria-expanded={userSearchOpen}
-              className="w-[280px] md:w-[400px] justify-start text-muted-foreground"
-            >
-              <Search className="w-4 h-4 mr-2 shrink-0" />
-              {impersonatedProfile ? (
-                <span className="text-foreground truncate">
-                  {impersonatedProfile.display_name || impersonatedProfile.email}
-                </span>
-              ) : (
-                <span>Kullanıcı ara...</span>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[280px] md:w-[400px] p-0" align="start">
-            <Command>
-              <CommandInput 
-                placeholder="İsim, e-posta veya firma ara..." 
-                value={searchTerm}
-                onValueChange={setSearchTerm}
-              />
-              <CommandList>
-                <CommandEmpty>
-                  {loading ? (
-                    <div className="flex items-center justify-center py-4">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
-                    </div>
-                  ) : (
-                    'Kullanıcı bulunamadı'
-                  )}
-                </CommandEmpty>
-                <CommandGroup heading={`${filteredUsers.length} kullanıcı`}>
-                  {filteredUsers.slice(0, 10).map(user => (
-                    <CommandItem
-                      key={user.user_id}
-                      value={`${user.display_name} ${user.email} ${user.firma_adi}`}
-                      onSelect={() => {
-                        handleViewUser(user);
-                        setUserSearchOpen(false);
-                      }}
-                      className="flex items-center justify-between gap-2 py-2"
-                    >
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
-                          <User className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium text-sm truncate">
-                            {user.display_name || user.email?.split('@')[0] || 'Bilinmeyen'}
-                          </p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {user.email}
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant={impersonatedUserId === user.user_id ? "default" : "ghost"}
-                        className="h-7 text-xs shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleViewUser(user);
-                          setUserSearchOpen(false);
-                        }}
-                      >
-                        <Eye className="w-3 h-3 mr-1" />
-                        Görüntüle
-                      </Button>
-                    </CommandItem>
-                  ))}
-                  {filteredUsers.length > 10 && (
-                    <div className="text-xs text-muted-foreground text-center py-2">
-                      +{filteredUsers.length - 10} kullanıcı daha...
-                    </div>
-                  )}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-        
-        {/* Theme Toggle */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleTheme}
-          className="h-9 w-9 shrink-0"
-        >
-          {theme === 'dark' ? (
-            <Sun className="h-4 w-4" />
-          ) : (
-            <Moon className="h-4 w-4" />
-          )}
-        </Button>
-      </div>
-      
       {/* Ana İçerik */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Impersonation Banner */}
@@ -366,34 +258,133 @@ export default function SuperAdminPanel() {
 
         {/* Tab Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-          <div className="border-b border-border px-2 md:px-4 overflow-x-auto">
-            <TabsList className="h-10 md:h-11 w-max md:w-auto gap-1">
-              <TabsTrigger value="users" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
+          <div className="border-b border-border px-2 md:px-4 flex items-center justify-between gap-2 overflow-x-auto">
+            <TabsList className="h-11 w-max gap-1">
+              <TabsTrigger value="users" className="gap-1.5 text-xs md:text-sm px-2 md:px-3">
                 <Users className="w-3 h-3 md:w-4 md:h-4" />
-                <span className="hidden sm:inline">Kullanıcı İzleme</span>
-                <span className="sm:hidden">Kullanıcılar</span>
+                <span>Kullanıcı İzleme</span>
               </TabsTrigger>
-              <TabsTrigger value="widgets" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
+              <TabsTrigger value="widgets" className="gap-1.5 text-xs md:text-sm px-2 md:px-3">
                 <Boxes className="w-3 h-3 md:w-4 md:h-4" />
-                <span className="hidden sm:inline">Widget Yönetimi</span>
-                <span className="sm:hidden">Widget</span>
+                <span>Widget Yönetimi</span>
               </TabsTrigger>
-              <TabsTrigger value="categories" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
+              <TabsTrigger value="categories" className="gap-1.5 text-xs md:text-sm px-2 md:px-3">
                 <Layers className="w-3 h-3 md:w-4 md:h-4" />
-                <span className="hidden md:inline">Kategoriler</span>
-                <span className="md:hidden">Kat.</span>
+                <span>Kategoriler</span>
               </TabsTrigger>
-              <TabsTrigger value="datasources" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
+              <TabsTrigger value="datasources" className="gap-1.5 text-xs md:text-sm px-2 md:px-3">
                 <Database className="w-3 h-3 md:w-4 md:h-4" />
-                <span className="hidden md:inline">Veri Kaynakları</span>
-                <span className="md:hidden">Veri</span>
+                <span>Veri Kaynakları</span>
               </TabsTrigger>
-              <TabsTrigger value="feedback" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
+              <TabsTrigger value="feedback" className="gap-1.5 text-xs md:text-sm px-2 md:px-3">
                 <MessageSquare className="w-3 h-3 md:w-4 md:h-4" />
-                <span className="hidden md:inline">Geri Bildirimler</span>
-                <span className="md:hidden">G.B.</span>
+                <span>Geri Bildirimler</span>
               </TabsTrigger>
             </TabsList>
+            
+            <div className="flex items-center gap-2">
+              {/* Kullanıcı Arama - Sadece Kullanıcı İzleme tab'ında göster */}
+              {activeTab === 'users' && (
+                <Popover open={userSearchOpen} onOpenChange={setUserSearchOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={userSearchOpen}
+                      className="w-[200px] md:w-[300px] justify-start text-muted-foreground h-9"
+                    >
+                      <Search className="w-4 h-4 mr-2 shrink-0" />
+                      {impersonatedProfile ? (
+                        <span className="text-foreground truncate">
+                          {impersonatedProfile.display_name || impersonatedProfile.email}
+                        </span>
+                      ) : (
+                        <span>Kullanıcı ara...</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[280px] md:w-[400px] p-0" align="end">
+                    <Command>
+                      <CommandInput 
+                        placeholder="İsim, e-posta veya firma ara..." 
+                        value={searchTerm}
+                        onValueChange={setSearchTerm}
+                      />
+                      <CommandList>
+                        <CommandEmpty>
+                          {loading ? (
+                            <div className="flex items-center justify-center py-4">
+                              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                            </div>
+                          ) : (
+                            'Kullanıcı bulunamadı'
+                          )}
+                        </CommandEmpty>
+                        <CommandGroup heading={`${filteredUsers.length} kullanıcı`}>
+                          {filteredUsers.slice(0, 10).map(user => (
+                            <CommandItem
+                              key={user.user_id}
+                              value={`${user.display_name} ${user.email} ${user.firma_adi}`}
+                              onSelect={() => {
+                                handleViewUser(user);
+                                setUserSearchOpen(false);
+                              }}
+                              className="flex items-center justify-between gap-2 py-2"
+                            >
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
+                                  <User className="w-4 h-4 text-muted-foreground" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium text-sm truncate">
+                                    {user.display_name || user.email?.split('@')[0] || 'Bilinmeyen'}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {user.email}
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant={impersonatedUserId === user.user_id ? "default" : "ghost"}
+                                className="h-7 text-xs shrink-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleViewUser(user);
+                                  setUserSearchOpen(false);
+                                }}
+                              >
+                                <Eye className="w-3 h-3 mr-1" />
+                                Görüntüle
+                              </Button>
+                            </CommandItem>
+                          ))}
+                          {filteredUsers.length > 10 && (
+                            <div className="text-xs text-muted-foreground text-center py-2">
+                              +{filteredUsers.length - 10} kullanıcı daha...
+                            </div>
+                          )}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              )}
+              
+              {/* Theme Toggle */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                className="h-9 w-9 shrink-0"
+              >
+                {theme === 'dark' ? (
+                  <Sun className="h-4 w-4" />
+                ) : (
+                  <Moon className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-auto">
