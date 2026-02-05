@@ -373,24 +373,26 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
 
   return (
     <DashboardFilterProvider>
-      <div className="flex h-full">
+      <div className="flex h-full min-h-0">
         {renderSidebar()}
-        <div className="flex-1 p-6 overflow-y-auto overflow-x-hidden">
-          {renderDiaStatus()}
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+          <div className="p-6">
+            {renderDiaStatus()}
 
-          {isPageLoading && (
-            <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Veri kaynakları yükleniyor...
-            </div>
-          )}
-          
-          {selectedPageId && (
-            <ContainerBasedDashboard 
-              pageId={selectedPageId} 
-              widgetData={{}} 
-            />
-          )}
+            {isPageLoading && (
+              <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Veri kaynakları yükleniyor...
+              </div>
+            )}
+            
+            {selectedPageId && (
+              <ContainerBasedDashboard 
+                pageId={selectedPageId} 
+                widgetData={{}} 
+              />
+            )}
+          </div>
         </div>
       </div>
     </DashboardFilterProvider>
