@@ -46,6 +46,7 @@ import { cn } from '@/lib/utils';
        nivoChord,
        nivoRadar,
        nivoGeo,
+        nivoFunnel,
        _nivoCore
      ] = await Promise.all([
        import('@nivo/sankey'),
@@ -53,6 +54,7 @@ import { cn } from '@/lib/utils';
        import('@nivo/chord'),
        import('@nivo/radar'),
        import('@nivo/geo'),
+        import('@nivo/funnel'),
        import('@nivo/core')
      ]);
      
@@ -65,6 +67,8 @@ import { cn } from '@/lib/utils';
        ResponsiveChord: nivoChord.ResponsiveChord,
        // Radar (Örümcek) Grafikleri
        ResponsiveRadar: nivoRadar.ResponsiveRadar,
+        // Funnel (Huni) Grafikleri
+        ResponsiveFunnel: nivoFunnel.ResponsiveFunnel,
        // Choropleth Haritalar (Coğrafi Veri Analizi)
        ResponsiveChoropleth: nivoGeo.ResponsiveChoropleth,
        ResponsiveGeoMap: nivoGeo.ResponsiveGeoMap,
@@ -109,6 +113,7 @@ import { cn } from '@/lib/utils';
    ResponsiveSunburst: () => null,
    ResponsiveChord: () => null,
    ResponsiveRadar: () => null,
+    ResponsiveFunnel: () => null,
    ResponsiveChoropleth: () => null,
    ResponsiveGeoMap: () => null,
    useTheme: () => ({}),
@@ -334,7 +339,7 @@ export function BuilderWidgetRenderer({
   const { filters, crossFilter, setCrossFilter, clearCrossFilter } = useGlobalFilters();
   
   // Veri çekme - global filtreler ile
-  const { data, rawData, isLoading, error, refetch } = useDynamicWidgetData(builderConfig, filters);
+  const { data, rawData, multiQueryData, isLoading, error, refetch } = useDynamicWidgetData(builderConfig, filters);
   
   // DEBUG: Widget veri durumu - SADECE development modunda
   if (process.env.NODE_ENV === 'development') {
@@ -596,12 +601,13 @@ export function BuilderWidgetRenderer({
         'Map',      // Leaflet harita bileşenleri
         'crossFilter', // Aktif çapraz filtre state'i
         'onCrossFilter', // Çapraz filtre oluşturma callback'i
-        'Nivo',     // Nivo bileşenleri (Sankey, Sunburst, Chord, Radar, Geo)
+        'multiData', // Multi-query ham sonuçları (query sırası ile)
+        'Nivo',     // Nivo bileşenleri (Sankey, Sunburst, Chord, Radar, Geo, Funnel)
         customCode
       );
       
       // Custom widget'a colors, filters, crossFilter ve onCrossFilter prop'ları geç
-       const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters, UIScope, mapScope, crossFilter, handleCrossFilter, nivoScope);
+        const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters, UIScope, mapScope, crossFilter, handleCrossFilter, multiQueryData, nivoScope);
       
       if (typeof WidgetComponent !== 'function') {
         return (
@@ -637,6 +643,7 @@ export function BuilderWidgetRenderer({
                   filters={filters} 
                   crossFilter={crossFilter}
                   onCrossFilter={handleCrossFilter}
+                  multiData={multiQueryData}
                 />
               </div>
             </ErrorBoundary>

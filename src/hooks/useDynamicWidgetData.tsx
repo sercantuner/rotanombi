@@ -20,6 +20,9 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 interface DynamicWidgetDataResult {
   data: any;
   rawData: any[];
+  // Multi-query widget'larda her sorgunun ham sonucunu (config.multiQuery.queries sırası ile)
+  // custom widget'lara aktarabilmek için kullanılır.
+  multiQueryData?: any[][] | null;
   isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -630,6 +633,9 @@ export function useDynamicWidgetData(
   // Raw veriyi tut (filtrelenmemiş) - filtre değişikliğinde yeniden API çağrısı yapmadan işle
   const rawDataCacheRef = useRef<any[]>([]);
   const hasInitialDataRef = useRef(false);
+
+  // Multi-query ham sonuçları (query sırası ile)
+  const multiQueryDataRef = useRef<any[][] | null>(null);
   
   // OPTIMIZATION: Config'i stabil JSON string'e çevir - dependency kontrolü için
   const configKey = useMemo(() => config ? JSON.stringify(config) : '', [config]);
@@ -807,6 +813,7 @@ export function useDynamicWidgetData(
       setRawData([]);
       rawDataCacheRef.current = [];
       hasInitialDataRef.current = false;
+      multiQueryDataRef.current = null;
       return;
     }
     
@@ -871,6 +878,10 @@ export function useDynamicWidgetData(
           queryResults[query.id] = [];
           incMiss();
         }
+
+        // Custom code widget'lar için: sorgu sonuçlarını sıra bazlı diziye çevir
+        // (config.multiQuery.queries dizisindeki sırayı korur)
+        multiQueryDataRef.current = config.multiQuery.queries.map((q) => queryResults[q.id] || []);
         
         // Birleştirmeleri uygula
         const primaryId = config.multiQuery.primaryQueryId || config.multiQuery.queries[0]?.id;
@@ -881,6 +892,7 @@ export function useDynamicWidgetData(
           fetchedData = applyMerge(fetchedData, rightData, merge);
         }
       } else {
+        multiQueryDataRef.current = null;
         // Tekli sorgu - CACHE-FIRST STRATEJİ (Merkezi Mimari)
         // Widget'lar asla kendi API çağrısı yapmaz - her zaman cache'den okur
         
@@ -1011,5 +1023,5 @@ export function useDynamicWidgetData(
     prevFiltersKeyRef.current = globalFiltersKey;
   }, [globalFiltersKey, processDataWithFilters]);
 
-  return { data, rawData, isLoading, error, refetch: fetchData };
+  return { data, rawData, multiQueryData: multiQueryDataRef.current, isLoading, error, refetch: fetchData };
 }

@@ -98,6 +98,7 @@ const EmptyMapScope = {
    ResponsiveSunburst: () => null,
    ResponsiveChord: () => null,
    ResponsiveRadar: () => null,
+    ResponsiveFunnel: () => null,
    ResponsiveChoropleth: () => null,
    ResponsiveGeoMap: () => null,
    useTheme: () => ({}),
@@ -158,6 +159,7 @@ const initMapScope = async () => {
        nivoChord,
        nivoRadar,
        nivoGeo,
+        nivoFunnel,
        _nivoCore
      ] = await Promise.all([
        import('@nivo/sankey'),
@@ -165,6 +167,7 @@ const initMapScope = async () => {
        import('@nivo/chord'),
        import('@nivo/radar'),
        import('@nivo/geo'),
+        import('@nivo/funnel'),
        import('@nivo/core')
      ]);
      
@@ -173,6 +176,7 @@ const initMapScope = async () => {
        ResponsiveSunburst: nivoSunburst.ResponsiveSunburst,
        ResponsiveChord: nivoChord.ResponsiveChord,
        ResponsiveRadar: nivoRadar.ResponsiveRadar,
+        ResponsiveFunnel: nivoFunnel.ResponsiveFunnel,
        ResponsiveChoropleth: nivoGeo.ResponsiveChoropleth,
        ResponsiveGeoMap: nivoGeo.ResponsiveGeoMap,
        getTheme: (isDark: boolean) => ({
@@ -1034,6 +1038,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
         'filters',
         'UI',
         'Map',
+        'multiData',
         'Nivo',
         customCode
       );
@@ -1049,7 +1054,11 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
         'hsl(280, 70%, 55%)',
       ];
       
-       const WidgetComponent = fn(React, sampleData, LucideIcons, RechartsScope, previewColors, {}, UIScope, mapScope, nivoScope);
+      const previewMultiData = isMultiQueryMode && multiQuery?.queries?.length
+        ? multiQuery.queries.map((q) => mergedQueryData[q.id] || [])
+        : null;
+
+       const WidgetComponent = fn(React, sampleData, LucideIcons, RechartsScope, previewColors, {}, UIScope, mapScope, previewMultiData, nivoScope);
       
       if (typeof WidgetComponent !== 'function') {
         return { 
@@ -1062,7 +1071,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
     } catch (err: any) {
       return { component: null, error: err.message };
     }
-  }, [customCode, sampleData, mapScope]);
+  }, [customCode, sampleData, mapScope, isMultiQueryMode, multiQuery, mergedQueryData, nivoScope]);
 
   // Error state'i güncelle
   useEffect(() => {
