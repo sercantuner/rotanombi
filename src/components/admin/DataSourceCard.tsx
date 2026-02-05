@@ -1,9 +1,8 @@
 // DataSourceCard - Veri Modeli canvas'ında gösterilen sürüklenebilir kart
 
-import React, { useState, useRef, useCallback } from 'react';
-import { Database, Key, Hash, ChevronDown, ChevronUp, GripVertical, MoreVertical } from 'lucide-react';
+import React, { useRef, useCallback } from 'react';
+import { Database, Key, Hash, GripVertical } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -48,15 +47,12 @@ export function DataSourceCard({
   isDropTarget,
   highlightedField,
 }: DataSourceCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+  const [isDragging, setIsDragging] = React.useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
   const initialPos = useRef<{ x: number; y: number } | null>(null);
 
   const fields = dataSource.last_fields || [];
-  const visibleFields = isExpanded ? fields : fields.slice(0, 6);
-  const hiddenCount = fields.length - 6;
 
   // Kart sürükleme
   const handleCardMouseDown = useCallback((e: React.MouseEvent) => {
@@ -147,8 +143,8 @@ export function DataSourceCard({
       
       <CardContent className="p-0">
         <div className="border-t border-border">
-          <ScrollArea className={cn("px-2 py-1", isExpanded ? "max-h-64" : "max-h-40")}>
-            {visibleFields.map((field) => (
+          <ScrollArea className="h-48 px-2 py-1">
+            {fields.map((field) => (
               <div
                 key={field}
                 className={cn(
@@ -175,31 +171,9 @@ export function DataSourceCard({
           </ScrollArea>
         </div>
 
-        {hiddenCount > 0 && (
-          <div className="border-t border-border">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full h-8 text-xs text-muted-foreground hover:text-foreground"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsExpanded(!isExpanded);
-              }}
-            >
-              {isExpanded ? (
-                <>
-                  <ChevronUp className="w-3 h-3 mr-1" />
-                  Daralt
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="w-3 h-3 mr-1" />
-                  {hiddenCount} alan daha
-                </>
-              )}
-            </Button>
-          </div>
-        )}
+        <div className="border-t border-border px-2 py-1.5 text-xs text-muted-foreground text-center">
+          {fields.length} alan
+        </div>
       </CardContent>
     </Card>
   );
