@@ -1,4 +1,5 @@
 // BulkDataSyncManager - Tüm kullanıcılar için toplu veri senkronizasyonu
+// Kaynak ve dönem bazlı orchestration ile detaylı ilerleme gösterimi
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -12,7 +13,11 @@ import {
   Play,
   AlertCircle,
   Building2,
-  StopCircle
+  StopCircle,
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  Layers
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -20,6 +25,8 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface UserWithDiaConfig {
   user_id: string;
@@ -31,11 +38,37 @@ interface UserWithDiaConfig {
   donem_kodu: string | null;
 }
 
-interface SyncProgress {
+interface DataSource {
+  slug: string;
+  name: string;
+  module: string;
+  method: string;
+}
+
+interface Period {
+  period_no: number;
+  period_name: string | null;
+}
+
+interface SourcePeriodProgress {
+  status: 'pending' | 'running' | 'success' | 'error' | 'skipped';
+  recordsFetched?: number;
+  error?: string;
+}
+
+interface SourceProgress {
+  slug: string;
+  name: string;
+  periods: Map<number, SourcePeriodProgress>;
+}
+
+interface UserProgress {
   userId: string;
-  status: 'pending' | 'running' | 'success' | 'error';
-  message?: string;
-  recordsTotal?: number;
+  status: 'pending' | 'running' | 'success' | 'error' | 'partial';
+  sources: Map<string, SourceProgress>;
+  totalRecords: number;
+  errorCount: number;
+  successCount: number;
 }
 
 export function BulkDataSyncManager() {
@@ -43,14 +76,19 @@ export function BulkDataSyncManager() {
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [progress, setProgress] = useState<Map<string, SyncProgress>>(new Map());
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [progress, setProgress] = useState<Map<string, UserProgress>>(new Map());
+  const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
+  const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   
-  // Acil stop için basit flag - useRef kullanarak render'lar arası kalıcılık
+  // Sync statistics
+  const [currentUserIndex, setCurrentUserIndex] = useState(0);
+  const [currentSourceIndex, setCurrentSourceIndex] = useState(0);
+  const [currentPeriodIndex, setCurrentPeriodIndex] = useState(0);
+  
+  // Stop flag
   const stopRequestedRef = useRef(false);
   const [stopping, setStopping] = useState(false);
 
-  // DIA yapılandırması olan kullanıcıları yükle
   useEffect(() => {
     loadUsers();
   }, []);
@@ -69,7 +107,6 @@ export function BulkDataSyncManager() {
       toast.error('Kullanıcılar yüklenemedi');
     } else {
       // Aynı sunucu/firma kombinasyonuna sahip kullanıcıları filtrele
-      // Her sunucu için sadece bir kullanıcı göster
       const seenServers = new Set<string>();
       const uniqueUsers = (data || []).filter(user => {
         const serverKey = `${user.dia_sunucu_adi}:${user.firma_kodu}`;
@@ -81,7 +118,6 @@ export function BulkDataSyncManager() {
       });
       
       setUsers(uniqueUsers);
-      // Varsayılan olarak tümünü seç
       setSelectedUsers(new Set(uniqueUsers.map(u => u.user_id)));
     }
     
@@ -106,108 +142,221 @@ export function BulkDataSyncManager() {
     }
   };
 
+  const toggleUserExpanded = (userId: string) => {
+    const newExpanded = new Set(expandedUsers);
+    if (newExpanded.has(userId)) {
+      newExpanded.delete(userId);
+    } else {
+      newExpanded.add(userId);
+    }
+    setExpandedUsers(newExpanded);
+  };
+
+  const toggleSourceExpanded = (key: string) => {
+    const newExpanded = new Set(expandedSources);
+    if (newExpanded.has(key)) {
+      newExpanded.delete(key);
+    } else {
+      newExpanded.add(key);
+    }
+    setExpandedSources(newExpanded);
+  };
+
+  const fetchDataSources = async (): Promise<DataSource[]> => {
+    const { data } = await supabase
+      .from('data_sources')
+      .select('slug, name, module, method')
+      .eq('is_active', true);
+    
+    // DIA dışı kaynakları filtrele
+    const nonDiaSources = ['takvim', '_system_calendar', 'system_calendar'];
+    return (data || []).filter(ds => 
+      !nonDiaSources.includes(ds.slug) && !ds.slug.startsWith('_system')
+    );
+  };
+
+  const fetchPeriods = async (userId: string, sunucuAdi: string, firmaKodu: string): Promise<Period[]> => {
+    // Önce veritabanından dene
+    const { data: dbPeriods } = await supabase
+      .from('firma_periods')
+      .select('period_no, period_name')
+      .eq('sunucu_adi', sunucuAdi)
+      .eq('firma_kodu', firmaKodu)
+      .order('period_no', { ascending: false });
+    
+    if (dbPeriods?.length) {
+      return dbPeriods;
+    }
+    
+    // DB'de yoksa, edge function çağrısı sırasında çekilecek
+    // Şimdilik varsayılan dönem
+    return [{ period_no: 1, period_name: 'Dönem 1' }];
+  };
+
   const startBulkSync = async () => {
     if (selectedUsers.size === 0) {
       toast.warning('En az bir kullanıcı seçin');
       return;
     }
 
-    // Stop flag'i sıfırla
+    stopRequestedRef.current = false;
     setStopping(false);
     setSyncing(true);
-    setCurrentIndex(0);
+    setCurrentUserIndex(0);
+    setCurrentSourceIndex(0);
+    setCurrentPeriodIndex(0);
     
-    // Seçili kullanıcıları al (liste zaten tekilleştirilmiş)
     const usersToSync = users.filter(u => selectedUsers.has(u.user_id));
+    const dataSources = await fetchDataSources();
     
-    const newProgress = new Map<string, SyncProgress>();
+    // Progress map'i hazırla
+    const newProgress = new Map<string, UserProgress>();
     
-    // Tümünü pending olarak işaretle
-    usersToSync.forEach(u => {
-      newProgress.set(u.user_id, { userId: u.user_id, status: 'pending' });
-    });
+    for (const user of usersToSync) {
+      const periods = await fetchPeriods(user.user_id, user.dia_sunucu_adi!, user.firma_kodu!);
+      
+      const sourcesMap = new Map<string, SourceProgress>();
+      for (const source of dataSources) {
+        const periodsMap = new Map<number, SourcePeriodProgress>();
+        for (const period of periods) {
+          periodsMap.set(period.period_no, { status: 'pending' });
+        }
+        sourcesMap.set(source.slug, { slug: source.slug, name: source.name, periods: periodsMap });
+      }
+      
+      newProgress.set(user.user_id, {
+        userId: user.user_id,
+        status: 'pending',
+        sources: sourcesMap,
+        totalRecords: 0,
+        errorCount: 0,
+        successCount: 0
+      });
+    }
     
-    // Stop flag'i sıfırla
-    stopRequestedRef.current = false;
+    setProgress(new Map(newProgress));
 
-    // Sırayla her kullanıcı için sync yap
-    for (let i = 0; i < usersToSync.length; i++) {
-      // Acil stop kontrolü
-      if (stopRequestedRef.current) {
-        // Kalan kullanıcıları "cancelled" olarak işaretle
-        for (let j = i; j < usersToSync.length; j++) {
-          const remainingUser = usersToSync[j];
-          if (newProgress.get(remainingUser.user_id)?.status === 'pending') {
-            newProgress.set(remainingUser.user_id, { 
-              userId: remainingUser.user_id, 
-              status: 'error',
-              message: 'İptal edildi',
-            });
+    // Kullanıcı bazlı sync
+    for (let userIdx = 0; userIdx < usersToSync.length; userIdx++) {
+      if (stopRequestedRef.current) break;
+      
+      const user = usersToSync[userIdx];
+      setCurrentUserIndex(userIdx + 1);
+      
+      // Kullanıcıyı running yap
+      const userProgress = newProgress.get(user.user_id)!;
+      userProgress.status = 'running';
+      setProgress(new Map(newProgress));
+      setExpandedUsers(new Set([user.user_id]));
+      
+      // Dönemleri tekrar çek (edge function çağrısı içinde güncellenmiş olabilir)
+      const periods = await fetchPeriods(user.user_id, user.dia_sunucu_adi!, user.firma_kodu!);
+      
+      // Her kaynak için
+      for (let sourceIdx = 0; sourceIdx < dataSources.length; sourceIdx++) {
+        if (stopRequestedRef.current) break;
+        
+        const source = dataSources[sourceIdx];
+        setCurrentSourceIndex(sourceIdx + 1);
+        
+        const sourceProgress = userProgress.sources.get(source.slug);
+        if (!sourceProgress) continue;
+        
+        // Dönemleri güncelle (yeni dönemler çekilmiş olabilir)
+        for (const period of periods) {
+          if (!sourceProgress.periods.has(period.period_no)) {
+            sourceProgress.periods.set(period.period_no, { status: 'pending' });
           }
         }
-        setProgress(new Map(newProgress));
-        break;
-      }
-
-      const user = usersToSync[i];
-      setCurrentIndex(i + 1);
-      
-      // Running olarak güncelle
-      newProgress.set(user.user_id, { userId: user.user_id, status: 'running' });
-      setProgress(new Map(newProgress));
-
-      try {
-        const response = await supabase.functions.invoke('dia-data-sync', {
-          body: {
-            action: 'syncAllForUser',
-            targetUserId: user.user_id,
-          },
-        });
-
-        // Stop sonrası response gelirse kontrol et
-        if (stopRequestedRef.current) {
-          newProgress.set(user.user_id, { 
-            userId: user.user_id, 
-            status: 'error',
-            message: 'İptal edildi',
-          });
-          setProgress(new Map(newProgress));
-          continue;
-        }
-
-        if (response.error) {
-          throw new Error(response.error.message);
-        }
-
-        const data = response.data;
         
-        if (data.success) {
-          const totalRecords = data.results?.reduce((sum: number, r: any) => sum + (r.recordsFetched || 0), 0) || 0;
-          newProgress.set(user.user_id, { 
-            userId: user.user_id, 
-            status: 'success',
-            message: `${data.totalSynced || 0} kaynak, ${data.periodsProcessed || 1} dönem senkronize edildi`,
-            recordsTotal: totalRecords,
-          });
-        } else {
-          newProgress.set(user.user_id, { 
-            userId: user.user_id,
-            status: 'error',
-            message: data.error || 'Bilinmeyen hata',
-          });
+        // Her dönem için
+        const periodNos = Array.from(sourceProgress.periods.keys()).sort((a, b) => b - a);
+        
+        for (let periodIdx = 0; periodIdx < periodNos.length; periodIdx++) {
+          if (stopRequestedRef.current) {
+            // Kalan tümünü skipped yap
+            for (let p = periodIdx; p < periodNos.length; p++) {
+              sourceProgress.periods.set(periodNos[p], { status: 'skipped', error: 'İptal edildi' });
+            }
+            break;
+          }
+          
+          const periodNo = periodNos[periodIdx];
+          setCurrentPeriodIndex(periodIdx + 1);
+          
+          // Running olarak işaretle
+          sourceProgress.periods.set(periodNo, { status: 'running' });
+          setProgress(new Map(newProgress));
+          
+          try {
+            // Tek kaynak + tek dönem sync
+            const response = await supabase.functions.invoke('dia-data-sync', {
+              body: {
+                action: 'syncSingleSource',
+                targetUserId: user.user_id,
+                dataSourceSlug: source.slug,
+                periodNo: periodNo,
+              },
+            });
+
+            if (stopRequestedRef.current) {
+              sourceProgress.periods.set(periodNo, { status: 'skipped', error: 'İptal edildi' });
+              continue;
+            }
+
+            if (response.error) {
+              sourceProgress.periods.set(periodNo, { 
+                status: 'error', 
+                error: response.error.message || 'Edge function hatası' 
+              });
+              userProgress.errorCount++;
+            } else if (response.data?.success) {
+              sourceProgress.periods.set(periodNo, { 
+                status: 'success', 
+                recordsFetched: response.data.recordsFetched || 0 
+              });
+              userProgress.totalRecords += response.data.recordsFetched || 0;
+              userProgress.successCount++;
+            } else {
+              sourceProgress.periods.set(periodNo, { 
+                status: 'error', 
+                error: response.data?.error || 'Bilinmeyen hata' 
+              });
+              userProgress.errorCount++;
+            }
+          } catch (error) {
+            sourceProgress.periods.set(periodNo, { 
+              status: 'error', 
+              error: error instanceof Error ? error.message : 'Bağlantı hatası' 
+            });
+            userProgress.errorCount++;
+          }
+          
+          setProgress(new Map(newProgress));
+          
+          // Rate limiting - dönemler arası kısa bekleme
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
-      } catch (error) {
-        newProgress.set(user.user_id, { 
-          userId: user.user_id, 
-          status: 'error',
-          message: error instanceof Error ? error.message : 'Bağlantı hatası',
-        });
+        
+        // Kaynaklar arası bekleme
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      
+      // Kullanıcı durumunu belirle
+      if (stopRequestedRef.current) {
+        userProgress.status = 'error';
+      } else if (userProgress.errorCount === 0) {
+        userProgress.status = 'success';
+      } else if (userProgress.successCount > 0) {
+        userProgress.status = 'partial';
+      } else {
+        userProgress.status = 'error';
       }
       
       setProgress(new Map(newProgress));
       
-      // Rate limiting - her kullanıcı arasında 2 saniye bekle (stop edilmediyse)
-      if (i < usersToSync.length - 1 && !stopRequestedRef.current) {
+      // Kullanıcılar arası bekleme
+      if (userIdx < usersToSync.length - 1 && !stopRequestedRef.current) {
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
@@ -216,40 +365,49 @@ export function BulkDataSyncManager() {
     setStopping(false);
     stopRequestedRef.current = false;
     
-    const successCount = Array.from(newProgress.values()).filter(p => p.status === 'success').length;
-    const errorCount = Array.from(newProgress.values()).filter(p => p.status === 'error').length;
-    const cancelledCount = Array.from(newProgress.values()).filter(p => p.message === 'İptal edildi').length;
+    // Sonuç özeti
+    const successUsers = Array.from(newProgress.values()).filter(p => p.status === 'success').length;
+    const partialUsers = Array.from(newProgress.values()).filter(p => p.status === 'partial').length;
+    const errorUsers = Array.from(newProgress.values()).filter(p => p.status === 'error').length;
+    const totalRecords = Array.from(newProgress.values()).reduce((sum, p) => sum + p.totalRecords, 0);
     
-    if (cancelledCount > 0) {
-      toast.info(`Senkronizasyon durduruldu. ${successCount} başarılı, ${cancelledCount} iptal edildi`);
-    } else if (errorCount === 0) {
-      toast.success(`${successCount} sunucu için veri senkronizasyonu tamamlandı`);
+    if (stopRequestedRef.current) {
+      toast.info('Senkronizasyon durduruldu');
+    } else if (errorUsers === 0) {
+      toast.success(`${successUsers} sunucu için ${totalRecords.toLocaleString()} kayıt senkronize edildi`);
     } else {
-      toast.warning(`${successCount} başarılı, ${errorCount} başarısız`);
+      toast.warning(`${successUsers} başarılı, ${partialUsers} kısmi, ${errorUsers} başarısız`);
     }
   };
 
   const stopSync = () => {
     stopRequestedRef.current = true;
     setStopping(true);
-    toast.info('Senkronizasyon durduruluyor... Mevcut işlem bittikten sonra duracak.');
+    toast.info('Senkronizasyon durduruluyor...');
   };
 
-  const getProgressPercent = () => {
+  const getOverallProgress = () => {
     if (!syncing) return 0;
-    return Math.round((currentIndex / selectedUsers.size) * 100);
+    const total = selectedUsers.size;
+    return Math.round((currentUserIndex / total) * 100);
   };
 
-  const getStatusIcon = (status: SyncProgress['status']) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pending':
-        return <Clock className="w-4 h-4 text-muted-foreground" />;
+        return <Clock className="w-3 h-3 text-muted-foreground" />;
       case 'running':
-        return <RefreshCw className="w-4 h-4 text-primary animate-spin" />;
+        return <RefreshCw className="w-3 h-3 text-primary animate-spin" />;
       case 'success':
-        return <CheckCircle className="w-4 h-4 text-success" />;
+        return <CheckCircle className="w-3 h-3 text-green-500" />;
       case 'error':
-        return <XCircle className="w-4 h-4 text-destructive" />;
+        return <XCircle className="w-3 h-3 text-destructive" />;
+      case 'partial':
+        return <AlertCircle className="w-3 h-3 text-yellow-500" />;
+      case 'skipped':
+        return <Clock className="w-3 h-3 text-muted-foreground" />;
+      default:
+        return null;
     }
   };
 
@@ -262,169 +420,262 @@ export function BulkDataSyncManager() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Database className="w-5 h-5" />
-                Toplu Veri Senkronizasyonu
-              </CardTitle>
-              <CardDescription>
-                Tüm kayıtlı kullanıcılar için DIA'dan veri çekip veritabanına kaydet
-              </CardDescription>
+    <TooltipProvider>
+      <div className="space-y-6">
+        {/* Header */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="w-5 h-5" />
+                  Toplu Veri Senkronizasyonu
+                </CardTitle>
+                <CardDescription>
+                  Kaynak ve dönem bazlı detaylı senkronizasyon
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">
+                  <Users className="w-3 h-3 mr-1" />
+                  {users.length} sunucu
+                </Badge>
+                <Badge variant="outline">
+                  {selectedUsers.size} seçili
+                </Badge>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">
-                <Users className="w-3 h-3 mr-1" />
-                {users.length} kullanıcı
-              </Badge>
-              <Badge variant="outline">
-                {selectedUsers.size} seçili
-              </Badge>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-4">
-            <Button
-              onClick={startBulkSync}
-              disabled={syncing || selectedUsers.size === 0}
-              className="gap-2"
-            >
-              {syncing ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Senkronize ediliyor...
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4" />
-                  Senkronizasyonu Başlat
-                </>
-              )}
-            </Button>
-            
-            {/* Acil Stop Butonu */}
-            {syncing && (
-              <Button 
-                variant="destructive" 
-                onClick={stopSync}
-                disabled={stopping}
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-4">
+              <Button
+                onClick={startBulkSync}
+                disabled={syncing || selectedUsers.size === 0}
                 className="gap-2"
               >
-                <StopCircle className="w-4 h-4" />
-                {stopping ? 'Durduruluyor...' : 'Acil Durdur'}
+                {syncing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Senkronize ediliyor...
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4" />
+                    Senkronizasyonu Başlat
+                  </>
+                )}
               </Button>
-            )}
-            
-            <Button variant="outline" onClick={loadUsers} disabled={syncing}>
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Listeyi Yenile
-            </Button>
-          </div>
-          
-          {syncing && (
-            <div className="mt-4 space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">
-                  İlerleme {stopping && '(durduruluyor...)'}
-                </span>
-                <span className="font-medium">{currentIndex} / {selectedUsers.size}</span>
-              </div>
-              <Progress value={getProgressPercent()} className="h-2" />
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Kullanıcı Listesi */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">DIA Yapılandırması Olan Kullanıcılar</CardTitle>
-            <Button variant="ghost" size="sm" onClick={toggleAll} disabled={syncing}>
-              {selectedUsers.size === users.length ? 'Seçimi Kaldır' : 'Tümünü Seç'}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="h-[400px]">
-            <div className="divide-y divide-border">
-              {users.map(user => {
-                const userProgress = progress.get(user.user_id);
-                
-                return (
-                  <div 
-                    key={user.user_id}
-                    className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors"
-                  >
-                    <Checkbox
-                      checked={selectedUsers.has(user.user_id)}
-                      onCheckedChange={() => toggleUser(user.user_id)}
-                      disabled={syncing}
-                    />
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium truncate">
-                          {user.display_name || user.email?.split('@')[0] || 'Bilinmeyen'}
-                        </span>
-                        {user.firma_adi && (
-                          <Badge variant="outline" className="text-xs">
-                            <Building2 className="w-3 h-3 mr-1" />
-                            {user.firma_adi}
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground truncate">
-                        {user.email} • {user.dia_sunucu_adi}
-                      </p>
-                    </div>
-                    
-                    <div className="flex items-center gap-3 shrink-0">
-                      <Badge variant="secondary" className="text-xs">
-                        Firma: {user.firma_kodu || '-'} / Dönem: {user.donem_kodu || '-'}
-                      </Badge>
-                      
-                      {userProgress && (
-                        <div className="flex items-center gap-2 min-w-[200px] max-w-[350px]">
-                          {getStatusIcon(userProgress.status)}
-                          <span className="text-xs text-muted-foreground">
-                            {userProgress.status === 'running' && 'Senkronize ediliyor...'}
-                            {userProgress.status === 'success' && (
-                              <span className="text-success">
-                                {userProgress.recordsTotal || 0} kayıt
-                              </span>
-                            )}
-                            {userProgress.status === 'error' && (
-                              <span className="text-destructive break-words whitespace-normal">
-                                {userProgress.message || 'Bilinmeyen hata'}
-                              </span>
-                            )}
-                            {userProgress.status === 'pending' && 'Bekliyor'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
               
-              {users.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <AlertCircle className="w-10 h-10 text-muted-foreground mb-3" />
-                  <p className="text-muted-foreground">
-                    DIA yapılandırması olan kullanıcı bulunamadı
-                  </p>
-                </div>
+              {syncing && (
+                <Button 
+                  variant="destructive" 
+                  onClick={stopSync}
+                  disabled={stopping}
+                  className="gap-2"
+                >
+                  <StopCircle className="w-4 h-4" />
+                  {stopping ? 'Durduruluyor...' : 'Acil Durdur'}
+                </Button>
               )}
+              
+              <Button variant="outline" onClick={loadUsers} disabled={syncing}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Yenile
+              </Button>
             </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
-    </div>
+            
+            {syncing && (
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Sunucu {currentUserIndex} / {selectedUsers.size}
+                    {stopping && ' (durduruluyor...)'}
+                  </span>
+                  <span className="font-medium">{getOverallProgress()}%</span>
+                </div>
+                <Progress value={getOverallProgress()} className="h-2" />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* User List with Detailed Progress */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">DIA Sunucuları</CardTitle>
+              <Button variant="ghost" size="sm" onClick={toggleAll} disabled={syncing}>
+                {selectedUsers.size === users.length ? 'Seçimi Kaldır' : 'Tümünü Seç'}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ScrollArea className="h-[500px]">
+              <div className="divide-y divide-border">
+                {users.map(user => {
+                  const userProgress = progress.get(user.user_id);
+                  const isExpanded = expandedUsers.has(user.user_id);
+                  
+                  return (
+                    <Collapsible 
+                      key={user.user_id}
+                      open={isExpanded}
+                      onOpenChange={() => toggleUserExpanded(user.user_id)}
+                    >
+                      <div className="p-4 hover:bg-muted/50 transition-colors">
+                        <div className="flex items-center gap-4">
+                          <Checkbox
+                            checked={selectedUsers.has(user.user_id)}
+                            onCheckedChange={() => toggleUser(user.user_id)}
+                            disabled={syncing}
+                          />
+                          
+                          <CollapsibleTrigger asChild>
+                            <Button variant="ghost" size="sm" className="p-0 h-auto">
+                              {isExpanded ? (
+                                <ChevronDown className="w-4 h-4" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4" />
+                              )}
+                            </Button>
+                          </CollapsibleTrigger>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium truncate">
+                                {user.display_name || user.email?.split('@')[0] || 'Bilinmeyen'}
+                              </span>
+                              {user.firma_adi && (
+                                <Badge variant="outline" className="text-xs">
+                                  <Building2 className="w-3 h-3 mr-1" />
+                                  {user.firma_adi}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground truncate">
+                              {user.dia_sunucu_adi} • Firma: {user.firma_kodu}
+                            </p>
+                          </div>
+                          
+                          <div className="flex items-center gap-3 shrink-0">
+                            {userProgress && (
+                              <>
+                                {getStatusIcon(userProgress.status)}
+                                <span className="text-sm">
+                                  {userProgress.status === 'success' && (
+                                    <span className="text-green-500">
+                                      {userProgress.totalRecords.toLocaleString()} kayıt
+                                    </span>
+                                  )}
+                                  {userProgress.status === 'partial' && (
+                                    <span className="text-yellow-500">
+                                      {userProgress.successCount} başarılı, {userProgress.errorCount} hatalı
+                                    </span>
+                                  )}
+                                  {userProgress.status === 'error' && (
+                                    <span className="text-destructive">Başarısız</span>
+                                  )}
+                                  {userProgress.status === 'running' && (
+                                    <span className="text-primary">Çalışıyor...</span>
+                                  )}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Expanded: Source and Period Details */}
+                      <CollapsibleContent>
+                        {userProgress && (
+                          <div className="px-4 pb-4 pl-16 space-y-2">
+                            {Array.from(userProgress.sources.entries()).map(([slug, sourceProgress]) => {
+                              const sourceKey = `${user.user_id}-${slug}`;
+                              const isSourceExpanded = expandedSources.has(sourceKey);
+                              const allSuccess = Array.from(sourceProgress.periods.values()).every(p => p.status === 'success');
+                              const hasError = Array.from(sourceProgress.periods.values()).some(p => p.status === 'error');
+                              const isRunning = Array.from(sourceProgress.periods.values()).some(p => p.status === 'running');
+                              
+                              return (
+                                <Collapsible 
+                                  key={sourceKey}
+                                  open={isSourceExpanded}
+                                  onOpenChange={() => toggleSourceExpanded(sourceKey)}
+                                >
+                                  <div className="flex items-center gap-2 py-1">
+                                    <CollapsibleTrigger asChild>
+                                      <Button variant="ghost" size="sm" className="p-0 h-auto">
+                                        {isSourceExpanded ? (
+                                          <ChevronDown className="w-3 h-3" />
+                                        ) : (
+                                          <ChevronRight className="w-3 h-3" />
+                                        )}
+                                      </Button>
+                                    </CollapsibleTrigger>
+                                    <FileText className="w-3 h-3 text-muted-foreground" />
+                                    <span className="text-sm">{sourceProgress.name}</span>
+                                    {isRunning ? (
+                                      <RefreshCw className="w-3 h-3 text-primary animate-spin ml-auto" />
+                                    ) : allSuccess ? (
+                                      <CheckCircle className="w-3 h-3 text-green-500 ml-auto" />
+                                    ) : hasError ? (
+                                      <XCircle className="w-3 h-3 text-destructive ml-auto" />
+                                    ) : null}
+                                  </div>
+                                  
+                                  <CollapsibleContent>
+                                    <div className="pl-6 space-y-1">
+                                      {Array.from(sourceProgress.periods.entries())
+                                        .sort((a, b) => b[0] - a[0])
+                                        .map(([periodNo, periodProgress]) => (
+                                          <div key={periodNo} className="flex items-center gap-2 text-xs py-0.5">
+                                            {getStatusIcon(periodProgress.status)}
+                                            <Layers className="w-3 h-3 text-muted-foreground" />
+                                            <span>Dönem {periodNo}</span>
+                                            {periodProgress.status === 'success' && (
+                                              <span className="text-green-500 ml-auto">
+                                                {periodProgress.recordsFetched?.toLocaleString()} kayıt
+                                              </span>
+                                            )}
+                                            {periodProgress.status === 'error' && periodProgress.error && (
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <span className="text-destructive ml-auto truncate max-w-[200px] cursor-help">
+                                                    {periodProgress.error}
+                                                  </span>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="left" className="max-w-sm">
+                                                  <p className="text-xs">{periodProgress.error}</p>
+                                                </TooltipContent>
+                                              </Tooltip>
+                                            )}
+                                          </div>
+                                        ))}
+                                    </div>
+                                  </CollapsibleContent>
+                                </Collapsible>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </CollapsibleContent>
+                    </Collapsible>
+                  );
+                })}
+                
+                {users.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <AlertCircle className="w-10 h-10 text-muted-foreground mb-3" />
+                    <p className="text-muted-foreground">
+                      DIA yapılandırması olan kullanıcı bulunamadı
+                    </p>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </div>
+    </TooltipProvider>
   );
 }
