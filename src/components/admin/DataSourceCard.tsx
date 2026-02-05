@@ -18,6 +18,7 @@ interface DataSourceCardProps {
   isDraggingField: boolean;
   isDropTarget: boolean;
   highlightedField?: string;
+  onCardClick?: (dataSource: DataSource) => void;
 }
 
 // Alan tipi ikonları
@@ -47,6 +48,7 @@ export function DataSourceCard({
   isDraggingField,
   isDropTarget,
   highlightedField,
+  onCardClick,
 }: DataSourceCardProps) {
   const [isDragging, setIsDragging] = React.useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -154,6 +156,7 @@ export function DataSourceCard({
         touchAction: 'none',
       }}
       onMouseDown={handleCardMouseDown}
+      onDoubleClick={() => onCardClick?.(dataSource)}
     >
       <CardHeader className="p-2 pb-1 flex flex-row items-center justify-between space-y-0 grip-handle cursor-grab hover:bg-muted/30 transition-colors rounded-t-lg">
         <div className="flex items-center gap-1.5 min-w-0 flex-1 grip-handle">

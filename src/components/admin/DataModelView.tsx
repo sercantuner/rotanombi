@@ -23,6 +23,7 @@ import { useDataSourceRelationships, DataSourceRelationship, RelationshipFormDat
 import { DataSourceCard } from './DataSourceCard';
 import { RelationshipLine, RelationshipMarkers } from './RelationshipLine';
 import { RelationshipEditor } from './RelationshipEditor';
+import { DataTransformEditor } from './DataTransformEditor';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -107,6 +108,10 @@ export function DataModelView() {
     sourceField?: string;
     targetField?: string;
   } | null>(null);
+
+  // Data Transform Editor state
+  const [transformEditorOpen, setTransformEditorOpen] = useState(false);
+  const [selectedDataSource, setSelectedDataSource] = useState<DataSource | null>(null);
 
   // Aktif veri kaynakları (last_fields olanlar)
   const activeDataSources = useMemo(() => {
@@ -364,6 +369,22 @@ export function DataModelView() {
     } else {
       await createRelationship(data);
     }
+  };
+
+  // Kart tıklandığında - Transform editörünü aç
+  const handleCardClick = useCallback((dataSource: DataSource) => {
+    setSelectedDataSource(dataSource);
+    setTransformEditorOpen(true);
+  }, []);
+
+  // Veri kaynağını güncelle
+  const handleSaveDataSource = async (ds: DataSource, updates: Partial<DataSource>) => {
+    await updateDataSource(ds.id, {
+      filters: updates.filters,
+      sorts: updates.sorts,
+      selected_columns: updates.selected_columns,
+      limit_count: updates.limit_count,
+    } as any);
   };
 
   // Canvas pan - middle mouse button veya boş alana tıklama
@@ -710,6 +731,7 @@ export function DataModelView() {
               isDraggingField={!!dragState?.isDragging}
               isDropTarget={dropTarget?.dataSourceId === ds.id}
               highlightedField={dropTarget?.dataSourceId === ds.id ? dropTarget.field : undefined}
+              onCardClick={handleCardClick}
             />
           ))}
         </div>
@@ -815,6 +837,14 @@ export function DataModelView() {
         onSave={handleSaveRelationship}
         onDelete={deleteRelationship}
         isLoading={isCreating || isUpdating || isDeleting}
+      />
+
+      {/* Veri Dönüşüm Editörü */}
+      <DataTransformEditor
+        dataSource={selectedDataSource}
+        open={transformEditorOpen}
+        onOpenChange={setTransformEditorOpen}
+        onSave={handleSaveDataSource}
       />
     </div>
   );
