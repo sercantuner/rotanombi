@@ -387,7 +387,7 @@ export default function SuperAdminPanel() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-hidden">
             <TabsContent value="users" className="h-full m-0">
               {isImpersonating && impersonatedUserId ? (
                 <ImpersonatedDashboard userId={impersonatedUserId} />
