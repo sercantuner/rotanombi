@@ -295,24 +295,24 @@ const { data, isLoading } = useQuery({
 
 ## Uygulama Aşamaları
 
-### Faz 1: Veritabanı Altyapısı
-- [ ] Tabloları oluştur (migration)
-- [ ] RLS politikaları
-- [ ] İndeksler
+### Faz 1: Veritabanı Altyapısı ✅
+- [x] Tabloları oluştur (migration) - company_data_cache, sync_history, period_sync_status
+- [x] RLS politikaları - şirket bazlı izolasyon
+- [x] İndeksler - performans optimizasyonu
 
-### Faz 2: Sync Engine
-- [ ] dia-data-sync edge function
-- [ ] Dönem kilitleme mantığı
-- [ ] Artımlı güncelleme
+### Faz 2: Sync Engine ✅
+- [x] dia-data-sync edge function
+- [x] Dönem kilitleme mantığı
+- [x] Artımlı güncelleme (_key bazlı upsert)
 
-### Faz 3: Widget Entegrasyonu
-- [ ] useCompanyData hook
-- [ ] useDynamicWidgetData refactor
+### Faz 3: Widget Entegrasyonu (Sonraki Adım)
+- [ ] useCompanyData hook ✅ (oluşturuldu)
+- [ ] useDynamicWidgetData refactor (Supabase'den okumaya geçiş)
 - [ ] Cache fallback (DB boşsa DIA'dan çek)
 
-### Faz 4: UI
-- [ ] Header sync butonu
-- [ ] Ayarlar sayfası veri yönetimi
+### Faz 4: UI ✅
+- [x] Header sync butonu (SyncButton komponenti)
+- [ ] Ayarlar sayfası veri yönetimi sekmesi
 - [ ] Sync progress göstergesi
 
 ---
