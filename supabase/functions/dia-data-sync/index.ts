@@ -12,7 +12,11 @@ interface SyncRequest {
   forceRefresh?: boolean;
   periodNo?: number;
   targetUserId?: string;
+  syncAllPeriods?: boolean; // Tüm dönemler için sync
 }
+
+// DIA dışı veri kaynakları (atlanacak)
+const NON_DIA_SOURCES = ['takvim', '_system_calendar', 'system_calendar'];
 
 interface SyncResult {
   success: boolean;
@@ -189,46 +193,141 @@ Deno.serve(async (req) => {
     const { data: dataSources } = await supabase.from('data_sources').select('slug, module, method, name').eq('is_active', true);
     if (!dataSources?.length) return new Response(JSON.stringify({ success: false, error: "Aktif veri kaynağı bulunamadı" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const sourcesToSync = (action === 'syncAll' || action === 'syncAllForUser') ? dataSources : dataSources.filter(ds => ds.slug === dataSourceSlug);
-    if (!sourcesToSync.length) return new Response(JSON.stringify({ success: false, error: `Veri kaynağı bulunamadı: ${dataSourceSlug}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // DIA dışı veri kaynaklarını filtrele
+    const diaDataSources = dataSources.filter(ds => !NON_DIA_SOURCES.includes(ds.slug) && !ds.slug.startsWith('_system'));
+    
+    const sourcesToSync = (action === 'syncAll' || action === 'syncAllForUser') ? diaDataSources : diaDataSources.filter(ds => ds.slug === dataSourceSlug);
+    if (!sourcesToSync.length) return new Response(JSON.stringify({ success: false, error: `DIA veri kaynağı bulunamadı: ${dataSourceSlug}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    // Tüm dönemleri çek (syncAllPeriods aktifse)
+    const syncAllPeriods = body.syncAllPeriods ?? true; // Varsayılan: tüm dönemler
+    let periodsToSync: number[] = [currentDonem];
+    
+    if (syncAllPeriods) {
+      const { data: firmaPeriods } = await supabase
+        .from('firma_periods')
+        .select('period_no')
+        .eq('sunucu_adi', sunucuAdi)
+        .eq('firma_kodu', firmaKodu)
+        .order('period_no', { ascending: false });
+      
+      if (firmaPeriods?.length) {
+        periodsToSync = firmaPeriods.map(p => p.period_no);
+        console.log(`[DIA Sync] Syncing ${periodsToSync.length} periods: ${periodsToSync.join(', ')}`);
+      }
+    }
 
     const results: SyncResult[] = [];
 
     for (const source of sourcesToSync) {
-      const { data: historyRecord } = await supabase.from('sync_history').insert({ sunucu_adi: sunucuAdi, firma_kodu: firmaKodu, donem_kodu: currentDonem, data_source_slug: source.slug, sync_type: 'incremental', triggered_by: user.id, status: 'running' }).select().single();
+      console.log(`[DIA Sync] Processing source: ${source.slug} (${source.module}/${source.method})`);
+      
+      let totalFetched = 0;
+      let totalInserted = 0;
+      let totalUpdated = 0;
+      let totalDeleted = 0;
+      let hasError = false;
+      let lastError = '';
 
-      try {
-        const { data: periodLock } = await supabase.from('period_sync_status').select('is_locked').eq('sunucu_adi', sunucuAdi).eq('firma_kodu', firmaKodu).eq('donem_kodu', currentDonem).eq('data_source_slug', source.slug).single();
+      for (const periodNo of periodsToSync) {
+        const { data: historyRecord } = await supabase.from('sync_history').insert({ 
+          sunucu_adi: sunucuAdi, 
+          firma_kodu: firmaKodu, 
+          donem_kodu: periodNo, 
+          data_source_slug: source.slug, 
+          sync_type: syncAllPeriods ? 'full' : 'incremental', 
+          triggered_by: user.id, 
+          status: 'running' 
+        }).select().single();
 
-        if (periodLock?.is_locked && !forceRefresh) {
-          results.push({ success: true, dataSourceSlug: source.slug, recordsFetched: 0, recordsInserted: 0, recordsUpdated: 0, recordsDeleted: 0, error: "Dönem kilitli - atlandı" });
-          continue;
+        try {
+          const { data: periodLock } = await supabase.from('period_sync_status')
+            .select('is_locked')
+            .eq('sunucu_adi', sunucuAdi)
+            .eq('firma_kodu', firmaKodu)
+            .eq('donem_kodu', periodNo)
+            .eq('data_source_slug', source.slug)
+            .single();
+
+          if (periodLock?.is_locked && !forceRefresh) {
+            console.log(`[DIA Sync] Period ${periodNo} is locked for ${source.slug}, skipping`);
+            continue;
+          }
+
+          const fetchResult = await fetchFromDia(session, source.module, source.method, periodNo);
+
+          if (!fetchResult.success) {
+            await supabase.from('sync_history').update({ 
+              status: 'failed', 
+              error: fetchResult.error, 
+              completed_at: new Date().toISOString() 
+            }).eq('id', historyRecord.id);
+            hasError = true;
+            lastError = fetchResult.error || 'Bilinmeyen hata';
+            console.error(`[DIA Sync] Failed for ${source.slug} period ${periodNo}: ${lastError}`);
+            continue;
+          }
+
+          const stats = await upsertData(supabase, sunucuAdi, firmaKodu, periodNo, source.slug, fetchResult.data || []);
+
+          await supabase.from('sync_history').update({ 
+            status: 'completed', 
+            records_fetched: fetchResult.data?.length || 0, 
+            records_inserted: stats.inserted, 
+            records_updated: stats.updated, 
+            records_deleted: stats.deleted, 
+            completed_at: new Date().toISOString() 
+          }).eq('id', historyRecord.id);
+
+          await supabase.from('period_sync_status').upsert({ 
+            sunucu_adi: sunucuAdi, 
+            firma_kodu: firmaKodu, 
+            donem_kodu: periodNo, 
+            data_source_slug: source.slug, 
+            last_incremental_sync: new Date().toISOString(), 
+            total_records: (fetchResult.data?.length || 0), 
+            updated_at: new Date().toISOString() 
+          }, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug' });
+
+          totalFetched += fetchResult.data?.length || 0;
+          totalInserted += stats.inserted;
+          totalUpdated += stats.updated;
+          totalDeleted += stats.deleted;
+
+          console.log(`[DIA Sync] Period ${periodNo} for ${source.slug}: ${fetchResult.data?.length || 0} records`);
+
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : "Bilinmeyen hata";
+          if (historyRecord?.id) {
+            await supabase.from('sync_history').update({ 
+              status: 'failed', 
+              error: errorMsg, 
+              completed_at: new Date().toISOString() 
+            }).eq('id', historyRecord.id);
+          }
+          hasError = true;
+          lastError = errorMsg;
         }
-
-        const fetchResult = await fetchFromDia(session, source.module, source.method, currentDonem);
-
-        if (!fetchResult.success) {
-          await supabase.from('sync_history').update({ status: 'failed', error: fetchResult.error, completed_at: new Date().toISOString() }).eq('id', historyRecord.id);
-          results.push({ success: false, dataSourceSlug: source.slug, error: fetchResult.error });
-          continue;
-        }
-
-        const stats = await upsertData(supabase, sunucuAdi, firmaKodu, currentDonem, source.slug, fetchResult.data || []);
-
-        await supabase.from('sync_history').update({ status: 'completed', records_fetched: fetchResult.data?.length || 0, records_inserted: stats.inserted, records_updated: stats.updated, records_deleted: stats.deleted, completed_at: new Date().toISOString() }).eq('id', historyRecord.id);
-
-        await supabase.from('period_sync_status').upsert({ sunucu_adi: sunucuAdi, firma_kodu: firmaKodu, donem_kodu: currentDonem, data_source_slug: source.slug, last_incremental_sync: new Date().toISOString(), total_records: (fetchResult.data?.length || 0), updated_at: new Date().toISOString() }, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug' });
-
-        results.push({ success: true, dataSourceSlug: source.slug, recordsFetched: fetchResult.data?.length || 0, recordsInserted: stats.inserted, recordsUpdated: stats.updated, recordsDeleted: stats.deleted, syncHistoryId: historyRecord.id });
-
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : "Bilinmeyen hata";
-        if (historyRecord?.id) await supabase.from('sync_history').update({ status: 'failed', error: errorMsg, completed_at: new Date().toISOString() }).eq('id', historyRecord.id);
-        results.push({ success: false, dataSourceSlug: source.slug, error: errorMsg });
       }
+
+      results.push({ 
+        success: !hasError || totalFetched > 0, 
+        dataSourceSlug: source.slug, 
+        recordsFetched: totalFetched, 
+        recordsInserted: totalInserted, 
+        recordsUpdated: totalUpdated, 
+        recordsDeleted: totalDeleted,
+        error: hasError ? lastError : undefined
+      });
     }
 
-    return new Response(JSON.stringify({ success: results.every(r => r.success), results, totalSynced: results.filter(r => r.success).length, totalFailed: results.filter(r => !r.success).length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ 
+      success: results.some(r => r.success), 
+      results, 
+      totalSynced: results.filter(r => r.success).length, 
+      totalFailed: results.filter(r => !r.success).length,
+      periodsProcessed: periodsToSync.length
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Beklenmeyen hata";
