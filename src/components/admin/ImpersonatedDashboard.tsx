@@ -375,7 +375,7 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
     <DashboardFilterProvider>
       <div className="flex h-full">
         {renderSidebar()}
-        <div className="flex-1 p-6 overflow-auto">
+        <div className="flex-1 p-6 overflow-y-auto overflow-x-hidden">
           {renderDiaStatus()}
 
           {isPageLoading && (
