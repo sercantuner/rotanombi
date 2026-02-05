@@ -495,7 +495,7 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
  
   if (userPages.length === 0) {
     return (
-       <div className="flex h-full pb-12">
+        <div className="relative flex h-full pb-12">
         {renderSidebar()}
         <div className="flex-1 p-6">
           <div className="flex flex-col items-center justify-center h-64 text-center">
@@ -512,7 +512,7 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
 
   return (
     <DashboardFilterProvider>
-        <div className="flex h-full min-h-0 bg-background pb-12">
+        <div className="relative flex h-full min-h-0 bg-background pb-12">
         {renderSidebar()}
          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-background">
            {isPageLoading && (
