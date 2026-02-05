@@ -271,11 +271,12 @@ export function DataModelView() {
 
       // Drop hedefini bul
       const element = document.elementFromPoint(e.clientX, e.clientY);
-      const fieldItem = element?.closest('.field-item');
+      const fieldItem = element?.closest('.field-item') as HTMLElement | null;
       if (fieldItem) {
-        const card = fieldItem.closest('[data-datasource-id]');
+        const card = fieldItem.closest('[data-datasource-id]') as HTMLElement | null;
         const dsId = card?.getAttribute('data-datasource-id');
-        const fieldName = fieldItem.textContent?.trim();
+        // data-field-name attribute'undan field adını al
+        const fieldName = fieldItem.getAttribute('data-field-name');
         if (dsId && fieldName && dsId !== dragState.sourceDataSourceId) {
           setDropTarget({ dataSourceId: dsId, field: fieldName });
           return;
@@ -326,9 +327,24 @@ export function DataModelView() {
     }
   };
 
-  // Canvas pan
+  // Canvas pan - middle mouse button veya boş alana tıklama
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.target === canvasRef.current) {
+    // Middle mouse button ile her yerden pan yapılabilir
+    if (e.button === 1) {
+      e.preventDefault();
+      setIsPanning(true);
+      panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+      return;
+    }
+    
+    // Sol tık ile sadece boş alandan pan yapılabilir
+    // Kartların veya grid dışı alanların tıklanmasına izin ver
+    const target = e.target as HTMLElement;
+    const isEmptyArea = target === canvasRef.current || 
+                        target.classList.contains('canvas-content') ||
+                        target.tagName === 'svg';
+    
+    if (e.button === 0 && isEmptyArea) {
       setIsPanning(true);
       panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
     }
@@ -545,10 +561,12 @@ export function DataModelView() {
         )}
         
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 canvas-content"
           style={{
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             transformOrigin: '0 0',
+            minWidth: '3000px',
+            minHeight: '2000px',
           }}
         >
           {/* SVG Layer - İlişki çizgileri */}
@@ -588,18 +606,17 @@ export function DataModelView() {
 
           {/* Kartlar */}
           {activeDataSources.map(ds => (
-            <div key={ds.id} data-datasource-id={ds.id}>
-              <DataSourceCard
-                dataSource={ds}
-                position={cardPositions[ds.id] || { x: 0, y: 0 }}
-                onPositionChange={handlePositionChange}
-                onFieldDragStart={handleFieldDragStart}
-                onFieldDrop={handleFieldDrop}
-                isDraggingField={!!dragState?.isDragging}
-                isDropTarget={dropTarget?.dataSourceId === ds.id}
-                highlightedField={dropTarget?.dataSourceId === ds.id ? dropTarget.field : undefined}
-              />
-            </div>
+            <DataSourceCard
+              key={ds.id}
+              dataSource={ds}
+              position={cardPositions[ds.id] || { x: 0, y: 0 }}
+              onPositionChange={handlePositionChange}
+              onFieldDragStart={handleFieldDragStart}
+              onFieldDrop={handleFieldDrop}
+              isDraggingField={!!dragState?.isDragging}
+              isDropTarget={dropTarget?.dataSourceId === ds.id}
+              highlightedField={dropTarget?.dataSourceId === ds.id ? dropTarget.field : undefined}
+            />
           ))}
         </div>
         
