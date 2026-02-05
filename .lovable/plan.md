@@ -1,225 +1,225 @@
 
-## Power BI Benzeri Çapraz Filtreleme (Cross-Filter) Sistemi
 
-### Problem Analizi
+# Satış Hunisi Widget - Teklif Verisi Sorunu Analiz ve Çözüm Planı
 
-Mevcut sistemde global filtreler çalışmıyor çünkü:
+## Sorun Özeti
 
-1. **Render Optimizasyonu Kırıldı**: Son düzeltmede `fetchData` fonksiyonu sadece `isPageDataReady` false→true geçişinde çağrılıyor (satır 890-898). Filtre değişikliklerinde widget'lar yeniden veri işlemiyor.
+"Cari Dönüşüm Hunisi" widget'ı, Teklif ve Sipariş verilerini göstermiyor. Sadece Cari Kart verileri (568 kayıt) görüntüleniyor.
 
-2. **Bağımsız Veri Akışı Yok**: `globalFilters` değiştiğinde `fetchData` tetiklenmiyor - dependency array'den çıkarıldı.
+## Kök Neden Analizi
 
-3. **Power BI Mimarisi Eksik**: Mevcut yapı basit filtre-veri ilişkisi kullanıyor. Power BI'daki gibi **widget-to-widget cross-filtering** veya **veri kaynağı bazlı filtre alanı tanımlaması** yok.
+### 1. Veri Kaynağı Yapılandırması (✅ DOĞRU)
 
----
+Widget'ın multiQuery yapısı doğru konfigüre edilmiş:
 
-### Çözüm Planı: Power BI Tarzı Filtreleme Mimarisi
+| Sıra | Sorgu Adı | Veri Kaynağı ID | Metot | Kayıt Sayısı (DB) |
+|------|-----------|-----------------|-------|-------------------|
+| 0 | Ana Sorgu | 11e5348f... | carikart_listele | 610 |
+| 1 | Teklif | 4cc3fd6d... | teklif_listele | 245 |
+| 2 | Sipariş | 83065325... | siparis_listele | 10 |
 
----
+### 2. Widget Kodundaki Veri Erişimi (✅ DOĞRU)
 
-#### Adım 1: `data_sources` Tablosuna Filtre Alan Tanımları Ekleme
+Widget kodu `multiData` scope değişkeninden doğru sırayla veri okuyor:
 
-Yeni bir sütun eklenmeli: `filterable_fields` (jsonb) - Bu veri kaynağının hangi alanlara göre filtrelenebileceğini tanımlar.
-
-```sql
-ALTER TABLE data_sources ADD COLUMN filterable_fields jsonb DEFAULT '[]';
+```javascript
+var cariler   = toArray(multiData[0]); // Cari Kart
+var teklifler = toArray(multiData[1]); // Teklif
+var siparisler = toArray(multiData[2]); // Sipariş
 ```
 
-Örnek yapı:
-```json
-[
-  {
-    "field": "carikarttipi",
-    "globalFilterKey": "cariKartTipi",
-    "label": "Cari Kart Tipi",
-    "operator": "IN"
-  },
-  {
-    "field": "satiselemani",
-    "globalFilterKey": "satisTemsilcisi",
-    "label": "Satış Temsilcisi",
-    "operator": "IN"
-  }
-]
+### 3. CustomCodeWidgetBuilder Önizleme Sorunu (❌ SORUN)
+
+**Sorunlu Akış:**
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│ useEffect (widget açıldığında)                                  │
+│   ↓                                                             │
+│ loadMultiQueryData(config.multiQuery) çağrılır                  │
+│   ↓                                                             │
+│ getDataSourceById(query.dataSourceId) → ❌ undefined            │
+│   ↓                                                             │
+│ Neden? → dataSources henüz React Query'den yüklenmemiş!         │
+│   ↓                                                             │
+│ mergedQueryData = {} (BOŞ)                                      │
+│   ↓                                                             │
+│ previewMultiData = [[], [], []] (BOŞ DİZİLER)                   │
+│   ↓                                                             │
+│ Widget: teklifler.length = 0, siparisler.length = 0             │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
----
+**Sorunun Nedeni:**
 
-#### Adım 2: GlobalFilters Değişikliği Algılama Mekanizması
-
-`useDynamicWidgetData.tsx` içinde filtre değişikliklerini izleyen yeni bir useEffect eklenmeli:
+`CustomCodeWidgetBuilder.tsx` satır 540-543'te:
 
 ```typescript
-// Filtre değişikliklerini izle (render döngüsü olmadan)
-const prevFiltersRef = useRef<string>('');
+if (config?.multiQuery) {
+  setIsMultiQueryMode(true);
+  setMultiQuery(config.multiQuery);
+  loadMultiQueryData(config.multiQuery);  // ← BURADA SORUN
+}
+```
 
+`loadMultiQueryData` fonksiyonu (satır 583-613), `getDataSourceById` kullanıyor. Bu fonksiyon `dataSources` state'ine bağımlı ve `useDataSources()` hook'u React Query ile asenkron olarak veri yüklüyor.
+
+Widget builder açıldığında `dataSources` henüz yüklenmemiş olabilir → `getDataSourceById` undefined döner → `mergedQueryData` boş kalır.
+
+### 4. Dashboard Render Sorunu (❌ SORUN)
+
+**Sorunlu Akış:**
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│ DataSourceLoader: Sayfadaki widget'ların veri kaynaklarını bul  │
+│   ↓                                                             │
+│ multiQuery.queries[].dataSourceId → 3 veri kaynağı tespit       │
+│   ↓                                                             │
+│ Her veri kaynağı için DIA API çağrısı yap ve cache'e yaz        │
+│   ↓                                                             │
+│ useDynamicWidgetData: Cache'den multiQueryData oluştur          │
+│   ↓                                                             │
+│ Eğer cache henüz dolmadıysa → multiQueryData = [[], [], []]     │
+│   ↓                                                             │
+│ Widget boş veri ile render edilir                               │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Ek Sorun:** Edge function loglarında Teklif verisi çekilmiş (245 kayıt) ancak widget'a ulaşmamış. Bu, cache senkronizasyon sorunu olabilir.
+
+---
+
+## Çözüm Planı
+
+### Adım 1: CustomCodeWidgetBuilder - dataSources Yüklenme Beklemesi
+
+**Dosya:** `src/components/admin/CustomCodeWidgetBuilder.tsx`
+
+`loadMultiQueryData` fonksiyonunu `dataSources` yüklenene kadar bekletmek için:
+
+1. `useDataSources()` hook'undan `isLoading` state'ini al
+2. `useEffect` dependency'lerine `dataSources` veya `isLoading` ekle
+3. `dataSources` yüklendikten SONRA `loadMultiQueryData` çağır
+
+```typescript
+// Satır 355'i güncelle
+const { activeDataSources, getDataSourceById, isLoading: isDataSourcesLoading, dataSources } = useDataSources();
+
+// Satır 540-543'ü güncelle
 useEffect(() => {
-  const filtersKey = JSON.stringify(globalFiltersRef.current);
-  
-  // İlk render değilse VE filtre değiştiyse yeniden işle
-  if (prevFiltersRef.current && prevFiltersRef.current !== filtersKey) {
-    // Cache'deki veriyi al ve filtreleri yeniden uygula
-    processDataWithFilters();
+  if (editingWidget && open && !isDataSourcesLoading && dataSources.length > 0) {
+    const config = editingWidget.builder_config as any;
+    if (config?.multiQuery) {
+      setIsMultiQueryMode(true);
+      setMultiQuery(config.multiQuery);
+      loadMultiQueryData(config.multiQuery);
+    }
   }
-  prevFiltersRef.current = filtersKey;
-}, [globalFilters]); // Sadece filtre değişikliğinde çalış
+}, [editingWidget, open, isDataSourcesLoading, dataSources]);
 ```
 
----
+### Adım 2: loadMultiQueryData - Cache Miss Durumunda DIA'dan Çekme
 
-#### Adım 3: Veri İşleme ve Filtreleme Ayırma
+**Dosya:** `src/components/admin/CustomCodeWidgetBuilder.tsx`
 
-Mevcut `fetchData` iki ayrı fonksiyona bölünmeli:
-
-1. **`loadRawData()`**: Cache'den veya API'den veri çeker (nadir çağrılır)
-2. **`processDataWithFilters()`**: Raw veri üzerinde global filtreleri uygular ve görselleştirme verisini hazırlar (her filtre değişikliğinde çağrılır)
+`loadMultiQueryData` fonksiyonunu geliştir - `last_sample_data` yoksa DIA API'den çek:
 
 ```typescript
-// Raw veriyi tut (filtrelenmemiş)
-const rawDataRef = useRef<any[]>([]);
-
-const processDataWithFilters = useCallback(() => {
-  const currentFilters = globalFiltersRef.current;
-  let processedData = [...rawDataRef.current];
+const loadMultiQueryData = async (config: MultiQueryConfig) => {
+  if (!config?.queries?.length) return;
   
-  // Global filtreleri uygula
-  if (currentFilters) {
-    processedData = applyGlobalFilters(processedData, currentFilters);
-  }
+  setIsLoadingData(true);
+  const dataMap: Record<string, any[]> = {};
   
-  // Görselleştirme tipine göre işle ve setData
-  processVisualization(processedData, config);
-}, [configKey]);
-```
-
----
-
-#### Adım 4: Widget Builder'da Filtre Alanı Seçici
-
-Widget oluşturulurken hangi global filtrelerin bu widget'ı etkileyeceği seçilebilmeli:
-
-```typescript
-// WidgetBuilderConfig'e eklenecek
-interface WidgetBuilderConfig {
-  // ...mevcut alanlar
-  
-  // Bu widget'ın etkileneceği global filtreler
-  affectedByFilters?: {
-    globalFilterKey: string;  // 'cariKartTipi', 'satisTemsilcisi', vb.
-    dataField: string;        // Verideki alan adı
-    operator: 'IN' | '=' | 'contains';
-  }[];
-  
-  // Bu widget'ın oluşturacağı cross-filter (tıklanınca diğer widget'ları etkiler)
-  crossFilterField?: {
-    dataField: string;
-    globalFilterKey: string;
-    label: string;
-  };
-}
-```
-
----
-
-#### Adım 5: Çapraz Filtreleme (Cross-Filter) Mekanizması
-
-Power BI'daki gibi bir grafik segmentine tıklandığında diğer widget'ları filtreleyen mekanizma:
-
-```typescript
-// GlobalFilterContext'e eklenecek
-interface GlobalFilterContextType {
-  // ...mevcut alanlar
-  
-  // Çapraz filtre (widget tıklamasından gelen geçici filtre)
-  crossFilter: {
-    sourceWidgetId: string;
-    field: string;
-    value: string | string[];
-  } | null;
-  
-  setCrossFilter: (filter: CrossFilter | null) => void;
-  clearCrossFilter: () => void;
-}
-```
-
-Widget'lar tıklanabilir hale gelecek:
-
-```typescript
-// Grafik segmentine tıklandığında
-const handleChartClick = (segment: { name: string; value: number }) => {
-  if (config.crossFilterField) {
-    setCrossFilter({
-      sourceWidgetId: widgetId,
-      field: config.crossFilterField.globalFilterKey,
-      value: segment.name,
-    });
+  try {
+    for (const query of config.queries) {
+      if (query.dataSourceId) {
+        const ds = getDataSourceById(query.dataSourceId);
+        
+        if (ds?.last_sample_data && ds.last_sample_data.length > 0) {
+          // Cache'den oku
+          dataMap[query.id] = ds.last_sample_data;
+        } else if (ds) {
+          // Cache boş, DIA'dan çek
+          const response = await supabase.functions.invoke('dia-api-test', {
+            body: {
+              module: ds.module,
+              method: ds.method,
+              filters: ds.filters || [],
+              limit: 100,
+              ...(isImpersonating && impersonatedUserId ? { targetUserId: impersonatedUserId } : {}),
+            },
+          });
+          
+          if (response.data?.data) {
+            dataMap[query.id] = response.data.data;
+          }
+        }
+      }
+    }
+    
+    setMergedQueryData(dataMap);
+    // ... rest of function
+  } catch (err: any) {
+    toast.error('Veri yükleme hatası: ' + err.message);
+  } finally {
+    setIsLoadingData(false);
   }
 };
 ```
 
+### Adım 3: useDynamicWidgetData - multiQueryData Güncelleme Sorunu
+
+**Dosya:** `src/hooks/useDynamicWidgetData.tsx`
+
+`multiQueryDataRef.current` bir ref olduğu için değişiklikler React'i yeniden render'a tetiklemiyor. Bu sorunu çözmek için:
+
+1. `multiQueryDataRef` yerine state kullan veya
+2. multiQueryData değiştiğinde bir counter artır
+
+```typescript
+// multiQueryDataRef yerine state kullan
+const [multiQueryData, setMultiQueryData] = useState<any[][] | null>(null);
+
+// fetchData fonksiyonunda
+setMultiQueryData(config.multiQuery.queries.map((q) => queryResults[q.id] || []));
+
+// Return'de
+return { data, rawData, multiQueryData, isLoading, error, refetch: fetchData };
+```
+
+### Adım 4: Memory Dokümantasyonu Güncelleme
+
+`.lovable/memory/technical/widget-rendering-scopes.md` dosyasını güncelle:
+- multiData'nın nasıl çalıştığını detaylandır
+- dataSources yüklenme zamanlaması hakkında not ekle
+
 ---
 
-#### Adım 6: Data Source Düzeyinde Filtre Yapılandırması UI
+## Teknik Uygulama Detayları
 
-Admin panelindeki DataSourceManager'a filtre alanı seçici eklenmeli:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Veri Kaynağı: Cari Kart Listesi                            │
-├─────────────────────────────────────────────────────────────┤
-│ Filtrelenebilir Alanlar:                                   │
-│  ☑ carikarttipi → Cari Kart Tipi (AL/AS/ST)               │
-│  ☑ satiselemani → Satış Temsilcisi                        │
-│  ☑ subekodu → Şube                                         │
-│  ☐ depokodu → Depo                                         │
-│  ☑ ozelkod1kod → Özel Kod 1                               │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-### Teknik Değişiklikler
+### Değiştirilecek Dosyalar
 
 | Dosya | Değişiklik |
 |-------|------------|
-| `src/hooks/useDynamicWidgetData.tsx` | Filtre değişiklik izleme, veri işleme ayrıştırma |
-| `src/contexts/GlobalFilterContext.tsx` | CrossFilter state ve setter'ları |
-| `src/lib/filterTypes.ts` | CrossFilter type tanımları |
-| `src/lib/widgetBuilderTypes.ts` | affectedByFilters, crossFilterField alanları |
-| `src/components/admin/DataSourceManager.tsx` | Filterable fields UI |
-| `src/components/admin/WidgetBuilder.tsx` | Filtre bağlama seçenekleri |
-| Migration | filterable_fields sütunu |
+| `src/components/admin/CustomCodeWidgetBuilder.tsx` | dataSources yüklenme beklemesi + loadMultiQueryData güçlendirme |
+| `src/hooks/useDynamicWidgetData.tsx` | multiQueryDataRef → state dönüşümü |
+| `.lovable/memory/technical/widget-rendering-scopes.md` | multiData dokümantasyonu |
+
+### Test Senaryoları
+
+1. **Widget Builder Önizleme:** Widget Builder'da Satış Hunisi widget'ını aç → Teklif ve Sipariş sayılarının doğru görüntülendiğini doğrula
+2. **Dashboard Görünümü:** Dashboard'a widget ekle → Tüm aşamaların (Cari, Potansiyel, Teklif, Satış) doğru veriyi gösterdiğini kontrol et
+3. **Drill-down:** Her hungi aşamasına tıkla → İlgili kayıtların popup'ta listelendiğini doğrula
 
 ---
 
-### Beklenen Davranış
+## Özet
 
-1. **Filtre Barından Seçim**: Kullanıcı "Alıcı" seçtiğinde, sadece `carikarttipi` alanı içeren veri kaynaklarını kullanan widget'lar filtrelenir.
+Sorun, asenkron veri yükleme ve timing ile ilgili. `dataSources` React Query ile yüklenirken `loadMultiQueryData` çağrılıyor ve boş dönüyor. Çözüm:
 
-2. **Çapraz Filtreleme**: Pasta grafiğinde "İstanbul" dilimini tıklamak, diğer tüm widget'ları şehir=İstanbul için filtreler.
+1. Veri kaynakları yüklenene kadar bekle
+2. Cache miss durumunda DIA'dan veri çek
+3. multiQueryData'yı reactive state olarak yönet
 
-3. **Akıllı Filtre Atlama**: Banka/Kasa widget'ları gibi `carikarttipi` alanı olmayan widget'lar bu filtreden etkilenmez.
-
-4. **Anlık Güncelleme**: Filtre değişikliğinde widget'lar cache'deki veriyi yeniden işler (API çağrısı yapmadan).
-
----
-
-### İlk Adım: Acil Düzeltme
-
-Filtreler çalışsın diye hemen yapılması gereken: `globalFilters` değiştiğinde `processDataWithFilters()` çağrılmalı:
-
-```typescript
-// useDynamicWidgetData.tsx - Filtre değişikliği izleme
-const globalFiltersKey = useMemo(() => 
-  JSON.stringify(globalFilters), 
-  [globalFilters]
-);
-
-useEffect(() => {
-  if (rawDataRef.current.length > 0) {
-    processDataWithFilters();
-  }
-}, [globalFiltersKey, processDataWithFilters]);
-```
-
-Bu plan onaylanırsa, önce acil düzeltmeyi yapıp filtrelerin çalışmasını sağlayacağım, ardından Power BI benzeri çapraz filtreleme özelliklerini aşamalı olarak ekleyeceğim.
