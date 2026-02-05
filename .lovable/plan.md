@@ -1,155 +1,225 @@
 
-## Problem Analizi: Grafiklerin Sürekli Yeniden Render Edilmesi
+## Power BI Benzeri Çapraz Filtreleme (Cross-Filter) Sistemi
 
-### Tespit Edilen Sorun
+### Problem Analizi
 
-Console loglarında aynı widget'ın **20+ kez** render edildiği görülüyor:
-```
-[BuilderWidgetRenderer] Fatura Satış Grafiği (393666ee-...) {...}
-[BuilderWidgetRenderer] Fatura Satış Grafiği (393666ee-...) {...}
-... (20+ kez tekrar)
-```
+Mevcut sistemde global filtreler çalışmıyor çünkü:
 
-### Kök Neden: Sonsuz Render Döngüsü
+1. **Render Optimizasyonu Kırıldı**: Son düzeltmede `fetchData` fonksiyonu sadece `isPageDataReady` false→true geçişinde çağrılıyor (satır 890-898). Filtre değişikliklerinde widget'lar yeniden veri işlemiyor.
 
-Birden fazla kaynak bu soruna neden oluyor:
+2. **Bağımsız Veri Akışı Yok**: `globalFilters` değiştiğinde `fetchData` tetiklenmiyor - dependency array'den çıkarıldı.
+
+3. **Power BI Mimarisi Eksik**: Mevcut yapı basit filtre-veri ilişkisi kullanıyor. Power BI'daki gibi **widget-to-widget cross-filtering** veya **veri kaynağı bazlı filtre alanı tanımlaması** yok.
 
 ---
 
-**1. `useDynamicWidgetData` Hook'undaki Dependency Array Sorunu (Satır 839)**
-
-```typescript
-}, [config, globalFilters, getCachedData, setCachedData, getDataSourceDataWithStale, 
-    isDataSourceLoading, sharedData, incrementCacheHit, incrementCacheMiss]);
-```
-
-**Problem:** Her render'da bu dependency'ler yeni referans alıyor (özellikle `globalFilters` ve `sharedData` objeleri). Bu, `fetchData` fonksiyonunun sürekli yeniden oluşturulmasına neden oluyor.
+### Çözüm Planı: Power BI Tarzı Filtreleme Mimarisi
 
 ---
 
-**2. `useEffect` + `fetchData` Zincirleme Tetiklemesi (Satır 843-847)**
+#### Adım 1: `data_sources` Tablosuna Filtre Alan Tanımları Ekleme
 
-```typescript
-useEffect(() => {
-  if (isPageDataReady) {
-    fetchData();
+Yeni bir sütun eklenmeli: `filterable_fields` (jsonb) - Bu veri kaynağının hangi alanlara göre filtrelenebileceğini tanımlar.
+
+```sql
+ALTER TABLE data_sources ADD COLUMN filterable_fields jsonb DEFAULT '[]';
+```
+
+Örnek yapı:
+```json
+[
+  {
+    "field": "carikarttipi",
+    "globalFilterKey": "cariKartTipi",
+    "label": "Cari Kart Tipi",
+    "operator": "IN"
+  },
+  {
+    "field": "satiselemani",
+    "globalFilterKey": "satisTemsilcisi",
+    "label": "Satış Temsilcisi",
+    "operator": "IN"
   }
-}, [isPageDataReady, fetchData]);
+]
 ```
 
-**Problem:** 
-- `fetchData` her render'da yeni referans alıyor (dependency array sorunu nedeniyle)
-- `isPageDataReady` true olduğunda `fetchData` çağrılıyor
-- `fetchData` state güncelliyor (`setData`, `setRawData`, `setIsFetching`)
-- State güncellemesi yeni render tetikliyor
-- Yeni render'da `fetchData` yeni referans alıyor
-- useEffect tekrar çalışıyor = **SONSUZ DÖNGÜ**
-
 ---
 
-**3. `globalFilters` Referans Kararsızlığı**
+#### Adım 2: GlobalFilters Değişikliği Algılama Mekanizması
 
-`GlobalFilterContext`'ten gelen `filters` objesi her render'da yeni referans alabilir. `useDynamicWidgetData` bu filtreleri dependency olarak alınca sürekli yeniden çalışıyor.
-
----
-
-**4. Cache Context Fonksiyonları Referans Sorunu**
-
-`DiaDataCacheContext`'ten gelen `getDataSourceDataWithStale`, `incrementCacheHit`, `incrementCacheMiss` fonksiyonları `useMemo` ile sarılsa da, context state değiştiğinde yeniden oluşturuluyorlar.
-
----
-
-## Çözüm Planı
-
-### Adım 1: fetchData Memoization Düzeltmesi
-`useDynamicWidgetData.tsx` dosyasında `fetchData` dependency array'ini düzelt:
+`useDynamicWidgetData.tsx` içinde filtre değişikliklerini izleyen yeni bir useEffect eklenmeli:
 
 ```typescript
-// ÖNCE (sorunlu)
-}, [config, globalFilters, getCachedData, setCachedData, ...]);
-
-// SONRA (düzeltilmiş)
-// 1. globalFilters'ı ref olarak tut
-const globalFiltersRef = useRef(globalFilters);
-globalFiltersRef.current = globalFilters;
-
-// 2. config'i JSON string olarak karşılaştır
-const configKey = useMemo(() => JSON.stringify(config), [config]);
-
-// 3. fetchData dependency'lerini minimize et
-}, [configKey]); // Sadece config değiştiğinde yeniden oluştur
-```
-
-### Adım 2: useEffect Tetikleyici Kontrolü
-`isPageDataReady` değişikliğini kontrollü yönet:
-
-```typescript
-// Önceki isPageDataReady değerini takip et
-const prevPageDataReadyRef = useRef(false);
+// Filtre değişikliklerini izle (render döngüsü olmadan)
+const prevFiltersRef = useRef<string>('');
 
 useEffect(() => {
-  // Sadece false -> true geçişinde çalış (ilk yükleme)
-  if (isPageDataReady && !prevPageDataReadyRef.current) {
-    fetchData();
+  const filtersKey = JSON.stringify(globalFiltersRef.current);
+  
+  // İlk render değilse VE filtre değiştiyse yeniden işle
+  if (prevFiltersRef.current && prevFiltersRef.current !== filtersKey) {
+    // Cache'deki veriyi al ve filtreleri yeniden uygula
+    processDataWithFilters();
   }
-  prevPageDataReadyRef.current = isPageDataReady;
-}, [isPageDataReady]); // fetchData'yı dependency'den ÇIKAR
+  prevFiltersRef.current = filtersKey;
+}, [globalFilters]); // Sadece filtre değişikliğinde çalış
 ```
 
-### Adım 3: GlobalFilters Stabilizasyonu
-`GlobalFilterContext.tsx` dosyasında filters objesini stabilize et:
+---
+
+#### Adım 3: Veri İşleme ve Filtreleme Ayırma
+
+Mevcut `fetchData` iki ayrı fonksiyona bölünmeli:
+
+1. **`loadRawData()`**: Cache'den veya API'den veri çeker (nadir çağrılır)
+2. **`processDataWithFilters()`**: Raw veri üzerinde global filtreleri uygular ve görselleştirme verisini hazırlar (her filtre değişikliğinde çağrılır)
 
 ```typescript
-// filters state'ini memoize et
-const memoizedFilters = useMemo(() => filters, [
-  filters.searchTerm,
-  filters.cariKartTipi.join(','),
-  filters.satisTemsilcisi.join(','),
-  // ... diğer alanlar
-]);
+// Raw veriyi tut (filtrelenmemiş)
+const rawDataRef = useRef<any[]>([]);
+
+const processDataWithFilters = useCallback(() => {
+  const currentFilters = globalFiltersRef.current;
+  let processedData = [...rawDataRef.current];
+  
+  // Global filtreleri uygula
+  if (currentFilters) {
+    processedData = applyGlobalFilters(processedData, currentFilters);
+  }
+  
+  // Görselleştirme tipine göre işle ve setData
+  processVisualization(processedData, config);
+}, [configKey]);
 ```
 
-### Adım 4: Cache Context Fonksiyonlarını Stabilize Et
-`DiaDataCacheContext.tsx` dosyasında callback'leri `useCallback` ile doğru şekilde memoize et:
+---
+
+#### Adım 4: Widget Builder'da Filtre Alanı Seçici
+
+Widget oluşturulurken hangi global filtrelerin bu widget'ı etkileyeceği seçilebilmeli:
 
 ```typescript
-// Fonksiyonları cache state'inden bağımsız yap
-const incrementCacheHitRef = useRef(() => {
-  setStats(prev => ({ ...prev, cacheHits: prev.cacheHits + 1 }));
-});
-
-const incrementCacheHit = useCallback(() => {
-  incrementCacheHitRef.current();
-}, []); // Boş dependency - asla değişmez
-```
-
-### Adım 5: BuilderWidgetRenderer Console Log Temizliği
-Debug loglarını production'da devre dışı bırak:
-
-```typescript
-// Her render'da log yazmayı durdur
-if (process.env.NODE_ENV === 'development') {
-  console.log(`[BuilderWidgetRenderer] ${widgetName}...`);
+// WidgetBuilderConfig'e eklenecek
+interface WidgetBuilderConfig {
+  // ...mevcut alanlar
+  
+  // Bu widget'ın etkileneceği global filtreler
+  affectedByFilters?: {
+    globalFilterKey: string;  // 'cariKartTipi', 'satisTemsilcisi', vb.
+    dataField: string;        // Verideki alan adı
+    operator: 'IN' | '=' | 'contains';
+  }[];
+  
+  // Bu widget'ın oluşturacağı cross-filter (tıklanınca diğer widget'ları etkiler)
+  crossFilterField?: {
+    dataField: string;
+    globalFilterKey: string;
+    label: string;
+  };
 }
 ```
 
 ---
 
-## Teknik Detaylar
+#### Adım 5: Çapraz Filtreleme (Cross-Filter) Mekanizması
 
-### Etkilenen Dosyalar
-1. `src/hooks/useDynamicWidgetData.tsx` - Ana düzeltme
-2. `src/contexts/GlobalFilterContext.tsx` - Filters stabilizasyonu
-3. `src/contexts/DiaDataCacheContext.tsx` - Callback stabilizasyonu
-4. `src/components/dashboard/BuilderWidgetRenderer.tsx` - Log temizliği
+Power BI'daki gibi bir grafik segmentine tıklandığında diğer widget'ları filtreleyen mekanizma:
 
-### Beklenen Sonuç
-- Widget'lar sayfa yüklendiğinde 1 kez render edilecek
-- Filtre değişikliğinde sadece 1 yeniden render olacak
-- Console loglarında tekrar eden satırlar olmayacak
-- Kullanıcı arayüzü daha akıcı/performanslı olacak
+```typescript
+// GlobalFilterContext'e eklenecek
+interface GlobalFilterContextType {
+  // ...mevcut alanlar
+  
+  // Çapraz filtre (widget tıklamasından gelen geçici filtre)
+  crossFilter: {
+    sourceWidgetId: string;
+    field: string;
+    value: string | string[];
+  } | null;
+  
+  setCrossFilter: (filter: CrossFilter | null) => void;
+  clearCrossFilter: () => void;
+}
+```
 
-### Risk Analizi
-- **Düşük Risk:** Değişiklikler sadece render optimizasyonu içeriyor
-- **Geriye Uyumluluk:** Mevcut widget davranışı korunacak
-- **Test Gerekliliği:** Tüm grafik widget'larının doğru render edildiği doğrulanmalı
+Widget'lar tıklanabilir hale gelecek:
+
+```typescript
+// Grafik segmentine tıklandığında
+const handleChartClick = (segment: { name: string; value: number }) => {
+  if (config.crossFilterField) {
+    setCrossFilter({
+      sourceWidgetId: widgetId,
+      field: config.crossFilterField.globalFilterKey,
+      value: segment.name,
+    });
+  }
+};
+```
+
+---
+
+#### Adım 6: Data Source Düzeyinde Filtre Yapılandırması UI
+
+Admin panelindeki DataSourceManager'a filtre alanı seçici eklenmeli:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Veri Kaynağı: Cari Kart Listesi                            │
+├─────────────────────────────────────────────────────────────┤
+│ Filtrelenebilir Alanlar:                                   │
+│  ☑ carikarttipi → Cari Kart Tipi (AL/AS/ST)               │
+│  ☑ satiselemani → Satış Temsilcisi                        │
+│  ☑ subekodu → Şube                                         │
+│  ☐ depokodu → Depo                                         │
+│  ☑ ozelkod1kod → Özel Kod 1                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Teknik Değişiklikler
+
+| Dosya | Değişiklik |
+|-------|------------|
+| `src/hooks/useDynamicWidgetData.tsx` | Filtre değişiklik izleme, veri işleme ayrıştırma |
+| `src/contexts/GlobalFilterContext.tsx` | CrossFilter state ve setter'ları |
+| `src/lib/filterTypes.ts` | CrossFilter type tanımları |
+| `src/lib/widgetBuilderTypes.ts` | affectedByFilters, crossFilterField alanları |
+| `src/components/admin/DataSourceManager.tsx` | Filterable fields UI |
+| `src/components/admin/WidgetBuilder.tsx` | Filtre bağlama seçenekleri |
+| Migration | filterable_fields sütunu |
+
+---
+
+### Beklenen Davranış
+
+1. **Filtre Barından Seçim**: Kullanıcı "Alıcı" seçtiğinde, sadece `carikarttipi` alanı içeren veri kaynaklarını kullanan widget'lar filtrelenir.
+
+2. **Çapraz Filtreleme**: Pasta grafiğinde "İstanbul" dilimini tıklamak, diğer tüm widget'ları şehir=İstanbul için filtreler.
+
+3. **Akıllı Filtre Atlama**: Banka/Kasa widget'ları gibi `carikarttipi` alanı olmayan widget'lar bu filtreden etkilenmez.
+
+4. **Anlık Güncelleme**: Filtre değişikliğinde widget'lar cache'deki veriyi yeniden işler (API çağrısı yapmadan).
+
+---
+
+### İlk Adım: Acil Düzeltme
+
+Filtreler çalışsın diye hemen yapılması gereken: `globalFilters` değiştiğinde `processDataWithFilters()` çağrılmalı:
+
+```typescript
+// useDynamicWidgetData.tsx - Filtre değişikliği izleme
+const globalFiltersKey = useMemo(() => 
+  JSON.stringify(globalFilters), 
+  [globalFilters]
+);
+
+useEffect(() => {
+  if (rawDataRef.current.length > 0) {
+    processDataWithFilters();
+  }
+}, [globalFiltersKey, processDataWithFilters]);
+```
+
+Bu plan onaylanırsa, önce acil düzeltmeyi yapıp filtrelerin çalışmasını sağlayacağım, ardından Power BI benzeri çapraz filtreleme özelliklerini aşamalı olarak ekleyeceğim.
