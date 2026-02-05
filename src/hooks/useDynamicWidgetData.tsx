@@ -1,11 +1,12 @@
 // useDynamicWidgetData - Widget Builder ile oluşturulan widget'lar için dinamik veri çekme
-// Global filtreler desteklenir - veriler cache'den okunduktan sonra post-fetch olarak uygulanır
-// OPTIMIZED v3.0 - Power BI tarzı çapraz filtreleme desteği + filtre değişiklik izleme
+// DB-FIRST v4.0: Widget'lar company_data_cache tablosundan veri okur, DIA API yerine
+// Global filtreler desteklenir - veriler DB'den okunduktan sonra post-fetch olarak uygulanır
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useDiaDataCache, generateCacheKey, SHARED_CACHE_KEYS } from '@/contexts/DiaDataCacheContext';
 import { useDataSources } from './useDataSources';
+import { useDiaProfile } from './useDiaProfile';
 import { WidgetBuilderConfig, AggregationType, CalculatedField, CalculationExpression, QueryMerge, DatePeriod, DiaApiFilter, PostFetchFilter, FilterOperator } from '@/lib/widgetBuilderTypes';
 import { queuedDiaFetch, handleRateLimitError } from '@/lib/diaRequestQueue';
 import { GlobalFilters, convertToDiaFilters, CrossFilter } from '@/lib/filterTypes';
@@ -620,6 +621,33 @@ function applyGlobalFilters(data: any[], globalFilters: GlobalFilters): any[] {
   return filtered;
 }
 
+// ============= VERİTABANINDAN VERİ OKUMA =============
+
+// company_data_cache tablosundan veri çek
+async function fetchFromDatabase(
+  dataSourceSlug: string,
+  sunucuAdi: string,
+  firmaKodu: string,
+  donemKodu: number
+): Promise<any[]> {
+  const { data, error } = await supabase
+    .from('company_data_cache')
+    .select('data')
+    .eq('data_source_slug', dataSourceSlug)
+    .eq('sunucu_adi', sunucuAdi)
+    .eq('firma_kodu', firmaKodu)
+    .eq('donem_kodu', donemKodu)
+    .eq('is_deleted', false);
+
+  if (error) {
+    console.error('[DB] Error fetching from company_data_cache:', error);
+    throw error;
+  }
+
+  // JSONB data alanlarını düz obje olarak döndür
+  return (data || []).map(row => row.data);
+}
+
 // Hook for using global filters in widgets
 export function useDynamicWidgetData(
   config: WidgetBuilderConfig | null,
@@ -630,7 +658,11 @@ export function useDynamicWidgetData(
   const [isFetching, setIsFetching] = useState(false); // İç fetch state
   const [error, setError] = useState<string | null>(null);
   
-  // Raw veriyi tut (filtrelenmemiş) - filtre değişikliğinde yeniden API çağrısı yapmadan işle
+  // DIA profil bilgileri - DB sorgusunda kullanılacak
+  const { sunucuAdi, firmaKodu, donemKodu: profileDonem, isConfigured } = useDiaProfile();
+  const effectiveDonem = parseInt(profileDonem || '1');
+  
+  // Raw veriyi tut (filtrelenmemiş) - filtre değişikliğinde yeniden DB sorgusı yapmadan işle
   const rawDataCacheRef = useRef<any[]>([]);
   const hasInitialDataRef = useRef(false);
 
@@ -644,7 +676,7 @@ export function useDynamicWidgetData(
   const globalFiltersRef = useRef(globalFilters);
   globalFiltersRef.current = globalFilters;
   
-  // Cache context - Artık veri kaynağı bazlı cache kullanıyoruz (Cache-First strateji)
+  // Cache context - Memory cache hala kullanılıyor (DB sonuçlarını da cache'leyebiliriz)
   const { 
     getCachedData, 
     setCachedData, 
@@ -658,6 +690,9 @@ export function useDynamicWidgetData(
     incrementCacheMiss 
   } = useDiaDataCache();
   
+  // Veri kaynağı bilgilerini çek (slug almak için)
+  const { dataSources } = useDataSources();
+  
   // OPTIMIZATION: sharedData ref ile tut
   const sharedDataRef = useRef(sharedData);
   sharedDataRef.current = sharedData;
@@ -667,17 +702,21 @@ export function useDynamicWidgetData(
     getCachedData,
     setCachedData,
     getDataSourceDataWithStale,
+    setDataSourceData,
     isDataSourceLoading,
     incrementCacheHit,
     incrementCacheMiss,
+    dataSources,
   });
   cacheContextRef.current = {
     getCachedData,
     setCachedData,
     getDataSourceDataWithStale,
+    setDataSourceData,
     isDataSourceLoading,
     incrementCacheHit,
     incrementCacheMiss,
+    dataSources,
   };
   
   // Cache-first loading: Cache'de veri varsa isLoading false döner
@@ -817,6 +856,16 @@ export function useDynamicWidgetData(
       return;
     }
     
+    // DIA profil bilgilerini kontrol et
+    if (!sunucuAdi || !firmaKodu) {
+      console.warn('[Widget] DIA profile not configured - widget will show empty');
+      setData(null);
+      setRawData([]);
+      rawDataCacheRef.current = [];
+      setIsFetching(false);
+      return;
+    }
+    
     // REF'lerden güncel değerleri oku - dependency array'e eklenmeden
     const currentGlobalFilters = globalFiltersRef.current;
     const currentSharedData = sharedDataRef.current;
@@ -824,9 +873,11 @@ export function useDynamicWidgetData(
       getCachedData: getCached, 
       setCachedData: setCached, 
       getDataSourceDataWithStale: getDataWithStale,
+      setDataSourceData: setDsData,
       isDataSourceLoading: isLoading,
       incrementCacheHit: incHit,
       incrementCacheMiss: incMiss,
+      dataSources: ds,
     } = cacheContextRef.current;
 
     setIsFetching(true);
@@ -839,48 +890,81 @@ export function useDynamicWidgetData(
       }
 
       let fetchedData: any[] = [];
+      
+      // Helper: DataSource ID'den slug al
+      const getDataSourceSlug = (dataSourceId: string): string | null => {
+        const dataSource = ds.find(d => d.id === dataSourceId);
+        return dataSource?.slug || null;
+      };
+      
+      // Helper: DB'den veya memory cache'den veri çek
+      const fetchDataForSource = async (dataSourceId: string): Promise<any[]> => {
+        const slug = getDataSourceSlug(dataSourceId);
+        if (!slug) {
+          console.warn(`[Widget] DataSource ${dataSourceId} slug not found`);
+          return [];
+        }
+        
+        // 1. Önce memory cache kontrol et
+        const { data: cachedSourceData, isStale } = getDataWithStale(dataSourceId);
+        if (cachedSourceData && !isStale) {
+          console.log(`[Widget] Memory Cache HIT - DataSource ${dataSourceId}: ${cachedSourceData.length} kayıt`);
+          incHit();
+          return cachedSourceData;
+        }
+        
+        // 2. Memory cache boş veya stale - DB'den oku
+        console.log(`[Widget] Fetching from DB - DataSource: ${slug} (sunucu: ${sunucuAdi}, firma: ${firmaKodu}, dönem: ${effectiveDonem})`);
+        
+        try {
+          const dbData = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, effectiveDonem);
+          
+          if (dbData.length > 0) {
+            console.log(`[Widget] DB HIT - DataSource ${slug}: ${dbData.length} kayıt`);
+            // Memory cache'i güncelle
+            setDsData(dataSourceId, dbData);
+            incHit();
+            return dbData;
+          } else {
+            // DB'de veri yok - memory cache'de stale veri varsa onu kullan
+            if (cachedSourceData) {
+              console.log(`[Widget] DB empty, using stale cache for ${dataSourceId}: ${cachedSourceData.length} kayıt`);
+              return cachedSourceData;
+            }
+            console.log(`[Widget] DB empty for ${slug} - no data`);
+            incMiss();
+            return [];
+          }
+        } catch (dbError) {
+          console.error(`[Widget] DB error for ${slug}:`, dbError);
+          // DB hatası durumunda stale cache'i kullan
+          if (cachedSourceData) {
+            console.log(`[Widget] DB error, using stale cache for ${dataSourceId}`);
+            return cachedSourceData;
+          }
+          throw dbError;
+        }
+      };
 
       // Çoklu sorgu varsa
       if (config.multiQuery && config.multiQuery.queries.length > 0) {
         const queryResults: Record<string, any[]> = {};
         
-        // Her sorguyu sırayla çalıştır
-        for (const query of config.multiQuery.queries) {
-          // 1) DataSourceId varsa: SADECE cache'ten oku (DIA çağrısı yok)
+        // Her sorguyu paralel çalıştır
+        const queryPromises = config.multiQuery.queries.map(async (query) => {
           if (query.dataSourceId) {
-            const { data: cachedSourceData, isStale } = getDataWithStale(query.dataSourceId);
-
-            if (cachedSourceData) {
-              console.log(
-                `[MultiQuery] Cache HIT for dataSource: ${query.dataSourceId} (${cachedSourceData.length} kayıt)${isStale ? ' [STALE]' : ''}`
-              );
-              queryResults[query.id] = cachedSourceData;
-              incHit();
-              continue;
-            }
-
-            // DataSourceLoader yüklerken bekle
-            if (isLoading(query.dataSourceId)) {
-              console.log(`[MultiQuery] DataSource ${query.dataSourceId} loading, waiting...`);
-              setIsFetching(true);
-              return;
-            }
-
-            // Cache yok + yüklenmiyor => DIA çağrısı YAPMA
-            console.warn(`[MultiQuery] DataSource ${query.dataSourceId} not in cache - returning empty (no DIA call)`);
-            queryResults[query.id] = [];
-            incMiss();
-            continue;
+            const result = await fetchDataForSource(query.dataSourceId);
+            return { id: query.id, data: result };
           }
-
-          // 2) DataSourceId yok => DIA çağrısı YAPMA
-          console.warn(`[MultiQuery] Query '${query.id}' has no dataSourceId - returning empty (no DIA call)`);
-          queryResults[query.id] = [];
+          console.warn(`[MultiQuery] Query '${query.id}' has no dataSourceId - returning empty`);
           incMiss();
-        }
+          return { id: query.id, data: [] };
+        });
+        
+        const results = await Promise.all(queryPromises);
+        results.forEach(r => { queryResults[r.id] = r.data; });
 
         // Custom code widget'lar için: sorgu sonuçlarını sıra bazlı diziye çevir (STATE)
-        // (config.multiQuery.queries dizisindeki sırayı korur) - Reaktif render tetiklenir
         const newMultiData = config.multiQuery.queries.map((q) => queryResults[q.id] || []);
         setMultiQueryData(newMultiData);
         console.log(`[MultiQuery] Set multiQueryData: ${newMultiData.map(d => d.length).join(', ')} records per query`);
@@ -895,33 +979,12 @@ export function useDynamicWidgetData(
         }
       } else {
         setMultiQueryData(null);
-        // Tekli sorgu - CACHE-FIRST STRATEJİ (Merkezi Mimari)
-        // Widget'lar asla kendi API çağrısı yapmaz - her zaman cache'den okur
+        // Tekli sorgu - DB-FIRST STRATEJİ
         
-        // 1. Veri kaynağı ID'si varsa, onun cache'ine bak
         if (config.dataSourceId) {
-          // Stale-while-revalidate destekli cache kontrolü
-          const { data: cachedSourceData, isStale } = getDataWithStale(config.dataSourceId);
-          
-          if (cachedSourceData) {
-            console.log(`[Widget] Cache HIT - DataSource ${config.dataSourceId}: ${cachedSourceData.length} kayıt${isStale ? ' [STALE]' : ''}`);
-            fetchedData = cachedSourceData;
-            incHit();
-            // Stale olsa bile API çağrısı yapmıyoruz - DataSourceLoader arka planda güncelleyecek
-          } else if (isLoading(config.dataSourceId)) {
-            // Veri kaynağı şu anda yükleniyor - bekle
-            console.log(`[Widget] DataSource ${config.dataSourceId} loading, waiting...`);
-            setIsFetching(true);
-            return; // fetchData tekrar çağrılacak
-          } else {
-            // Cache'de yok ve yüklenmiyor - uyarı ver ama API çağrısı YAPMA
-            console.warn(`[Widget] DataSource ${config.dataSourceId} not in cache - widget will show empty`);
-            fetchedData = [];
-            // Hata mesajı gösterme - DataSourceLoader yükleyecek
-          }
+          fetchedData = await fetchDataForSource(config.dataSourceId);
         } else {
-          // 2. Veri kaynağı ID yok - Eski genel cache mantığı (geriye uyumluluk)
-          // ÖNEMLİ: Kontör tasarrufu için burada cache MISS durumunda DIA çağrısı yapmıyoruz.
+          // Veri kaynağı ID yok - Eski genel cache mantığı (geriye uyumluluk)
           const cacheKey = generateCacheKey(config.diaApi.module, config.diaApi.method, config.diaApi.parameters);
 
           const cachedResult = getCached(cacheKey);
@@ -930,7 +993,7 @@ export function useDynamicWidgetData(
             fetchedData = cachedResult.sampleData;
             incHit();
           } else {
-            console.warn(`[Widget Cache] MISS - ${cacheKey} (no DIA call) - widget will show empty`);
+            console.warn(`[Widget Cache] MISS - ${cacheKey} (no DB call) - widget will show empty`);
             incMiss();
             fetchedData = [];
           }
@@ -955,6 +1018,7 @@ export function useDynamicWidgetData(
       
       // Global filtreleri uygula ve görselleştir
       let filteredData = [...fetchedData];
+      const currentGlobalFilters = globalFiltersRef.current;
       if (currentGlobalFilters) {
         const beforeCount = filteredData.length;
         filteredData = applyGlobalFilters(filteredData, currentGlobalFilters);
@@ -973,22 +1037,24 @@ export function useDynamicWidgetData(
     }
   // OPTIMIZED: fetchData'nın dependency'lerini minimize et
   // globalFilters ve sharedData ref'lerde tutulduğu için buraya eklenmiyor
-  // config değiştiğinde veya cache fonksiyonları değiştiğinde yeniden oluştur
+  // config, sunucuAdi, firmaKodu değiştiğinde yeniden oluştur
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configKey, processVisualizationData]);
+  }, [configKey, processVisualizationData, sunucuAdi, firmaKodu, effectiveDonem]);
 
-  // isPageDataReady değişikliğini takip et - SADECE false->true geçişinde fetch yap
-  const prevPageDataReadyRef = useRef(false);
-
+  // DIA profil değişikliği veya config değiştiğinde veri çek
+  const prevConfigRef = useRef(configKey);
+  
   useEffect(() => {
-    // Sadece sayfa hazır hale geldiğinde (false -> true) fetch yap
-    if (isPageDataReady && !prevPageDataReadyRef.current) {
-      fetchData();
+    // Config değiştiyse veya ilk mount'ta fetch yap
+    if (config && sunucuAdi && firmaKodu) {
+      // isPageDataReady bekleme - doğrudan DB'den okuyoruz
+      if (prevConfigRef.current !== configKey || !hasInitialDataRef.current) {
+        fetchData();
+      }
     }
-    prevPageDataReadyRef.current = isPageDataReady;
-    // fetchData'yı dependency'den çıkarıyoruz - sonsuz döngüyü önlemek için
+    prevConfigRef.current = configKey;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPageDataReady]);
+  }, [configKey, sunucuAdi, firmaKodu, effectiveDonem]);
 
   // Filtre değişikliklerini izle - raw veri üzerinde yeniden işle (API çağrısı yapmadan)
   const globalFiltersKey = useMemo(() => {
