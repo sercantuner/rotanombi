@@ -1,154 +1,98 @@
 
+# DIA API'de Seçili Sütunları Optimize Etme Planı
 
-## Takvim (Date Table) Veri Kaynağı Oluşturma Planı
+## Özet
+Transform Editör'de devre dışı bırakılan sütunların DIA API sorgularına doğru formatta eklenmesi ve böylece veri transferinin optimize edilmesi.
 
-Power BI tarzı bir **Date/Calendar Table** veri kaynağı oluşturulacak. Bu, DIA'dan çekilen bir veri değil, sistemde otomatik üretilen bir tarih boyut tablosudur.
+## Mevcut Durum Analizi
 
----
+### Veritabanı
+- `data_sources.selected_columns`: Seçili sütunları array olarak saklanıyor ✅
+- Örnek: `["_key", "turu", "tarih", "toplam", ...]`
 
-### Ne Oluşturulacak?
+### Transform Editör 
+- Sütun seçimi yapılabiliyor ve `selected_columns` olarak kaydediliyor ✅
 
-| Alan | Değer |
-|------|-------|
-| **Name** | Takvim |
-| **Slug** | takvim |
-| **Module** | _system |
-| **Method** | calendar |
-| **Description** | Power BI tarzı tarih boyut tablosu - zaman bazlı analizler için |
+### useDataSourceLoader
+- `selectedColumns: dataSource.selected_columns` olarak edge function'a gönderiliyor ✅
 
----
-
-### Takvim Tablosu Alanları
-
-```text
-tarih              - Date (YYYY-MM-DD)
-yil                - Number (2020, 2021, 2022...)
-ay                 - Number (1-12)
-ay_adi             - String (Ocak, Şubat...)
-gun                - Number (1-31)
-gun_adi            - String (Pazartesi, Salı...)
-hafta_no           - Number (1-53)
-ceyrek             - Number (1-4)
-ceyrek_adi         - String (Q1, Q2, Q3, Q4)
-yil_ay             - String (2024-01)
-yil_ceyrek         - String (2024-Q1)
-is_gunu            - Boolean (Hafta içi mi?)
-hafta_sonu         - Boolean (Cumartesi/Pazar mı?)
-```
-
----
-
-### Teknik Uygulama
-
-#### 1. Veritabanına Veri Kaynağı Ekleme
-
-`data_sources` tablosuna kayıt:
-
-```sql
-INSERT INTO data_sources (
-  user_id, name, slug, description,
-  module, method, 
-  filters, sorts, limit_count,
-  cache_ttl, is_active, is_shared,
-  last_fields, last_record_count
-)
-SELECT 
-  p.user_id,
-  'Takvim',
-  'takvim',
-  'Power BI tarzı tarih boyut tablosu - zaman bazlı analizler için',
-  '_system',
-  'calendar',
-  '[]'::jsonb,
-  '[{"field": "tarih", "sorttype": "ASC"}]'::jsonb,
-  0,
-  86400,
-  true,
-  true,
-  '["tarih", "yil", "ay", "ay_adi", "gun", "gun_adi", "hafta_no", "ceyrek", "ceyrek_adi", "yil_ay", "yil_ceyrek", "is_gunu", "hafta_sonu"]'::jsonb,
-  3650
-FROM profiles p
-WHERE p.user_id = auth.uid()
-LIMIT 1;
-```
-
-#### 2. Frontend'de Takvim Verisi Üretimi
-
-`useDataSourceLoader.tsx` dosyasına özel mantık:
-
+### Sorun: Edge Function
+Mevcut kod (`dia-api-test/index.ts` satır 556-559):
 ```typescript
-// _system modülü için özel işlem
-if (dataSource.module === '_system' && dataSource.method === 'calendar') {
-  const calendarData = generateCalendarData();
-  return calendarData;
+if (selectedColumns.length > 0) {
+  payload[methodKey].selectedcolumns = selectedColumns.join(',');
 }
 ```
 
-#### 3. Takvim Veri Üretim Fonksiyonu
+Bu, DIA API'ye şu şekilde gönderiyor:
+```json
+{
+  "scf_carikart_listele": {
+    "selectedcolumns": "_key,turu,tarih,toplam"
+  }
+}
+```
 
-```typescript
-function generateCalendarData(startYear = 2020, endYear = 2030): any[] {
-  const data = [];
-  const aylar = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 
-                 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
-  const gunler = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
-  
-  for (let yil = startYear; yil <= endYear; yil++) {
-    for (let ay = 0; ay < 12; ay++) {
-      const gunSayisi = new Date(yil, ay + 1, 0).getDate();
-      for (let gun = 1; gun <= gunSayisi; gun++) {
-        const tarih = new Date(yil, ay, gun);
-        const haftaGunu = tarih.getDay();
-        
-        data.push({
-          tarih: format(tarih, 'yyyy-MM-dd'),
-          yil,
-          ay: ay + 1,
-          ay_adi: aylar[ay],
-          gun,
-          gun_adi: gunler[haftaGunu],
-          hafta_no: getWeek(tarih),
-          ceyrek: Math.floor(ay / 3) + 1,
-          ceyrek_adi: `Q${Math.floor(ay / 3) + 1}`,
-          yil_ay: `${yil}-${String(ay + 1).padStart(2, '0')}`,
-          yil_ceyrek: `${yil}-Q${Math.floor(ay / 3) + 1}`,
-          is_gunu: haftaGunu >= 1 && haftaGunu <= 5,
-          hafta_sonu: haftaGunu === 0 || haftaGunu === 6,
-        });
-      }
+### DIA API Beklentisi (Custom Knowledge'dan)
+```json
+{
+  "scf_carikart_listele": {
+    "params": {
+      "selectedcolumns": ["_key", "turu", "tarih", "toplam"]
     }
   }
-  return data;
 }
 ```
 
+## Yapılacak Değişiklikler
+
+### 1. Edge Function Güncelleme (`dia-api-test/index.ts`)
+
+`selectedcolumns` parametresini `params` objesi içine taşı ve array formatında gönder:
+
+```text
+// Mevcut (satır 556-559)
+if (selectedColumns.length > 0) {
+  payload[methodKey].selectedcolumns = selectedColumns.join(',');
+}
+
+// Yeni
+if (selectedColumns.length > 0) {
+  // DIA API: selectedcolumns params objesi içinde array olarak gönderilmeli
+  if (!payload[methodKey].params) {
+    payload[methodKey].params = {};
+  }
+  payload[methodKey].params.selectedcolumns = selectedColumns;
+}
+```
+
+### 2. Dönem Loop İçin Aynı Düzeltme
+
+Period loop mekanizmasında da `selectedcolumns` doğru formatta olmalı (satır 650-700 civarı).
+
 ---
 
-### Kullanım Senaryoları
+## Teknik Detaylar
 
-1. **Zaman Serisi Grafikleri**: Eksik tarihleri doldurmak için LEFT JOIN
-2. **Dönemsel Karşılaştırma**: Yıl-yıl, çeyrek-çeyrek analizler
-3. **Filtreleme**: Ay, çeyrek, hafta bazlı filtreler
-4. **İş Günü Hesaplamaları**: Tatil günlerini hariç tutma
-
----
-
-### Dosya Değişiklikleri
+### Değiştirilecek Dosyalar
 
 | Dosya | Değişiklik |
 |-------|------------|
-| `useDataSourceLoader.tsx` | `_system/calendar` için özel generate mantığı |
-| `useDynamicWidgetData.tsx` | `_system` modülü kontrolü |
-| Veritabanı | `data_sources` tablosuna yeni kayıt |
+| `supabase/functions/dia-api-test/index.ts` | `selectedcolumns` formatını `params` objesi içine al, array olarak gönder |
 
----
+### Geriye Dönük Uyumluluk
 
-### İlişki Kurulumu (Opsiyonel)
+- Bu değişiklik tüm veri kaynakları için geçerli olacak
+- Eğer `selected_columns` boşsa (`null` veya `[]`), `params.selectedcolumns` eklenmeyecek ve DIA tüm sütunları döndürecek (mevcut davranış)
 
-Veri Modeli'nde diğer tablolarla ilişki:
+### Test Senaryoları
 
-| Kaynak | Hedef | Alan |
-|--------|-------|------|
-| Takvim.tarih | Fatura.tarih | 1:N |
-| Takvim.tarih | Cari Hareket.tarih | 1:N |
+1. Transform Editör'de birkaç sütun seç, kaydet
+2. Dashboard'da ilgili widget'ın verilerini kontrol et
+3. Edge function loglarında `selectedcolumns` parametresinin doğru gönderildiğini doğrula
 
+### Beklenen Faydalar
+
+- **Veri Tasarrufu**: Sadece seçili sütunlar çekilecek
+- **Hız**: Daha az veri = daha hızlı yanıt
+- **Kontör Tasarrufu**: DIA API'den daha az veri çekilmesi
