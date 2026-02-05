@@ -139,14 +139,14 @@ export function Sidebar({
 
         {/* Logo - collapsed iken tamamen gizle */}
         {!collapsed && (
-          <div className="p-6 border-b border-border">
-            <div className="flex items-center gap-3">
+           <div className="p-4 border-b border-border">
+             <div className="flex flex-col items-start gap-1">
               <img 
                 src={rotanombiLogo} 
                 alt="RotanomBI" 
-                className="h-8 w-auto"
+                 className="h-7 w-auto"
               />
-              <p className="text-xs text-muted-foreground">Rapor Portalı</p>
+               <p className="text-[10px] text-muted-foreground uppercase tracking-wider pl-0.5">Rapor Portalı</p>
             </div>
           </div>
         )}
