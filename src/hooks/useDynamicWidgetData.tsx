@@ -630,7 +630,7 @@ async function fetchFromDatabase(
   firmaKodu: string,
   donemKodu: number
 ): Promise<any[]> {
-  const PAGE_SIZE = 5000; // Supabase max 1000 varsayılan, biz 5000 kullanıyoruz
+  const PAGE_SIZE = 1000; // Supabase max 1000 satır döndürür
   let allData: any[] = [];
   let from = 0;
   let hasMore = true;
