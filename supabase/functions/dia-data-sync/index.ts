@@ -32,66 +32,82 @@ interface SyncResult {
 // Bellek optimizasyonu: Sayfalı veri çekme (max 2000 kayıt per sync)
 const MAX_RECORDS_PER_SYNC = 2000;
 
+// Sayfalı veri çekme - bellek optimizasyonu için
+const PAGE_SIZE = 500;
+const MAX_PAGES = 10; // Maximum 5000 kayıt per source per period
+
 async function fetchFromDia(diaSession: any, module: string, method: string, donemKodu: number): Promise<{ success: boolean; data?: any[]; error?: string; totalFetched?: number }> {
   try {
     const diaUrl = `https://${diaSession.sunucuAdi}.ws.dia.com.tr/api/v3/${module}/json`;
     const fullMethod = method.startsWith(`${module}_`) ? method : `${module}_${method}`;
     
-    // DIA API payload - limit: 0 = sınırsız (DIA formatı)
-    const payload = { 
-      [fullMethod]: { 
-        session_id: diaSession.sessionId, 
-        firma_kodu: diaSession.firmaKodu, 
-        donem_kodu: donemKodu, 
-        limit: 0 // DIA'da 0 = sınırsız, pozitif sayı bazen sorun çıkarıyor
-      } 
-    };
-    
-    console.log(`[DIA Sync] Fetching: ${diaUrl} with method ${fullMethod}`);
-    
-    const response = await fetch(diaUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
-    
-    const result = await response.json();
-    
-    // DIA hata kontrolü
-    if (result.code && result.code !== "200") {
-      return { success: false, error: result.msg || `DIA Error: ${result.code}` };
-    }
-    if (result.error || result.hata) {
-      return { success: false, error: result.error?.message || result.hata?.aciklama || "API hatası" };
-    }
-    
-    // DIA API yanıt formatı: { code: "200", result: [...] } veya { code: "200", result: { key: [...] } }
-    let data: any[] = [];
-    
-    if (result.result) {
-      if (Array.isArray(result.result)) {
-        data = result.result;
-      } else if (typeof result.result === 'object' && result.result !== null) {
-        // Nested format: { result: { some_key: [...] } }
-        const firstKey = Object.keys(result.result)[0];
-        if (firstKey && Array.isArray(result.result[firstKey])) {
-          data = result.result[firstKey];
-        }
+    let allData: any[] = [];
+    let offset = 0;
+    let hasMore = true;
+    let pageCount = 0;
+
+    while (hasMore && pageCount < MAX_PAGES) {
+      const payload = { 
+        [fullMethod]: { 
+          session_id: diaSession.sessionId, 
+          firma_kodu: diaSession.firmaKodu, 
+          donem_kodu: donemKodu, 
+          limit: PAGE_SIZE,
+          offset: offset
+        } 
+      };
+      
+      console.log(`[DIA Sync] Fetching: ${diaUrl} method ${fullMethod} (offset: ${offset}, limit: ${PAGE_SIZE})`);
+      
+      const response = await fetch(diaUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
+      
+      const result = await response.json();
+      
+      // DIA hata kontrolü
+      if (result.code && result.code !== "200") {
+        return { success: false, error: result.msg || `DIA Error: ${result.code}` };
       }
-    } else if (result.msg && Array.isArray(result.msg)) {
-      // Alternatif format
-      data = result.msg;
-    } else if (result[fullMethod] && Array.isArray(result[fullMethod])) {
-      // Legacy format
-      data = result[fullMethod];
+      if (result.error || result.hata) {
+        return { success: false, error: result.error?.message || result.hata?.aciklama || "API hatası" };
+      }
+      
+      // DIA API yanıt formatını parse et
+      let pageData: any[] = [];
+      
+      if (result.result) {
+        if (Array.isArray(result.result)) {
+          pageData = result.result;
+        } else if (typeof result.result === 'object' && result.result !== null) {
+          const firstKey = Object.keys(result.result)[0];
+          if (firstKey && Array.isArray(result.result[firstKey])) {
+            pageData = result.result[firstKey];
+          }
+        }
+      } else if (result.msg && Array.isArray(result.msg)) {
+        pageData = result.msg;
+      } else if (result[fullMethod] && Array.isArray(result[fullMethod])) {
+        pageData = result[fullMethod];
+      }
+      
+      if (!pageData || !Array.isArray(pageData)) {
+        pageData = [];
+      }
+
+      allData = allData.concat(pageData);
+      pageCount++;
+      
+      // Sonraki sayfa var mı?
+      if (pageData.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        offset += PAGE_SIZE;
+      }
     }
     
-    // Null koruması
-    if (!data || !Array.isArray(data)) {
-      data = [];
-    }
+    console.log(`[DIA Sync] Fetched ${allData.length} records for ${fullMethod} (period: ${donemKodu}, pages: ${pageCount})`);
     
-    const recordCount = data.length;
-    console.log(`[DIA Sync] Fetched ${recordCount} records for ${fullMethod} (period: ${donemKodu})`);
-    
-    return { success: true, data, totalFetched: recordCount };
+    return { success: true, data: allData, totalFetched: allData.length };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Bilinmeyen hata" };
   }
