@@ -1,5 +1,5 @@
-// BuilderWidgetRenderer - Widget Builder ile oluşturulan widget'ları render eder
-// v3.1 - KPI, Custom Code, Recharts tam destek + Leaflet harita desteği
+ // BuilderWidgetRenderer - Widget Builder ile oluşturulan widget'ları render eder
+ // v4.0 - KPI, Custom Code, Recharts, Leaflet + Nivo (Sankey, Sunburst, Chord, Radar, Choropleth) desteği
 
 import React, { useState, useMemo, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import { WidgetBuilderConfig, AggregationType, DatePeriod } from '@/lib/widgetBuilderTypes';
@@ -31,6 +31,89 @@ import {
   Treemap
 } from 'recharts';
 import { cn } from '@/lib/utils';
+ 
+ // Nivo bileşenleri - lazy import ile yüklenir (performans optimizasyonu)
+ let NivoScope: any = null;
+ 
+ // Nivo'yu lazy olarak yükle (sadece gelişmiş grafik widget'ı kullanılırsa)
+ const initNivoScope = async () => {
+   if (NivoScope) return NivoScope;
+   
+   try {
+     const [
+       nivoSankey,
+       nivoSunburst,
+       nivoChord,
+       nivoRadar,
+       nivoGeo,
+       _nivoCore
+     ] = await Promise.all([
+       import('@nivo/sankey'),
+       import('@nivo/sunburst'),
+       import('@nivo/chord'),
+       import('@nivo/radar'),
+       import('@nivo/geo'),
+       import('@nivo/core')
+     ]);
+     
+     NivoScope = {
+       // Sankey Diyagramları (Akış ve Süreç Analizi)
+       ResponsiveSankey: nivoSankey.ResponsiveSankey,
+       // Sunburst (Güneş Patlaması) Grafikleri
+       ResponsiveSunburst: nivoSunburst.ResponsiveSunburst,
+       // Chord (Akor) Diyagramları
+       ResponsiveChord: nivoChord.ResponsiveChord,
+       // Radar (Örümcek) Grafikleri
+       ResponsiveRadar: nivoRadar.ResponsiveRadar,
+       // Choropleth Haritalar (Coğrafi Veri Analizi)
+       ResponsiveChoropleth: nivoGeo.ResponsiveChoropleth,
+       ResponsiveGeoMap: nivoGeo.ResponsiveGeoMap,
+       // Tema oluşturucu (dark/light mode uyumu)
+       getTheme: (isDark: boolean) => ({
+         background: 'transparent',
+         textColor: isDark ? 'hsl(0 0% 90%)' : 'hsl(0 0% 20%)',
+         fontSize: 11,
+         axis: {
+           domain: { line: { stroke: isDark ? 'hsl(0 0% 30%)' : 'hsl(0 0% 70%)', strokeWidth: 1 } },
+           ticks: { 
+             line: { stroke: isDark ? 'hsl(0 0% 30%)' : 'hsl(0 0% 70%)', strokeWidth: 1 },
+             text: { fill: isDark ? 'hsl(0 0% 60%)' : 'hsl(0 0% 40%)' }
+           },
+           legend: { text: { fill: isDark ? 'hsl(0 0% 70%)' : 'hsl(0 0% 30%)' } }
+         },
+         grid: { line: { stroke: isDark ? 'hsl(0 0% 20%)' : 'hsl(0 0% 90%)', strokeWidth: 1 } },
+         legends: { text: { fill: isDark ? 'hsl(0 0% 70%)' : 'hsl(0 0% 30%)' } },
+         tooltip: {
+           container: {
+             background: isDark ? 'hsl(220 10% 15%)' : 'hsl(0 0% 100%)',
+             color: isDark ? 'hsl(0 0% 90%)' : 'hsl(0 0% 20%)',
+             fontSize: 12,
+             borderRadius: 4,
+             boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+           }
+         },
+         labels: { text: { fill: isDark ? 'hsl(0 0% 90%)' : 'hsl(0 0% 20%)' } }
+       })
+     };
+     
+     return NivoScope;
+   } catch (e) {
+     console.warn('Nivo yüklenemedi:', e);
+     return null;
+   }
+ };
+ 
+ // Nivo placeholder - yüklenmeden önce
+ const EmptyNivoScope = {
+   ResponsiveSankey: () => null,
+   ResponsiveSunburst: () => null,
+   ResponsiveChord: () => null,
+   ResponsiveRadar: () => null,
+   ResponsiveChoropleth: () => null,
+   ResponsiveGeoMap: () => null,
+   useTheme: () => ({}),
+   getTheme: () => ({})
+ };
 
 // Leaflet harita bileşenleri - lazy import ile yüklenir
 let MapScope: any = null;
@@ -275,8 +358,17 @@ export function BuilderWidgetRenderer({
     return /(^|[^a-zA-Z0-9_])Map\./.test(customCode);
   }, [customCode]);
 
+   // Nivo kullanımı tespiti
+   const needsNivo = useMemo(() => {
+     if (!customCode) return false;
+     return /(^|[^a-zA-Z0-9_])Nivo\./.test(customCode);
+   }, [customCode]);
+ 
   // Harita scope'u: ihtiyaç varsa lazy yükle, yoksa boş scope kullan
   const [mapScope, setMapScope] = useState<any>(() => MapScope || EmptyMapScope);
+   // Nivo scope'u: ihtiyaç varsa lazy yükle
+   const [nivoScope, setNivoScope] = useState<any>(() => NivoScope || EmptyNivoScope);
+ 
 
   useEffect(() => {
     let cancelled = false;
@@ -295,6 +387,25 @@ export function BuilderWidgetRenderer({
       cancelled = true;
     };
   }, [needsMap]);
+   
+   // Nivo lazy loading
+   useEffect(() => {
+     let cancelled = false;
+ 
+     if (!needsNivo) {
+       setNivoScope(EmptyNivoScope);
+       return;
+     }
+ 
+     initNivoScope().then((scope) => {
+       if (cancelled) return;
+       setNivoScope(scope || EmptyNivoScope);
+     });
+ 
+     return () => {
+       cancelled = true;
+     };
+   }, [needsNivo]);
   
   // Tarih filtresi state
   const [selectedDatePeriod, setSelectedDatePeriod] = useState<DatePeriod>(
@@ -485,11 +596,12 @@ export function BuilderWidgetRenderer({
         'Map',      // Leaflet harita bileşenleri
         'crossFilter', // Aktif çapraz filtre state'i
         'onCrossFilter', // Çapraz filtre oluşturma callback'i
+        'Nivo',     // Nivo bileşenleri (Sankey, Sunburst, Chord, Radar, Geo)
         customCode
       );
       
       // Custom widget'a colors, filters, crossFilter ve onCrossFilter prop'ları geç
-      const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters, UIScope, mapScope, crossFilter, handleCrossFilter);
+       const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters, UIScope, mapScope, crossFilter, handleCrossFilter, nivoScope);
       
       if (typeof WidgetComponent !== 'function') {
         return (

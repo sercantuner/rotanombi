@@ -1098,6 +1098,347 @@ url: 'https://stamen-tiles.a.ssl.fastly.net/terrain/{z}/{x}/{y}.png'
 - Eksik parantez, süslü parantez bırakma
 - Tüm fonksiyonları kapat
 
+ ═══════════════════════════════════════════════════════════════════════════════
+ 
+ 📊 GELİŞMİŞ GRAFİK BİLEŞENLERİ (Nivo SCOPE)
+ ───────────────────────────────────────────────────────────────────────────────
+ Widget'a otomatik olarak "Nivo" scope'u geçilir. Bu scope D3.js tabanlı gelişmiş 
+ grafik bileşenlerini içerir:
+ 
+ 📦 NİVO SCOPE İÇERİĞİ:
+    - Nivo.ResponsiveSankey: Akış ve süreç analizi diyagramları
+    - Nivo.ResponsiveSunburst: Güneş patlaması (hiyerarşik) grafikleri
+    - Nivo.ResponsiveChord: İlişki ve bağlantı diyagramları
+    - Nivo.ResponsiveRadar: Örümcek/radar grafikleri (çok boyutlu karşılaştırma)
+    - Nivo.ResponsiveChoropleth: Coğrafi haritalar (ülke/il renklendirme)
+    - Nivo.ResponsiveGeoMap: Basit coğrafi haritalar
+    - Nivo.getTheme(isDark): Tema oluşturucu fonksiyon
+ 
+ 🎨 NİVO TEMA KULLANIMI (ZORUNLU - Dark/Light Mode Uyumu):
+ var isDark = document.documentElement.classList.contains('dark');
+ var nivoTheme = Nivo.getTheme(isDark);
+ 
+ // Tüm Nivo bileşenlerinde theme prop'u kullan:
+ React.createElement(Nivo.ResponsiveSankey, {
+   data: sankeyData,
+   theme: nivoTheme,
+   // ... diğer props
+ })
+ 
+ ═══════════════════════════════════════════════════════════════════════════════
+ 
+ 🔄 SANKEY DİYAGRAMI (Akış ve Süreç Analizi)
+ ───────────────────────────────────────────────────────────────────────────────
+ Süreç akışlarını, kaynak-hedef ilişkilerini ve değer transferlerini gösterir.
+ 
+ 📐 VERİ FORMATI:
+ var sankeyData = {
+   nodes: [
+     { id: 'Kaynak A', nodeColor: getColor(0) },
+     { id: 'Kaynak B', nodeColor: getColor(1) },
+     { id: 'Hedef 1', nodeColor: getColor(2) },
+     { id: 'Hedef 2', nodeColor: getColor(3) }
+   ],
+   links: [
+     { source: 'Kaynak A', target: 'Hedef 1', value: 100 },
+     { source: 'Kaynak A', target: 'Hedef 2', value: 50 },
+     { source: 'Kaynak B', target: 'Hedef 1', value: 75 }
+   ]
+ };
+ 
+ ✅ SANKEY ÖRNEK YAPISI:
+ React.createElement('div', { className: 'h-full min-h-[300px]' },
+   React.createElement(Nivo.ResponsiveSankey, {
+     data: sankeyData,
+     theme: nivoTheme,
+     margin: { top: 20, right: 20, bottom: 20, left: 20 },
+     align: 'justify',
+     colors: function(node) { return node.nodeColor || getColor(0); },
+     nodeOpacity: 1,
+     nodeHoverOthersOpacity: 0.35,
+     nodeThickness: 18,
+     nodeSpacing: 24,
+     nodeBorderWidth: 0,
+     nodeBorderColor: { from: 'color', modifiers: [['darker', 0.8]] },
+     linkOpacity: 0.5,
+     linkHoverOthersOpacity: 0.1,
+     linkContract: 3,
+     enableLinkGradient: true,
+     labelPosition: 'outside',
+     labelOrientation: 'horizontal',
+     labelPadding: 16,
+     labelTextColor: { from: 'color', modifiers: [['darker', 1]] }
+   })
+ )
+ 
+ ═══════════════════════════════════════════════════════════════════════════════
+ 
+ ☀️ SUNBURST GRAFİĞİ (Güneş Patlaması - Hiyerarşik)
+ ───────────────────────────────────────────────────────────────────────────────
+ Hiyerarşik verileri iç içe halkalar şeklinde gösterir (kategori > alt kategori).
+ 
+ 📐 VERİ FORMATI (Hiyerarşik):
+ var sunburstData = {
+   name: 'Satışlar',
+   color: getColor(0),
+   children: [
+     {
+       name: 'Bölge A',
+       color: getColor(1),
+       children: [
+         { name: 'Ürün 1', color: getColor(2), value: 100 },
+         { name: 'Ürün 2', color: getColor(3), value: 80 }
+       ]
+     },
+     {
+       name: 'Bölge B',
+       color: getColor(4),
+       children: [
+         { name: 'Ürün 1', color: getColor(5), value: 120 }
+       ]
+     }
+   ]
+ };
+ 
+ ✅ SUNBURST ÖRNEK YAPISI:
+ React.createElement('div', { className: 'h-full min-h-[300px]' },
+   React.createElement(Nivo.ResponsiveSunburst, {
+     data: sunburstData,
+     theme: nivoTheme,
+     margin: { top: 10, right: 10, bottom: 10, left: 10 },
+     id: 'name',
+     value: 'value',
+     cornerRadius: 2,
+     borderColor: { theme: 'background' },
+     borderWidth: 1,
+     colors: function(d) { return d.data.color || getColor(0); },
+     childColor: { from: 'color', modifiers: [['brighter', 0.1]] },
+     enableArcLabels: true,
+     arcLabelsSkipAngle: 10,
+     arcLabelsTextColor: { from: 'color', modifiers: [['darker', 1.4]] }
+   })
+ )
+ 
+ ═══════════════════════════════════════════════════════════════════════════════
+ 
+ 🎵 CHORD DİYAGRAMI (İlişki ve Bağlantı Analizi)
+ ───────────────────────────────────────────────────────────────────────────────
+ Öğeler arası ilişki ve akış yoğunluğunu gösterir (örn: bölgeler arası satış).
+ 
+ 📐 VERİ FORMATI (Matris):
+ var chordData = [
+   [100, 50, 30],   // Bölge A -> Bölge A, B, C
+   [40, 80, 20],    // Bölge B -> Bölge A, B, C
+   [60, 10, 90]     // Bölge C -> Bölge A, B, C
+ ];
+ var chordKeys = ['Bölge A', 'Bölge B', 'Bölge C'];
+ 
+ ✅ CHORD ÖRNEK YAPISI:
+ React.createElement('div', { className: 'h-full min-h-[300px]' },
+   React.createElement(Nivo.ResponsiveChord, {
+     data: chordData,
+     keys: chordKeys,
+     theme: nivoTheme,
+     margin: { top: 60, right: 60, bottom: 60, left: 60 },
+     valueFormat: '.2s',
+     padAngle: 0.02,
+     innerRadiusRatio: 0.96,
+     innerRadiusOffset: 0.02,
+     inactiveArcOpacity: 0.25,
+     arcBorderColor: { from: 'color', modifiers: [['darker', 0.6]] },
+     activeRibbonOpacity: 0.75,
+     inactiveRibbonOpacity: 0.25,
+     ribbonBorderColor: { from: 'color', modifiers: [['darker', 0.6]] },
+     labelRotation: -90,
+     labelTextColor: { from: 'color', modifiers: [['darker', 1]] },
+     colors: { scheme: 'nivo' },
+     motionConfig: 'stiff'
+   })
+ )
+ 
+ ═══════════════════════════════════════════════════════════════════════════════
+ 
+ 🕸️ RADAR GRAFİĞİ (Örümcek - Çok Boyutlu Karşılaştırma)
+ ───────────────────────────────────────────────────────────────────────────────
+ Birden fazla metriği aynı anda karşılaştırmak için (performans analizi).
+ 
+ 📐 VERİ FORMATI:
+ var radarData = [
+   { metric: 'Satış', Ürün_A: 80, Ürün_B: 65, Ürün_C: 90 },
+   { metric: 'Karlılık', Ürün_A: 70, Ürün_B: 85, Ürün_C: 60 },
+   { metric: 'Müşteri', Ürün_A: 95, Ürün_B: 50, Ürün_C: 75 },
+   { metric: 'Büyüme', Ürün_A: 60, Ürün_B: 90, Ürün_C: 85 },
+   { metric: 'Marka', Ürün_A: 85, Ürün_B: 70, Ürün_C: 80 }
+ ];
+ var radarKeys = ['Ürün_A', 'Ürün_B', 'Ürün_C'];
+ 
+ ✅ RADAR ÖRNEK YAPISI:
+ React.createElement('div', { className: 'h-full min-h-[300px]' },
+   React.createElement(Nivo.ResponsiveRadar, {
+     data: radarData,
+     keys: radarKeys,
+     indexBy: 'metric',
+     theme: nivoTheme,
+     valueFormat: '>-.2f',
+     margin: { top: 70, right: 80, bottom: 40, left: 80 },
+     borderColor: { from: 'color' },
+     gridLabelOffset: 36,
+     dotSize: 10,
+     dotColor: { theme: 'background' },
+     dotBorderWidth: 2,
+     colors: function(d) { 
+       var idx = radarKeys.indexOf(d.key);
+       return getColor(idx >= 0 ? idx : 0);
+     },
+     blendMode: 'multiply',
+     motionConfig: 'wobbly',
+     legends: [
+       {
+         anchor: 'top-left',
+         direction: 'column',
+         translateX: -50,
+         translateY: -40,
+         itemWidth: 80,
+         itemHeight: 20,
+         itemTextColor: 'hsl(var(--foreground))',
+         symbolSize: 12,
+         symbolShape: 'circle'
+       }
+     ]
+   })
+ )
+ 
+ ═══════════════════════════════════════════════════════════════════════════════
+ 
+ 🗺️ CHOROPLETH HARİTA (Coğrafi Renklendirme)
+ ───────────────────────────────────────────────────────────────────────────────
+ Bölgeleri değerlere göre renklendirir (il bazlı satış, ülke bazlı performans).
+ 
+ ⚠️ ÖNEMLİ: Choropleth için GeoJSON harita verisi gerekir!
+ Türkiye için: Türkiye il sınırları GeoJSON
+ Dünya için: World countries GeoJSON
+ 
+ 📐 VERİ FORMATI:
+ var choroplethData = [
+   { id: 'TR34', value: 1500000 },  // İstanbul
+   { id: 'TR06', value: 800000 },   // Ankara
+   { id: 'TR35', value: 600000 }    // İzmir
+ ];
+ 
+ ✅ CHOROPLETH ÖRNEK YAPISI:
+ // GeoJSON features prop'u ile kullanılır
+ React.createElement('div', { className: 'h-full min-h-[400px]' },
+   React.createElement(Nivo.ResponsiveChoropleth, {
+     data: choroplethData,
+     features: geoJsonFeatures,  // GeoJSON FeatureCollection
+     theme: nivoTheme,
+     margin: { top: 0, right: 0, bottom: 0, left: 0 },
+     colors: 'blues',  // veya 'greens', 'reds', 'purples'
+     domain: [0, 2000000],
+     unknownColor: 'hsl(var(--muted))',
+     label: 'properties.name',
+     valueFormat: '.2s',
+     projectionType: 'mercator',
+     projectionScale: 1000,
+     projectionTranslation: [0.5, 0.5],
+     borderWidth: 0.5,
+     borderColor: 'hsl(var(--border))',
+     legends: [
+       {
+         anchor: 'bottom-left',
+         direction: 'column',
+         translateX: 20,
+         translateY: -60,
+         itemWidth: 94,
+         itemHeight: 18,
+         itemsSpacing: 4,
+         itemTextColor: 'hsl(var(--foreground))',
+         symbolSize: 18
+       }
+     ]
+   })
+ )
+ 
+ ═══════════════════════════════════════════════════════════════════════════════
+ 
+ 📈 AI DESTEKLİ TAHMİNLEME GRAFİĞİ (Forecast Line Chart)
+ ───────────────────────────────────────────────────────────────────────────────
+ Mevcut veriden gelecek tahmini gösteren grafik (trend + projeksiyon).
+ 
+ ✅ TAHMİN HESAPLAMA:
+ var calculateForecast = function(data, valueField, forecastDays) {
+   forecastDays = forecastDays || 7;
+   
+   // Son 30 günlük trend hesapla
+   var n = data.length;
+   if (n < 2) return data;
+   
+   var sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+   data.forEach(function(item, i) {
+     var x = i;
+     var y = parseFloat(item[valueField]) || 0;
+     sumX += x; sumY += y; sumXY += x * y; sumX2 += x * x;
+   });
+   
+   var slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+   var intercept = (sumY - slope * sumX) / n;
+   
+   // Tahmin noktaları oluştur
+   var lastDate = new Date(data[n-1].tarih);
+   var forecasts = [];
+   
+   for (var i = 1; i <= forecastDays; i++) {
+     var nextDate = new Date(lastDate);
+     nextDate.setDate(nextDate.getDate() + i);
+     forecasts.push({
+       tarih: nextDate.toISOString().split('T')[0],
+       label: nextDate.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' }),
+       [valueField]: null,  // Gerçek değer yok
+       forecast: intercept + slope * (n + i - 1),  // Tahmin değeri
+       isForecast: true
+     });
+   }
+   
+   // Mevcut veriyi forecast alanıyla güncelle
+   var updatedData = data.map(function(item, i) {
+     return Object.assign({}, item, {
+       forecast: null,  // Mevcut veride tahmin yok
+       isForecast: false
+     });
+   });
+   
+   return updatedData.concat(forecasts);
+ };
+ 
+ // Grafik render:
+ // 1. Gerçek değerler: solid Line
+ // 2. Tahmin değerleri: dashed Line
+ React.createElement(Recharts.Line, {
+   dataKey: valueField,
+   stroke: getColor(0),
+   strokeWidth: 2,
+   dot: true,
+   name: 'Gerçek'
+ }),
+ React.createElement(Recharts.Line, {
+   dataKey: 'forecast',
+   stroke: getColor(0),
+   strokeWidth: 2,
+   strokeDasharray: '5 5',  // Kesikli çizgi - tahmin
+   dot: { strokeDasharray: '' },  // Noktalar kesikli olmasın
+   name: 'Tahmin'
+ })
+ 
+ ═══════════════════════════════════════════════════════════════════════════════
+ 
+ ⚠️ NİVO GENEL KURALLAR:
+ ───────────────────────────────────────────────────────────────────────────────
+ 1. Container yüksekliği ZORUNLU: min-h-[300px] veya h-[400px]
+ 2. Theme prop'u ZORUNLU: theme: Nivo.getTheme(isDark)
+ 3. Renk paleti: colors: function(d) { return getColor(idx); } veya colors: { scheme: 'nivo' }
+ 4. margin prop'u genellikle gerekli: { top: 20, right: 20, bottom: 20, left: 20 }
+ 5. Nivo bileşenleri "Responsive" prefix'i ile kullanılmalı (tam genişlik/yükseklik için)
+ 
 SADECE JavaScript kodu döndür, açıklama veya markdown formatı kullanma.`;
 
 // Kod iyileştirme/chat için system prompt
@@ -1163,6 +1504,16 @@ Widget'a "Map" scope'u da geçilir. Leaflet harita bileşenleri:
 - Koordinat formatı: [lat, lng] (dizi olarak)
 - TileLayer için OpenStreetMap: url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 
+ 📊 GELİŞMİŞ GRAFİKLER (Nivo SCOPE):
+ Widget'a "Nivo" scope'u da geçilir. D3.js tabanlı gelişmiş grafik bileşenleri:
+ - Nivo.ResponsiveSankey: Akış diyagramları
+ - Nivo.ResponsiveSunburst: Güneş patlaması (hiyerarşik)
+ - Nivo.ResponsiveChord: İlişki diyagramları
+ - Nivo.ResponsiveRadar: Radar/örümcek grafikleri
+ - Nivo.ResponsiveChoropleth: Coğrafi renklendirme
+ - Container'a min-h-[300px] ZORUNLU
+ - Theme: var nivoTheme = Nivo.getTheme(document.documentElement.classList.contains('dark'));
+ 
 SADECE güncellenmiş JavaScript kodunu döndür, açıklama ekleme.`;
 
 // Kodun tamamlanıp tamamlanmadığını kontrol et
