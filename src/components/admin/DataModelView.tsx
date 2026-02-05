@@ -8,10 +8,14 @@ import {
   Save, 
   AlertCircle,
   Loader2,
-  Database
+  Database,
+  LayoutGrid,
+  Shuffle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { useDataSources, DataSource } from '@/hooks/useDataSources';
 import { useDataSourceRelationships, DataSourceRelationship, RelationshipFormData } from '@/hooks/useDataSourceRelationships';
 import { DataSourceCard } from './DataSourceCard';
@@ -20,6 +24,12 @@ import { RelationshipEditor } from './RelationshipEditor';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+// Grid ayarları
+const GRID_SIZE = 20;
+const CARD_WIDTH = 256;
+const CARD_HEIGHT = 280;
+const GAP = 60;
+
 // Debounce helper
 function debounce<T extends (...args: any[]) => any>(fn: T, delay: number): T {
   let timeoutId: ReturnType<typeof setTimeout>;
@@ -27,6 +37,11 @@ function debounce<T extends (...args: any[]) => any>(fn: T, delay: number): T {
     clearTimeout(timeoutId);
     timeoutId = setTimeout(() => fn(...args), delay);
   }) as T;
+}
+
+// Snap to grid helper
+function snapToGrid(value: number): number {
+  return Math.round(value / GRID_SIZE) * GRID_SIZE;
 }
 
 // Kart pozisyonu tipi
@@ -67,6 +82,10 @@ export function DataModelView() {
   // Kart pozisyonları
   const [cardPositions, setCardPositions] = useState<Record<string, CardPosition>>({});
   const [positionsChanged, setPositionsChanged] = useState(false);
+  
+  // Grid/snap ayarları
+  const [showGrid, setShowGrid] = useState(true);
+  const [snapToGridEnabled, setSnapToGridEnabled] = useState(true);
 
   // Sürükleme durumu (alan sürükleme)
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -92,9 +111,6 @@ export function DataModelView() {
     if (activeDataSources.length === 0) return;
 
     const positions: Record<string, CardPosition> = {};
-    const CARD_WIDTH = 260;
-    const CARD_HEIGHT = 200;
-    const GAP = 40;
     const COLS = Math.ceil(Math.sqrt(activeDataSources.length));
 
     activeDataSources.forEach((ds, index) => {
@@ -111,8 +127,8 @@ export function DataModelView() {
       const col = index % COLS;
       const row = Math.floor(index / COLS);
       positions[ds.id] = {
-        x: col * (CARD_WIDTH + GAP) + 50,
-        y: row * (CARD_HEIGHT + GAP) + 50,
+        x: snapToGrid(col * (CARD_WIDTH + GAP) + 50),
+        y: snapToGrid(row * (CARD_HEIGHT + GAP) + 50),
       };
     });
 
@@ -135,14 +151,99 @@ export function DataModelView() {
     []
   );
 
-  // Kart pozisyonu değiştiğinde
+  // Kart pozisyonu değiştiğinde (snap-to-grid)
   const handlePositionChange = useCallback((id: string, position: CardPosition) => {
+    const finalPos = snapToGridEnabled 
+      ? { x: snapToGrid(position.x), y: snapToGrid(position.y) }
+      : position;
     setCardPositions(prev => ({
       ...prev,
-      [id]: position,
+      [id]: finalPos,
     }));
     setPositionsChanged(true);
-  }, []);
+  }, [snapToGridEnabled]);
+  
+  // Otomatik layout algoritması - force-directed benzeri
+  const handleAutoLayout = useCallback(() => {
+    if (activeDataSources.length === 0) return;
+    
+    // İlişkilere göre kartları grupla
+    const relationshipMap = new Map<string, Set<string>>();
+    
+    activeDataSources.forEach(ds => {
+      relationshipMap.set(ds.id, new Set());
+    });
+    
+    relationships.forEach(rel => {
+      relationshipMap.get(rel.source_data_source_id)?.add(rel.target_data_source_id);
+      relationshipMap.get(rel.target_data_source_id)?.add(rel.source_data_source_id);
+    });
+    
+    // En çok bağlantısı olan kartları merkeze yakın yerleştir
+    const sortedByConnections = [...activeDataSources].sort((a, b) => {
+      const aConns = relationshipMap.get(a.id)?.size || 0;
+      const bConns = relationshipMap.get(b.id)?.size || 0;
+      return bConns - aConns;
+    });
+    
+    const newPositions: Record<string, CardPosition> = {};
+    const placed = new Set<string>();
+    
+    // Merkez nokta
+    const centerX = 400;
+    const centerY = 200;
+    
+    // İlk kartı merkeze yerleştir
+    if (sortedByConnections.length > 0) {
+      const first = sortedByConnections[0];
+      newPositions[first.id] = { x: snapToGrid(centerX), y: snapToGrid(centerY) };
+      placed.add(first.id);
+    }
+    
+    // Diğer kartları spiral şeklinde yerleştir
+    let angle = 0;
+    let radius = CARD_WIDTH + GAP * 2;
+    let layer = 1;
+    
+    for (let i = 1; i < sortedByConnections.length; i++) {
+      const ds = sortedByConnections[i];
+      
+      // İlişkili kartlara yakın yerleştir
+      const connectedTo = relationshipMap.get(ds.id);
+      let targetX = centerX + Math.cos(angle) * radius;
+      let targetY = centerY + Math.sin(angle) * radius;
+      
+      if (connectedTo && connectedTo.size > 0) {
+        // İlişkili kartların ortalamasına yakın yerleştir
+        let sumX = 0, sumY = 0, count = 0;
+        connectedTo.forEach(connId => {
+          if (newPositions[connId]) {
+            sumX += newPositions[connId].x;
+            sumY += newPositions[connId].y;
+            count++;
+          }
+        });
+        if (count > 0) {
+          targetX = sumX / count + (CARD_WIDTH + GAP) * Math.cos(angle);
+          targetY = sumY / count + (CARD_HEIGHT + GAP) * Math.sin(angle);
+        }
+      }
+      
+      newPositions[ds.id] = { x: snapToGrid(targetX), y: snapToGrid(Math.max(40, targetY)) };
+      placed.add(ds.id);
+      
+      angle += Math.PI / 3;
+      if (angle >= Math.PI * 2) {
+        angle = 0;
+        layer++;
+        radius = (CARD_WIDTH + GAP * 2) * layer;
+      }
+    }
+    
+    setCardPositions(newPositions);
+    setPositionsChanged(true);
+    toast.success('Kartlar otomatik olarak yerleştirildi');
+  }, [activeDataSources, relationships, snapToGridEnabled]);
 
   // Alan sürükleme başlat
   const handleFieldDragStart = useCallback((dataSourceId: string, field: string, position: { x: number; y: number }) => {
@@ -318,13 +419,41 @@ export function DataModelView() {
     <div className="flex flex-col h-full bg-muted/30">
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-background">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
           <span className="text-sm font-medium">
             {activeDataSources.length} veri kaynağı • {relationships.length} ilişki
           </span>
+          
+          <div className="flex items-center gap-2">
+            <Switch
+              id="showGrid"
+              checked={showGrid}
+              onCheckedChange={setShowGrid}
+            />
+            <Label htmlFor="showGrid" className="text-xs flex items-center gap-1">
+              <LayoutGrid className="w-3 h-3" />
+              Grid
+            </Label>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Switch
+              id="snapToGrid"
+              checked={snapToGridEnabled}
+              onCheckedChange={setSnapToGridEnabled}
+            />
+            <Label htmlFor="snapToGrid" className="text-xs">Snap</Label>
+          </div>
         </div>
         
         <div className="flex items-center gap-1">
+          <Button variant="outline" size="sm" onClick={handleAutoLayout}>
+            <Shuffle className="w-4 h-4 mr-1" />
+            Otomatik Yerleştir
+          </Button>
+          
+          <div className="w-px h-6 bg-border mx-2" />
+          
           <Button variant="ghost" size="icon" onClick={() => handleZoom(0.1)}>
             <ZoomIn className="w-4 h-4" />
           </Button>
@@ -356,6 +485,21 @@ export function DataModelView() {
         style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
         onMouseDown={handleCanvasMouseDown}
       >
+        {/* Grid Background */}
+        {showGrid && (
+          <div 
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              backgroundImage: `
+                linear-gradient(to right, hsl(var(--border) / 0.3) 1px, transparent 1px),
+                linear-gradient(to bottom, hsl(var(--border) / 0.3) 1px, transparent 1px)
+              `,
+              backgroundSize: `${GRID_SIZE * zoom}px ${GRID_SIZE * zoom}px`,
+              backgroundPosition: `${pan.x % (GRID_SIZE * zoom)}px ${pan.y % (GRID_SIZE * zoom)}px`,
+            }}
+          />
+        )}
+        
         <div
           className="absolute inset-0"
           style={{

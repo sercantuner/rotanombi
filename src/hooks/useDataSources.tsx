@@ -36,6 +36,9 @@ export interface DataSource {
   last_fields: string[] | null;
   last_sample_data: any[] | null; // Filtreleme için örnek veriler
   
+  // Filterable alanlar (global filtre bağlamaları)
+  filterable_fields: Record<string, string> | null;
+  
   // Model görünümü pozisyonu
   model_position: { x: number; y: number } | null;
   
@@ -87,6 +90,7 @@ export function useDataSources() {
         period_config: ds.period_config as unknown as PeriodConfig | null,
         last_fields: ds.last_fields as unknown as string[] | null,
         last_sample_data: (ds as any).last_sample_data as any[] | null,
+        filterable_fields: (ds.filterable_fields as unknown as Record<string, string>) || null,
         model_position: (ds as any).model_position as { x: number; y: number } | null,
       })) as DataSource[];
     },
