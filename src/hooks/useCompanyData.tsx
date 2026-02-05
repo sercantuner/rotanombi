@@ -49,25 +49,43 @@ export function useCompanyData(filter: CompanyDataFilter) {
         return [];
       }
 
-      let query = supabase
-        .from('company_data_cache')
-        .select('data')
-        .eq('data_source_slug', filter.dataSourceSlug)
-        .eq('donem_kodu', effectiveDonem);
+      // Sayfalama ile tüm veriyi çek - Supabase varsayılan 1000 limit'i aşmak için
+      const PAGE_SIZE = 5000;
+      let allData: any[] = [];
+      let from = 0;
+      let hasMore = true;
+      
+      while (hasMore) {
+        let query = supabase
+          .from('company_data_cache')
+          .select('data')
+          .eq('data_source_slug', filter.dataSourceSlug)
+          .eq('donem_kodu', effectiveDonem)
+          .range(from, from + PAGE_SIZE - 1);
 
-      if (!filter.includeDeleted) {
-        query = query.eq('is_deleted', false);
-      }
+        if (!filter.includeDeleted) {
+          query = query.eq('is_deleted', false);
+        }
 
-      const { data, error } = await query;
+        const { data, error } = await query;
 
-      if (error) {
-        console.error('[useCompanyData] Error fetching data:', error);
-        throw error;
+        if (error) {
+          console.error('[useCompanyData] Error fetching data:', error);
+          throw error;
+        }
+
+        const rows = data || [];
+        allData = allData.concat(rows.map(row => row.data));
+        
+        if (rows.length < PAGE_SIZE) {
+          hasMore = false;
+        } else {
+          from += PAGE_SIZE;
+        }
       }
 
       // JSONB data alanlarını düz obje olarak döndür
-      return (data || []).map(row => row.data);
+      return allData;
     },
     enabled: !!user && !!sunucuAdi && !!firmaKodu && !!filter.dataSourceSlug,
     staleTime: 5 * 60 * 1000, // 5 dakika

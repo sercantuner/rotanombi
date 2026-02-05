@@ -113,24 +113,41 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     const effectiveDonem = parseInt(donemKodu || '1');
 
     try {
-      const { data, error } = await supabase
-        .from('company_data_cache')
-        .select('data')
-        .eq('data_source_slug', dataSource.slug)
-        .eq('sunucu_adi', sunucuAdi)
-        .eq('firma_kodu', firmaKodu)
-        .eq('donem_kodu', effectiveDonem)
-        .eq('is_deleted', false);
+      // Sayfalama ile tüm veriyi çek - Supabase varsayılan 1000 limit'i aşmak için
+      const PAGE_SIZE = 5000;
+      let allData: any[] = [];
+      let from = 0;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('company_data_cache')
+          .select('data')
+          .eq('data_source_slug', dataSource.slug)
+          .eq('sunucu_adi', sunucuAdi)
+          .eq('firma_kodu', firmaKodu)
+          .eq('donem_kodu', effectiveDonem)
+          .eq('is_deleted', false)
+          .range(from, from + PAGE_SIZE - 1);
 
-      if (error) {
-        console.error(`[DataSourceLoader] DB-FIRST error for ${dataSource.name}:`, error);
-        return null;
+        if (error) {
+          console.error(`[DataSourceLoader] DB-FIRST error for ${dataSource.name}:`, error);
+          return null;
+        }
+
+        const rows = data || [];
+        allData = allData.concat(rows.map(row => row.data));
+        
+        if (rows.length < PAGE_SIZE) {
+          hasMore = false;
+        } else {
+          from += PAGE_SIZE;
+        }
       }
 
-      if (data && data.length > 0) {
-        const extractedData = data.map(row => row.data);
-        console.log(`[DataSourceLoader] DB-FIRST HIT: ${dataSource.name} (${extractedData.length} kayıt from DB)`);
-        return extractedData;
+      if (allData.length > 0) {
+        console.log(`[DataSourceLoader] DB-FIRST HIT: ${dataSource.name} (${allData.length} kayıt from DB)`);
+        return allData;
       }
 
       console.log(`[DataSourceLoader] DB-FIRST MISS: ${dataSource.name} - no data in DB`);
