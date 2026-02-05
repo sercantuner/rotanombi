@@ -11,10 +11,11 @@ const corsHeaders = {
 };
 
 interface SyncRequest {
-  action: 'sync' | 'syncAll' | 'lockPeriod' | 'getSyncStatus';
+  action: 'sync' | 'syncAll' | 'lockPeriod' | 'getSyncStatus' | 'syncAllForUser';
   dataSourceSlug?: string;
   forceRefresh?: boolean;
   periodNo?: number;
+  targetUserId?: string; // Super admin tarafından belirtilen hedef kullanıcı
 }
 
 interface SyncResult {
@@ -202,10 +203,32 @@ serve(async (req) => {
     }
 
     const body: SyncRequest = await req.json();
-    const { action, dataSourceSlug, forceRefresh = false, periodNo } = body;
+    const { action, dataSourceSlug, forceRefresh = false, periodNo, targetUserId } = body;
 
-    // DIA session al
-    const diaResult = await getDiaSession(supabase, user.id);
+    // Super admin kontrolü (syncAllForUser için)
+    let effectiveUserId = user.id;
+    
+    if (action === 'syncAllForUser' && targetUserId) {
+      // Super admin kontrolü
+      const { data: roleCheck } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'super_admin')
+        .single();
+      
+      if (!roleCheck) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Bu işlem için süper admin yetkisi gerekli" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      effectiveUserId = targetUserId;
+    }
+
+    // DIA session al (hedef kullanıcı için)
+    const diaResult = await getDiaSession(supabase, effectiveUserId);
     if (!diaResult.success || !diaResult.session) {
       return new Response(
         JSON.stringify({ success: false, error: diaResult.error || "DIA bağlantısı kurulamadı" }),
@@ -221,10 +244,16 @@ serve(async (req) => {
     const { data: profile } = await supabase
       .from('profiles')
       .select('donem_kodu')
-      .eq('user_id', diaResult.effectiveUserId || user.id)
+      .eq('user_id', effectiveUserId)
       .single();
 
     const currentDonem = parseInt(profile?.donem_kodu) || session.donemKodu;
+
+    // ===== SYNC ALL FOR USER (Super Admin) =====
+    if (action === 'syncAllForUser') {
+      // Bu action, syncAll ile aynı mantığı kullanır ama hedef kullanıcı için
+      console.log(`[DIA Sync] Super admin syncing all data for user: ${effectiveUserId}`);
+    }
 
     // ===== GET SYNC STATUS =====
     if (action === 'getSyncStatus') {
@@ -304,8 +333,9 @@ serve(async (req) => {
       );
     }
 
+    // ===== SYNC veya SYNC ALL veya SYNC ALL FOR USER =====
     // Hangi veri kaynaklarını senkronize edeceğimizi belirle
-    const sourcesToSync = action === 'syncAll' 
+    const sourcesToSync = (action === 'syncAll' || action === 'syncAllForUser')
       ? dataSources 
       : dataSources.filter(ds => ds.slug === dataSourceSlug);
 
