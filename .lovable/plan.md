@@ -2,8 +2,35 @@
 # Edge Function ve Veritabanı Optimizasyonu Planı
 
 ## Özet
-1. Edge function deploy hatasının çözümü
-2. Büyük veri setleri için JSONB optimizasyonu (20,000+ kayıt senaryosu)
+1. ✅ Edge function deploy hatasının çözümü (geçici altyapı sorunu)
+2. ✅ Büyük veri setleri için JSONB optimizasyonu (20,000+ kayıt senaryosu)
+
+## Uygulanan Değişiklikler (Tamamlandı)
+
+### Expression-Based Indexes
+Generated columns yerine expression-based indeksler kullanıldı (PostgreSQL immutability kısıtlaması nedeniyle):
+
+```sql
+-- Tarih sorguları için
+CREATE INDEX idx_company_data_tarih ON company_data_cache ((data->>'tarih')) WHERE is_deleted = false;
+
+-- Cari kodu sorguları için  
+CREATE INDEX idx_company_data_carikodu ON company_data_cache ((data->>'carikodu')) WHERE is_deleted = false;
+
+-- Tür sorguları için
+CREATE INDEX idx_company_data_turu ON company_data_cache ((data->>'turu')) WHERE is_deleted = false;
+
+-- GIN index for deep JSONB queries
+CREATE INDEX idx_company_data_gin ON company_data_cache USING GIN (data jsonb_path_ops) WHERE is_deleted = false;
+
+-- Composite index for company lookups
+CREATE INDEX idx_company_data_composite ON company_data_cache (sunucu_adi, firma_kodu, data_source_slug, donem_kodu) WHERE is_deleted = false;
+
+-- Slug + tarih combined index
+CREATE INDEX idx_company_data_slug_tarih ON company_data_cache (data_source_slug, (data->>'tarih') DESC) WHERE is_deleted = false;
+```
+
+---
 
 ---
 
