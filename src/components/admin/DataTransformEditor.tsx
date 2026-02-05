@@ -610,11 +610,18 @@ export function DataTransformEditor({
   };
 
   // Sütun toggle
+  // Boş dizi = tüm sütunlar seçili demek, bu durumda tıklanan sütunu kaldır
   const toggleColumn = (field: string) => {
     setSelectedColumns(prev => {
+      // Eğer dizi boşsa (tümü seçili), tıklanan hariç tümünü seç
+      if (prev.length === 0) {
+        return allFields.filter(f => f !== field);
+      }
+      // Zaten seçiliyse kaldır
       if (prev.includes(field)) {
         return prev.filter(f => f !== field);
       }
+      // Seçili değilse ekle
       return [...prev, field];
     });
   };
