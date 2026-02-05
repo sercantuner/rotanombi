@@ -349,7 +349,10 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
    // Alt sabit bar - DIA durumu ve kontrol butonları
    const renderBottomBar = () => {
      return (
-      <div className="absolute bottom-0 left-0 right-0 z-40 bg-card border-t border-border px-4 py-2">
+      <div 
+        className="fixed bottom-0 right-0 z-40 bg-card border-t border-border px-4 py-2"
+        style={{ left: 'var(--main-sidebar-width, 4rem)' }}
+      >
          <div className="flex items-center justify-between gap-4">
            {/* Sol - DIA Durumu */}
            <div className="flex items-center gap-3">
@@ -495,7 +498,7 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
  
   if (userPages.length === 0) {
     return (
-        <div className="relative flex h-full pb-12">
+        <div className="flex h-full pb-12">
         {renderSidebar()}
         <div className="flex-1 p-6">
           <div className="flex flex-col items-center justify-center h-64 text-center">
@@ -512,7 +515,7 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
 
   return (
     <DashboardFilterProvider>
-        <div className="relative flex h-full min-h-0 bg-background pb-12">
+        <div className="flex h-full min-h-0 bg-background pb-12">
         {renderSidebar()}
          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-background">
            {isPageLoading && (

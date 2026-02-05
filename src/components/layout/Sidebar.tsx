@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useEffect } from 'react';
 
 interface NavItem {
   path: string;
@@ -67,6 +68,11 @@ export function Sidebar({
   const navigate = useNavigate();
   const [showCreatePage, setShowCreatePage] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(true);
+
+  // Sidebar genişliğini CSS değişkeni olarak paylaş (fixed positioned elementlar için)
+  useEffect(() => {
+    document.documentElement.style.setProperty('--main-sidebar-width', collapsed ? '4rem' : '16rem');
+  }, [collapsed]);
 
   // Admin filtresi
   const visibleStaticItems = staticNavItems.filter(item => !item.adminOnly || isAdmin);
