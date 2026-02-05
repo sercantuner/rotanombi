@@ -7,8 +7,12 @@ const corsHeaders = {
 };
 
 const PAGE_SIZE = 200, BATCH_SIZE = 25, MAX_RECORDS = 50000;
-const CLEANUP_TIMEOUT_MS = 15 * 60 * 1000; // 15 dakika (önceki 5dk yerine)
+const CLEANUP_TIMEOUT_MS = 15 * 60 * 1000; // 15 dakika
 const NON_DIA = ['takvim', '_system_calendar', 'system_calendar'];
+
+// Chunk sabitleri
+const DEFAULT_CHUNK_SIZE = 1000; // Her chunk'ta max kayıt
+const MAX_CHUNK_SIZE = 2000;    // Güvenlik limiti
 
 function parse(r: any, m: string): any[] {
   if (r.result) {
@@ -68,6 +72,62 @@ async function fetchPage(sb: any, uid: string, sess: any, mod: string, met: stri
   } catch (e) { return { ok: false, data: [], err: e instanceof Error ? e.message : "Fetch error" }; }
 }
 
+// Chunk-bazlı streaming: Belirli sayıda kayıt çek ve yaz, sonra dön
+async function streamChunk(
+  sb: any, uid: string, sess: any, mod: string, met: string, dk: number, 
+  sun: string, fk: string, slug: string, startOffset: number, chunkSize: number
+) {
+  let off = startOffset;
+  let fetched = 0;
+  let written = 0;
+  let cs = sess;
+  const keys = new Set<number>();
+  
+  console.log(`[syncChunk] Starting: ${slug}, offset=${startOffset}, chunkSize=${chunkSize}`);
+  
+  while (fetched < chunkSize) {
+    const r = await fetchPage(sb, uid, cs, mod, met, dk, off);
+    
+    if (!r.ok) {
+      // İlk sayfada hata varsa başarısız
+      if (fetched === 0) {
+        console.log(`[syncChunk] First page error: ${r.err}`);
+        return { ok: false, fetched, written, hasMore: false, nextOffset: off, err: r.err };
+      }
+      // Sonraki sayfalarda hata = veri bitti
+      console.log(`[syncChunk] Page error after ${fetched} records: ${r.err}`);
+      break;
+    }
+    
+    if (r.sess) cs = r.sess;
+    
+    // Veri geldiyse hemen yaz
+    if (r.data.length > 0) {
+      written += await write(sb, sun, fk, dk, slug, r.data, keys);
+      fetched += r.data.length;
+      console.log(`[syncChunk] Page fetched: ${r.data.length} records, total=${fetched}`);
+    }
+    
+    // Sayfa dolmadıysa = veri bitti
+    if (r.data.length < PAGE_SIZE) {
+      console.log(`[syncChunk] Data exhausted (${r.data.length} < ${PAGE_SIZE})`);
+      return { ok: true, fetched, written, hasMore: false, nextOffset: off + r.data.length };
+    }
+    
+    off += PAGE_SIZE;
+    
+    // ChunkSize'a ulaştık mı?
+    if (fetched >= chunkSize) {
+      console.log(`[syncChunk] Chunk complete: ${fetched} records`);
+      return { ok: true, fetched, written, hasMore: true, nextOffset: off };
+    }
+  }
+  
+  // Döngü tamamlandı (hata veya veri bitti)
+  return { ok: true, fetched, written, hasMore: false, nextOffset: off };
+}
+
+// Eski stream fonksiyonu (tüm veriyi çeker - syncSingleSource için)
 async function stream(sb: any, uid: string, sess: any, mod: string, met: string, dk: number, sun: string, fk: string, slug: string) {
   let off = 0, more = true, fetched = 0, written = 0, pg = 0, cs = sess;
   const keys = new Set<number>();
@@ -103,9 +163,9 @@ Deno.serve(async (req) => {
     const { data: { user }, error: ue } = await sb.auth.getUser(auth.replace("Bearer ", ""));
     if (ue || !user) return new Response(JSON.stringify({ success: false, error: "Invalid token" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     const body = await req.json();
-    const { action, dataSourceSlug, periodNo, targetUserId, syncAllPeriods } = body;
+    const { action, dataSourceSlug, periodNo, targetUserId, syncAllPeriods, offset, chunkSize } = body;
     let euid = user.id;
-    if ((action === 'syncAllForUser' || action === 'syncSingleSource') && targetUserId) {
+    if ((action === 'syncAllForUser' || action === 'syncSingleSource' || action === 'syncChunk') && targetUserId) {
       const { data: rc } = await sb.from('user_roles').select('role').eq('user_id', user.id).eq('role', 'super_admin').single();
       if (!rc) return new Response(JSON.stringify({ success: false, error: "Super admin required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       euid = targetUserId;
@@ -113,6 +173,60 @@ Deno.serve(async (req) => {
     const dr = await getDiaSession(sb, euid);
     if (!dr.success || !dr.session) return new Response(JSON.stringify({ success: false, error: dr.error || "DIA connection failed" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     const { session } = dr, sun = session.sunucuAdi, fk = String(session.firmaKodu);
+    
+    // ===== YENI: syncChunk action =====
+    if (action === 'syncChunk') {
+      if (!dataSourceSlug || periodNo === undefined) {
+        return new Response(JSON.stringify({ success: false, error: "dataSourceSlug and periodNo required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      
+      const { data: src } = await sb.from('data_sources').select('slug, module, method, name').eq('slug', dataSourceSlug).eq('is_active', true).single();
+      if (!src) {
+        return new Response(JSON.stringify({ success: false, error: `Source not found: ${dataSourceSlug}` }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      
+      const startOffset = offset || 0;
+      const requestedChunkSize = Math.min(chunkSize || DEFAULT_CHUNK_SIZE, MAX_CHUNK_SIZE);
+      
+      console.log(`[syncChunk] Processing: ${src.slug}, period=${periodNo}, offset=${startOffset}, chunkSize=${requestedChunkSize}`);
+      
+      const result = await streamChunk(
+        sb, euid, session, src.module, src.method, periodNo, 
+        sun, fk, src.slug, startOffset, requestedChunkSize
+      );
+      
+      if (!result.ok) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: result.err,
+          written: result.written,
+          hasMore: false,
+          nextOffset: result.nextOffset
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      
+      // period_sync_status'ı güncelle (incremental)
+      if (result.written > 0) {
+        await sb.from('period_sync_status').upsert({ 
+          sunucu_adi: sun, 
+          firma_kodu: fk, 
+          donem_kodu: periodNo, 
+          data_source_slug: src.slug, 
+          last_incremental_sync: new Date().toISOString(), 
+          updated_at: new Date().toISOString() 
+        }, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug' });
+      }
+      
+      console.log(`[syncChunk] Complete: written=${result.written}, hasMore=${result.hasMore}, nextOffset=${result.nextOffset}`);
+      
+      return new Response(JSON.stringify({ 
+        success: true, 
+        written: result.written,
+        fetched: result.fetched,
+        hasMore: result.hasMore,
+        nextOffset: result.nextOffset
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     
     if (action === 'syncSingleSource') {
       if (!dataSourceSlug || periodNo === undefined) return new Response(JSON.stringify({ success: false, error: "dataSourceSlug and periodNo required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
