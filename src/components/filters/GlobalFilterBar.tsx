@@ -1,6 +1,6 @@
 // Global Filter Bar - Üst filtre barı bileşeni (Dinamik filtre yönetimi)
 import React, { useMemo, useState, useEffect } from 'react';
-import { Calendar, Users, Filter, X, ChevronDown, ChevronUp, RotateCcw, Settings2, Lock, Building2, Warehouse, MapPin, Hash, PanelTopClose, PanelTop } from 'lucide-react';
+import { Calendar, Users, Filter, X, ChevronDown, ChevronUp, RotateCcw, Settings2, Lock, Building2, Warehouse, MapPin, Hash, PanelTopClose, PanelTop, Sparkles } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
 import { useFilterPreferences, ALL_AVAILABLE_FILTERS } from '@/hooks/useFilterPreferences';
@@ -48,6 +48,9 @@ export function GlobalFilterBar({
     clearFilters,
     activeFilterCount,
   } = useGlobalFilters();
+  
+  // Cross-filter state
+  const { crossFilter, clearCrossFilter } = useGlobalFilters();
 
   const { preferences, savePreferences, isFilterVisible, isLoading: prefsLoading } = useFilterPreferences();
   
@@ -227,6 +230,28 @@ export function GlobalFilterBar({
               </div>
             )}
           </div>
+
+          {/* Cross-Filter Göstergesi - Aktif çapraz filtre varsa göster */}
+          {crossFilter && (
+            <div className="flex items-center gap-2 mt-2 p-2 bg-primary/10 border border-primary/30 rounded-lg animate-in fade-in slide-in-from-top-1 duration-200">
+              <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="text-xs text-muted-foreground">Çapraz Filtre: </span>
+                <span className="text-sm font-medium text-primary">
+                  {crossFilter.label || (Array.isArray(crossFilter.value) ? crossFilter.value.join(', ') : crossFilter.value)}
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearCrossFilter}
+                className="h-6 px-2 text-xs text-primary hover:text-primary hover:bg-primary/20"
+              >
+                <X className="w-3 h-3 mr-1" />
+                Temizle
+              </Button>
+            </div>
+          )}
 
           {/* Collapsible Content - Filtre butonları */}
           <CollapsibleContent className="mt-3">

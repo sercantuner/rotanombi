@@ -4,20 +4,31 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import type { VadeYaslandirma } from '@/lib/diaClient';
 import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
 import { useChartColorPalette } from '@/hooks/useChartColorPalette';
+import { X } from 'lucide-react';
 
 interface Props {
   yaslandirma: VadeYaslandirma;
   isLoading?: boolean;
   widgetId?: string; // Widget bazında palet desteği için
+  crossFilterField?: string; // Bu widget hangi global filtre alanını kontrol eder
 }
 
 type Periyot = 'gunluk' | 'haftalik' | 'aylik';
 
-export function VadeYaslandirmasi({ yaslandirma, isLoading, widgetId }: Props) {
-  const { filters, setFilter } = useGlobalFilters();
+export function VadeYaslandirmasi({ yaslandirma, isLoading, widgetId, crossFilterField = 'vadeDilimi' }: Props) {
+  const { filters, setFilter, crossFilter, setCrossFilter, clearCrossFilter } = useGlobalFilters();
   // Widget bazında palet desteği - widgetId varsa widget-specific palet kullanılır
   const { colors: paletteColors, getColor } = useChartColorPalette({ widgetId });
   const [periyot, setPeriyot] = useState<Periyot>('gunluk');
+  
+  // Bu widget'ın cross-filter tarafından etkilenip etkilenmediğini kontrol et
+  const isCrossFiltered = useMemo(() => {
+    if (!crossFilter || !crossFilterField) return false;
+    return crossFilter.field === crossFilterField;
+  }, [crossFilter, crossFilterField]);
+  
+  // Aktif cross-filter değeri
+  const activeCrossFilterValue = isCrossFiltered ? crossFilter?.value : null;
 
   const formatCurrency = (value: number) => {
     if (value >= 1000000) {
@@ -186,7 +197,25 @@ export function VadeYaslandirmasi({ yaslandirma, isLoading, widgetId }: Props) {
 
   const handleBarClick = (data: any) => {
     if (data && data.key) {
-      setFilter('vadeDilimi', filters.vadeDilimi === data.key ? null : data.key);
+      // Önce lokal filtre
+      const newValue = filters.vadeDilimi === data.key ? null : data.key;
+      setFilter('vadeDilimi', newValue);
+      
+      // Cross-filter de güncelle
+      if (crossFilterField && widgetId) {
+        if (activeCrossFilterValue === data.key) {
+          clearCrossFilter();
+        } else if (newValue) {
+          setCrossFilter({
+            sourceWidgetId: widgetId,
+            field: crossFilterField,
+            value: data.key,
+            label: data.name,
+          });
+        } else {
+          clearCrossFilter();
+        }
+      }
     }
   };
 
@@ -235,6 +264,24 @@ export function VadeYaslandirmasi({ yaslandirma, isLoading, widgetId }: Props) {
 
   return (
     <div className="glass-card rounded-xl p-3 md:p-6 animate-slide-up">
+      {/* Cross-filter aktif göstergesi */}
+      {isCrossFiltered && crossFilter && (
+        <div className="mb-2 flex items-center justify-between bg-primary/10 border border-primary/30 rounded-lg px-3 py-1.5">
+          <span className="text-xs font-medium text-primary">
+            Çapraz Filtre: <span className="font-bold">{crossFilter.label || crossFilter.value}</span>
+          </span>
+          <button 
+            onClick={() => {
+              clearCrossFilter();
+              setFilter('vadeDilimi', null);
+            }}
+            className="p-0.5 hover:bg-primary/20 rounded flex items-center gap-1 text-xs text-primary"
+          >
+            <X className="h-3 w-3" />
+            Temizle
+          </button>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3 md:mb-4">
         <div className="min-w-0">
           <h3 className="text-sm md:text-lg font-semibold truncate">Nakit Akış Projeksiyonu (FIFO)</h3>
@@ -335,9 +382,11 @@ export function VadeYaslandirmasi({ yaslandirma, isLoading, widgetId }: Props) {
                 <Cell 
                   key={`cell-${index}`} 
                   fill={entry.color}
-                  opacity={filters.vadeDilimi && filters.vadeDilimi !== entry.key ? 0.3 : 1}
-                  stroke={filters.vadeDilimi === entry.key ? 'hsl(var(--foreground))' : 'none'}
-                  strokeWidth={filters.vadeDilimi === entry.key ? 2 : 0}
+                  opacity={(filters.vadeDilimi && filters.vadeDilimi !== entry.key) || 
+                           (isCrossFiltered && activeCrossFilterValue !== entry.key) ? 0.3 : 1}
+                  stroke={filters.vadeDilimi === entry.key || activeCrossFilterValue === entry.key 
+                    ? 'hsl(var(--foreground))' : 'none'}
+                  strokeWidth={filters.vadeDilimi === entry.key || activeCrossFilterValue === entry.key ? 2 : 0}
                 />
               ))}
             </Bar>
