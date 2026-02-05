@@ -1,225 +1,245 @@
 
+# Power BI Benzeri Veri Modeli İlişki Yönetimi Sistemi
 
-# Satış Hunisi Widget - Teklif Verisi Sorunu Analiz ve Çözüm Planı
+## Genel Bakış
 
-## Sorun Özeti
+Power BI'ın Model View'ına benzer şekilde, veri kaynaklarını (Data Sources) görsel kartlar olarak gösteren ve aralarındaki ilişkileri sürükle-bırak ile kurabileceğiniz bir arayüz oluşturulacak. Bu yapı:
+- Mevcut widget'ları etkilemeyecek (geriye uyumluluk)
+- Yeni oluşturulan widget'lar otomatik olarak bu ilişkileri kullanacak
+- Cross-filtering (çapraz filtreleme) için alan eşleştirmelerini görsel olarak yapabileceksiniz
 
-"Cari Dönüşüm Hunisi" widget'ı, Teklif ve Sipariş verilerini göstermiyor. Sadece Cari Kart verileri (568 kayıt) görüntüleniyor.
+---
 
-## Kök Neden Analizi
+## Teknik Mimari
 
-### 1. Veri Kaynağı Yapılandırması (✅ DOĞRU)
+### 1. Veritabanı Değişiklikleri
 
-Widget'ın multiQuery yapısı doğru konfigüre edilmiş:
+Yeni bir tablo oluşturulacak: `data_source_relationships`
 
-| Sıra | Sorgu Adı | Veri Kaynağı ID | Metot | Kayıt Sayısı (DB) |
-|------|-----------|-----------------|-------|-------------------|
-| 0 | Ana Sorgu | 11e5348f... | carikart_listele | 610 |
-| 1 | Teklif | 4cc3fd6d... | teklif_listele | 245 |
-| 2 | Sipariş | 83065325... | siparis_listele | 10 |
+| Kolon | Tip | Açıklama |
+|-------|-----|----------|
+| id | uuid | Primary key |
+| source_data_source_id | uuid | Kaynak veri kaynağı (FK) |
+| target_data_source_id | uuid | Hedef veri kaynağı (FK) |
+| source_field | text | Kaynak tablodaki alan |
+| target_field | text | Hedef tablodaki alan |
+| relationship_type | text | 'one_to_many', 'many_to_one', 'one_to_one' |
+| cross_filter_direction | text | 'single', 'both', 'none' |
+| is_active | boolean | Aktif/pasif |
+| created_at | timestamptz | Oluşturulma tarihi |
+| user_id | uuid | Oluşturan kullanıcı |
 
-### 2. Widget Kodundaki Veri Erişimi (✅ DOĞRU)
-
-Widget kodu `multiData` scope değişkeninden doğru sırayla veri okuyor:
-
-```javascript
-var cariler   = toArray(multiData[0]); // Cari Kart
-var teklifler = toArray(multiData[1]); // Teklif
-var siparisler = toArray(multiData[2]); // Sipariş
-```
-
-### 3. CustomCodeWidgetBuilder Önizleme Sorunu (❌ SORUN)
-
-**Sorunlu Akış:**
+### 2. Bileşen Yapısı
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│ useEffect (widget açıldığında)                                  │
-│   ↓                                                             │
-│ loadMultiQueryData(config.multiQuery) çağrılır                  │
-│   ↓                                                             │
-│ getDataSourceById(query.dataSourceId) → ❌ undefined            │
-│   ↓                                                             │
-│ Neden? → dataSources henüz React Query'den yüklenmemiş!         │
-│   ↓                                                             │
-│ mergedQueryData = {} (BOŞ)                                      │
-│   ↓                                                             │
-│ previewMultiData = [[], [], []] (BOŞ DİZİLER)                   │
-│   ↓                                                             │
-│ Widget: teklifler.length = 0, siparisler.length = 0             │
-└─────────────────────────────────────────────────────────────────┘
+SuperAdminPanel
+└── Tabs
+    └── "Veri Modeli" (yeni sekme)
+        └── DataModelView
+            ├── DataModelCanvas (ana görsel alan)
+            │   ├── DataSourceCard (sürüklenebilir kartlar)
+            │   │   ├── Kart başlığı (veri kaynağı adı)
+            │   │   ├── Alan listesi (scroll edilebilir)
+            │   │   └── Bağlantı noktaları (connection points)
+            │   └── RelationshipLine (bağlantı çizgileri - SVG)
+            ├── RelationshipEditor (ilişki düzenleme modal)
+            └── ModelToolbar (zoom, fit, layout düğmeleri)
 ```
 
-**Sorunun Nedeni:**
+### 3. Görsel Tasarım
 
-`CustomCodeWidgetBuilder.tsx` satır 540-543'te:
+Her veri kaynağı bir kart olarak görünecek:
+
+```text
+┌─────────────────────────────┐
+│ 📊 Cari Kart Listesi    ... │  ← Kart başlığı + menü
+├─────────────────────────────┤
+│ 🔑 carikartkodu             │  ← Primary key (anahtar ikonu)
+│    carikarttipi             │
+│    cariunvan                │
+│ Σ  bakiye                   │  ← Sayısal alanlar
+│    satiselemani             │
+│    ozelkod1kod              │
+│    ...                      │
+├─────────────────────────────┤
+│ ↓ Daralt (15 daha)          │  ← Expand/collapse
+└─────────────────────────────┘
+```
+
+İlişkiler çizgilerle gösterilecek:
+- **1:N** → Tek çizgi + çoklu işaret
+- **1:1** → Tek çizgi
+- **Çift yönlü filtre** → Çift ok başlı çizgi
+
+---
+
+## Uygulama Detayları
+
+### Dosya 1: Veritabanı Migration
+
+```sql
+-- Veri kaynakları arası ilişkiler
+CREATE TABLE data_source_relationships (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_data_source_id UUID NOT NULL REFERENCES data_sources(id) ON DELETE CASCADE,
+  target_data_source_id UUID NOT NULL REFERENCES data_sources(id) ON DELETE CASCADE,
+  source_field TEXT NOT NULL,
+  target_field TEXT NOT NULL,
+  relationship_type TEXT NOT NULL DEFAULT 'one_to_many',
+  cross_filter_direction TEXT NOT NULL DEFAULT 'single',
+  is_active BOOLEAN DEFAULT true,
+  user_id UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  
+  CONSTRAINT unique_relationship UNIQUE (source_data_source_id, target_data_source_id, source_field, target_field)
+);
+
+-- RLS politikaları
+ALTER TABLE data_source_relationships ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can read relationships" 
+  ON data_source_relationships FOR SELECT 
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Super admins can manage relationships"
+  ON data_source_relationships FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM user_roles 
+      WHERE user_id = auth.uid() 
+      AND role = 'super_admin'
+    )
+  );
+
+-- Kart pozisyonlarını saklamak için data_sources tablosuna ekleme
+ALTER TABLE data_sources ADD COLUMN IF NOT EXISTS model_position JSONB;
+```
+
+### Dosya 2: Hook - useDataSourceRelationships
+
+Konum: `src/hooks/useDataSourceRelationships.tsx`
 
 ```typescript
-if (config?.multiQuery) {
-  setIsMultiQueryMode(true);
-  setMultiQuery(config.multiQuery);
-  loadMultiQueryData(config.multiQuery);  // ← BURADA SORUN
+// Veri kaynağı ilişkilerini yönetir
+interface DataSourceRelationship {
+  id: string;
+  sourceDataSourceId: string;
+  targetDataSourceId: string;
+  sourceField: string;
+  targetField: string;
+  relationshipType: 'one_to_many' | 'many_to_one' | 'one_to_one';
+  crossFilterDirection: 'single' | 'both' | 'none';
+  isActive: boolean;
 }
+
+// CRUD işlemleri ve React Query entegrasyonu
 ```
 
-`loadMultiQueryData` fonksiyonu (satır 583-613), `getDataSourceById` kullanıyor. Bu fonksiyon `dataSources` state'ine bağımlı ve `useDataSources()` hook'u React Query ile asenkron olarak veri yüklüyor.
+### Dosya 3: DataModelView Ana Bileşeni
 
-Widget builder açıldığında `dataSources` henüz yüklenmemiş olabilir → `getDataSourceById` undefined döner → `mergedQueryData` boş kalır.
+Konum: `src/components/admin/DataModelView.tsx`
 
-### 4. Dashboard Render Sorunu (❌ SORUN)
+Özellikler:
+- Canvas üzerinde sürüklenebilir veri kaynağı kartları
+- Alanlar arasında bağlantı çizgileri (SVG path)
+- Zoom in/out, pan, fit-to-view
+- Kart pozisyonlarını veritabanına kaydetme
 
-**Sorunlu Akış:**
+### Dosya 4: DataSourceCard Bileşeni
+
+Konum: `src/components/admin/DataSourceCard.tsx`
+
+- Kart başlığı: veri kaynağı adı + metot bilgisi
+- Alan listesi: `last_fields` array'inden çekilecek
+- Bağlantı noktaları: her alanın yanında küçük daire
+- Sürükle-bırak: @dnd-kit kullanarak pozisyon değişikliği
+
+### Dosya 5: RelationshipLine Bileşeni
+
+Konum: `src/components/admin/RelationshipLine.tsx`
+
+- SVG path ile iki kart arasında çizgi
+- Bezier eğrisi kullanarak estetik görünüm
+- İlişki tipine göre farklı stil (1:N, 1:1)
+- Çizgiye tıklanınca düzenleme modalı
+
+### Dosya 6: RelationshipEditor Modal
+
+Konum: `src/components/admin/RelationshipEditor.tsx`
+
+- Kaynak/hedef alan seçimi (aranabilir dropdown)
+- İlişki tipi seçimi (1:N, N:1, 1:1)
+- Çapraz filtre yönü seçimi (tek yön, çift yön, kapalı)
+- Aktif/pasif toggle
+
+---
+
+## Mevcut Widget'larla Uyumluluk
+
+### Geriye Dönük Uyumluluk
+
+Mevcut widget'lar `builder_config.multiQuery.merges` ve `builder_config.affectedByFilters` alanlarını kullanmaya devam edecek. Bu değişiklikler:
+
+1. **Eski widget'lar**: Mevcut yapılandırma korunur, hiçbir değişiklik gerekmez
+2. **Yeni widget'lar**: İlişki tanımlıysa, widget oluşturulurken otomatik olarak `affectedByFilters` doldurulabilir
+
+### İlişkilerin Widget'lara Uygulanması
+
+`useDynamicWidgetData` hook'u, widget'ın bağlı olduğu veri kaynakları için tanımlı ilişkileri okuyacak ve:
+- Cross-filter aktifse, ilgili global filtre değerlerini otomatik uygulayacak
+- Multi-query merge'lerde ilişki alanlarını önerecek
+
+---
+
+## Ekran Akışı
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│ DataSourceLoader: Sayfadaki widget'ların veri kaynaklarını bul  │
-│   ↓                                                             │
-│ multiQuery.queries[].dataSourceId → 3 veri kaynağı tespit       │
-│   ↓                                                             │
-│ Her veri kaynağı için DIA API çağrısı yap ve cache'e yaz        │
-│   ↓                                                             │
-│ useDynamicWidgetData: Cache'den multiQueryData oluştur          │
-│   ↓                                                             │
-│ Eğer cache henüz dolmadıysa → multiQueryData = [[], [], []]     │
-│   ↓                                                             │
-│ Widget boş veri ile render edilir                               │
-└─────────────────────────────────────────────────────────────────┘
+1. Kullanıcı "Veri Modeli" sekmesine tıklar
+                ↓
+2. Canvas yüklenir, mevcut veri kaynakları kart olarak gösterilir
+                ↓
+3. Kullanıcı bir alanın yanındaki bağlantı noktasını sürükler
+                ↓
+4. Hedef karttaki alana bırakır
+                ↓
+5. İlişki düzenleme modalı açılır
+   - İlişki tipi seçimi
+   - Çapraz filtre yönü seçimi
+                ↓
+6. "Kaydet" → İlişki çizgisi gösterilir + veritabanına kaydedilir
 ```
-
-**Ek Sorun:** Edge function loglarında Teklif verisi çekilmiş (245 kayıt) ancak widget'a ulaşmamış. Bu, cache senkronizasyon sorunu olabilir.
 
 ---
 
-## Çözüm Planı
+## Değiştirilecek/Oluşturulacak Dosyalar
 
-### Adım 1: CustomCodeWidgetBuilder - dataSources Yüklenme Beklemesi
-
-**Dosya:** `src/components/admin/CustomCodeWidgetBuilder.tsx`
-
-`loadMultiQueryData` fonksiyonunu `dataSources` yüklenene kadar bekletmek için:
-
-1. `useDataSources()` hook'undan `isLoading` state'ini al
-2. `useEffect` dependency'lerine `dataSources` veya `isLoading` ekle
-3. `dataSources` yüklendikten SONRA `loadMultiQueryData` çağır
-
-```typescript
-// Satır 355'i güncelle
-const { activeDataSources, getDataSourceById, isLoading: isDataSourcesLoading, dataSources } = useDataSources();
-
-// Satır 540-543'ü güncelle
-useEffect(() => {
-  if (editingWidget && open && !isDataSourcesLoading && dataSources.length > 0) {
-    const config = editingWidget.builder_config as any;
-    if (config?.multiQuery) {
-      setIsMultiQueryMode(true);
-      setMultiQuery(config.multiQuery);
-      loadMultiQueryData(config.multiQuery);
-    }
-  }
-}, [editingWidget, open, isDataSourcesLoading, dataSources]);
-```
-
-### Adım 2: loadMultiQueryData - Cache Miss Durumunda DIA'dan Çekme
-
-**Dosya:** `src/components/admin/CustomCodeWidgetBuilder.tsx`
-
-`loadMultiQueryData` fonksiyonunu geliştir - `last_sample_data` yoksa DIA API'den çek:
-
-```typescript
-const loadMultiQueryData = async (config: MultiQueryConfig) => {
-  if (!config?.queries?.length) return;
-  
-  setIsLoadingData(true);
-  const dataMap: Record<string, any[]> = {};
-  
-  try {
-    for (const query of config.queries) {
-      if (query.dataSourceId) {
-        const ds = getDataSourceById(query.dataSourceId);
-        
-        if (ds?.last_sample_data && ds.last_sample_data.length > 0) {
-          // Cache'den oku
-          dataMap[query.id] = ds.last_sample_data;
-        } else if (ds) {
-          // Cache boş, DIA'dan çek
-          const response = await supabase.functions.invoke('dia-api-test', {
-            body: {
-              module: ds.module,
-              method: ds.method,
-              filters: ds.filters || [],
-              limit: 100,
-              ...(isImpersonating && impersonatedUserId ? { targetUserId: impersonatedUserId } : {}),
-            },
-          });
-          
-          if (response.data?.data) {
-            dataMap[query.id] = response.data.data;
-          }
-        }
-      }
-    }
-    
-    setMergedQueryData(dataMap);
-    // ... rest of function
-  } catch (err: any) {
-    toast.error('Veri yükleme hatası: ' + err.message);
-  } finally {
-    setIsLoadingData(false);
-  }
-};
-```
-
-### Adım 3: useDynamicWidgetData - multiQueryData Güncelleme Sorunu
-
-**Dosya:** `src/hooks/useDynamicWidgetData.tsx`
-
-`multiQueryDataRef.current` bir ref olduğu için değişiklikler React'i yeniden render'a tetiklemiyor. Bu sorunu çözmek için:
-
-1. `multiQueryDataRef` yerine state kullan veya
-2. multiQueryData değiştiğinde bir counter artır
-
-```typescript
-// multiQueryDataRef yerine state kullan
-const [multiQueryData, setMultiQueryData] = useState<any[][] | null>(null);
-
-// fetchData fonksiyonunda
-setMultiQueryData(config.multiQuery.queries.map((q) => queryResults[q.id] || []));
-
-// Return'de
-return { data, rawData, multiQueryData, isLoading, error, refetch: fetchData };
-```
-
-### Adım 4: Memory Dokümantasyonu Güncelleme
-
-`.lovable/memory/technical/widget-rendering-scopes.md` dosyasını güncelle:
-- multiData'nın nasıl çalıştığını detaylandır
-- dataSources yüklenme zamanlaması hakkında not ekle
+| Dosya | İşlem | Açıklama |
+|-------|-------|----------|
+| `supabase/migrations/xxx_add_relationships.sql` | Yeni | İlişkiler tablosu |
+| `src/hooks/useDataSourceRelationships.tsx` | Yeni | İlişki CRUD hook'u |
+| `src/components/admin/DataModelView.tsx` | Yeni | Ana görsel bileşen |
+| `src/components/admin/DataSourceCard.tsx` | Yeni | Sürüklenebilir kart |
+| `src/components/admin/RelationshipLine.tsx` | Yeni | SVG bağlantı çizgisi |
+| `src/components/admin/RelationshipEditor.tsx` | Yeni | İlişki düzenleme modal |
+| `src/pages/SuperAdminPanel.tsx` | Güncelleme | "Veri Modeli" sekmesi ekleme |
+| `src/hooks/useDataSources.tsx` | Güncelleme | `model_position` alanı desteği |
 
 ---
 
-## Teknik Uygulama Detayları
+## Teknik Notlar
 
-### Değiştirilecek Dosyalar
-
-| Dosya | Değişiklik |
-|-------|------------|
-| `src/components/admin/CustomCodeWidgetBuilder.tsx` | dataSources yüklenme beklemesi + loadMultiQueryData güçlendirme |
-| `src/hooks/useDynamicWidgetData.tsx` | multiQueryDataRef → state dönüşümü |
-| `.lovable/memory/technical/widget-rendering-scopes.md` | multiData dokümantasyonu |
-
-### Test Senaryoları
-
-1. **Widget Builder Önizleme:** Widget Builder'da Satış Hunisi widget'ını aç → Teklif ve Sipariş sayılarının doğru görüntülendiğini doğrula
-2. **Dashboard Görünümü:** Dashboard'a widget ekle → Tüm aşamaların (Cari, Potansiyel, Teklif, Satış) doğru veriyi gösterdiğini kontrol et
-3. **Drill-down:** Her hungi aşamasına tıkla → İlgili kayıtların popup'ta listelendiğini doğrula
+1. **Canvas Kütüphanesi**: React Flow yerine manuel SVG + @dnd-kit kullanılacak (mevcut proje pattern'i)
+2. **Performans**: Lazy loading ile sadece görünür alanlar render edilecek
+3. **Pozisyon Kaydetme**: Debounced (1sn) olarak veritabanına kaydedilecek
+4. **Responsive**: Minimum 1024px genişlik gerektirir (mobilde uyarı gösterilir)
 
 ---
 
-## Özet
+## Sonraki Adımlar
 
-Sorun, asenkron veri yükleme ve timing ile ilgili. `dataSources` React Query ile yüklenirken `loadMultiQueryData` çağrılıyor ve boş dönüyor. Çözüm:
-
-1. Veri kaynakları yüklenene kadar bekle
-2. Cache miss durumunda DIA'dan veri çek
-3. multiQueryData'yı reactive state olarak yönet
-
+1. Migration dosyası oluştur ve tabloyu aktif et
+2. Hook'u implement et
+3. Görsel bileşenleri oluştur
+4. SuperAdminPanel'e entegre et
+5. Test ve iyileştirmeler
