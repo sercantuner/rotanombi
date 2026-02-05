@@ -1,220 +1,270 @@
 
-# Edge Function ve Veritabanı Optimizasyonu Planı
+# DIA Veri Senkronizasyonu Optimizasyon Planı
 
-## Özet
-1. ✅ Edge function deploy hatasının çözümü (geçici altyapı sorunu)
-2. ✅ Büyük veri setleri için JSONB optimizasyonu (20,000+ kayıt senaryosu)
+## Tespit Edilen Sorunlar
 
-## Uygulanan Değişiklikler (Tamamlandı)
+### 1. INVALID_SESSION Hatası
+DIA session'ı 30 dakikada expire oluyor. Uzun süren sync işlemlerinde (çok sayfalı veri çekme) session timeout'a uğruyor.
 
-### Expression-Based Indexes
-Generated columns yerine expression-based indeksler kullanıldı (PostgreSQL immutability kısıtlaması nedeniyle):
+### 2. Database Statement Timeout
+Lovable Cloud veritabanı varsayılan olarak ~10 saniye statement timeout'a sahip. Büyük batch upsert işlemleri bu süreyi aşıyor.
 
-```sql
--- Tarih sorguları için
-CREATE INDEX idx_company_data_tarih ON company_data_cache ((data->>'tarih')) WHERE is_deleted = false;
+### 3. Edge Function Timeout
+Edge Function maksimum 60 saniye çalışabiliyor. Tüm dönemleri tek seferde çekmek bu süreyi aşıyor.
 
--- Cari kodu sorguları için  
-CREATE INDEX idx_company_data_carikodu ON company_data_cache ((data->>'carikodu')) WHERE is_deleted = false;
-
--- Tür sorguları için
-CREATE INDEX idx_company_data_turu ON company_data_cache ((data->>'turu')) WHERE is_deleted = false;
-
--- GIN index for deep JSONB queries
-CREATE INDEX idx_company_data_gin ON company_data_cache USING GIN (data jsonb_path_ops) WHERE is_deleted = false;
-
--- Composite index for company lookups
-CREATE INDEX idx_company_data_composite ON company_data_cache (sunucu_adi, firma_kodu, data_source_slug, donem_kodu) WHERE is_deleted = false;
-
--- Slug + tarih combined index
-CREATE INDEX idx_company_data_slug_tarih ON company_data_cache (data_source_slug, (data->>'tarih') DESC) WHERE is_deleted = false;
-```
+### 4. Takılı Kalan Sync Kayıtları
+Timeout olan işlemler `running` durumunda kalıyor ve temizlenmiyor.
 
 ---
 
----
+## Çözüm Stratejisi
 
-## 1. Edge Function "Bundle Generation Timed Out" Çözümü
-
-### Sorun Analizi
-- `dia-data-sync` edge function ~487 satır
-- Supabase'de geçici altyapı timeout'ları yaşanabiliyor
-- Import'ların esm.sh üzerinden çekilmesi bazen yavaşlayabiliyor
-
-### Çözüm Adımları
-
-**A. deno.lock Temizliği**
-- Eğer varsa `supabase/functions/deno.lock` dosyasını silme
-- Bu dosya bazen eski format nedeniyle timeout'a sebep olabiliyor
-
-**B. Import Sadeleştirme**
-Mevcut import'lar zaten minimal:
-```typescript
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getDiaSession } from "../_shared/diaAutoLogin.ts";
-```
-
-**C. Yeniden Deploy**
-- Geçici altyapı sorunu olması muhtemel
-- Tekrar deploy denendiğinde çalışması beklenir
-
-### Aksiyon
-- Şu an için ek kod değişikliği gerekmiyor
-- Timeout tekrar olursa kodu parçalara ayırabiliriz
-
----
-
-## 2. Büyük Veri için Veritabanı Optimizasyonu
-
-### Mevcut Durum
-```sql
-data JSONB NOT NULL DEFAULT '{}'::jsonb
-```
-
-### Problem
-- 20,000+ fatura = 20,000+ JSONB satırı
-- Her JSONB ~1-5KB olabilir
-- Filtreleme/sıralama için tüm JSONB parse edilmeli
-
-### Önerilen Hibrit Çözüm
-
-**A. Generated Columns (Otomatik Çıkarılan Sütunlar)**
-
-Sık kullanılan alanları JSONB'den otomatik çıkarıp indeksleyebilen sütunlar:
-
-```sql
--- Yeni sütunlar
-ALTER TABLE company_data_cache ADD COLUMN IF NOT EXISTS
-  extracted_tarih DATE GENERATED ALWAYS AS (
-    CASE WHEN data->>'tarih' IS NOT NULL 
-    THEN (data->>'tarih')::date 
-    ELSE NULL END
-  ) STORED;
-
-ALTER TABLE company_data_cache ADD COLUMN IF NOT EXISTS
-  extracted_toplam NUMERIC GENERATED ALWAYS AS (
-    CASE WHEN data->>'toplam_tutar' IS NOT NULL 
-    THEN (data->>'toplam_tutar')::numeric 
-    ELSE NULL END
-  ) STORED;
-
-ALTER TABLE company_data_cache ADD COLUMN IF NOT EXISTS
-  extracted_carikodu TEXT GENERATED ALWAYS AS (
-    data->>'carikodu'
-  ) STORED;
-
-ALTER TABLE company_data_cache ADD COLUMN IF NOT EXISTS
-  extracted_turu INTEGER GENERATED ALWAYS AS (
-    CASE WHEN data->>'turu' ~ '^[0-9]+$'
-    THEN (data->>'turu')::integer
-    ELSE NULL END
-  ) STORED;
-```
-
-**B. Performans İndeksleri**
-
-```sql
--- Tarih bazlı sorgular için
-CREATE INDEX idx_company_data_extracted_tarih 
-ON company_data_cache (data_source_slug, extracted_tarih DESC)
-WHERE is_deleted = false;
-
--- Cari kodu bazlı sorgular için
-CREATE INDEX idx_company_data_extracted_cari
-ON company_data_cache (data_source_slug, extracted_carikodu)
-WHERE is_deleted = false;
-
--- Fatura türü sorgular için
-CREATE INDEX idx_company_data_extracted_turu
-ON company_data_cache (data_source_slug, extracted_turu)
-WHERE is_deleted = false;
-```
-
-**C. JSONB İçin GIN Index (Opsiyonel)**
-
-```sql
--- Detaylı JSONB sorguları için (ör: data @> '{"durum": "onaylandi"}')
-CREATE INDEX idx_company_data_gin 
-ON company_data_cache USING GIN (data jsonb_path_ops)
-WHERE is_deleted = false;
-```
-
----
-
-## Performans Karşılaştırması
-
-| Senaryo | JSONB Only | Hibrit (Generated) |
-|---------|------------|-------------------|
-| 20,000 kayıt filtreleme | ~500-1000ms | ~50-100ms |
-| Tarih bazlı sıralama | ~800ms | ~30ms |
-| Cari kodu arama | ~600ms | ~20ms |
-| Toplam tutar agregasyonu | ~1200ms | ~80ms |
-
-**~10x performans artışı beklenir**
-
----
-
-## Alternatif: Tam Normalizasyon (Gelecek Faz)
-
-Eğer hibrit yeterli olmazsa, veri kaynağına özel tablolar oluşturulabilir:
+### Faz 1: Edge Function Yeniden Tasarımı
 
 ```text
-┌─────────────────────────────────────────┐
-│ fatura_cache                            │
-├─────────────────────────────────────────┤
-│ dia_key | tarih | fisno | carikodu |    │
-│ toplam | kdv | net | turu | ... (50+)   │
-└─────────────────────────────────────────┘
-
-┌─────────────────────────────────────────┐
-│ cari_kart_cache                         │
-├─────────────────────────────────────────┤
-│ dia_key | carikodu | unvan | bakiye |   │
-│ toplambakiye | vadegunu | ... (100+)    │
-└─────────────────────────────────────────┘
++------------------+     +-------------------+     +------------------+
+|   Frontend       | --> |  dia-data-sync    | --> |  DIA API         |
+|   (BulkSync)     |     |  (per source/     |     |  (sayfa sayfa)   |
+|                  |     |   period)         |     |                  |
++------------------+     +-------------------+     +------------------+
+        |                        |
+        |  Döngü                 |  Her sayfa sonrası
+        |  (source by source)   |  session refresh check
+        v                        v
++------------------+     +-------------------+
+|  Progress UI     |     |  company_data_    |
+|  (realtime)      |     |  cache (upsert)   |
++------------------+     +-------------------+
 ```
 
-Ancak bu yaklaşım:
-- ❌ Her veri kaynağı için ayrı tablo/migration gerektirir
-- ❌ DIA model değişikliklerinde güncelleme gerekir
-- ❌ Geliştirme süresini uzatır
+**Değişiklikler:**
+- Her veri kaynağı ve dönem için **ayrı Edge Function çağrısı** (timeout önleme)
+- Session'ı **her DIA çağrısı öncesinde** kontrol et ve gerekirse yenile
+- Daha küçük batch boyutları (50 kayıt)
+- Her sayfa yazıldıktan sonra hemen temizleme
 
-**Öneri: Hibrit yaklaşımla başla, gerekirse tam normalizasyona geç**
+### Faz 2: Session Yönetimi İyileştirmesi
+
+`diaAutoLogin.ts` güncellemesi:
+- INVALID_SESSION hatası alınırsa **otomatik retry** mekanizması
+- Session yenileme için middleware pattern
+- Her API çağrısı öncesi session geçerlilik kontrolü
+
+```typescript
+// Yeni fonksiyon: refreshSessionIfNeeded
+async function ensureValidSession(supabase, userId, currentSession) {
+  // Session 2 dakikadan az kaldıysa yenile
+  if (isSessionExpiringSoon(currentSession)) {
+    return await performAutoLogin(supabase, userId);
+  }
+  return currentSession;
+}
+```
+
+### Faz 3: Frontend Orchestration (Tek Kaynak/Dönem Bazlı)
+
+`BulkDataSyncManager.tsx` güncellemesi:
+- **Sunucu bazlı değil, sunucu+kaynak+dönem bazlı** sync
+- Her kaynak/dönem için ayrı API çağrısı
+- Detaylı ilerleme gösterimi
+- Hata detaylarını açıkça gösterme
+
+```text
+Sync Progress:
+├── corlugrup (Firma 1)
+│   ├── cari_kart_listesi
+│   │   ├── Dönem 3: ✅ 2085 kayıt
+│   │   ├── Dönem 2: ✅ 1800 kayıt
+│   │   └── Dönem 1: ✅ 1500 kayıt
+│   ├── scf_fatura_listele
+│   │   ├── Dönem 3: ⏳ Çalışıyor...
+│   │   └── ...
+│   └── ...
+└── eguncel (Firma 9)
+    └── ...
+```
 
 ---
 
-## Uygulama Planı
+## Teknik Değişiklikler
 
-### Faz 1: İzleme (Hemen)
-- Edge function deploy'u tekrar dene
-- Sync işlemini test et
-- Query sürelerini logla
+### 1. `dia-data-sync/index.ts` Güncellemeleri
 
-### Faz 2: Hibrit Optimizasyon (Gerekirse)
-- Generated columns ekle
-- Performans indekslerini oluştur
-- Widget sorgularını güncelle
+**A. Session Refresh Mekanizması:**
+```typescript
+// Her sayfa çekimi öncesinde session kontrolü
+async function fetchPageWithSessionRefresh(
+  supabase, userId, diaSession, payload
+) {
+  // Session süresi dolmak üzereyse yenile
+  const session = await ensureValidSession(supabase, userId, diaSession);
+  
+  // Payload'daki session_id'yi güncelle
+  payload[methodKey].session_id = session.sessionId;
+  
+  // API çağrısı yap
+  const response = await fetch(diaUrl, {...});
+  const result = await response.json();
+  
+  // INVALID_SESSION hatası varsa retry
+  if (result.msg === 'INVALID_SESSION' || result.code === '401') {
+    const newSession = await performAutoLogin(supabase, userId);
+    payload[methodKey].session_id = newSession.sessionId;
+    return await fetch(diaUrl, {...});
+  }
+  
+  return result;
+}
+```
 
-### Faz 3: Partitioning (Çok Büyük Veri)
-- 100,000+ kayıt olduğunda
-- donem_kodu bazlı tablo bölümleme
+**B. Mikro Batch Yazma:**
+```typescript
+const MICRO_BATCH_SIZE = 25; // 100'den 25'e düşür
+
+async function writeMicroBatches(supabase, records) {
+  for (let i = 0; i < records.length; i += MICRO_BATCH_SIZE) {
+    const batch = records.slice(i, i + MICRO_BATCH_SIZE);
+    
+    // Tek tek upsert (timeout önleme)
+    for (const record of batch) {
+      await supabase
+        .from('company_data_cache')
+        .upsert(record, { onConflict: '...' });
+    }
+  }
+}
+```
+
+**C. Yeni Action: `syncSingleSource`:**
+```typescript
+// Tek kaynak, tek dönem sync
+if (action === 'syncSingleSource') {
+  const { dataSourceSlug, periodNo, targetUserId } = body;
+  
+  // Sadece belirtilen kaynak ve dönem için sync
+  const result = await fetchAndWritePageByPage(
+    supabase, session, source.module, source.method,
+    periodNo, sunucuAdi, firmaKodu, dataSourceSlug
+  );
+  
+  return Response.json({ success: true, result });
+}
+```
+
+### 2. `_shared/diaAutoLogin.ts` Güncellemeleri
+
+**Retry Wrapper:**
+```typescript
+export async function withSessionRetry<T>(
+  supabase: any,
+  userId: string,
+  operation: (session: DiaSession) => Promise<T>
+): Promise<T> {
+  let session = await getDiaSession(supabase, userId);
+  
+  try {
+    return await operation(session.session!);
+  } catch (error) {
+    if (isInvalidSessionError(error)) {
+      // Force refresh
+      await invalidateSession(supabase, userId);
+      session = await getDiaSession(supabase, userId);
+      return await operation(session.session!);
+    }
+    throw error;
+  }
+}
+```
+
+### 3. `BulkDataSyncManager.tsx` Güncellemeleri
+
+**A. Detaylı Sync Orchestration:**
+```typescript
+interface DetailedSyncProgress {
+  userId: string;
+  serverName: string;
+  sources: {
+    slug: string;
+    name: string;
+    periods: {
+      periodNo: number;
+      status: 'pending' | 'running' | 'success' | 'error';
+      recordsFetched?: number;
+      error?: string;
+    }[];
+  }[];
+}
+```
+
+**B. Kaynak Bazlı Sıralı Sync:**
+```typescript
+const syncUserData = async (user: UserWithDiaConfig) => {
+  // 1. Önce dönemleri çek
+  const periods = await fetchPeriods(user.user_id);
+  
+  // 2. Veri kaynaklarını çek
+  const dataSources = await fetchDataSources();
+  
+  // 3. Her kaynak için, her dönem için sync
+  for (const source of dataSources) {
+    for (const period of periods) {
+      // Acil stop kontrolü
+      if (stopRequestedRef.current) break;
+      
+      // Tek kaynak/dönem sync
+      await supabase.functions.invoke('dia-data-sync', {
+        body: {
+          action: 'syncSingleSource',
+          targetUserId: user.user_id,
+          dataSourceSlug: source.slug,
+          periodNo: period.period_no,
+        },
+      });
+      
+      // UI güncelle
+      updateProgress(user.user_id, source.slug, period.period_no, 'success');
+    }
+  }
+};
+```
+
+**C. Hata Mesajı Görünürlüğü:**
+- Her kaynak/dönem için ayrı durum gösterimi
+- Tooltip ile detaylı hata mesajı
+- Retry butonu (tek kaynak/dönem için)
+
+### 4. Takılı Kayıtları Temizleme
+
+**Cleanup Script (Edge Function başlangıcında):**
+```typescript
+// 5 dakikadan uzun süredir running olan kayıtları failed olarak işaretle
+await supabase
+  .from('sync_history')
+  .update({ 
+    status: 'failed', 
+    error: 'Timeout - işlem tamamlanamadı',
+    completed_at: new Date().toISOString()
+  })
+  .eq('status', 'running')
+  .lt('started_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
+```
 
 ---
 
-## Değiştirilecek Dosyalar
+## Dosya Değişiklikleri Özeti
 
 | Dosya | Değişiklik |
 |-------|------------|
-| Yeni Migration | Generated columns + indeksler |
-| `useCompanyData.tsx` | Extracted sütunları kullanacak sorgular |
-| `dia-data-sync/index.ts` | Değişiklik yok (JSONB yazımı aynı kalır) |
+| `supabase/functions/dia-data-sync/index.ts` | Session refresh, mikro batch, syncSingleSource action, cleanup logic |
+| `supabase/functions/_shared/diaAutoLogin.ts` | withSessionRetry wrapper, session invalidation |
+| `src/components/admin/BulkDataSyncManager.tsx` | Kaynak/dönem bazlı orchestration, detaylı progress UI |
 
 ---
 
-## Önemli Not
+## Beklenen İyileştirmeler
 
-Generated columns yaklaşımı **geriye dönük uyumludur**:
-- Mevcut JSONB verisi korunur
-- Yeni sütunlar mevcut veriden otomatik hesaplanır
-- Widget sorguları kademeli olarak güncellenebilir
+1. **Session Timeout Önleme**: Her çağrı öncesi session kontrolü
+2. **Database Timeout Önleme**: Mikro batch yazma (25 kayıt)
+3. **Edge Function Timeout Önleme**: Kaynak/dönem bazlı ayrı çağrılar
+4. **Hata Görünürlüğü**: Detaylı hata mesajları UI'da
+5. **Güvenilirlik**: Retry mekanizması ve takılı kayıt temizleme
