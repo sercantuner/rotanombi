@@ -821,8 +821,8 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
               Veri
             </TabsTrigger>
             <TabsTrigger value="merge" className="gap-1 text-xs">
-              <Database className="h-3.5 w-3.5" />
-              Birleştir
+              <Layers className="h-3.5 w-3.5" />
+              Çoklu Kaynak
             </TabsTrigger>
             <TabsTrigger value="calculation" className="gap-1 text-xs">
               <Calculator className="h-3.5 w-3.5" />
