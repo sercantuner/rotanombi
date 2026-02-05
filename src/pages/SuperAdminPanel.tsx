@@ -199,26 +199,6 @@ export default function SuperAdminPanel() {
       {/* Ana İçerik */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
         {/* Impersonation Banner */}
-        {isImpersonating && impersonatedProfile && (
-          <div className="bg-warning/10 border-b border-warning/30 px-4 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Eye className="w-4 h-4 text-warning" />
-              <span className="text-sm font-medium">
-                <span className="text-warning">{impersonatedProfile.display_name || impersonatedProfile.email}</span> 
-                <span className="text-muted-foreground"> kullanıcısı olarak görüntülüyorsunuz</span>
-              </span>
-            </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={stopImpersonation}
-              className="h-7"
-            >
-              <X className="w-4 h-4 mr-1" />
-              Kapat
-            </Button>
-          </div>
-        )}
 
         {/* Tab Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
