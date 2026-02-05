@@ -1,5 +1,6 @@
 // BulkDataSyncManager - Tüm kullanıcılar için toplu veri senkronizasyonu
 // Kaynak ve dönem bazlı orchestration ile detaylı ilerleme gösterimi
+// Chunk-bazlı streaming ile büyük veri setleri desteklenir
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -19,7 +20,7 @@ import {
   FileText,
   Layers,
   Calendar,
-  Globe
+  Zap
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -29,6 +30,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+// Chunk sabitleri
+const CHUNK_SIZE = 1000;        // Her chunk'ta max kayıt
+const CHUNK_DELAY_MS = 500;     // Chunk'lar arası bekleme (ms)
+const MAX_CHUNKS = 100;         // Güvenlik limiti (max 100.000 kayıt)
 
 interface UserWithDiaConfig {
   user_id: string;
@@ -58,6 +64,9 @@ interface SourcePeriodProgress {
   status: 'pending' | 'running' | 'success' | 'error' | 'skipped';
   recordsFetched?: number;
   error?: string;
+  // Chunk ilerleme bilgisi
+  chunksCompleted?: number;
+  isChunking?: boolean;
 }
 
 interface SourceProgress {
@@ -202,6 +211,91 @@ export function BulkDataSyncManager() {
     return [{ period_no: 1, period_name: 'Dönem 1' }];
   };
 
+  // Chunk-bazlı senkronizasyon fonksiyonu
+  const syncSourceWithChunks = async (
+    userId: string,
+    sourceSlug: string,
+    periodNo: number,
+    onProgress?: (written: number, chunksCompleted: number, hasMore: boolean) => void
+  ): Promise<{ success: boolean; totalWritten: number; error?: string }> => {
+    let offset = 0;
+    let totalWritten = 0;
+    let chunkCount = 0;
+    
+    console.log(`[ChunkSync] Starting: ${sourceSlug}, period=${periodNo}`);
+    
+    while (chunkCount < MAX_CHUNKS) {
+      // Durdurma kontrolü
+      if (stopRequestedRef.current) {
+        console.log(`[ChunkSync] Stop requested, returning partial result`);
+        return { success: true, totalWritten, error: 'İptal edildi' };
+      }
+      
+      try {
+        const response = await supabase.functions.invoke('dia-data-sync', {
+          body: {
+            action: 'syncChunk',
+            targetUserId: userId,
+            dataSourceSlug: sourceSlug,
+            periodNo: periodNo,
+            offset: offset,
+            chunkSize: CHUNK_SIZE,
+          },
+        });
+        
+        if (response.error) {
+          console.error(`[ChunkSync] Error:`, response.error);
+          return { 
+            success: false, 
+            totalWritten, 
+            error: response.error.message || 'Edge function hatası' 
+          };
+        }
+        
+        if (!response.data?.success) {
+          console.error(`[ChunkSync] API Error:`, response.data?.error);
+          return { 
+            success: false, 
+            totalWritten, 
+            error: response.data?.error || 'Bilinmeyen hata' 
+          };
+        }
+        
+        totalWritten += response.data.written || 0;
+        chunkCount++;
+        
+        console.log(`[ChunkSync] Chunk ${chunkCount}: written=${response.data.written}, total=${totalWritten}, hasMore=${response.data.hasMore}`);
+        
+        // Progress callback
+        onProgress?.(totalWritten, chunkCount, response.data.hasMore);
+        
+        // Veri bittiyse çık
+        if (!response.data.hasMore) {
+          console.log(`[ChunkSync] Complete: ${totalWritten} records in ${chunkCount} chunks`);
+          return { success: true, totalWritten };
+        }
+        
+        // Sonraki chunk için offset güncelle
+        offset = response.data.nextOffset;
+        
+        // Rate limiting - chunk'lar arası bekleme
+        await new Promise(resolve => setTimeout(resolve, CHUNK_DELAY_MS));
+        
+      } catch (error) {
+        console.error(`[ChunkSync] Exception:`, error);
+        return { 
+          success: false, 
+          totalWritten, 
+          error: error instanceof Error ? error.message : 'Bağlantı hatası' 
+        };
+      }
+    }
+    
+    // MAX_CHUNKS'a ulaşıldı
+    console.log(`[ChunkSync] Max chunks reached: ${totalWritten} records in ${chunkCount} chunks`);
+    return { success: true, totalWritten };
+  };
+
   const startBulkSync = async () => {
     if (selectedUsers.size === 0) {
       toast.warning('En az bir kullanıcı seçin');
@@ -313,45 +407,52 @@ export function BulkDataSyncManager() {
           const periodNo = periodNos[periodIdx];
           setCurrentPeriodIndex(periodIdx + 1);
           
-          // Running olarak işaretle
-          sourceProgress.periods.set(periodNo, { status: 'running' });
+          // Running olarak işaretle (chunk modunda)
+          sourceProgress.periods.set(periodNo, { 
+            status: 'running', 
+            isChunking: true, 
+            chunksCompleted: 0 
+          });
           setProgress(new Map(newProgress));
           
           try {
-            // Tek kaynak + tek dönem sync
-            const response = await supabase.functions.invoke('dia-data-sync', {
-              body: {
-                action: 'syncSingleSource',
-                targetUserId: user.user_id,
-                dataSourceSlug: source.slug,
-                periodNo: periodNo,
-              },
-            });
+            // Chunk-bazlı sync kullan
+            const result = await syncSourceWithChunks(
+              user.user_id,
+              source.slug,
+              periodNo,
+              (written, chunksCompleted, hasMore) => {
+                // Progress güncelle
+                sourceProgress.periods.set(periodNo, { 
+                  status: 'running', 
+                  recordsFetched: written,
+                  isChunking: true,
+                  chunksCompleted
+                });
+                setProgress(new Map(newProgress));
+              }
+            );
 
             if (stopRequestedRef.current) {
               sourceProgress.periods.set(periodNo, { status: 'skipped', error: 'İptal edildi' });
               continue;
             }
 
-            if (response.error) {
+            if (!result.success) {
               sourceProgress.periods.set(periodNo, { 
                 status: 'error', 
-                error: response.error.message || 'Edge function hatası' 
+                error: result.error || 'Bilinmeyen hata',
+                recordsFetched: result.totalWritten
               });
               userProgress.errorCount++;
-            } else if (response.data?.success) {
-              sourceProgress.periods.set(periodNo, { 
-                status: 'success', 
-                recordsFetched: response.data.recordsFetched || 0 
-              });
-              userProgress.totalRecords += response.data.recordsFetched || 0;
-              userProgress.successCount++;
             } else {
               sourceProgress.periods.set(periodNo, { 
-                status: 'error', 
-                error: response.data?.error || 'Bilinmeyen hata' 
+                status: 'success', 
+                recordsFetched: result.totalWritten,
+                isChunking: false
               });
-              userProgress.errorCount++;
+              userProgress.totalRecords += result.totalWritten;
+              userProgress.successCount++;
             }
           } catch (error) {
             sourceProgress.periods.set(periodNo, { 
@@ -480,8 +581,9 @@ export function BulkDataSyncManager() {
                   <Database className="w-5 h-5" />
                   Toplu Veri Senkronizasyonu
                 </CardTitle>
-                <CardDescription>
-                  Kaynak ve dönem bazlı detaylı senkronizasyon
+                <CardDescription className="flex items-center gap-2 mt-1">
+                  <Zap className="w-3 h-3" />
+                  Chunk-bazlı streaming ile büyük veri desteği
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -690,6 +792,16 @@ export function BulkDataSyncManager() {
                                             {getStatusIcon(periodProgress.status)}
                                             <Layers className="w-3 h-3 text-muted-foreground" />
                                             <span>Dönem {periodNo}</span>
+                                            
+                                            {/* Chunk ilerleme gösterimi */}
+                                            {periodProgress.isChunking && periodProgress.status === 'running' && (
+                                              <Badge variant="secondary" className="text-xs py-0 px-1.5 h-5 ml-1">
+                                                <Zap className="w-3 h-3 mr-1" />
+                                                Chunk {periodProgress.chunksCompleted || 0}
+                                                {periodProgress.recordsFetched ? ` - ${periodProgress.recordsFetched.toLocaleString()}` : ''}
+                                              </Badge>
+                                            )}
+                                            
                                             {periodProgress.status === 'success' && (
                                               <span className="text-green-500 ml-auto">
                                                 {periodProgress.recordsFetched?.toLocaleString()} kayıt
