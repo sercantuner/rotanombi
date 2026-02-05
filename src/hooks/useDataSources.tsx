@@ -44,6 +44,8 @@ export interface DataSource {
   
   is_active: boolean;
   is_shared: boolean;
+  is_period_independent: boolean; // Dönem bağımsız mı?
+  is_non_dia: boolean; // DIA dışı kaynak mı?
   
   created_at: string;
   updated_at: string;
@@ -66,6 +68,8 @@ export interface DataSourceFormData {
   refresh_schedule?: string;
   is_active?: boolean;
   is_shared?: boolean;
+  is_period_independent?: boolean;
+  is_non_dia?: boolean;
 }
 
 export function useDataSources() {
@@ -92,6 +96,8 @@ export function useDataSources() {
         last_sample_data: (ds as any).last_sample_data as any[] | null,
         filterable_fields: (ds.filterable_fields as unknown as Record<string, string>) || null,
         model_position: (ds as any).model_position as { x: number; y: number } | null,
+        is_period_independent: ds.is_period_independent ?? false,
+        is_non_dia: (ds as any).is_non_dia ?? false,
       })) as DataSource[];
     },
   });
@@ -121,6 +127,8 @@ export function useDataSources() {
           refresh_schedule: formData.refresh_schedule || null,
           is_active: formData.is_active ?? true,
           is_shared: formData.is_shared ?? false,
+          is_period_independent: formData.is_period_independent ?? false,
+          is_non_dia: formData.is_non_dia ?? false,
         })
         .select()
         .single();
@@ -160,6 +168,8 @@ export function useDataSources() {
       if (formData.refresh_schedule !== undefined) updateData.refresh_schedule = formData.refresh_schedule;
       if (formData.is_active !== undefined) updateData.is_active = formData.is_active;
       if (formData.is_shared !== undefined) updateData.is_shared = formData.is_shared;
+      if (formData.is_period_independent !== undefined) updateData.is_period_independent = formData.is_period_independent;
+      if (formData.is_non_dia !== undefined) updateData.is_non_dia = formData.is_non_dia;
 
       const { data, error } = await supabase
         .from('data_sources')

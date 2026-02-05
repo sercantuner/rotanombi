@@ -22,7 +22,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { 
   Database, Plus, Edit, Trash2, Play, RefreshCw, Clock, Check, AlertCircle, 
-  Share2, CheckCircle, XCircle, Loader2, CalendarClock, History
+  Share2, CheckCircle, XCircle, Loader2, CalendarClock, History, Globe, Calendar
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -70,6 +70,8 @@ export function DataSourceManager() {
     auto_refresh: false,
     refresh_schedule: null,
     is_active: true,
+    is_period_independent: false,
+    is_non_dia: false,
   });
   
   // Filtre/Sort state
@@ -109,6 +111,8 @@ export function DataSourceManager() {
           auto_refresh: source.auto_refresh || false,
           refresh_schedule: source.refresh_schedule || null,
           is_active: source.is_active ?? true,
+          is_period_independent: source.is_period_independent ?? false,
+          is_non_dia: source.is_non_dia ?? false,
         });
         setApiFilters((source.filters as DiaApiFilter[]) || []);
         setApiSorts((source.sorts as DiaApiSort[]) || []);
@@ -150,6 +154,8 @@ export function DataSourceManager() {
         auto_refresh: false,
         refresh_schedule: null,
         is_active: true,
+        is_period_independent: false,
+        is_non_dia: false,
       });
       setApiFilters([]);
       setApiSorts([]);
@@ -276,6 +282,8 @@ export function DataSourceManager() {
       sorts: apiSorts,
       selected_columns: selectedColumns,
       period_config: periodConfig.enabled ? periodConfig : undefined,
+      // Dönem bağımsızlık: periodConfig kapalıysa veya açıkça işaretlenmişse
+      is_period_independent: !periodConfig.enabled || formData.is_period_independent,
     };
     
     let savedSourceId: string | undefined;
@@ -364,8 +372,20 @@ export function DataSourceManager() {
                     )}
                   >
                     <div className="flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium">{source.name}</p>
+                        {source.is_non_dia && (
+                          <Badge variant="outline" className="text-xs">
+                            <Globe className="h-3 w-3 mr-1" />
+                            Harici
+                          </Badge>
+                        )}
+                        {source.is_period_independent && (
+                          <Badge variant="outline" className="text-xs">
+                            <Calendar className="h-3 w-3 mr-1" />
+                            Dönem Bağımsız
+                          </Badge>
+                        )}
                         {source.is_shared && (
                           <Badge variant="secondary" className="text-xs">
                             <Share2 className="h-3 w-3 mr-1" />
@@ -377,7 +397,7 @@ export function DataSourceManager() {
                         )}
                         {/* Hızlı test sonucu */}
                         {quickTestResult?.sourceId === source.id && (
-                          <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                          <Badge variant="outline" className="text-xs border-primary/50 text-primary">
                             <CheckCircle className="h-3 w-3 mr-1" />
                             {quickTestResult.recordCount} kayıt
                           </Badge>
@@ -766,6 +786,46 @@ export function DataSourceManager() {
                       onCheckedChange={checked => setFormData(prev => ({ 
                         ...prev, 
                         is_active: checked 
+                      }))}
+                    />
+                  </div>
+                </div>
+                
+                {/* Kaynak Tipi Ayarları */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <Label>Dönem Bağımsız</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Tüm dönemlerde aynı, bir kez çekilir
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={formData.is_period_independent || !periodConfig.enabled}
+                      onCheckedChange={checked => setFormData(prev => ({ 
+                        ...prev, 
+                        is_period_independent: checked 
+                      }))}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                    <div className="flex items-center gap-2">
+                      <Globe className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <Label>DIA Dışı Kaynak</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Harici API veya sabit veri
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={formData.is_non_dia}
+                      onCheckedChange={checked => setFormData(prev => ({ 
+                        ...prev, 
+                        is_non_dia: checked 
                       }))}
                     />
                   </div>
