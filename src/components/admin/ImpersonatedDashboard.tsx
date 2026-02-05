@@ -73,6 +73,15 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
 
   const licenseStatus = getLicenseStatus();
 
+   // DIA bağlantı bilgisi metni
+   const getDiaConnectionInfo = () => {
+     if (!isDiaConfigured || diaStatus !== 'connected') return null;
+     const parts = [];
+     if (impersonatedProfile?.donem_kodu) parts.push(impersonatedProfile.donem_kodu);
+     if (impersonatedProfile?.dia_sunucu_adi) parts.push(impersonatedProfile.dia_sunucu_adi);
+     return parts.join(' • ');
+   };
+ 
   // KRİTİK: İzleme modunda widget'lar cache-first çalıştığı için
   // sayfanın veri kaynaklarını mutlaka DataSourceLoader ile yüklemeliyiz.
   const { isLoading: dataSourcesLoading, refresh: refreshDataSources } = useDataSourceLoader(selectedPageId);
@@ -325,24 +334,76 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
             {sidebarCollapsed ? (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className={cn(
-                    "flex items-center justify-center p-2 rounded-lg",
-                    diaStatus === 'connected' ? "bg-green-500/10" : "bg-muted"
-                  )}>
-                    <Plug className={cn("w-4 h-4", diaStatus === 'connected' ? "text-green-600" : "text-muted-foreground")} />
-                  </div>
+                   <button
+                     onClick={handleReconnect}
+                     disabled={diaStatus === 'connecting'}
+                     className={cn(
+                       "flex items-center justify-center p-2 rounded-lg w-full transition-colors hover:bg-muted/80",
+                        diaStatus === 'connected' ? "bg-success/10" : diaStatus === 'error' ? "bg-destructive/10" : "bg-muted"
+                     )}
+                   >
+                     {diaStatus === 'connecting' ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                     ) : diaStatus === 'error' ? (
+                        <AlertCircle className="w-4 h-4 text-destructive" />
+                     ) : (
+                        <Plug className={cn("w-4 h-4", diaStatus === 'connected' ? "text-success" : "text-muted-foreground")} />
+                     )}
+                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="right">
-                  {diaStatus === 'connected' ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
+                   {diaStatus === 'connecting' ? 'Bağlanıyor...' : diaStatus === 'error' ? 'Hata - Tekrar dene' : diaStatus === 'connected' ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
                 </TooltipContent>
               </Tooltip>
             ) : (
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded-lg text-xs",
-                diaStatus === 'connected' ? "bg-green-500/10 text-green-600" : "bg-muted text-muted-foreground"
-              )}>
-                <Plug className="w-3.5 h-3.5" />
-                <span>{diaStatus === 'connected' ? 'DIA Bağlı' : 'DIA Bağlı Değil'}</span>
+               <div className="space-y-2">
+                 {/* DIA Durumu */}
+                 <div className={cn(
+                   "flex items-center gap-2 px-3 py-2 rounded-lg text-xs",
+                    diaStatus === 'connected' ? "bg-success/10 text-success" : 
+                    diaStatus === 'error' ? "bg-destructive/10 text-destructive" :
+                    diaStatus === 'connecting' ? "bg-primary/10 text-primary" :
+                   "bg-muted text-muted-foreground"
+                 )}>
+                   {diaStatus === 'connecting' ? (
+                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                   ) : diaStatus === 'error' ? (
+                     <AlertCircle className="w-3.5 h-3.5" />
+                   ) : (
+                     <Plug className="w-3.5 h-3.5" />
+                   )}
+                   <span className="flex-1">
+                     {diaStatus === 'connecting' ? 'Bağlanıyor...' : 
+                      diaStatus === 'error' ? 'Bağlantı Hatası' :
+                      diaStatus === 'connected' ? 'DIA Bağlantısı Aktif' : 'DIA Bağlı Değil'}
+                   </span>
+                 </div>
+ 
+                 {/* Bağlantı Bilgisi */}
+                 {diaStatus === 'connected' && getDiaConnectionInfo() && (
+                   <div className="text-[10px] text-muted-foreground px-3">
+                     {getDiaConnectionInfo()}
+                   </div>
+                 )}
+ 
+                 {/* Hata Mesajı */}
+                 {diaStatus === 'error' && diaError && (
+                    <div className="text-[10px] text-destructive px-3 truncate" title={diaError}>
+                     {diaError}
+                   </div>
+                 )}
+ 
+                 {/* Yenile Butonu */}
+                 <Button
+                   variant="outline"
+                   size="sm"
+                   className="w-full h-7 text-xs"
+                   onClick={handleReconnect}
+                   disabled={diaStatus === 'connecting'}
+                 >
+                   <RefreshCw className={cn("w-3 h-3 mr-1", diaStatus === 'connecting' && "animate-spin")} />
+                   Yenile
+                 </Button>
               </div>
             )}
           </div>
@@ -351,81 +412,11 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
     );
   };
 
-  // DIA bağlantı durumu banner
-  const renderDiaStatus = () => {
-    if (!isDiaConfigured) {
-      return (
-        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4 flex items-center gap-3">
-          <WifiOff className="w-5 h-5 text-amber-600" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-              DIA Bağlantısı Yapılandırılmamış
-            </p>
-            <p className="text-xs text-amber-600 dark:text-amber-400">
-              Bu kullanıcının DIA ERP bağlantı ayarları henüz yapılmamış.
-            </p>
-          </div>
-        </div>
-      );
-    }
-
-    if (diaStatus === 'connecting') {
-      return (
-        <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4 flex items-center gap-3">
-          <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-          <p className="text-sm text-blue-800 dark:text-blue-200">
-            DIA bağlantısı kuruluyor...
-          </p>
-        </div>
-      );
-    }
-
-    if (diaStatus === 'error') {
-      return (
-        <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-4 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-red-800 dark:text-red-200">
-              DIA Bağlantı Hatası
-            </p>
-            <p className="text-xs text-red-600 dark:text-red-400">{diaError}</p>
-          </div>
-          <Button variant="outline" size="sm" onClick={handleReconnect}>
-            <RefreshCw className="w-4 h-4 mr-1" />
-            Tekrar Dene
-          </Button>
-        </div>
-      );
-    }
-
-    if (diaStatus === 'connected') {
-      return (
-        <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg p-3 mb-4 flex items-center gap-3">
-          <CheckCircle className="w-5 h-5 text-green-600" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-green-800 dark:text-green-200">
-              DIA Bağlantısı Aktif
-            </p>
-            <p className="text-xs text-green-600 dark:text-green-400">
-              {impersonatedProfile?.firma_adi || impersonatedProfile?.firma_kodu} • {impersonatedProfile?.dia_sunucu_adi}
-            </p>
-          </div>
-          <Button variant="ghost" size="sm" onClick={handleReconnect}>
-            <RefreshCw className="w-4 h-4" />
-          </Button>
-        </div>
-      );
-    }
-
-    return null;
-  };
-
   if (userPages.length === 0) {
     return (
       <div className="flex h-full">
         {renderSidebar()}
         <div className="flex-1 p-6">
-          {renderDiaStatus()}
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <AlertCircle className="w-12 h-12 text-muted-foreground mb-4" />
             <p className="text-muted-foreground">
@@ -441,24 +432,20 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
     <DashboardFilterProvider>
       <div className="flex h-full min-h-0">
         {renderSidebar()}
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-          <div className="p-6">
-            {renderDiaStatus()}
-
-            {isPageLoading && (
-              <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Veri kaynakları yükleniyor...
-              </div>
-            )}
-            
-            {selectedPageId && (
-              <ContainerBasedDashboard 
-                pageId={selectedPageId} 
-                widgetData={{}} 
-              />
-            )}
-          </div>
+         <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pb-6">
+           {isPageLoading && (
+             <div className="p-6 pb-0 flex items-center gap-2 text-xs text-muted-foreground">
+               <Loader2 className="w-3.5 h-3.5 animate-spin" />
+               Veri kaynakları yükleniyor...
+             </div>
+           )}
+           
+           {selectedPageId && (
+             <ContainerBasedDashboard 
+               pageId={selectedPageId} 
+               widgetData={{}} 
+             />
+           )}
         </div>
       </div>
     </DashboardFilterProvider>
