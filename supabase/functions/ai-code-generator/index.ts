@@ -808,6 +808,94 @@ React.createElement('div', { className: 'flex-1 h-full min-h-0 relative' },
      )
    )
 
+🕸️ RADAR / SPIDER CHART (Örümcek Grafiği):
+   - Çok boyutlu karşılaştırma ve dağılım analizi için ideal
+   - Legend KULLANMA - tüm alanı grafiğe ayır
+   - outerRadius: '80%' (minimum %80 - grafik büyük görünsün)
+   - Drill-down popup zorunlu (onClick + UI.Dialog)
+   - fillOpacity: 0.4 (yarı saydam alan)
+   
+   ✅ ZORUNLU RADAR YAPISI:
+   React.createElement('div', { className: 'h-full flex flex-col' },
+     // Header
+     React.createElement('div', { className: 'flex-shrink-0 flex items-center justify-between mb-2 px-1' },
+       React.createElement('div', { className: 'flex flex-col' },
+         React.createElement('h3', { className: 'text-base font-semibold text-foreground flex items-center gap-2' }, 
+           React.createElement(LucideIcons.Radar, { className: 'w-4 h-4 text-primary' }),
+           'Dağılım Başlığı'
+         ),
+         React.createElement('span', { className: 'text-xs text-muted-foreground' }, 
+           chartData.length + ' kategori'
+         )
+       ),
+       React.createElement('div', { className: 'text-right' },
+         React.createElement('span', { className: 'text-lg font-bold text-foreground block leading-none' }, totalRecords),
+         React.createElement('span', { className: 'text-[10px] text-muted-foreground uppercase' }, 'Toplam')
+       )
+     ),
+     // Radar Chart Container
+     React.createElement('div', { className: 'flex-1 min-h-0 relative w-full' },
+       React.createElement(Recharts.ResponsiveContainer, { width: '100%', height: '100%' },
+         React.createElement(Recharts.RadarChart, { 
+           cx: '50%', 
+           cy: '50%', 
+           outerRadius: '80%',
+           data: chartData,
+           margin: { top: 10, right: 30, left: 30, bottom: 10 }
+         },
+           React.createElement(Recharts.PolarGrid, { stroke: 'hsl(var(--border))' }),
+           React.createElement(Recharts.PolarAngleAxis, { 
+             dataKey: 'name',
+             tick: { fill: 'hsl(var(--foreground))', fontSize: 11, fontWeight: 500 }
+           }),
+           React.createElement(Recharts.PolarRadiusAxis, { 
+             angle: 30, 
+             domain: [0, 'auto'],
+             tick: { fill: 'hsl(var(--muted-foreground))', fontSize: 9 },
+             axisLine: false
+           }),
+           React.createElement(Recharts.Radar, {
+             name: 'Değer',
+             dataKey: 'value',
+             stroke: getColor(0),
+             fill: getColor(0),
+             fillOpacity: 0.4,
+             isAnimationActive: true,
+             onClick: handleSliceClick,
+             cursor: 'pointer'
+           }),
+           React.createElement(Recharts.Tooltip, { 
+             content: React.createElement(CustomTooltip),
+             wrapperStyle: { zIndex: 9999 }
+           })
+         )
+       )
+     ),
+     // Drill-down Dialog (UI.Dialog)
+     React.createElement(UI.Dialog, { open: isOpen, onOpenChange: setIsOpen },
+       React.createElement(UI.DialogContent, { 
+         className: 'w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col p-0 gap-0 rounded border border-border' 
+       },
+         // Header - pr-12 ZORUNLU!
+         React.createElement('div', { 
+           className: 'flex items-center justify-between p-3 border-b border-border flex-shrink-0 gap-4 pr-12 bg-muted/10'
+         },
+           // ...header içeriği
+         ),
+         React.createElement(UI.DialogDescription, { className: 'sr-only' }, 'Detay'),
+         React.createElement('div', { className: 'flex-1 overflow-y-auto p-2' },
+           // ...liste içeriği
+         )
+       )
+     )
+   )
+   
+   ❌ RADAR YASAKLAR:
+   - Legend (yan liste) kullanmak - Radar'da legend YASAK, tüm alan grafik için
+   - outerRadius %60 veya altı - minimum %80 kullan
+   - onClick olmadan radar - drill-down zorunlu
+   - wrapperStyle: { zIndex: 9999 } olmadan Tooltip
+
 📋 TABLO / LİSTE:
    - Scroll için max-h-[XXXpx] + overflow-y-auto
    - Zebra striping: even:bg-muted/30
