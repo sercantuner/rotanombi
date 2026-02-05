@@ -1,5 +1,5 @@
 // BulkDataSyncManager - Tüm kullanıcılar için toplu veri senkronizasyonu
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
@@ -11,7 +11,8 @@ import {
   Clock, 
   Play,
   AlertCircle,
-  Building2
+  Building2,
+  StopCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -44,6 +45,10 @@ export function BulkDataSyncManager() {
   const [syncing, setSyncing] = useState(false);
   const [progress, setProgress] = useState<Map<string, SyncProgress>>(new Map());
   const [currentIndex, setCurrentIndex] = useState(0);
+  
+  // Acil stop için abort controller
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const [stopping, setStopping] = useState(false);
 
   // DIA yapılandırması olan kullanıcıları yükle
   useEffect(() => {
@@ -95,6 +100,9 @@ export function BulkDataSyncManager() {
       return;
     }
 
+    // Yeni abort controller oluştur
+    abortControllerRef.current = new AbortController();
+    setStopping(false);
     setSyncing(true);
     setCurrentIndex(0);
     
@@ -109,6 +117,23 @@ export function BulkDataSyncManager() {
 
     // Sırayla her kullanıcı için sync yap
     for (let i = 0; i < usersToSync.length; i++) {
+      // Acil stop kontrolü
+      if (abortControllerRef.current?.signal.aborted) {
+        // Kalan kullanıcıları "cancelled" olarak işaretle
+        for (let j = i; j < usersToSync.length; j++) {
+          const remainingUser = usersToSync[j];
+          if (newProgress.get(remainingUser.user_id)?.status === 'pending') {
+            newProgress.set(remainingUser.user_id, { 
+              userId: remainingUser.user_id, 
+              status: 'error',
+              message: 'İptal edildi',
+            });
+          }
+        }
+        setProgress(new Map(newProgress));
+        break;
+      }
+
       const user = usersToSync[i];
       setCurrentIndex(i + 1);
       
@@ -123,6 +148,17 @@ export function BulkDataSyncManager() {
             targetUserId: user.user_id,
           },
         });
+
+        // Stop sonrası response gelirse kontrol et
+        if (abortControllerRef.current?.signal.aborted) {
+          newProgress.set(user.user_id, { 
+            userId: user.user_id, 
+            status: 'error',
+            message: 'İptal edildi',
+          });
+          setProgress(new Map(newProgress));
+          continue;
+        }
 
         if (response.error) {
           throw new Error(response.error.message);
@@ -155,21 +191,34 @@ export function BulkDataSyncManager() {
       
       setProgress(new Map(newProgress));
       
-      // Rate limiting - her kullanıcı arasında 2 saniye bekle
-      if (i < usersToSync.length - 1) {
+      // Rate limiting - her kullanıcı arasında 2 saniye bekle (stop edilmediyse)
+      if (i < usersToSync.length - 1 && !abortControllerRef.current?.signal.aborted) {
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
 
     setSyncing(false);
+    setStopping(false);
+    abortControllerRef.current = null;
     
     const successCount = Array.from(newProgress.values()).filter(p => p.status === 'success').length;
     const errorCount = Array.from(newProgress.values()).filter(p => p.status === 'error').length;
+    const cancelledCount = Array.from(newProgress.values()).filter(p => p.message === 'İptal edildi').length;
     
-    if (errorCount === 0) {
+    if (cancelledCount > 0) {
+      toast.info(`Senkronizasyon durduruldu. ${successCount} başarılı, ${cancelledCount} iptal edildi`);
+    } else if (errorCount === 0) {
       toast.success(`${successCount} kullanıcı için veri senkronizasyonu tamamlandı`);
     } else {
       toast.warning(`${successCount} başarılı, ${errorCount} başarısız`);
+    }
+  };
+
+  const stopSync = () => {
+    if (abortControllerRef.current) {
+      setStopping(true);
+      abortControllerRef.current.abort();
+      toast.info('Senkronizasyon durduruluyor...');
     }
   };
 
@@ -245,6 +294,19 @@ export function BulkDataSyncManager() {
               )}
             </Button>
             
+            {/* Acil Stop Butonu */}
+            {syncing && (
+              <Button 
+                variant="destructive" 
+                onClick={stopSync}
+                disabled={stopping}
+                className="gap-2"
+              >
+                <StopCircle className="w-4 h-4" />
+                {stopping ? 'Durduruluyor...' : 'Acil Durdur'}
+              </Button>
+            )}
+            
             <Button variant="outline" onClick={loadUsers} disabled={syncing}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Listeyi Yenile
@@ -254,7 +316,9 @@ export function BulkDataSyncManager() {
           {syncing && (
             <div className="mt-4 space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">İlerleme</span>
+                <span className="text-muted-foreground">
+                  İlerleme {stopping && '(durduruluyor...)'}
+                </span>
                 <span className="font-medium">{currentIndex} / {selectedUsers.size}</span>
               </div>
               <Progress value={getProgressPercent()} className="h-2" />
