@@ -1,15 +1,12 @@
 
 # AI Widget Oluşturma - Veri Modeli Entegrasyonu Planı
 
+## ✅ TAMAMLANDI
+
 ## Özet
 AI kod üreticisinin (`CustomCodeWidgetBuilder`) veri kaynaklarını ve aralarındaki ilişkileri (`data_source_relationships`) otomatik olarak anlayıp kullanması ve MultiQueryBuilder'ın basitleştirilmesi.
 
-## Mevcut Durum
-
-### AI Kod Üreticisi (`CustomCodeWidgetBuilder`)
-- Sadece seçilen veri kaynağının `last_sample_data` örnek verisini ve alan istatistiklerini AI'ye gönderiyor
-- Veri kaynakları arasındaki ilişkiler (`data_source_relationships`) AI prompt'a dahil edilmiyor
-- Kullanıcı manuel olarak DIA Model linkleri eklemek zorunda
+## Yapılan Değişiklikler
 
 ### MultiQueryBuilder
 - Çoklu sorgu seçimi + birleştirme (merge) konfigürasyonu içeriyor

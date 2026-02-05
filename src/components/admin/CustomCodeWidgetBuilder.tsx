@@ -4,6 +4,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import { useDataSources, DataSource as DataSourceType } from '@/hooks/useDataSources';
+import { useDataSourceRelationships } from '@/hooks/useDataSourceRelationships';
 import { useWidgetAdmin, useWidgets } from '@/hooks/useWidgets';
 import { useWidgetCategories } from '@/hooks/useWidgetCategories';
 import { WidgetFormData, WIDGET_SIZES } from '@/lib/widgetTypes';
@@ -353,6 +354,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   const { widgets } = useWidgets();
   const { createWidget, updateWidget, isLoading: isSaving } = useWidgetAdmin();
   const { activeDataSources, getDataSourceById, isLoading: isDataSourcesLoading, dataSources } = useDataSources();
+  const { relationships, getRelationshipsForDataSource } = useDataSourceRelationships();
   const { activeCategories, isLoading: isCategoriesLoading, getCategoryBySlug } = useWidgetCategories();
   const { user } = useAuth();
   const { impersonatedUserId, isImpersonating } = useImpersonation();
@@ -1517,6 +1519,33 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
     fetchExampleCode();
   }, [selectedExampleWidget]);
   
+  // Veri modeli ilişkilerini prompt için hazırla
+  const getDataModelContext = useCallback(() => {
+    if (!selectedDataSourceId) return null;
+    
+    const sourceRelationships = getRelationshipsForDataSource(selectedDataSourceId);
+    if (!sourceRelationships || sourceRelationships.length === 0) return null;
+    
+    const relatedSources = sourceRelationships.map(rel => {
+      const isSource = rel.source_data_source_id === selectedDataSourceId;
+      const relatedId = isSource ? rel.target_data_source_id : rel.source_data_source_id;
+      const relatedDS = getDataSourceById(relatedId);
+      
+      return {
+        name: relatedDS?.name || 'Bilinmeyen',
+        slug: relatedDS?.slug || '',
+        relationField: isSource ? rel.source_field : rel.target_field,
+        targetField: isSource ? rel.target_field : rel.source_field,
+        type: rel.relationship_type,
+        crossFilter: rel.cross_filter_direction,
+        recordCount: relatedDS?.last_record_count || 0,
+        sampleFields: relatedDS?.last_fields?.slice(0, 10) || [],
+      };
+    });
+    
+    return { relationships: sourceRelationships, relatedSources };
+  }, [selectedDataSourceId, getRelationshipsForDataSource, getDataSourceById]);
+  
   const buildEnhancedPrompt = useCallback(() => {
     let prompt = aiPrompt;
     
@@ -1526,6 +1555,25 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
       prompt += 'Aşağıdaki widget kodunu yapı ve stil açısından örnek al:\n';
       prompt += '```javascript\n' + exampleWidgetCode + '\n```\n';
       prompt += 'Bu widget\'ın responsive legend, renk paleti kullanımı ve container yapısını benzer şekilde uygula.';
+    }
+    
+    // VERİ MODELİ İLİŞKİLERİ - YENİ!
+    const dataModelContext = getDataModelContext();
+    if (dataModelContext && dataModelContext.relatedSources.length > 0) {
+      prompt += '\n\n═══════════════════════════════════════════════════════════════\n';
+      prompt += '                    VERİ MODELİ İLİŞKİLERİ\n';
+      prompt += '═══════════════════════════════════════════════════════════════\n\n';
+      prompt += `📊 Mevcut Veri Kaynağı: ${selectedDataSource?.name || 'Seçili Kaynak'}\n`;
+      prompt += `   Alanlar: ${selectedDataSource?.last_fields?.slice(0, 15).join(', ') || '...'}\n\n`;
+      prompt += '🔗 İlişkili Veri Kaynakları:\n';
+      dataModelContext.relatedSources.forEach(rel => {
+        prompt += `   • ${rel.name} → ${rel.relationField} = ${rel.targetField} (${rel.type})\n`;
+        prompt += `     Cross-filter: ${rel.crossFilter}, ${rel.recordCount} kayıt\n`;
+        if (rel.sampleFields.length > 0) {
+          prompt += `     Alanlar: ${rel.sampleFields.join(', ')}...\n`;
+        }
+      });
+      prompt += '\n💡 Bu ilişkileri kullanarak veri birleştirmesi yapabilirsin.\n';
     }
     
     // DIA Model linkleri ekle
@@ -1563,7 +1611,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
     prompt += '- ÖNEMLİ: Bilgiler ve X butonu ASLA üst üste binmemeli!\n';
     
     return prompt;
-  }, [aiPrompt, selectedExampleWidget, exampleWidgetCode, diaModelLinks, aiRequirements, customRules]);
+  }, [aiPrompt, selectedExampleWidget, exampleWidgetCode, selectedDataSource, getDataModelContext, diaModelLinks, aiRequirements, customRules]);
 
   // Tam prompt oluşturma - AI'ye gönderilen tüm içerik
   const generateFullPromptPreview = useCallback(() => {

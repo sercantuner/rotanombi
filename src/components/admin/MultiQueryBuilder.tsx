@@ -1,5 +1,5 @@
-// MultiQueryBuilder - Çoklu sorgu ve birleştirme yapılandırma
-// Veri Kaynağı (Data Source) seçimi ile çalışır, API test mantığı kaldırıldı
+// MultiQueryBuilder - Çoklu sorgu yapılandırma (Basitleştirilmiş)
+// Veri Kaynağı (Data Source) seçimi ile çalışır - Birleştirme işlemleri AI tarafından otomatik yapılır
 
 import React, { useState, useMemo } from 'react';
 import { 
@@ -13,6 +13,7 @@ import {
   DiaApiSort,
 } from '@/lib/widgetBuilderTypes';
 import { useDataSources, DataSource } from '@/hooks/useDataSources';
+import { useDataSourceRelationships } from '@/hooks/useDataSourceRelationships';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,10 +22,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Plus, Trash2, Link2, Database, ChevronDown, ChevronRight, 
   CheckCircle, ArrowDown, GripVertical,
-  ArrowLeftRight, Merge, ArrowRightLeft, Maximize2, Layers, Copy, Grid3x3, Share2
+  ArrowLeftRight, Merge, ArrowRightLeft, Maximize2, Layers, Copy, Grid3x3, Share2, Info, Sparkles
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -414,8 +416,43 @@ function MergeEditor({
 }
 
 export function MultiQueryBuilder({ multiQuery, onChange }: MultiQueryBuilderProps) {
-  // Veri kaynaklarını hook ile çek
-  const { activeDataSources, isLoading: isLoadingDataSources } = useDataSources();
+  // Veri kaynaklarını ve ilişkileri hook ile çek
+  const { activeDataSources, isLoading: isLoadingDataSources, getDataSourceById } = useDataSources();
+  const { getRelationshipsForDataSource, getRelationshipsBetween } = useDataSourceRelationships();
+  
+  // Gelişmiş mod (birleştirme paneli göster/gizle)
+  const [showAdvancedMode, setShowAdvancedMode] = useState(false);
+  
+  // Seçili veri kaynaklarının otomatik ilişkilerini hesapla
+  const autoDetectedRelationships = useMemo(() => {
+    if (!multiQuery?.queries || multiQuery.queries.length < 2) return [];
+    
+    const detected: { source: string; target: string; sourceField: string; targetField: string; type: string }[] = [];
+    
+    for (let i = 0; i < multiQuery.queries.length; i++) {
+      for (let j = i + 1; j < multiQuery.queries.length; j++) {
+        const sourceId = multiQuery.queries[i].dataSourceId;
+        const targetId = multiQuery.queries[j].dataSourceId;
+        
+        if (sourceId && targetId) {
+          const rels = getRelationshipsBetween(sourceId, targetId);
+          rels.forEach(rel => {
+            const sourceName = getDataSourceById(rel.source_data_source_id)?.name || '';
+            const targetName = getDataSourceById(rel.target_data_source_id)?.name || '';
+            detected.push({
+              source: sourceName,
+              target: targetName,
+              sourceField: rel.source_field,
+              targetField: rel.target_field,
+              type: rel.relationship_type
+            });
+          });
+        }
+      }
+    }
+    
+    return detected;
+  }, [multiQuery?.queries, getRelationshipsBetween, getDataSourceById]);
   
   // Çoklu sorgu modunu aktifleştir
   const enableMultiQuery = () => {
@@ -591,48 +628,51 @@ export function MultiQueryBuilder({ multiQuery, onChange }: MultiQueryBuilderPro
           </ScrollArea>
         </div>
         
-        {/* Birleştirmeler - Ayrı scroll alanı */}
-        {multiQuery.queries.length >= 2 && (
-          <div className="border rounded-md">
-            <div className="p-2 bg-muted/30 border-b flex items-center justify-between">
-              <Label className="text-xs font-medium flex items-center gap-2">
-                <Link2 className="h-3 w-3" />
-                Birleştirmeler
-              </Label>
-              <Button size="sm" variant="ghost" onClick={addMerge} className="h-6 text-xs px-2">
-                <Plus className="h-3 w-3 mr-1" />
-                Ekle
-              </Button>
+        {/* Otomatik İlişki Bilgisi - Veri Modeli'nden */}
+        {autoDetectedRelationships.length > 0 && (
+          <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span className="text-xs font-medium text-primary">Otomatik Tespit Edilen İlişkiler</span>
             </div>
-            <ScrollArea className="h-[200px]">
-              {multiQuery.merges.length > 0 ? (
-                <div className="p-2 space-y-1.5">
-                  {multiQuery.merges.map((merge, index) => (
-                    <MergeEditor
-                      key={index}
-                      merge={merge}
-                      queries={multiQuery.queries}
-                      onChange={(m) => updateMerge(index, m)}
-                      onDelete={() => deleteMerge(index)}
-                    />
-                  ))}
+            <div className="space-y-1">
+              {autoDetectedRelationships.map((rel, idx) => (
+                <div key={idx} className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Badge variant="outline" className="text-[10px]">{rel.source}</Badge>
+                  <span className="text-primary">→</span>
+                  <span className="font-mono text-[10px]">{rel.sourceField} = {rel.targetField}</span>
+                  <span className="text-primary">→</span>
+                  <Badge variant="outline" className="text-[10px]">{rel.target}</Badge>
+                  <Badge variant="secondary" className="text-[10px]">{rel.type}</Badge>
                 </div>
-              ) : (
-                <div className="text-center py-4 text-xs text-muted-foreground">
-                  <Link2 className="h-5 w-5 mx-auto mb-1 opacity-30" />
-                  <p>Sorgular arasında bağlantı yok</p>
-                </div>
-              )}
-            </ScrollArea>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-2 flex items-center gap-1">
+              <Info className="h-3 w-3" />
+              Bu ilişkiler Veri Modeli'nden alınır ve AI kod üretiminde otomatik kullanılır.
+            </p>
           </div>
         )}
         
-        {/* Birleştirme Sonucu Görselleştirmesi */}
-        {multiQuery.queries.length >= 1 && (
-          <MergeResultVisualization
-            queries={multiQuery.queries}
-            merges={multiQuery.merges}
-          />
+        {/* Gelişmiş Mod - Manuel Birleştirme (Opsiyonel) */}
+        {multiQuery.queries.length >= 2 && (
+          <Collapsible open={showAdvancedMode} onOpenChange={setShowAdvancedMode}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="w-full justify-between h-8 text-xs">
+                <span className="flex items-center gap-2">
+                  <Link2 className="h-3 w-3" />
+                  Gelişmiş: Manuel Birleştirme
+                </span>
+                {showAdvancedMode ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2">
+              <div className="text-center py-3 text-xs text-muted-foreground border rounded-md">
+                <p>Manuel birleştirme genellikle gerekli değildir.</p>
+                <p className="mt-1">AI, Veri Modeli ilişkilerini otomatik kullanır.</p>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         )}
       </CardContent>
     </Card>
