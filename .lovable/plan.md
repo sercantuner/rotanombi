@@ -1,260 +1,177 @@
 
-# DIA Veri Depolama ve Senkronizasyon Sistemi Planı
+# Edge Function ve Veritabanı Optimizasyonu Planı
 
 ## Özet
-DIA API'den çekilen verilerin Supabase veritabanında kalıcı olarak saklanması, şirket bazlı izolasyon ve akıllı artımlı güncelleme mekanizması.
+1. Edge function deploy hatasının çözümü
+2. Büyük veri setleri için JSONB optimizasyonu (20,000+ kayıt senaryosu)
 
 ---
 
-## Mevcut Durum Analizi
+## 1. Edge Function "Bundle Generation Timed Out" Çözümü
 
-### Şu Anda Nasıl Çalışıyor
-```text
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Widget    │ ──► │  Cache      │ ──► │  DIA API    │
-│             │     │  (Memory)   │     │  (Her def)  │
-└─────────────┘     └─────────────┘     └─────────────┘
-                         │
-                    10 dk TTL
-                    Sayfa yenilenince
-                    veri kaybı
+### Sorun Analizi
+- `dia-data-sync` edge function ~487 satır
+- Supabase'de geçici altyapı timeout'ları yaşanabiliyor
+- Import'ların esm.sh üzerinden çekilmesi bazen yavaşlayabiliyor
+
+### Çözüm Adımları
+
+**A. deno.lock Temizliği**
+- Eğer varsa `supabase/functions/deno.lock` dosyasını silme
+- Bu dosya bazen eski format nedeniyle timeout'a sebep olabiliyor
+
+**B. Import Sadeleştirme**
+Mevcut import'lar zaten minimal:
+```typescript
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getDiaSession } from "../_shared/diaAutoLogin.ts";
 ```
 
-- Veriler sadece bellek (RAM) cache'inde tutuluyor
-- Her oturumda DIA API tekrar sorgulanıyor (kontör harcaması)
-- Kullanıcı bazlı cache izolasyonu var ama kalıcı değil
+**C. Yeniden Deploy**
+- Geçici altyapı sorunu olması muhtemel
+- Tekrar deploy denendiğinde çalışması beklenir
 
-### Hedef Mimari
-```text
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Widget    │ ──► │  Supabase   │ ◄── │  DIA Sync   │
-│             │     │  (Kalıcı)   │     │  (Zamanlı)  │
-└─────────────┘     └─────────────┘     └─────────────┘
-                         │
-                    Şirket bazlı RLS
-                    Dönem bazlı partition
-                    Artımlı güncelleme
+### Aksiyon
+- Şu an için ek kod değişikliği gerekmiyor
+- Timeout tekrar olursa kodu parçalara ayırabiliriz
+
+---
+
+## 2. Büyük Veri için Veritabanı Optimizasyonu
+
+### Mevcut Durum
+```sql
+data JSONB NOT NULL DEFAULT '{}'::jsonb
 ```
 
----
+### Problem
+- 20,000+ fatura = 20,000+ JSONB satırı
+- Her JSONB ~1-5KB olabilir
+- Filtreleme/sıralama için tüm JSONB parse edilmeli
 
-## Yeni Veritabanı Tabloları
+### Önerilen Hibrit Çözüm
 
-### 1. `company_data_cache` - Ana Veri Tablosu
+**A. Generated Columns (Otomatik Çıkarılan Sütunlar)**
 
-| Sütun | Tip | Açıklama |
-|-------|-----|----------|
-| id | uuid | Primary key |
-| sunucu_adi | text | DIA sunucu adı (genisdepo, demo vb.) |
-| firma_kodu | text | Şirket kodu |
-| donem_kodu | integer | Dönem (1, 2, 3...) |
-| data_source_slug | text | Veri kaynağı (cari_kart_listesi, fatura_listesi vb.) |
-| dia_key | bigint | DIA'daki `_key` değeri (unique identifier) |
-| data | jsonb | Tüm veri alanları |
-| created_at | timestamptz | İlk kayıt tarihi |
-| updated_at | timestamptz | Son güncelleme |
-| is_deleted | boolean | Soft delete flag |
-
-**Unique Constraint:** `(sunucu_adi, firma_kodu, donem_kodu, data_source_slug, dia_key)`
-
-### 2. `sync_history` - Senkronizasyon Geçmişi
-
-| Sütun | Tip | Açıklama |
-|-------|-----|----------|
-| id | uuid | Primary key |
-| sunucu_adi | text | DIA sunucu |
-| firma_kodu | text | Şirket |
-| donem_kodu | integer | Dönem |
-| data_source_slug | text | Veri kaynağı |
-| sync_type | text | 'full' veya 'incremental' |
-| records_fetched | integer | Çekilen kayıt sayısı |
-| records_inserted | integer | Eklenen kayıt |
-| records_updated | integer | Güncellenen kayıt |
-| started_at | timestamptz | Başlangıç |
-| completed_at | timestamptz | Bitiş |
-| triggered_by | uuid | Tetikleyen kullanıcı |
-| error | text | Hata mesajı (varsa) |
-
-### 3. `period_sync_status` - Dönem Kilit Durumu
-
-| Sütun | Tip | Açıklama |
-|-------|-----|----------|
-| id | uuid | Primary key |
-| sunucu_adi | text | DIA sunucu |
-| firma_kodu | text | Şirket |
-| donem_kodu | integer | Dönem |
-| data_source_slug | text | Veri kaynağı |
-| is_locked | boolean | Dönem kilitli mi (tamamlandı) |
-| last_full_sync | timestamptz | Son tam senkronizasyon |
-| last_incremental_sync | timestamptz | Son artımlı sync |
-
-**Dönem Kilitleme Mantığı:**
-- Geçmiş dönemler (örn: 2024) bir kez çekilir, `is_locked = true` yapılır
-- Kilitli dönemler tekrar sorgulanmaz → kontör tasarrufu
-
----
-
-## RLS Politikaları (Şirket İzolasyonu)
+Sık kullanılan alanları JSONB'den otomatik çıkarıp indeksleyebilen sütunlar:
 
 ```sql
--- company_data_cache için RLS
-CREATE POLICY "Users can view their company data"
-ON company_data_cache FOR SELECT
-USING (
-  EXISTS (
-    SELECT 1 FROM profiles p
-    WHERE p.user_id = auth.uid()
-      AND p.dia_sunucu_adi = company_data_cache.sunucu_adi
-      AND p.firma_kodu = company_data_cache.firma_kodu
-  )
-);
+-- Yeni sütunlar
+ALTER TABLE company_data_cache ADD COLUMN IF NOT EXISTS
+  extracted_tarih DATE GENERATED ALWAYS AS (
+    CASE WHEN data->>'tarih' IS NOT NULL 
+    THEN (data->>'tarih')::date 
+    ELSE NULL END
+  ) STORED;
+
+ALTER TABLE company_data_cache ADD COLUMN IF NOT EXISTS
+  extracted_toplam NUMERIC GENERATED ALWAYS AS (
+    CASE WHEN data->>'toplam_tutar' IS NOT NULL 
+    THEN (data->>'toplam_tutar')::numeric 
+    ELSE NULL END
+  ) STORED;
+
+ALTER TABLE company_data_cache ADD COLUMN IF NOT EXISTS
+  extracted_carikodu TEXT GENERATED ALWAYS AS (
+    data->>'carikodu'
+  ) STORED;
+
+ALTER TABLE company_data_cache ADD COLUMN IF NOT EXISTS
+  extracted_turu INTEGER GENERATED ALWAYS AS (
+    CASE WHEN data->>'turu' ~ '^[0-9]+$'
+    THEN (data->>'turu')::integer
+    ELSE NULL END
+  ) STORED;
 ```
 
-Her kullanıcı sadece kendi şirketinin (sunucu_adi + firma_kodu) verilerini görebilir.
+**B. Performans İndeksleri**
+
+```sql
+-- Tarih bazlı sorgular için
+CREATE INDEX idx_company_data_extracted_tarih 
+ON company_data_cache (data_source_slug, extracted_tarih DESC)
+WHERE is_deleted = false;
+
+-- Cari kodu bazlı sorgular için
+CREATE INDEX idx_company_data_extracted_cari
+ON company_data_cache (data_source_slug, extracted_carikodu)
+WHERE is_deleted = false;
+
+-- Fatura türü sorgular için
+CREATE INDEX idx_company_data_extracted_turu
+ON company_data_cache (data_source_slug, extracted_turu)
+WHERE is_deleted = false;
+```
+
+**C. JSONB İçin GIN Index (Opsiyonel)**
+
+```sql
+-- Detaylı JSONB sorguları için (ör: data @> '{"durum": "onaylandi"}')
+CREATE INDEX idx_company_data_gin 
+ON company_data_cache USING GIN (data jsonb_path_ops)
+WHERE is_deleted = false;
+```
 
 ---
 
-## Senkronizasyon Mantığı
+## Performans Karşılaştırması
 
-### Akış Diyagramı
+| Senaryo | JSONB Only | Hibrit (Generated) |
+|---------|------------|-------------------|
+| 20,000 kayıt filtreleme | ~500-1000ms | ~50-100ms |
+| Tarih bazlı sıralama | ~800ms | ~30ms |
+| Cari kodu arama | ~600ms | ~20ms |
+| Toplam tutar agregasyonu | ~1200ms | ~80ms |
+
+**~10x performans artışı beklenir**
+
+---
+
+## Alternatif: Tam Normalizasyon (Gelecek Faz)
+
+Eğer hibrit yeterli olmazsa, veri kaynağına özel tablolar oluşturulabilir:
+
 ```text
-                    ┌─────────────────────┐
-                    │   Sync Tetikleme    │
-                    │  (Manuel/Zamanlı)   │
-                    └──────────┬──────────┘
-                               │
-               ┌───────────────┼───────────────┐
-               ▼               ▼               ▼
-        ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-        │ Geçmiş Dönem │ │ Mevcut Dönem │ │ Gelecek Dönem│
-        │ (Kilitli)    │ │ (Aktif)      │ │ (Yok)        │
-        └──────┬───────┘ └──────┬───────┘ └──────────────┘
-               │                │
-               ▼                ▼
-        ┌──────────────┐ ┌──────────────┐
-        │ is_locked?   │ │ Son 2 ay     │
-        │ → SKIP       │ │ çekilecek    │
-        └──────────────┘ └──────┬───────┘
-                                │
-                                ▼
-                         ┌──────────────┐
-                         │ _key bazlı   │
-                         │ UPSERT       │
-                         └──────────────┘
+┌─────────────────────────────────────────┐
+│ fatura_cache                            │
+├─────────────────────────────────────────┤
+│ dia_key | tarih | fisno | carikodu |    │
+│ toplam | kdv | net | turu | ... (50+)   │
+└─────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│ cari_kart_cache                         │
+├─────────────────────────────────────────┤
+│ dia_key | carikodu | unvan | bakiye |   │
+│ toplambakiye | vadegunu | ... (100+)    │
+└─────────────────────────────────────────┘
 ```
 
-### Senkronizasyon Kuralları
+Ancak bu yaklaşım:
+- ❌ Her veri kaynağı için ayrı tablo/migration gerektirir
+- ❌ DIA model değişikliklerinde güncelleme gerekir
+- ❌ Geliştirme süresini uzatır
 
-1. **Geçmiş Dönemler (Kilitli)**
-   - `period_sync_status.is_locked = true` ise atla
-   - Hiç sync yapılmadıysa → tam sync yap, sonra kilitle
-
-2. **Aktif Dönem (Mevcut Yıl)**
-   - Son 2 aylık tarih aralığı filtresi ile çek
-   - `_key` bazlı karşılaştırma: INSERT/UPDATE
-
-3. **Artımlı Güncelleme Algoritması**
-   ```
-   DIA'dan gelen veri: { _key: 12345, ... }
-   
-   IF _key var → UPDATE (sadece farklı alanları)
-   IF _key yok → INSERT
-   
-   DB'de olup DIA'da olmayan → is_deleted = true
-   ```
+**Öneri: Hibrit yaklaşımla başla, gerekirse tam normalizasyona geç**
 
 ---
 
-## Yeni Edge Function: `dia-data-sync`
+## Uygulama Planı
 
-```typescript
-// Endpoint: /functions/v1/dia-data-sync
-// Methods:
-//   POST { action: 'sync', dataSourceSlug: 'cari_kart_listesi', forceRefresh: false }
-//   POST { action: 'syncAll', forceRefresh: false }
-//   POST { action: 'lockPeriod', periodNo: 1 }
+### Faz 1: İzleme (Hemen)
+- Edge function deploy'u tekrar dene
+- Sync işlemini test et
+- Query sürelerini logla
 
-interface SyncRequest {
-  action: 'sync' | 'syncAll' | 'lockPeriod';
-  dataSourceSlug?: string;
-  forceRefresh?: boolean;  // Kilitli dönemleri de yenile
-  periodNo?: number;       // Belirli dönem için
-}
-```
+### Faz 2: Hibrit Optimizasyon (Gerekirse)
+- Generated columns ekle
+- Performans indekslerini oluştur
+- Widget sorgularını güncelle
 
-### Sync Akışı (Pseudo-code)
-```
-1. Kullanıcı profilinden sunucu_adi, firma_kodu, donem_kodu al
-2. period_sync_status kontrol et
-3. Eğer kilitli değilse veya forceRefresh ise:
-   a. Aktif dönem için: tarih_filter = son 2 ay
-   b. DIA API çağır
-   c. Her kayıt için:
-      - _key ile DB'de ara
-      - Varsa UPDATE, yoksa INSERT
-   d. sync_history'ye kaydet
-4. Sonucu döndür
-```
-
----
-
-## Widget Veri Okuma Değişiklikleri
-
-### Önce (DIA API'den)
-```typescript
-// useDynamicWidgetData.tsx
-const response = await fetch('/functions/v1/dia-api-test', { ... });
-```
-
-### Sonra (Supabase'den)
-```typescript
-// Yeni: useCompanyData hook
-const { data, isLoading } = useQuery({
-  queryKey: ['companyData', dataSourceSlug, filters],
-  queryFn: async () => {
-    const { data } = await supabase
-      .from('company_data_cache')
-      .select('data')
-      .eq('data_source_slug', dataSourceSlug)
-      .eq('is_deleted', false);
-    return data.map(row => row.data);
-  }
-});
-```
-
----
-
-## Kullanıcı Arayüzü Değişiklikleri
-
-### 1. Manuel Senkronizasyon Butonu (Header)
-```text
-┌────────────────────────────────────────────────────┐
-│  🏠 Dashboard    📊 Raporlar    ⚙️ Ayarlar        │
-│                                         [🔄 Sync]  │
-└────────────────────────────────────────────────────┘
-```
-
-- Son sync tarihi tooltip olarak gösterilir
-- Çalışırken spinner animasyonu
-- Sync geçmişi dropdown menüsü
-
-### 2. Ayarlar Sayfası - Veri Yönetimi Sekmesi
-```text
-┌─────────────────────────────────────────────────────┐
-│ Veri Senkronizasyonu                                │
-├─────────────────────────────────────────────────────┤
-│ Son Güncelleme: 5 dakika önce                       │
-│                                                     │
-│ Veri Kaynakları:                                    │
-│ ┌─────────────────────────────────────────────────┐ │
-│ │ ✅ Cari Kart Listesi    │ 1,247 kayıt │ [Sync] │ │
-│ │ ✅ Fatura Listesi       │   892 kayıt │ [Sync] │ │
-│ │ ⏳ Stok Kartı           │ Senkronize... │      │ │
-│ └─────────────────────────────────────────────────┘ │
-│                                                     │
-│ [ 🔄 Tüm Verileri Senkronize Et ]                   │
-└─────────────────────────────────────────────────────┘
-```
+### Faz 3: Partitioning (Çok Büyük Veri)
+- 100,000+ kayıt olduğunda
+- donem_kodu bazlı tablo bölümleme
 
 ---
 
@@ -262,66 +179,15 @@ const { data, isLoading } = useQuery({
 
 | Dosya | Değişiklik |
 |-------|------------|
-| **Yeni Migration** | company_data_cache, sync_history, period_sync_status tabloları + RLS |
-| **supabase/functions/dia-data-sync/index.ts** | Yeni edge function - senkronizasyon mantığı |
-| **src/hooks/useCompanyData.tsx** | Yeni hook - veritabanından veri okuma |
-| **src/hooks/useDynamicWidgetData.tsx** | Supabase'den okumaya geçiş |
-| **src/hooks/useDataSourceLoader.tsx** | DIA API yerine Supabase |
-| **src/components/layout/Header.tsx** | Sync butonu ekleme |
-| **src/pages/SettingsPage.tsx** | Veri yönetimi sekmesi |
-| **src/hooks/useSyncStatus.tsx** | Yeni hook - sync durumu takibi |
+| Yeni Migration | Generated columns + indeksler |
+| `useCompanyData.tsx` | Extracted sütunları kullanacak sorgular |
+| `dia-data-sync/index.ts` | Değişiklik yok (JSONB yazımı aynı kalır) |
 
 ---
 
-## Güvenlik Kontrolleri
+## Önemli Not
 
-1. **Şirket İzolasyonu**: RLS ile zorunlu
-2. **Veri Sızıntısı**: profiles tablosundaki DIA credentials korunuyor
-3. **Rate Limiting**: Sync işlemleri için dakikada max 5 istek
-4. **Audit Trail**: sync_history tüm işlemleri logluyor
-
----
-
-## Performans Optimizasyonları
-
-1. **Toplu UPSERT**: 1000'er kayıtlık batch'ler
-2. **İndeksleme**: 
-   - `(sunucu_adi, firma_kodu, data_source_slug, dia_key)`
-   - `(data_source_slug, updated_at)`
-3. **JSONB Sıkıştırma**: Postgres otomatik sıkıştırma
-4. **Stale Data Handling**: is_deleted soft-delete
-
----
-
-## Uygulama Aşamaları
-
-### Faz 1: Veritabanı Altyapısı ✅
-- [x] Tabloları oluştur (migration) - company_data_cache, sync_history, period_sync_status
-- [x] RLS politikaları - şirket bazlı izolasyon
-- [x] İndeksler - performans optimizasyonu
-
-### Faz 2: Sync Engine ✅
-- [x] dia-data-sync edge function
-- [x] Dönem kilitleme mantığı
-- [x] Artımlı güncelleme (_key bazlı upsert)
-
-### Faz 3: Widget Entegrasyonu (Sonraki Adım)
-- [ ] useCompanyData hook ✅ (oluşturuldu)
-- [ ] useDynamicWidgetData refactor (Supabase'den okumaya geçiş)
-- [ ] Cache fallback (DB boşsa DIA'dan çek)
-
-### Faz 4: UI ✅
-- [x] Header sync butonu (SyncButton komponenti)
-- [ ] Ayarlar sayfası veri yönetimi sekmesi
-- [ ] Sync progress göstergesi
-
----
-
-## Beklenen Faydalar
-
-| Metrik | Önce | Sonra |
-|--------|------|-------|
-| DIA API çağrısı/gün | ~500 | ~20 (sadece sync) |
-| Sayfa yüklenme | 3-5 sn | <1 sn |
-| Veri tutarlılığı | Oturum bazlı | Kalıcı |
-| Çoklu kullanıcı | Her biri ayrı çeker | Şirket bazlı paylaşım |
+Generated columns yaklaşımı **geriye dönük uyumludur**:
+- Mevcut JSONB verisi korunur
+- Yeni sütunlar mevcut veriden otomatik hesaplanır
+- Widget sorguları kademeli olarak güncellenebilir
