@@ -90,6 +90,9 @@ export function DataModelView() {
   const [snapToGridEnabled, setSnapToGridEnabled] = useState(true);
   const [showMinimap, setShowMinimap] = useState(true);
 
+  // Pan için space tuşu desteği
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+
   // Sürükleme durumu (alan sürükleme)
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<{ dataSourceId: string; field: string } | null>(null);
@@ -97,6 +100,7 @@ export function DataModelView() {
   // Modal state
   const [editorOpen, setEditorOpen] = useState(false);
   const [selectedRelationship, setSelectedRelationship] = useState<DataSourceRelationship | null>(null);
+  const [hoveredRelationship, setHoveredRelationship] = useState<DataSourceRelationship | null>(null);
   const [newRelationshipData, setNewRelationshipData] = useState<{
     sourceDs?: DataSource;
     targetDs?: DataSource;
@@ -108,6 +112,34 @@ export function DataModelView() {
   const activeDataSources = useMemo(() => {
     return dataSources.filter(ds => ds.last_fields && ds.last_fields.length > 0);
   }, [dataSources]);
+
+  // Space basılı mı? (pan için)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || (el as any).isContentEditable)) return;
+      if (e.code === 'Space') setIsSpacePressed(true);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') setIsSpacePressed(false);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
+
+  const clientToWorld = useCallback((clientX: number, clientY: number) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return {
+      x: (clientX - rect.left - pan.x) / zoom,
+      y: (clientY - rect.top - pan.y) / zoom,
+    };
+  }, [pan.x, pan.y, zoom]);
 
   // İlk yüklemede pozisyonları ayarla
   useEffect(() => {
@@ -250,14 +282,15 @@ export function DataModelView() {
 
   // Alan sürükleme başlat
   const handleFieldDragStart = useCallback((dataSourceId: string, field: string, position: { x: number; y: number }) => {
+    const worldPos = clientToWorld(position.x, position.y);
     setDragState({
       isDragging: true,
       sourceDataSourceId: dataSourceId,
       sourceField: field,
-      startPosition: position,
-      currentPosition: position,
+      startPosition: worldPos,
+      currentPosition: worldPos,
     });
-  }, []);
+  }, [clientToWorld]);
 
   // Mouse move - sürükleme çizgisi için
   useEffect(() => {
@@ -266,7 +299,7 @@ export function DataModelView() {
     const handleMouseMove = (e: MouseEvent) => {
       setDragState(prev => prev ? {
         ...prev,
-        currentPosition: { x: e.clientX, y: e.clientY },
+        currentPosition: clientToWorld(e.clientX, e.clientY),
       } : null);
 
       // Drop hedefini bul
@@ -287,20 +320,26 @@ export function DataModelView() {
 
     document.addEventListener('mousemove', handleMouseMove);
     return () => document.removeEventListener('mousemove', handleMouseMove);
-  }, [dragState?.isDragging, dragState?.sourceDataSourceId]);
+  }, [dragState?.isDragging, dragState?.sourceDataSourceId, clientToWorld]);
 
   // Alan bırakıldığında
   const handleFieldDrop = useCallback((sourceDataSourceId: string, sourceField: string, position: { x: number; y: number }) => {
-    if (dropTarget && dropTarget.dataSourceId !== sourceDataSourceId) {
+    // Drop anında hedefi yeniden çöz (dropTarget state'i bazen kaçırabiliyor)
+    const element = document.elementFromPoint(position.x, position.y);
+    const fieldItem = element?.closest('.field-item') as HTMLElement | null;
+    const cardEl = (fieldItem?.closest('[data-datasource-id]') || element?.closest('[data-datasource-id]')) as HTMLElement | null;
+    const targetDsId = cardEl?.getAttribute('data-datasource-id') || undefined;
+    const targetField = fieldItem?.getAttribute('data-field-name') || undefined;
+
+    if (targetDsId && targetDsId !== sourceDataSourceId) {
       const sourceDs = activeDataSources.find(ds => ds.id === sourceDataSourceId);
-      const targetDs = activeDataSources.find(ds => ds.id === dropTarget.dataSourceId);
-      
+      const targetDs = activeDataSources.find(ds => ds.id === targetDsId);
       if (sourceDs && targetDs) {
         setNewRelationshipData({
           sourceDs,
           targetDs,
           sourceField,
-          targetField: dropTarget.field,
+          targetField,
         });
         setSelectedRelationship(null);
         setEditorOpen(true);
@@ -337,18 +376,42 @@ export function DataModelView() {
       return;
     }
     
-    // Sol tık ile sadece boş alandan pan yapılabilir
+    // Sol tık ile boş alandan; veya Space/Alt basılıyken her yerden pan
     // Kartların veya grid dışı alanların tıklanmasına izin ver
     const target = e.target as HTMLElement;
     const isEmptyArea = target === canvasRef.current || 
                         target.classList.contains('canvas-content') ||
                         target.tagName === 'svg';
+
+    // input/scroll gibi alanlarda pan başlatma
+    if (target.closest('input') || target.closest('textarea') || target.closest('[data-radix-scroll-area-viewport]')) return;
     
-    if (e.button === 0 && isEmptyArea) {
+    if (e.button === 0 && (isEmptyArea || isSpacePressed || e.altKey)) {
       setIsPanning(true);
       panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
     }
-  }, [pan]);
+  }, [pan, isSpacePressed]);
+
+  const handleCanvasWheel = useCallback((e: React.WheelEvent) => {
+    const target = e.target as HTMLElement;
+    // Kart içindeki listede scroll'u bozma
+    if (target.closest('[data-radix-scroll-area-viewport]')) return;
+
+    // Ctrl + wheel => zoom
+    if (e.ctrlKey) {
+      e.preventDefault();
+      const delta = -e.deltaY * 0.001;
+      setZoom(prev => Math.max(0.25, Math.min(2, prev + delta)));
+      return;
+    }
+
+    // Wheel => pan
+    e.preventDefault();
+    setPan(prev => ({
+      x: prev.x - e.deltaX,
+      y: prev.y - e.deltaY,
+    }));
+  }, []);
 
   useEffect(() => {
     if (!isPanning) return;
@@ -542,8 +605,9 @@ export function DataModelView() {
       <div
         ref={canvasRef}
         className="flex-1 relative overflow-hidden cursor-grab"
-        style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+         style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
         onMouseDown={handleCanvasMouseDown}
+         onWheel={handleCanvasWheel}
       >
         {/* Grid Background */}
         {showGrid && (
@@ -570,7 +634,7 @@ export function DataModelView() {
           }}
         >
           {/* SVG Layer - İlişki çizgileri */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ overflow: 'visible' }}>
+          <svg className="absolute inset-0 w-full h-full pointer-events-auto" style={{ overflow: 'visible' }}>
             <RelationshipMarkers />
             
             {relationships.map(rel => {
@@ -584,6 +648,7 @@ export function DataModelView() {
                   sourcePosition={positions.source}
                   targetPosition={positions.target}
                   onClick={handleRelationshipClick}
+                  onHoverChange={setHoveredRelationship}
                   isSelected={selectedRelationship?.id === rel.id}
                 />
               );
@@ -592,10 +657,10 @@ export function DataModelView() {
             {/* Sürükleme çizgisi */}
             {dragState?.isDragging && (
               <line
-                x1={dragState.startPosition.x - pan.x}
-                y1={dragState.startPosition.y - pan.y}
-                x2={dragState.currentPosition.x - pan.x}
-                y2={dragState.currentPosition.y - pan.y}
+                x1={dragState.startPosition.x}
+                y1={dragState.startPosition.y}
+                x2={dragState.currentPosition.x}
+                y2={dragState.currentPosition.y}
                 stroke="hsl(var(--primary))"
                 strokeWidth={2}
                 strokeDasharray="5,5"
@@ -603,6 +668,35 @@ export function DataModelView() {
               />
             )}
           </svg>
+
+          {/* Hover/Seçili ilişki detayları */}
+          {(hoveredRelationship || selectedRelationship) && (
+            <div className="absolute left-3 top-3 z-40 max-w-sm bg-background/95 border border-border rounded-md shadow-sm px-3 py-2">
+              {(() => {
+                const rel = hoveredRelationship || selectedRelationship;
+                if (!rel) return null;
+                const source = activeDataSources.find(d => d.id === rel.source_data_source_id);
+                const target = activeDataSources.find(d => d.id === rel.target_data_source_id);
+                return (
+                  <div className="space-y-1">
+                    <div className="text-xs font-medium">İlişki Detayı</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      <span className="font-medium text-foreground">{source?.name || 'Kaynak'}</span>
+                      <span className="text-muted-foreground"> · </span>
+                      <span className="font-mono">{rel.source_field}</span>
+                      <span className="text-muted-foreground"> → </span>
+                      <span className="font-medium text-foreground">{target?.name || 'Hedef'}</span>
+                      <span className="text-muted-foreground"> · </span>
+                      <span className="font-mono">{rel.target_field}</span>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Tip: <span className="text-foreground">{rel.relationship_type}</span> · Yön: <span className="text-foreground">{rel.cross_filter_direction}</span> · Durum: <span className="text-foreground">{rel.is_active ? 'aktif' : 'pasif'}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           {/* Kartlar */}
           {activeDataSources.map(ds => (
