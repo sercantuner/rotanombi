@@ -1,4 +1,5 @@
 // useDataSourceLoader - Sayfa seviyesinde veri kaynaklarını merkezi olarak yükler
+// DB-FIRST STRATEGY: Önce veritabanını kontrol et, yoksa API'den çek
 // GLOBAL CACHE: Bir veri kaynağı bir kez sorgulandıktan sonra tüm sayfalarda kullanılır
 // LAZY LOADING: Sayfa geçişlerinde sadece eksik sorgular tamamlanır
 // _system modülü: Takvim gibi lokal üretilen veri kaynakları desteklenir
@@ -6,6 +7,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useDiaDataCache } from '@/contexts/DiaDataCacheContext';
+import { useDiaProfile } from '@/hooks/useDiaProfile';
 import { useDataSources, DataSource } from './useDataSources';
 import { queuedDiaFetch } from '@/lib/diaRequestQueue';
 import { toast } from 'sonner';
@@ -57,7 +59,10 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
   const [hasInitialized, setHasInitialized] = useState(false); // Sayfa yenileme tespiti için
   const loadingRef = useRef(false);
   
-   const { dataSources, getDataSourceById, updateLastFetch, isLoading: isDataSourcesLoading } = useDataSources();
+  // DIA profile for DB queries
+  const diaProfile = useDiaProfile();
+  
+  const { dataSources, getDataSourceById, updateLastFetch, isLoading: isDataSourcesLoading } = useDataSources();
   const { 
     getCachedData,
     getDataSourceData,
@@ -94,7 +99,47 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     return [];
   }, [setDataSourceData, markDataSourceFetched]);
 
-  // Sayfadaki widget'ların kullandığı veri kaynaklarını bul
+  // DB-FIRST: Veritabanından veri çekme fonksiyonu
+  const loadDataSourceFromDatabase = useCallback(async (
+    dataSource: DataSource
+  ): Promise<any[] | null> => {
+    const { sunucuAdi, firmaKodu, donemKodu } = diaProfile;
+    
+    if (!sunucuAdi || !firmaKodu) {
+      console.log(`[DataSourceLoader] DB-FIRST: No profile config, skipping DB check for ${dataSource.name}`);
+      return null;
+    }
+
+    const effectiveDonem = parseInt(donemKodu || '1');
+
+    try {
+      const { data, error } = await supabase
+        .from('company_data_cache')
+        .select('data')
+        .eq('data_source_slug', dataSource.slug)
+        .eq('sunucu_adi', sunucuAdi)
+        .eq('firma_kodu', firmaKodu)
+        .eq('donem_kodu', effectiveDonem)
+        .eq('is_deleted', false);
+
+      if (error) {
+        console.error(`[DataSourceLoader] DB-FIRST error for ${dataSource.name}:`, error);
+        return null;
+      }
+
+      if (data && data.length > 0) {
+        const extractedData = data.map(row => row.data);
+        console.log(`[DataSourceLoader] DB-FIRST HIT: ${dataSource.name} (${extractedData.length} kayıt from DB)`);
+        return extractedData;
+      }
+
+      console.log(`[DataSourceLoader] DB-FIRST MISS: ${dataSource.name} - no data in DB`);
+      return null;
+    } catch (err) {
+      console.error(`[DataSourceLoader] DB-FIRST exception for ${dataSource.name}:`, err);
+      return null;
+    }
+  }, [diaProfile]);
   const findUsedDataSources = useCallback(async (): Promise<string[]> => {
     if (!pageId) {
       console.log('[DataSourceLoader] No pageId, returning empty sources');
@@ -196,7 +241,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     }
   }, [pageId]);
 
-  // Tek bir veri kaynağını yükle - SADECE henüz sorgulanmamış olanları
+  // Tek bir veri kaynağını yükle - DB-FIRST STRATEGY
   const loadDataSource = useCallback(async (
     dataSource: DataSource, 
     accessToken: string,
@@ -210,32 +255,40 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     // 1. Zaten global registry'de VE cache'de veri varsa - cache'den al
     if (!forceRefresh && isDataSourceFetched(dataSource.id)) {
       const cachedData = getDataSourceData(dataSource.id);
-      // FIX: Cache'de gerçekten veri var mı kontrol et
       if (cachedData && cachedData.length > 0) {
         console.log(`[DataSourceLoader] GLOBAL HIT: ${dataSource.name} (${cachedData.length} kayıt) - başka sayfada zaten yüklendi`);
         incrementCacheHit();
         return cachedData;
       }
-      // Registry'de var ama cache boş - yeniden fetch gerekli
-      console.log(`[DataSourceLoader] STALE REGISTRY: ${dataSource.name} - registry'de var ama cache boş, yeniden yükleniyor`);
     }
     
-    // 2. Cache kontrolü (stale-while-revalidate)
+    // 2. Memory cache kontrolü (stale-while-revalidate)
     const { data: cachedData, isStale } = getDataSourceDataWithStale(dataSource.id);
     
     if (cachedData && cachedData.length > 0 && !forceRefresh) {
-      console.log(`[DataSourceLoader] Cache HIT: ${dataSource.name} (${cachedData.length} kayıt)${isStale ? ' [STALE]' : ''}`);
+      console.log(`[DataSourceLoader] Memory Cache HIT: ${dataSource.name} (${cachedData.length} kayıt)${isStale ? ' [STALE]' : ''}`);
       incrementCacheHit();
-      // Stale olsa bile API çağrısı yapmıyoruz - kontör tasarrufu
       return cachedData;
     }
 
-    // 3. API'den çek ve global registry'e işaretle
-    console.log(`[DataSourceLoader] FETCHING: ${dataSource.name} - İlk kez sorgulanıyor`);
+    // 3. DB-FIRST: Veritabanından veri çek
+    if (!forceRefresh) {
+      const dbData = await loadDataSourceFromDatabase(dataSource);
+      if (dbData && dbData.length > 0) {
+        // Veritabanından gelen veriyi memory cache'e de kaydet
+        setDataSourceData(dataSource.id, dbData, DEFAULT_TTL);
+        markDataSourceFetched(dataSource.id);
+        incrementCacheHit();
+        return dbData;
+      }
+    }
+
+    // 4. Son çare: DIA API'den çek
+    console.log(`[DataSourceLoader] API FETCH: ${dataSource.name} - DB boş, API'den çekiliyor`);
     incrementCacheMiss();
 
     return loadDataSourceFromApi(dataSource, accessToken);
-  }, [getDataSourceData, getDataSourceDataWithStale, isDataSourceFetched, incrementCacheHit, incrementCacheMiss, loadSystemDataSource]);
+  }, [getDataSourceData, getDataSourceDataWithStale, isDataSourceFetched, incrementCacheHit, incrementCacheMiss, loadSystemDataSource, loadDataSourceFromDatabase, setDataSourceData, markDataSourceFetched]);
 
   // DIA hata mesajlarını kullanıcı dostu hale getir
   const getDiaErrorMessage = useCallback((error: string): string => {
