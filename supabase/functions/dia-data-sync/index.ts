@@ -27,8 +27,13 @@ interface SyncResult {
 
 async function fetchFromDia(diaSession: any, module: string, method: string, donemKodu: number): Promise<{ success: boolean; data?: any[]; error?: string }> {
   try {
+    // DIA API: URL'de modül, payload'da "{modül}_{metot}" formatı bekleniyor
     const diaUrl = `https://${diaSession.sunucuAdi}.ws.dia.com.tr/api/v3/${module}/json`;
-    const payload = { [method]: { session_id: diaSession.sessionId, firma_kodu: diaSession.firmaKodu, donem_kodu: donemKodu, limit: 0 } };
+    // Method zaten modül prefix'i içeriyorsa kullan, yoksa ekle
+    const fullMethod = method.startsWith(`${module}_`) ? method : `${module}_${method}`;
+    const payload = { [fullMethod]: { session_id: diaSession.sessionId, firma_kodu: diaSession.firmaKodu, donem_kodu: donemKodu, limit: 0 } };
+    
+    console.log(`[DIA Sync] Fetching: ${diaUrl} with method ${fullMethod}`);
     
     const response = await fetch(diaUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
@@ -36,7 +41,8 @@ async function fetchFromDia(diaSession: any, module: string, method: string, don
     const result = await response.json();
     if (result.error || result.hata) return { success: false, error: result.error?.message || result.hata?.aciklama || "API hatası" };
     
-    const data = result[method] || result.data || [];
+    const data = result[fullMethod] || result.data || [];
+    console.log(`[DIA Sync] Fetched ${Array.isArray(data) ? data.length : 0} records for ${fullMethod}`);
     return { success: true, data: Array.isArray(data) ? data : [] };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Bilinmeyen hata" };
