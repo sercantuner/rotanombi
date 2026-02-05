@@ -423,6 +423,21 @@ export interface WidgetBuilderConfig {
   defaultSortOrder?: number;
   // Drill-down yapılandırması
   drillDown?: DrillDownConfig;
+  
+  // Power BI tarzı filtre bağlamaları
+  // Bu widget'ın etkileneceği global filtreler
+  affectedByFilters?: {
+    globalFilterKey: string;  // 'cariKartTipi', 'satisTemsilcisi', vb.
+    dataField: string;        // Verideki alan adı
+    operator: 'IN' | '=' | 'contains';
+  }[];
+  
+  // Bu widget'ın oluşturacağı cross-filter (tıklanınca diğer widget'ları etkiler)
+  crossFilterField?: {
+    dataField: string;
+    globalFilterKey: string;
+    label: string;
+  };
 }
 
 // Grafik tipleri listesi
