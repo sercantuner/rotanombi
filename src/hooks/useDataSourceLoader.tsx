@@ -114,7 +114,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
 
     try {
       // Sayfalama ile tüm veriyi çek - Supabase varsayılan 1000 limit'i aşmak için
-      const PAGE_SIZE = 5000;
+      const PAGE_SIZE = 1000; // Supabase max 1000 satır döndürür
       let allData: any[] = [];
       let from = 0;
       let hasMore = true;
