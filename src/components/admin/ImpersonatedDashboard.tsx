@@ -65,13 +65,11 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
       console.log('[ImpersonatedDashboard] Session expired or missing, triggering auto-login via dia-api-test');
       
       // dia-api-test edge function'ı hedef kullanıcı için otomatik login yapar
-      // Basit bir test isteği gönder - bu session'ı yenileyecek
+      // ensureSessionOnly: DIA'ya herhangi bir method çağrısı yapmadan session üretir
       const { data: testData, error: testError } = await supabase.functions.invoke('dia-api-test', {
         body: {
           targetUserId: userId,
-          module: 'sis',
-          method: 'sube_listele',
-          limit: 1, // Sadece 1 kayıt - session test için yeterli
+          ensureSessionOnly: true,
         }
       });
 

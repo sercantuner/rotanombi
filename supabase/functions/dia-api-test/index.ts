@@ -26,6 +26,8 @@ interface TestApiRequest {
   targetUserId?: string;
   // Sadece bağlantı durumunu kontrol et (veri çekme)
   checkConnectionOnly?: boolean;
+  // Sadece oturumun geçerli olduğundan emin ol (DIA'ya method çağrısı yapmaz)
+  ensureSessionOnly?: boolean;
   // Dönem loop için
   periodConfig?: {
     enabled: boolean;
@@ -212,8 +214,55 @@ serve(async (req) => {
       returnAllSampleData = false, // Filtre önerileri için tüm veriyi sampleData olarak döndür
       targetUserId, // Impersonation için - super admin başka kullanıcının verisini çekebilir
       checkConnectionOnly = false, // Sadece bağlantı durumunu kontrol et
+      ensureSessionOnly = false, // Sadece session yenile / doğrula
       periodConfig, // Dönem loop yapılandırması
     } = body;
+
+    // ensureSessionOnly modu - DIA'ya herhangi bir method çağrısı yapmadan sadece geçerli session üret
+    // (Impersonation dashboard için güvenli: frontend'e şifre/apiKey taşımadan session yenileme)
+    if (ensureSessionOnly) {
+      const effectiveUserId = targetUserId || user.id;
+
+      // Super admin kontrolü - sadece super admin başka kullanıcının session'ını tetikleyebilir
+      if (targetUserId && targetUserId !== user.id) {
+        const { data: roleCheck } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('role', 'super_admin')
+          .single();
+
+        if (!roleCheck) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Bu işlem için Super Admin yetkisi gerekli' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      const diaResult = await getDiaSession(supabase, effectiveUserId);
+      if (!diaResult.success || !diaResult.session) {
+        return new Response(
+          JSON.stringify({ success: false, error: diaResult.error || 'DIA bağlantısı kurulamadı' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // NOT: sessionId hassas bilgi - client'a dönmüyoruz
+      return new Response(
+        JSON.stringify({
+          success: true,
+          diaConfigured: true,
+          hasSession: true,
+          sunucuAdi: diaResult.session.sunucuAdi,
+          firmaKodu: diaResult.session.firmaKodu,
+          donemKodu: diaResult.session.donemKodu,
+          expiresAt: diaResult.session.expiresAt,
+          effectiveUserId: diaResult.effectiveUserId,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // checkConnectionOnly modu - sadece DIA yapılandırmasını kontrol et, veri çekme
     if (checkConnectionOnly) {
