@@ -22,6 +22,17 @@ interface ContainerBasedDashboardProps {
   pageId: string;
   widgetData?: any;
   isLoading?: boolean;
+   hideFloatingActions?: boolean;
+   onFloatingActionsRender?: (props: {
+     isDragMode: boolean;
+     isWidgetEditMode: boolean;
+     hasChanges: boolean;
+     onContainerAdd: () => void;
+     onDragModeToggle: () => void;
+     onWidgetEditModeToggle: () => void;
+     onSave: () => void;
+     onCancel: () => void;
+   }) => void;
 }
 
 // Floating Action Button Component
@@ -192,7 +203,7 @@ function SortableContainer({
   );
 }
 
-export function ContainerBasedDashboard({ pageId, widgetData = {}, isLoading = false }: ContainerBasedDashboardProps) {
+ export function ContainerBasedDashboard({ pageId, widgetData = {}, isLoading = false, hideFloatingActions = false, onFloatingActionsRender }: ContainerBasedDashboardProps) {
   const { user } = useAuth();
   const { containers, addContainer, deleteContainer, reorderContainers, refreshContainers, isLoading: containersLoading } = usePageContainers(pageId);
   const [isDragMode, setIsDragMode] = useState(false);
@@ -278,6 +289,22 @@ export function ContainerBasedDashboard({ pageId, widgetData = {}, isLoading = f
     refreshContainers();
   };
 
+   // Floating actions props'larını üst bileşene gönder
+   useEffect(() => {
+     if (onFloatingActionsRender) {
+       onFloatingActionsRender({
+         isDragMode,
+         isWidgetEditMode,
+         hasChanges,
+         onContainerAdd: () => setContainerPickerOpen(true),
+         onDragModeToggle: () => setIsDragMode(true),
+         onWidgetEditModeToggle: () => setIsWidgetEditMode(!isWidgetEditMode),
+         onSave: handleSave,
+         onCancel: handleCancel
+       });
+     }
+   }, [isDragMode, isWidgetEditMode, hasChanges, onFloatingActionsRender]);
+ 
   const activeContainer = activeId ? localContainers.find(c => c.id === activeId) : null;
 
   // Yükleniyor durumu
@@ -298,16 +325,18 @@ export function ContainerBasedDashboard({ pageId, widgetData = {}, isLoading = f
         onDragEnd={handleDragEnd}
       >
         {/* Floating Toolbar - Sağ Alt Köşe */}
-        <FloatingActions
-          isDragMode={isDragMode}
-          isWidgetEditMode={isWidgetEditMode}
-          hasChanges={hasChanges}
-          onContainerAdd={() => setContainerPickerOpen(true)}
-          onDragModeToggle={() => setIsDragMode(true)}
-          onWidgetEditModeToggle={() => setIsWidgetEditMode(!isWidgetEditMode)}
-          onSave={handleSave}
-          onCancel={handleCancel}
-        />
+         {!hideFloatingActions && (
+           <FloatingActions
+             isDragMode={isDragMode}
+             isWidgetEditMode={isWidgetEditMode}
+             hasChanges={hasChanges}
+             onContainerAdd={() => setContainerPickerOpen(true)}
+             onDragModeToggle={() => setIsDragMode(true)}
+             onWidgetEditModeToggle={() => setIsWidgetEditMode(!isWidgetEditMode)}
+             onSave={handleSave}
+             onCancel={handleCancel}
+           />
+         )}
 
         {isDragMode && (
           <div className="mb-4 p-3 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary flex items-center gap-2">
