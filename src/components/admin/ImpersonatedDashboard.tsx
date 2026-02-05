@@ -329,92 +329,79 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
             })}
           </nav>
 
-          {/* DIA Durumu */}
-          <div className={cn("border-t border-border", sidebarCollapsed ? "p-2" : "p-3")}>
-            {sidebarCollapsed ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                   <button
-                     onClick={handleReconnect}
-                     disabled={diaStatus === 'connecting'}
-                     className={cn(
-                       "flex items-center justify-center p-2 rounded-lg w-full transition-colors hover:bg-muted/80",
-                        diaStatus === 'connected' ? "bg-success/10" : diaStatus === 'error' ? "bg-destructive/10" : "bg-muted"
-                     )}
-                   >
-                     {diaStatus === 'connecting' ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                     ) : diaStatus === 'error' ? (
-                        <AlertCircle className="w-4 h-4 text-destructive" />
-                     ) : (
-                        <Plug className={cn("w-4 h-4", diaStatus === 'connected' ? "text-success" : "text-muted-foreground")} />
-                     )}
-                   </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                   {diaStatus === 'connecting' ? 'Bağlanıyor...' : diaStatus === 'error' ? 'Hata - Tekrar dene' : diaStatus === 'connected' ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-               <div className="space-y-2">
-                 {/* DIA Durumu */}
-                 <div className={cn(
-                   "flex items-center gap-2 px-3 py-2 rounded-lg text-xs",
-                    diaStatus === 'connected' ? "bg-success/10 text-success" : 
-                    diaStatus === 'error' ? "bg-destructive/10 text-destructive" :
-                    diaStatus === 'connecting' ? "bg-primary/10 text-primary" :
-                   "bg-muted text-muted-foreground"
-                 )}>
-                   {diaStatus === 'connecting' ? (
-                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                   ) : diaStatus === 'error' ? (
-                     <AlertCircle className="w-3.5 h-3.5" />
-                   ) : (
-                     <Plug className="w-3.5 h-3.5" />
-                   )}
-                   <span className="flex-1">
-                     {diaStatus === 'connecting' ? 'Bağlanıyor...' : 
-                      diaStatus === 'error' ? 'Bağlantı Hatası' :
-                      diaStatus === 'connected' ? 'DIA Bağlantısı Aktif' : 'DIA Bağlı Değil'}
-                   </span>
-                 </div>
- 
-                 {/* Bağlantı Bilgisi */}
-                 {diaStatus === 'connected' && getDiaConnectionInfo() && (
-                   <div className="text-[10px] text-muted-foreground px-3">
-                     {getDiaConnectionInfo()}
-                   </div>
-                 )}
- 
-                 {/* Hata Mesajı */}
-                 {diaStatus === 'error' && diaError && (
-                    <div className="text-[10px] text-destructive px-3 truncate" title={diaError}>
-                     {diaError}
-                   </div>
-                 )}
- 
-                 {/* Yenile Butonu */}
-                 <Button
-                   variant="outline"
-                   size="sm"
-                   className="w-full h-7 text-xs"
-                   onClick={handleReconnect}
-                   disabled={diaStatus === 'connecting'}
-                 >
-                   <RefreshCw className={cn("w-3 h-3 mr-1", diaStatus === 'connecting' && "animate-spin")} />
-                   Yenile
-                 </Button>
-              </div>
-            )}
-          </div>
         </aside>
       </TooltipProvider>
     );
   };
 
+   // Alt sabit bar - DIA durumu ve kontrol butonları
+   const renderBottomBar = () => {
+     return (
+       <div className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border px-4 py-2">
+         <div className="flex items-center justify-between gap-4">
+           {/* Sol - DIA Durumu */}
+           <div className="flex items-center gap-3">
+             <div className={cn(
+               "flex items-center gap-2 px-3 py-1.5 rounded text-xs",
+               diaStatus === 'connected' ? "bg-success/10 text-success" : 
+               diaStatus === 'error' ? "bg-destructive/10 text-destructive" :
+               diaStatus === 'connecting' ? "bg-primary/10 text-primary" :
+               "bg-muted text-muted-foreground"
+             )}>
+               {diaStatus === 'connecting' ? (
+                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
+               ) : diaStatus === 'error' ? (
+                 <AlertCircle className="w-3.5 h-3.5" />
+               ) : (
+                 <Plug className="w-3.5 h-3.5" />
+               )}
+               <span>
+                 {diaStatus === 'connecting' ? 'Bağlanıyor...' : 
+                  diaStatus === 'error' ? 'Bağlantı Hatası' :
+                  diaStatus === 'connected' ? 'DIA Bağlı' : 'Bağlı Değil'}
+               </span>
+               {diaStatus === 'connected' && getDiaConnectionInfo() && (
+                 <span className="text-muted-foreground">• {getDiaConnectionInfo()}</span>
+               )}
+             </div>
+ 
+             {/* Yenile Butonu */}
+             <TooltipProvider>
+               <Tooltip>
+                 <TooltipTrigger asChild>
+                   <Button
+                     variant="ghost"
+                     size="icon"
+                     className="h-8 w-8"
+                     onClick={handleReconnect}
+                     disabled={diaStatus === 'connecting'}
+                   >
+                     <RefreshCw className={cn("w-4 h-4", diaStatus === 'connecting' && "animate-spin")} />
+                   </Button>
+                 </TooltipTrigger>
+                 <TooltipContent>Yenile</TooltipContent>
+               </Tooltip>
+             </TooltipProvider>
+ 
+             {diaStatus === 'error' && diaError && (
+               <span className="text-[10px] text-destructive max-w-[200px] truncate" title={diaError}>
+                 {diaError}
+               </span>
+             )}
+           </div>
+ 
+           {/* Sağ - Bilgi */}
+           <div className="text-xs text-muted-foreground">
+             {impersonatedProfile?.display_name || impersonatedProfile?.email} izleniyor
+           </div>
+         </div>
+       </div>
+     );
+   };
+ 
   if (userPages.length === 0) {
     return (
-      <div className="flex h-full">
+       <div className="flex h-full pb-12">
         {renderSidebar()}
         <div className="flex-1 p-6">
           <div className="flex flex-col items-center justify-center h-64 text-center">
@@ -424,13 +411,14 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
             </p>
           </div>
         </div>
+         {renderBottomBar()}
       </div>
     );
   }
 
   return (
     <DashboardFilterProvider>
-       <div className="flex h-full min-h-0 bg-background">
+        <div className="flex h-full min-h-0 bg-background pb-12">
         {renderSidebar()}
          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-background">
            {isPageLoading && (
@@ -447,6 +435,7 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
              />
            )}
         </div>
+         {renderBottomBar()}
       </div>
     </DashboardFilterProvider>
   );
