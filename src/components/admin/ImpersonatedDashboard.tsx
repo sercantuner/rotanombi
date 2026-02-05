@@ -89,7 +89,7 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
    const getDiaConnectionInfo = () => {
      if (!isDiaConfigured || diaStatus !== 'connected') return null;
      const parts = [];
-     if (impersonatedProfile?.donem_kodu) parts.push(impersonatedProfile.donem_kodu);
+     if (impersonatedProfile?.firma_kodu) parts.push(impersonatedProfile.firma_kodu);
      if (impersonatedProfile?.dia_sunucu_adi) parts.push(impersonatedProfile.dia_sunucu_adi);
      return parts.join(' • ');
    };
@@ -349,7 +349,7 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
    // Alt sabit bar - DIA durumu ve kontrol butonları
    const renderBottomBar = () => {
      return (
-       <div className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border px-4 py-2">
+      <div className="absolute bottom-0 left-0 right-0 z-40 bg-card border-t border-border px-4 py-2">
          <div className="flex items-center justify-between gap-4">
            {/* Sol - DIA Durumu */}
            <div className="flex items-center gap-3">
