@@ -31,10 +31,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-// Chunk sabitleri
-const CHUNK_SIZE = 1000;        // Her chunk'ta max kayıt
+// Chunk sabitleri - 502 hatası için optimize edildi
+const CHUNK_SIZE = 500;         // Her chunk'ta max kayıt (eskisi 1000)
 const CHUNK_DELAY_MS = 500;     // Chunk'lar arası bekleme (ms)
-const MAX_CHUNKS = 100;         // Güvenlik limiti (max 100.000 kayıt)
+const MAX_CHUNKS = 200;         // Güvenlik limiti (max 100.000 kayıt)
 
 interface UserWithDiaConfig {
   user_id: string;
