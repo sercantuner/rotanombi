@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface ImpersonatedProfile {
   user_id: string;
@@ -40,8 +41,10 @@ const ImpersonationContext = createContext<ImpersonationContextType | undefined>
 
 export function ImpersonationProvider({ children }: { children: React.ReactNode }) {
   const { isSuperAdmin } = usePermissions();
+  const { user } = useAuth();
   const [impersonatedUserId, setImpersonatedUserId] = useState<string | null>(null);
   const [impersonatedProfile, setImpersonatedProfile] = useState<ImpersonatedProfile | null>(null);
+  const [isDiaConfigured, setIsDiaConfigured] = useState<boolean>(false);
 
   // Impersonated user'ın profilini yükle
   // GÜVENLİK: Team admin'ler sadece temel profil bilgilerini görebilir
@@ -55,9 +58,8 @@ export function ImpersonationProvider({ children }: { children: React.ReactNode 
     const loadProfile = async () => {
       console.log('[Impersonation] Loading profile for user:', impersonatedUserId);
       
-      // Super admin'ler hassas DIA bilgilerine erişebilir
-      // Team admin'ler sadece temel profil bilgilerini görebilir
-      const { data, error } = await supabase
+      // Temel profil bilgilerini yükle
+      const { data: basicData, error: basicError } = await supabase
         .from('profiles')
         .select(`
           user_id, email, display_name, avatar_url, 
@@ -67,31 +69,95 @@ export function ImpersonationProvider({ children }: { children: React.ReactNode 
         .eq('user_id', impersonatedUserId)
         .single();
 
-      if (!error && data) {
+      if (!basicError && basicData) {
         console.log('[Impersonation] Profile loaded (safe view):', {
-          email: data.email,
-          firma_adi: data.firma_adi
+          email: basicData.email,
+          firma_adi: basicData.firma_adi
         });
-        // Hassas DIA bilgileri artık yüklenmiyor - güvenlik için
-        setImpersonatedProfile({
-          ...data,
-          // Hassas alanlar null olarak ayarlanır
-          dia_sunucu_adi: null,
-          dia_ws_kullanici: null,
-          dia_ws_sifre: null,
-          dia_api_key: null,
-          dia_session_id: null,
-          dia_session_expires: null,
-          firma_kodu: null,
-          donem_kodu: null
-        } as ImpersonatedProfile);
+        
+        // Super Admin ise, DIA bağlantı durumunu kontrol et
+        // Hassas bilgileri frontend'e çekmeden, sadece varlığını kontrol edelim
+        if (isSuperAdmin) {
+          // Edge function ile DIA yapılandırma durumunu kontrol et
+          try {
+            const { data: checkData, error: checkError } = await supabase.functions.invoke('dia-api-test', {
+              body: {
+                targetUserId: impersonatedUserId,
+                checkConnectionOnly: true
+              }
+            });
+            
+            if (!checkError && checkData?.diaConfigured) {
+              console.log('[Impersonation] DIA is configured for user');
+              setIsDiaConfigured(true);
+              
+              // Profile'a DIA bağlantı meta bilgilerini ekle (hassas olmayan)
+              setImpersonatedProfile({
+                ...basicData,
+                dia_sunucu_adi: checkData.sunucuAdi || null,
+                dia_ws_kullanici: null, // Hassas - gizle
+                dia_ws_sifre: null, // Hassas - gizle
+                dia_api_key: null, // Hassas - gizle
+                dia_session_id: checkData.hasSession ? 'active' : null,
+                dia_session_expires: null,
+                firma_kodu: checkData.firmaKodu || null,
+                firma_adi: basicData.firma_adi,
+                donem_kodu: checkData.donemKodu || null,
+                donem_yili: basicData.donem_yili
+              } as ImpersonatedProfile);
+            } else {
+              console.log('[Impersonation] DIA not configured for user');
+              setIsDiaConfigured(false);
+              setImpersonatedProfile({
+                ...basicData,
+                dia_sunucu_adi: null,
+                dia_ws_kullanici: null,
+                dia_ws_sifre: null,
+                dia_api_key: null,
+                dia_session_id: null,
+                dia_session_expires: null,
+                firma_kodu: null,
+                donem_kodu: null
+              } as ImpersonatedProfile);
+            }
+          } catch (err) {
+            console.error('[Impersonation] Failed to check DIA config:', err);
+            setIsDiaConfigured(false);
+            setImpersonatedProfile({
+              ...basicData,
+              dia_sunucu_adi: null,
+              dia_ws_kullanici: null,
+              dia_ws_sifre: null,
+              dia_api_key: null,
+              dia_session_id: null,
+              dia_session_expires: null,
+              firma_kodu: null,
+              donem_kodu: null
+            } as ImpersonatedProfile);
+          }
+        } else {
+          // Super admin değilse sadece temel bilgileri göster
+          setIsDiaConfigured(false);
+          setImpersonatedProfile({
+            ...basicData,
+            dia_sunucu_adi: null,
+            dia_ws_kullanici: null,
+            dia_ws_sifre: null,
+            dia_api_key: null,
+            dia_session_id: null,
+            dia_session_expires: null,
+            firma_kodu: null,
+            donem_kodu: null
+          } as ImpersonatedProfile);
+        }
       } else {
-        console.error('[Impersonation] Failed to load profile:', error);
+        console.error('[Impersonation] Failed to load profile:', basicError);
+        setIsDiaConfigured(false);
       }
     };
 
     loadProfile();
-  }, [impersonatedUserId]);
+  }, [impersonatedUserId, isSuperAdmin]);
 
   const startImpersonation = useCallback((userId: string) => {
     if (!isSuperAdmin) return;
@@ -103,10 +169,8 @@ export function ImpersonationProvider({ children }: { children: React.ReactNode 
     console.log('[Impersonation] Stopping impersonation');
     setImpersonatedUserId(null);
     setImpersonatedProfile(null);
+    setIsDiaConfigured(false);
   }, []);
-
-  // DIA bağlantısı yapılandırılmış mı?
-  const isDiaConfigured = !!(impersonatedProfile?.dia_sunucu_adi && impersonatedProfile?.firma_kodu);
 
   return (
     <ImpersonationContext.Provider
