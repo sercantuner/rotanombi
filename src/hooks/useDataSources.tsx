@@ -36,6 +36,9 @@ export interface DataSource {
   last_fields: string[] | null;
   last_sample_data: any[] | null; // Filtreleme için örnek veriler
   
+  // Model görünümü pozisyonu
+  model_position: { x: number; y: number } | null;
+  
   is_active: boolean;
   is_shared: boolean;
   
@@ -84,6 +87,7 @@ export function useDataSources() {
         period_config: ds.period_config as unknown as PeriodConfig | null,
         last_fields: ds.last_fields as unknown as string[] | null,
         last_sample_data: (ds as any).last_sample_data as any[] | null,
+        model_position: (ds as any).model_position as { x: number; y: number } | null,
       })) as DataSource[];
     },
   });

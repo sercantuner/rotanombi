@@ -98,6 +98,63 @@ export type Database = {
           },
         ]
       }
+      data_source_relationships: {
+        Row: {
+          created_at: string | null
+          cross_filter_direction: string
+          id: string
+          is_active: boolean | null
+          relationship_type: string
+          source_data_source_id: string
+          source_field: string
+          target_data_source_id: string
+          target_field: string
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          cross_filter_direction?: string
+          id?: string
+          is_active?: boolean | null
+          relationship_type?: string
+          source_data_source_id: string
+          source_field: string
+          target_data_source_id: string
+          target_field: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          cross_filter_direction?: string
+          id?: string
+          is_active?: boolean | null
+          relationship_type?: string
+          source_data_source_id?: string
+          source_field?: string
+          target_data_source_id?: string
+          target_field?: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_source_relationships_source_data_source_id_fkey"
+            columns: ["source_data_source_id"]
+            isOneToOne: false
+            referencedRelation: "data_sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_source_relationships_target_data_source_id_fkey"
+            columns: ["target_data_source_id"]
+            isOneToOne: false
+            referencedRelation: "data_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       data_sources: {
         Row: {
           auto_refresh: boolean | null
@@ -115,6 +172,7 @@ export type Database = {
           last_sample_data: Json | null
           limit_count: number | null
           method: string
+          model_position: Json | null
           module: string
           name: string
           period_config: Json | null
@@ -141,6 +199,7 @@ export type Database = {
           last_sample_data?: Json | null
           limit_count?: number | null
           method: string
+          model_position?: Json | null
           module: string
           name: string
           period_config?: Json | null
@@ -167,6 +226,7 @@ export type Database = {
           last_sample_data?: Json | null
           limit_count?: number | null
           method?: string
+          model_position?: Json | null
           module?: string
           name?: string
           period_config?: Json | null
