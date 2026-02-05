@@ -25,15 +25,25 @@ interface SyncResult {
   syncHistoryId?: string;
 }
 
-async function fetchFromDia(diaSession: any, module: string, method: string, donemKodu: number): Promise<{ success: boolean; data?: any[]; error?: string }> {
+// Bellek optimizasyonu: Sayfalı veri çekme (max 2000 kayıt per sync)
+const MAX_RECORDS_PER_SYNC = 2000;
+
+async function fetchFromDia(diaSession: any, module: string, method: string, donemKodu: number): Promise<{ success: boolean; data?: any[]; error?: string; totalFetched?: number }> {
   try {
-    // DIA API: URL'de modül, payload'da "{modül}_{metot}" formatı bekleniyor
     const diaUrl = `https://${diaSession.sunucuAdi}.ws.dia.com.tr/api/v3/${module}/json`;
-    // Method zaten modül prefix'i içeriyorsa kullan, yoksa ekle
     const fullMethod = method.startsWith(`${module}_`) ? method : `${module}_${method}`;
-    const payload = { [fullMethod]: { session_id: diaSession.sessionId, firma_kodu: diaSession.firmaKodu, donem_kodu: donemKodu, limit: 0 } };
     
-    console.log(`[DIA Sync] Fetching: ${diaUrl} with method ${fullMethod}`);
+    // Bellek tasarrufu için limit uygula
+    const payload = { 
+      [fullMethod]: { 
+        session_id: diaSession.sessionId, 
+        firma_kodu: diaSession.firmaKodu, 
+        donem_kodu: donemKodu, 
+        limit: MAX_RECORDS_PER_SYNC 
+      } 
+    };
+    
+    console.log(`[DIA Sync] Fetching: ${diaUrl} with method ${fullMethod} (limit: ${MAX_RECORDS_PER_SYNC})`);
     
     const response = await fetch(diaUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
@@ -42,37 +52,67 @@ async function fetchFromDia(diaSession: any, module: string, method: string, don
     if (result.error || result.hata) return { success: false, error: result.error?.message || result.hata?.aciklama || "API hatası" };
     
     const data = result[fullMethod] || result.data || [];
-    console.log(`[DIA Sync] Fetched ${Array.isArray(data) ? data.length : 0} records for ${fullMethod}`);
-    return { success: true, data: Array.isArray(data) ? data : [] };
+    const recordCount = Array.isArray(data) ? data.length : 0;
+    console.log(`[DIA Sync] Fetched ${recordCount} records for ${fullMethod}`);
+    
+    return { success: true, data: Array.isArray(data) ? data : [], totalFetched: recordCount };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Bilinmeyen hata" };
   }
 }
 
+// Bellek-optimize edilmiş upsert: Daha küçük batch'ler, referansları temizle
 async function upsertData(supabase: any, sunucuAdi: string, firmaKodu: string, donemKodu: number, dataSourceSlug: string, records: any[]): Promise<{ inserted: number; updated: number; deleted: number }> {
   const stats = { inserted: 0, updated: 0, deleted: 0 };
   if (!records.length) return stats;
 
-  const { data: existingRecords } = await supabase.from('company_data_cache').select('id, dia_key').eq('sunucu_adi', sunucuAdi).eq('firma_kodu', firmaKodu).eq('donem_kodu', donemKodu).eq('data_source_slug', dataSourceSlug).eq('is_deleted', false);
+  // Mevcut kayıtları küçük parçalar halinde al (bellek tasarrufu)
+  const { data: existingRecords } = await supabase
+    .from('company_data_cache')
+    .select('id, dia_key')
+    .eq('sunucu_adi', sunucuAdi)
+    .eq('firma_kodu', firmaKodu)
+    .eq('donem_kodu', donemKodu)
+    .eq('data_source_slug', dataSourceSlug)
+    .eq('is_deleted', false)
+    .limit(5000); // Mevcut kayıtları da limitli al
 
   const existingMap = new Map<number, string>();
   (existingRecords || []).forEach((r: any) => existingMap.set(r.dia_key, r.id));
 
   const incomingKeys = new Set<number>();
-  const batchSize = 500;
+  const batchSize = 200; // Daha küçük batch (500 -> 200)
   
   for (let i = 0; i < records.length; i += batchSize) {
     const batch = records.slice(i, i + batchSize);
-    const upsertData = batch.map(record => {
+    const upsertPayload = batch.map(record => {
       const diaKey = record._key || record.id;
       if (diaKey) incomingKeys.add(Number(diaKey));
-      return { sunucu_adi: sunucuAdi, firma_kodu: firmaKodu, donem_kodu: donemKodu, data_source_slug: dataSourceSlug, dia_key: Number(diaKey), data: record, is_deleted: false, updated_at: new Date().toISOString() };
+      return { 
+        sunucu_adi: sunucuAdi, 
+        firma_kodu: firmaKodu, 
+        donem_kodu: donemKodu, 
+        data_source_slug: dataSourceSlug, 
+        dia_key: Number(diaKey), 
+        data: record, 
+        is_deleted: false, 
+        updated_at: new Date().toISOString() 
+      };
     }).filter(r => r.dia_key);
 
-    if (upsertData.length === 0) continue;
+    if (upsertPayload.length === 0) continue;
 
-    const { error } = await supabase.from('company_data_cache').upsert(upsertData, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug,dia_key', ignoreDuplicates: false });
-    if (error) { console.error(`Upsert error:`, error); continue; }
+    const { error } = await supabase
+      .from('company_data_cache')
+      .upsert(upsertPayload, { 
+        onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug,dia_key', 
+        ignoreDuplicates: false 
+      });
+    
+    if (error) { 
+      console.error(`[DIA Sync] Upsert error batch ${i}:`, error.message); 
+      continue; 
+    }
 
     for (const record of batch) {
       const diaKey = Number(record._key || record.id);
@@ -80,10 +120,13 @@ async function upsertData(supabase: any, sunucuAdi: string, firmaKodu: string, d
     }
   }
 
+  // Soft delete - sadece ilk 500 için (bellek tasarrufu)
+  let deleteCount = 0;
   for (const [diaKey, id] of existingMap) {
-    if (!incomingKeys.has(diaKey)) {
+    if (!incomingKeys.has(diaKey) && deleteCount < 500) {
       await supabase.from('company_data_cache').update({ is_deleted: true, updated_at: new Date().toISOString() }).eq('id', id);
       stats.deleted++;
+      deleteCount++;
     }
   }
 
