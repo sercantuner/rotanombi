@@ -1,270 +1,146 @@
 
-# DIA Veri Senkronizasyonu Optimizasyon Planı
+# DIA Senkronizasyon Düzeltme Planı
 
 ## Tespit Edilen Sorunlar
 
-### 1. INVALID_SESSION Hatası
-DIA session'ı 30 dakikada expire oluyor. Uzun süren sync işlemlerinde (çok sayfalı veri çekme) session timeout'a uğruyor.
+### Sorun 1: BulkDataSyncManager Dönem Bağımsızlığını Görmezden Geliyor
+Frontend kodu `is_period_independent` flag'ini veritabanından çekmiyor ve her kaynak için tüm dönemleri sorguluyorken, Edge Function bu mantığı uygulasa bile frontend her dönem için ayrı istek atıyor.
 
-### 2. Database Statement Timeout
-Lovable Cloud veritabanı varsayılan olarak ~10 saniye statement timeout'a sahip. Büyük batch upsert işlemleri bu süreyi aşıyor.
+**Kanıt (Cache Verileri):**
+| Kaynak | Dönem Bağımsız mı? | Çekilen Dönemler |
+|--------|-------------------|------------------|
+| Banka_Hesap_listesi | ✅ Evet | 9, 3, 2, 1 (hatalı) |
+| cari_kart_listesi | ✅ Evet | 9, 8, 7, 6, 5, 3, 2, 1 (hatalı) |
+| Kasa Kart Listesi | ✅ Evet | 9, 3, 2, 1 (hatalı) |
+| scf_fatura_listele | ❌ Hayır | 9-1 arası tümü (doğru) |
 
-### 3. Edge Function Timeout
-Edge Function maksimum 60 saniye çalışabiliyor. Tüm dönemleri tek seferde çekmek bu süreyi aşıyor.
+### Sorun 2: Edge Function syncSingleSource Action'ında is_period_independent Kontrolü Yok
+Edge function `syncSingleSource` action'ında sadece belirtilen dönem için veri çekiyor ve bu kontrol yok.
 
-### 4. Takılı Kalan Sync Kayıtları
-Timeout olan işlemler `running` durumunda kalıyor ve temizlenmiyor.
-
----
-
-## Çözüm Stratejisi
-
-### Faz 1: Edge Function Yeniden Tasarımı
-
-```text
-+------------------+     +-------------------+     +------------------+
-|   Frontend       | --> |  dia-data-sync    | --> |  DIA API         |
-|   (BulkSync)     |     |  (per source/     |     |  (sayfa sayfa)   |
-|                  |     |   period)         |     |                  |
-+------------------+     +-------------------+     +------------------+
-        |                        |
-        |  Döngü                 |  Her sayfa sonrası
-        |  (source by source)   |  session refresh check
-        v                        v
-+------------------+     +-------------------+
-|  Progress UI     |     |  company_data_    |
-|  (realtime)      |     |  cache (upsert)   |
-+------------------+     +-------------------+
-```
-
-**Değişiklikler:**
-- Her veri kaynağı ve dönem için **ayrı Edge Function çağrısı** (timeout önleme)
-- Session'ı **her DIA çağrısı öncesinde** kontrol et ve gerekirse yenile
-- Daha küçük batch boyutları (50 kayıt)
-- Her sayfa yazıldıktan sonra hemen temizleme
-
-### Faz 2: Session Yönetimi İyileştirmesi
-
-`diaAutoLogin.ts` güncellemesi:
-- INVALID_SESSION hatası alınırsa **otomatik retry** mekanizması
-- Session yenileme için middleware pattern
-- Her API çağrısı öncesi session geçerlilik kontrolü
-
-```typescript
-// Yeni fonksiyon: refreshSessionIfNeeded
-async function ensureValidSession(supabase, userId, currentSession) {
-  // Session 2 dakikadan az kaldıysa yenile
-  if (isSessionExpiringSoon(currentSession)) {
-    return await performAutoLogin(supabase, userId);
-  }
-  return currentSession;
-}
-```
-
-### Faz 3: Frontend Orchestration (Tek Kaynak/Dönem Bazlı)
-
-`BulkDataSyncManager.tsx` güncellemesi:
-- **Sunucu bazlı değil, sunucu+kaynak+dönem bazlı** sync
-- Her kaynak/dönem için ayrı API çağrısı
-- Detaylı ilerleme gösterimi
-- Hata detaylarını açıkça gösterme
-
-```text
-Sync Progress:
-├── corlugrup (Firma 1)
-│   ├── cari_kart_listesi
-│   │   ├── Dönem 3: ✅ 2085 kayıt
-│   │   ├── Dönem 2: ✅ 1800 kayıt
-│   │   └── Dönem 1: ✅ 1500 kayıt
-│   ├── scf_fatura_listele
-│   │   ├── Dönem 3: ⏳ Çalışıyor...
-│   │   └── ...
-│   └── ...
-└── eguncel (Firma 9)
-    └── ...
-```
+### Sorun 3: Stok Listesi Timeout Hataları
+Büyük veri kaynakları için timeout hataları devam ediyor.
 
 ---
 
-## Teknik Değişiklikler
+## Düzeltme Planı
 
-### 1. `dia-data-sync/index.ts` Güncellemeleri
+### Değişiklik 1: BulkDataSyncManager.tsx - Dönem Bağımsız Kontrol
 
-**A. Session Refresh Mekanizması:**
 ```typescript
-// Her sayfa çekimi öncesinde session kontrolü
-async function fetchPageWithSessionRefresh(
-  supabase, userId, diaSession, payload
-) {
-  // Session süresi dolmak üzereyse yenile
-  const session = await ensureValidSession(supabase, userId, diaSession);
-  
-  // Payload'daki session_id'yi güncelle
-  payload[methodKey].session_id = session.sessionId;
-  
-  // API çağrısı yap
-  const response = await fetch(diaUrl, {...});
-  const result = await response.json();
-  
-  // INVALID_SESSION hatası varsa retry
-  if (result.msg === 'INVALID_SESSION' || result.code === '401') {
-    const newSession = await performAutoLogin(supabase, userId);
-    payload[methodKey].session_id = newSession.sessionId;
-    return await fetch(diaUrl, {...});
-  }
-  
-  return result;
+interface DataSource {
+  slug: string;
+  name: string;
+  module: string;
+  method: string;
+  is_period_independent: boolean; // Ekleniyor
+  is_non_dia: boolean; // Ekleniyor
 }
-```
 
-**B. Mikro Batch Yazma:**
-```typescript
-const MICRO_BATCH_SIZE = 25; // 100'den 25'e düşür
-
-async function writeMicroBatches(supabase, records) {
-  for (let i = 0; i < records.length; i += MICRO_BATCH_SIZE) {
-    const batch = records.slice(i, i + MICRO_BATCH_SIZE);
-    
-    // Tek tek upsert (timeout önleme)
-    for (const record of batch) {
-      await supabase
-        .from('company_data_cache')
-        .upsert(record, { onConflict: '...' });
-    }
-  }
-}
-```
-
-**C. Yeni Action: `syncSingleSource`:**
-```typescript
-// Tek kaynak, tek dönem sync
-if (action === 'syncSingleSource') {
-  const { dataSourceSlug, periodNo, targetUserId } = body;
+const fetchDataSources = async (): Promise<DataSource[]> => {
+  const { data } = await supabase
+    .from('data_sources')
+    .select('slug, name, module, method, is_period_independent, is_non_dia')
+    .eq('is_active', true);
   
-  // Sadece belirtilen kaynak ve dönem için sync
-  const result = await fetchAndWritePageByPage(
-    supabase, session, source.module, source.method,
-    periodNo, sunucuAdi, firmaKodu, dataSourceSlug
+  // DIA dışı kaynakları filtrele
+  return (data || []).filter(ds => 
+    !ds.is_non_dia && 
+    !ds.slug.startsWith('_system')
   );
-  
-  return Response.json({ success: true, result });
-}
-```
-
-### 2. `_shared/diaAutoLogin.ts` Güncellemeleri
-
-**Retry Wrapper:**
-```typescript
-export async function withSessionRetry<T>(
-  supabase: any,
-  userId: string,
-  operation: (session: DiaSession) => Promise<T>
-): Promise<T> {
-  let session = await getDiaSession(supabase, userId);
-  
-  try {
-    return await operation(session.session!);
-  } catch (error) {
-    if (isInvalidSessionError(error)) {
-      // Force refresh
-      await invalidateSession(supabase, userId);
-      session = await getDiaSession(supabase, userId);
-      return await operation(session.session!);
-    }
-    throw error;
-  }
-}
-```
-
-### 3. `BulkDataSyncManager.tsx` Güncellemeleri
-
-**A. Detaylı Sync Orchestration:**
-```typescript
-interface DetailedSyncProgress {
-  userId: string;
-  serverName: string;
-  sources: {
-    slug: string;
-    name: string;
-    periods: {
-      periodNo: number;
-      status: 'pending' | 'running' | 'success' | 'error';
-      recordsFetched?: number;
-      error?: string;
-    }[];
-  }[];
-}
-```
-
-**B. Kaynak Bazlı Sıralı Sync:**
-```typescript
-const syncUserData = async (user: UserWithDiaConfig) => {
-  // 1. Önce dönemleri çek
-  const periods = await fetchPeriods(user.user_id);
-  
-  // 2. Veri kaynaklarını çek
-  const dataSources = await fetchDataSources();
-  
-  // 3. Her kaynak için, her dönem için sync
-  for (const source of dataSources) {
-    for (const period of periods) {
-      // Acil stop kontrolü
-      if (stopRequestedRef.current) break;
-      
-      // Tek kaynak/dönem sync
-      await supabase.functions.invoke('dia-data-sync', {
-        body: {
-          action: 'syncSingleSource',
-          targetUserId: user.user_id,
-          dataSourceSlug: source.slug,
-          periodNo: period.period_no,
-        },
-      });
-      
-      // UI güncelle
-      updateProgress(user.user_id, source.slug, period.period_no, 'success');
-    }
-  }
 };
 ```
 
-**C. Hata Mesajı Görünürlüğü:**
-- Her kaynak/dönem için ayrı durum gösterimi
-- Tooltip ile detaylı hata mesajı
-- Retry butonu (tek kaynak/dönem için)
-
-### 4. Takılı Kayıtları Temizleme
-
-**Cleanup Script (Edge Function başlangıcında):**
+**Sync Döngüsü Güncellemesi:**
 ```typescript
-// 5 dakikadan uzun süredir running olan kayıtları failed olarak işaretle
-await supabase
-  .from('sync_history')
-  .update({ 
-    status: 'failed', 
-    error: 'Timeout - işlem tamamlanamadı',
-    completed_at: new Date().toISOString()
-  })
-  .eq('status', 'running')
-  .lt('started_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
+// Her kaynak için dönem listesini belirle
+const periodsForSource = source.is_period_independent 
+  ? [periods[0]] // Sadece aktif dönem (en yüksek period_no)
+  : periods; // Tüm dönemler
+
+// Debug log
+console.log(`[BulkSync] ${source.slug}: ${
+  source.is_period_independent 
+    ? 'dönem bağımsız (1 dönem)' 
+    : `dönem bağımlı (${periodsForSource.length} dönem)`
+}`);
+```
+
+### Değişiklik 2: Progress Map'te Kaynak Bazlı Dönem Gösterimi
+
+Dönem bağımsız kaynaklar için sadece aktif dönem gösterilecek:
+
+```typescript
+for (const source of dataSources) {
+  const periodsMap = new Map<number, SourcePeriodProgress>();
+  
+  // Dönem bağımsız kaynak sadece aktif dönemde çekilir
+  const relevantPeriods = source.is_period_independent 
+    ? [periods[0]] // İlk dönem (en yüksek no)
+    : periods;
+  
+  for (const period of relevantPeriods) {
+    periodsMap.set(period.period_no, { status: 'pending' });
+  }
+  
+  sourcesMap.set(source.slug, { 
+    slug: source.slug, 
+    name: source.name, 
+    periods: periodsMap,
+    isPeriodIndependent: source.is_period_independent // UI badge için
+  });
+}
+```
+
+### Değişiklik 3: UI'da Dönem Bağımsız Badge Gösterimi
+
+```tsx
+{sourceProgress.isPeriodIndependent && (
+  <Badge variant="outline" className="text-xs">
+    <Calendar className="w-3 h-3 mr-1" />
+    Dönem Bağımsız
+  </Badge>
+)}
 ```
 
 ---
 
-## Dosya Değişiklikleri Özeti
+## Dosya Değişiklikleri
 
 | Dosya | Değişiklik |
 |-------|------------|
-| `supabase/functions/dia-data-sync/index.ts` | Session refresh, mikro batch, syncSingleSource action, cleanup logic |
-| `supabase/functions/_shared/diaAutoLogin.ts` | withSessionRetry wrapper, session invalidation |
-| `src/components/admin/BulkDataSyncManager.tsx` | Kaynak/dönem bazlı orchestration, detaylı progress UI |
+| `src/components/admin/BulkDataSyncManager.tsx` | `is_period_independent` ve `is_non_dia` alanlarını fetch et, dönem listesini buna göre belirle |
 
 ---
 
-## Beklenen İyileştirmeler
+## Beklenen Davranış
 
-1. **Session Timeout Önleme**: Her çağrı öncesi session kontrolü
-2. **Database Timeout Önleme**: Mikro batch yazma (25 kayıt)
-3. **Edge Function Timeout Önleme**: Kaynak/dönem bazlı ayrı çağrılar
-4. **Hata Görünürlüğü**: Detaylı hata mesajları UI'da
-5. **Güvenilirlik**: Retry mekanizması ve takılı kayıt temizleme
+### Dönem Bağımsız Kaynaklar
+- **cari_kart_listesi**: Sadece Dönem 9 için 1 istek
+- **Stok_listesi**: Sadece Dönem 9 için 1 istek  
+- **Kasa Kart Listesi**: Sadece Dönem 9 için 1 istek
+- **Banka_Hesap_listesi**: Sadece Dönem 9 için 1 istek
+
+### Dönem Bağımlı Kaynaklar
+- **scf_fatura_listele**: Dönem 9, 8, 7... 1 için 9 istek
+- **Çek Senet Listesi**: Tüm dönemler için ayrı istek
+- **Sipariş Listesi**: Tüm dönemler için ayrı istek
+
+---
+
+## Ek: Hata Yönetimi İyileştirmeleri
+
+### INSUFFICIENT_PRIVILEGES Hatası
+Görev Listesi için yetki hatası alınıyor. Bu tür yetki hatalarını UI'da net göstermek önemli:
+
+```typescript
+// Hata mesajı parse
+const getUserFriendlyError = (error: string) => {
+  if (error.includes('INSUFFICIENT_PRIVILEGES')) {
+    return 'DIA yetkisi eksik - Web servis kullanıcısı ayarlarını kontrol edin';
+  }
+  if (error.includes('Timeout')) {
+    return 'Zaman aşımı - Veri çok büyük olabilir';
+  }
+  return error;
+};
+```
