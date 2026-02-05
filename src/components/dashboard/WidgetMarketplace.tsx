@@ -1,20 +1,22 @@
-// Widget Marketplace - Kullanıcıların widget ekleyebileceği arayüz
+ // Widget Marketplace - Kullanıcıların widget ekleyebileceği arayüz
+ // Dinamik kategori desteği ile
 
 import React, { useState, useMemo } from 'react';
 import { useWidgets } from '@/hooks/useWidgets';
 import { useWidgetPermissions } from '@/hooks/useWidgetPermissions';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
-import { Widget, WidgetCategory, PAGE_CATEGORIES, WIDGET_TYPES, WIDGET_SIZES } from '@/lib/widgetTypes';
+ import { Widget, WidgetCategory, WIDGET_TYPES, WIDGET_SIZES } from '@/lib/widgetTypes';
+ import { useWidgetCategories } from '@/hooks/useWidgetCategories';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, Check, LayoutGrid, PieChart, Table2, List, Activity } from 'lucide-react';
+ import { Plus, Search, Check, LayoutGrid, PieChart, Table2, List, Activity, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import * as LucideIcons from 'lucide-react';
+ import { cn } from '@/lib/utils';
 
 interface WidgetMarketplaceProps {
   currentPage: WidgetCategory;
@@ -40,14 +42,6 @@ const typeIcons: Record<string, React.ElementType> = {
   summary: LayoutGrid,
 };
 
-// Kategori renkleri
-const categoryColors: Record<WidgetCategory, string> = {
-  dashboard: 'bg-blue-500/10 text-blue-500',
-  satis: 'bg-green-500/10 text-green-500',
-  finans: 'bg-amber-500/10 text-amber-500',
-  cari: 'bg-purple-500/10 text-purple-500',
-};
-
 export function WidgetMarketplace({ 
   currentPage, 
   open: controlledOpen, 
@@ -58,6 +52,7 @@ export function WidgetMarketplace({
   const { widgets, isLoading } = useWidgets();
   const { filterAccessibleWidgets, canAddWidget } = useWidgetPermissions();
   const { getPageLayout, addWidgetToPage } = useUserSettings();
+   const { activeCategories, isLoading: isCategoriesLoading } = useWidgetCategories();
   
   const [internalOpen, setInternalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -95,16 +90,29 @@ export function WidgetMarketplace({
     });
   }, [widgets, filterAccessibleWidgets, canAddWidget, currentWidgetKeys, searchTerm, selectedCategory]);
 
-  // Kategoriye göre grupla
-  const groupedWidgets = useMemo(() => {
-    const groups: Record<string, Widget[]> = {};
-    availableWidgets.forEach(widget => {
-      const cat = widget.category;
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(widget);
-    });
-    return groups;
-  }, [availableWidgets]);
+   // Kategori sayaçları
+   const categoryCounts = useMemo(() => {
+     const counts: Record<string, number> = { all: 0 };
+     
+     // Erişilebilir widget'ları filtrele (sayfada olmayanlar)
+     const accessibleWidgets = filterAccessibleWidgets(widgets).filter(w => 
+       w.is_active && !currentWidgetKeys.includes(w.widget_key) && canAddWidget(w.id)
+     );
+     
+     counts.all = accessibleWidgets.length;
+     
+     activeCategories.forEach(cat => {
+       counts[cat.slug] = accessibleWidgets.filter(w => w.category === cat.slug).length;
+     });
+     
+     return counts;
+   }, [widgets, filterAccessibleWidgets, canAddWidget, currentWidgetKeys, activeCategories]);
+   
+   // Seçili kategori objesi
+   const selectedCategoryObj = useMemo(() => {
+     if (selectedCategory === 'all') return null;
+     return activeCategories.find(c => c.slug === selectedCategory);
+   }, [selectedCategory, activeCategories]);
 
   // Widget ekle
   const handleAddWidget = async (widgetKey: string) => {
@@ -131,7 +139,7 @@ export function WidgetMarketplace({
         <DialogHeader>
           <DialogTitle>Widget Ekle</DialogTitle>
           <DialogDescription>
-            {PAGE_CATEGORIES.find(c => c.id === currentPage)?.name} sayfasına eklemek istediğiniz widget'ı seçin
+             {activeCategories.find(c => c.slug === currentPage)?.name || currentPage} sayfasına eklemek istediğiniz widget'ı seçin
           </DialogDescription>
         </DialogHeader>
 
@@ -146,15 +154,70 @@ export function WidgetMarketplace({
           />
         </div>
 
-        {/* Category Tabs */}
-        <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="all">Tümü</TabsTrigger>
-            {PAGE_CATEGORIES.map(cat => (
-              <TabsTrigger key={cat.id} value={cat.id}>{cat.name}</TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+         {/* Category Pills - Horizontal Scroll */}
+         <div className="relative">
+           {isCategoriesLoading ? (
+             <div className="flex items-center justify-center py-2">
+               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+             </div>
+           ) : (
+             <ScrollArea className="w-full" type="scroll">
+               <div className="flex gap-2 pb-2">
+                 {/* Tümü butonu */}
+                 <button
+                   onClick={() => setSelectedCategory('all')}
+                   className={cn(
+                     "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
+                     "border",
+                     selectedCategory === 'all'
+                       ? "bg-primary text-primary-foreground border-primary"
+                       : "bg-background hover:bg-muted border-border text-muted-foreground hover:text-foreground"
+                   )}
+                 >
+                   <LayoutGrid className="h-3.5 w-3.5" />
+                   Tümü
+                   <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs bg-background/50">
+                     {categoryCounts.all}
+                   </Badge>
+                 </button>
+                 
+                 {/* Dinamik kategoriler */}
+                 {activeCategories.map(cat => {
+                   const count = categoryCounts[cat.slug] || 0;
+                   const isSelected = selectedCategory === cat.slug;
+                   
+                   return (
+                     <button
+                       key={cat.id}
+                       onClick={() => setSelectedCategory(cat.slug)}
+                       className={cn(
+                         "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
+                         "border",
+                         isSelected
+                           ? "bg-primary text-primary-foreground border-primary"
+                           : "bg-background hover:bg-muted border-border text-muted-foreground hover:text-foreground"
+                       )}
+                     >
+                       <DynamicIcon iconName={cat.icon || 'Folder'} className="h-3.5 w-3.5" />
+                       {cat.name}
+                       {count > 0 && (
+                         <Badge 
+                           variant="secondary" 
+                           className={cn(
+                             "ml-1 h-5 px-1.5 text-xs",
+                             isSelected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted"
+                           )}
+                         >
+                           {count}
+                         </Badge>
+                       )}
+                     </button>
+                   );
+                 })}
+               </div>
+             </ScrollArea>
+           )}
+         </div>
 
         {/* Widget Grid */}
         <ScrollArea className="h-[400px] pr-4">
@@ -195,8 +258,8 @@ export function WidgetMarketplace({
                           <div>
                             <CardTitle className="text-sm font-medium">{widget.name}</CardTitle>
                             <div className="flex items-center gap-1 mt-1">
-                              <Badge variant="secondary" className={`text-xs ${categoryColors[widget.category]}`}>
-                                {PAGE_CATEGORIES.find(c => c.id === widget.category)?.name}
+                               <Badge variant="secondary" className="text-xs">
+                                 {activeCategories.find(c => c.slug === widget.category)?.name || widget.category}
                               </Badge>
                             </div>
                           </div>
