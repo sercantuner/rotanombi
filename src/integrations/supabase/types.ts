@@ -53,6 +53,45 @@ export type Database = {
         }
         Relationships: []
       }
+      company_data_cache: {
+        Row: {
+          created_at: string
+          data: Json
+          data_source_slug: string
+          dia_key: number
+          donem_kodu: number
+          firma_kodu: string
+          id: string
+          is_deleted: boolean
+          sunucu_adi: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json
+          data_source_slug: string
+          dia_key: number
+          donem_kodu: number
+          firma_kodu: string
+          id?: string
+          is_deleted?: boolean
+          sunucu_adi: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          data_source_slug?: string
+          dia_key?: number
+          donem_kodu?: number
+          firma_kodu?: string
+          id?: string
+          is_deleted?: boolean
+          sunucu_adi?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       container_widgets: {
         Row: {
           container_id: string
@@ -489,6 +528,48 @@ export type Database = {
           },
         ]
       }
+      period_sync_status: {
+        Row: {
+          created_at: string
+          data_source_slug: string
+          donem_kodu: number
+          firma_kodu: string
+          id: string
+          is_locked: boolean
+          last_full_sync: string | null
+          last_incremental_sync: string | null
+          sunucu_adi: string
+          total_records: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data_source_slug: string
+          donem_kodu: number
+          firma_kodu: string
+          id?: string
+          is_locked?: boolean
+          last_full_sync?: string | null
+          last_incremental_sync?: string | null
+          sunucu_adi: string
+          total_records?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data_source_slug?: string
+          donem_kodu?: number
+          firma_kodu?: string
+          id?: string
+          is_locked?: boolean
+          last_full_sync?: string | null
+          last_incremental_sync?: string | null
+          sunucu_adi?: string
+          total_records?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -570,6 +651,60 @@ export type Database = {
           updated_at?: string
           use_mock_data?: boolean | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      sync_history: {
+        Row: {
+          completed_at: string | null
+          data_source_slug: string
+          donem_kodu: number
+          error: string | null
+          firma_kodu: string
+          id: string
+          records_deleted: number | null
+          records_fetched: number | null
+          records_inserted: number | null
+          records_updated: number | null
+          started_at: string
+          status: string
+          sunucu_adi: string
+          sync_type: string
+          triggered_by: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          data_source_slug: string
+          donem_kodu: number
+          error?: string | null
+          firma_kodu: string
+          id?: string
+          records_deleted?: number | null
+          records_fetched?: number | null
+          records_inserted?: number | null
+          records_updated?: number | null
+          started_at?: string
+          status?: string
+          sunucu_adi: string
+          sync_type?: string
+          triggered_by?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          data_source_slug?: string
+          donem_kodu?: number
+          error?: string | null
+          firma_kodu?: string
+          id?: string
+          records_deleted?: number | null
+          records_fetched?: number | null
+          records_inserted?: number | null
+          records_updated?: number | null
+          started_at?: string
+          status?: string
+          sunucu_adi?: string
+          sync_type?: string
+          triggered_by?: string | null
         }
         Relationships: []
       }

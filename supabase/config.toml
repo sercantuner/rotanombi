@@ -11,3 +11,9 @@ verify_jwt = false
 
 [functions.dia-finans-rapor]
 verify_jwt = false
+
+[functions.dia-data-sync]
+verify_jwt = false
+
+[functions.dia-api-test]
+verify_jwt = false

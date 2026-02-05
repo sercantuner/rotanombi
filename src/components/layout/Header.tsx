@@ -1,11 +1,12 @@
- import React, { useState, useEffect } from 'react';
- import { RefreshCw, Sun, Moon, Server } from 'lucide-react';
- import { useTheme } from '@/hooks/useTheme';
- import { useDiaProfile } from '@/hooks/useDiaProfile';
- import { useIsMobile } from '@/hooks/use-mobile';
- import { WidgetPicker } from '@/components/dashboard/WidgetPicker';
- import { UnifiedNotificationCenter } from '@/components/layout/UnifiedNotificationCenter';
- import type { WidgetCategory } from '@/lib/widgetRegistry';
+import React, { useState, useEffect } from 'react';
+import { RefreshCw, Sun, Moon, Server } from 'lucide-react';
+import { useTheme } from '@/hooks/useTheme';
+import { useDiaProfile } from '@/hooks/useDiaProfile';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { WidgetPicker } from '@/components/dashboard/WidgetPicker';
+import { UnifiedNotificationCenter } from '@/components/layout/UnifiedNotificationCenter';
+import { SyncButton } from '@/components/sync/SyncButton';
+import type { WidgetCategory } from '@/lib/widgetRegistry';
  
  interface HeaderProps {
    title: string;
@@ -52,15 +53,18 @@
          )}
        </div>
  
-       {/* Right: Actions */}
-       <div className="flex items-center gap-1.5 md:gap-3">
-         {/* Custom Actions */}
-         {actions}
- 
-         {/* Widget Picker - Desktop only */}
-         {showWidgetPicker && currentPage && !isMobile && (
-           <WidgetPicker currentPage={currentPage} />
-         )}
+        {/* Right: Actions */}
+        <div className="flex items-center gap-1.5 md:gap-3">
+          {/* Custom Actions */}
+          {actions}
+
+          {/* Data Sync Button */}
+          <SyncButton />
+
+          {/* Widget Picker - Desktop only */}
+          {showWidgetPicker && currentPage && !isMobile && (
+            <WidgetPicker currentPage={currentPage} />
+          )}
  
          {/* Refresh Button */}
          {onRefresh && (
