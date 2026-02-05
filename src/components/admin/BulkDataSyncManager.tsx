@@ -68,9 +68,21 @@ export function BulkDataSyncManager() {
       console.error('Error loading users:', error);
       toast.error('Kullanıcılar yüklenemedi');
     } else {
-      setUsers(data || []);
+      // Aynı sunucu/firma kombinasyonuna sahip kullanıcıları filtrele
+      // Her sunucu için sadece bir kullanıcı göster
+      const seenServers = new Set<string>();
+      const uniqueUsers = (data || []).filter(user => {
+        const serverKey = `${user.dia_sunucu_adi}:${user.firma_kodu}`;
+        if (seenServers.has(serverKey)) {
+          return false;
+        }
+        seenServers.add(serverKey);
+        return true;
+      });
+      
+      setUsers(uniqueUsers);
       // Varsayılan olarak tümünü seç
-      setSelectedUsers(new Set((data || []).map(u => u.user_id)));
+      setSelectedUsers(new Set(uniqueUsers.map(u => u.user_id)));
     }
     
     setLoading(false);
@@ -105,38 +117,14 @@ export function BulkDataSyncManager() {
     setSyncing(true);
     setCurrentIndex(0);
     
-    // Aynı sunucu için zaten sync yapılmış olanları takip et
-    const syncedServers = new Set<string>();
-    
-    // Sync yapılacak kullanıcıları filtrele - aynı sunucu/firma için sadece bir kullanıcı al
-    const usersToSync: UserWithDiaConfig[] = [];
-    const allUsers = users.filter(u => selectedUsers.has(u.user_id));
-    
-    for (const user of allUsers) {
-      const serverKey = `${user.dia_sunucu_adi}:${user.firma_kodu}`;
-      if (!syncedServers.has(serverKey)) {
-        usersToSync.push(user);
-        syncedServers.add(serverKey);
-      }
-    }
-    
-    // Atlanacak kullanıcılar (aynı sunucu)
-    const skippedUsers = allUsers.filter(u => !usersToSync.includes(u));
+    // Seçili kullanıcıları al (liste zaten tekilleştirilmiş)
+    const usersToSync = users.filter(u => selectedUsers.has(u.user_id));
     
     const newProgress = new Map<string, SyncProgress>();
     
     // Tümünü pending olarak işaretle
     usersToSync.forEach(u => {
       newProgress.set(u.user_id, { userId: u.user_id, status: 'pending' });
-    });
-    
-    // Atlanan kullanıcıları zaten senkronize olarak işaretle
-    skippedUsers.forEach(u => {
-      newProgress.set(u.user_id, { 
-        userId: u.user_id, 
-        status: 'success',
-        message: 'Aynı sunucu başka kullanıcı ile senkronize edildi',
-      });
     });
     
     // Stop flag'i sıfırla
