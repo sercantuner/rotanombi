@@ -19,8 +19,9 @@ import {
   Layers,
   MessageSquare,
   Sun,
-   Moon,
-   User
+  Moon,
+  User,
+  Link2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,6 +42,7 @@ const SuperAdminWidgetManager = React.lazy(() => import('@/components/admin/Supe
 const DataSourceManager = React.lazy(() => import('@/components/admin/DataSourceManager').then(m => ({ default: m.DataSourceManager })));
 const CategoryManager = React.lazy(() => import('@/components/admin/CategoryManager').then(m => ({ default: m.CategoryManager })));
 const FeedbackManager = React.lazy(() => import('@/components/admin/FeedbackManager').then(m => ({ default: m.FeedbackManager })));
+const DataModelView = React.lazy(() => import('@/components/admin/DataModelView').then(m => ({ default: m.DataModelView })));
 
 // UserProfile, ImpersonatedProfile'ın bir parçasını kullanır - sadece gösterim için gerekli alanlar
 interface UserProfile {
@@ -220,6 +222,10 @@ export default function SuperAdminPanel() {
                 <Database className="w-3 h-3 md:w-4 md:h-4" />
                 <span>Veri Kaynakları</span>
               </TabsTrigger>
+              <TabsTrigger value="datamodel" className="gap-1.5 text-xs md:text-sm px-2 md:px-3">
+                <Link2 className="w-3 h-3 md:w-4 md:h-4" />
+                <span>Veri Modeli</span>
+              </TabsTrigger>
               <TabsTrigger value="feedback" className="gap-1.5 text-xs md:text-sm px-2 md:px-3">
                 <MessageSquare className="w-3 h-3 md:w-4 md:h-4" />
                 <span>Geri Bildirimler</span>
@@ -370,6 +376,12 @@ export default function SuperAdminPanel() {
              <TabsContent value="datasources" className="h-full m-0 p-6 bg-background">
               <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
                 <DataSourceManager />
+              </React.Suspense>
+            </TabsContent>
+
+             <TabsContent value="datamodel" className="h-full m-0 bg-background">
+              <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+                <DataModelView />
               </React.Suspense>
             </TabsContent>
 

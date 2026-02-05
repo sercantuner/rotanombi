@@ -1,0 +1,450 @@
+// DataModelView - Power BI benzeri veri modeli görünümü
+
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { 
+  ZoomIn, 
+  ZoomOut, 
+  Maximize2, 
+  Save, 
+  AlertCircle,
+  Loader2,
+  Database
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useDataSources, DataSource } from '@/hooks/useDataSources';
+import { useDataSourceRelationships, DataSourceRelationship, RelationshipFormData } from '@/hooks/useDataSourceRelationships';
+import { DataSourceCard } from './DataSourceCard';
+import { RelationshipLine, RelationshipMarkers } from './RelationshipLine';
+import { RelationshipEditor } from './RelationshipEditor';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+// Debounce helper
+function debounce<T extends (...args: any[]) => any>(fn: T, delay: number): T {
+  let timeoutId: ReturnType<typeof setTimeout>;
+  return ((...args: Parameters<T>) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), delay);
+  }) as T;
+}
+
+// Kart pozisyonu tipi
+interface CardPosition {
+  x: number;
+  y: number;
+}
+
+// Sürükleme durumu
+interface DragState {
+  isDragging: boolean;
+  sourceDataSourceId: string;
+  sourceField: string;
+  startPosition: { x: number; y: number };
+  currentPosition: { x: number; y: number };
+}
+
+export function DataModelView() {
+  const { dataSources, updateDataSource, isLoading: dsLoading } = useDataSources();
+  const { 
+    relationships, 
+    createRelationship, 
+    updateRelationship, 
+    deleteRelationship,
+    isLoading: relLoading,
+    isCreating,
+    isUpdating,
+    isDeleting,
+  } = useDataSourceRelationships();
+
+  // Canvas state
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Kart pozisyonları
+  const [cardPositions, setCardPositions] = useState<Record<string, CardPosition>>({});
+  const [positionsChanged, setPositionsChanged] = useState(false);
+
+  // Sürükleme durumu (alan sürükleme)
+  const [dragState, setDragState] = useState<DragState | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ dataSourceId: string; field: string } | null>(null);
+
+  // Modal state
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [selectedRelationship, setSelectedRelationship] = useState<DataSourceRelationship | null>(null);
+  const [newRelationshipData, setNewRelationshipData] = useState<{
+    sourceDs?: DataSource;
+    targetDs?: DataSource;
+    sourceField?: string;
+    targetField?: string;
+  } | null>(null);
+
+  // Aktif veri kaynakları (last_fields olanlar)
+  const activeDataSources = useMemo(() => {
+    return dataSources.filter(ds => ds.last_fields && ds.last_fields.length > 0);
+  }, [dataSources]);
+
+  // İlk yüklemede pozisyonları ayarla
+  useEffect(() => {
+    if (activeDataSources.length === 0) return;
+
+    const positions: Record<string, CardPosition> = {};
+    const CARD_WIDTH = 260;
+    const CARD_HEIGHT = 200;
+    const GAP = 40;
+    const COLS = Math.ceil(Math.sqrt(activeDataSources.length));
+
+    activeDataSources.forEach((ds, index) => {
+      // Veritabanındaki pozisyon varsa kullan
+      if (ds.model_position) {
+        const pos = ds.model_position as { x?: number; y?: number };
+        if (typeof pos.x === 'number' && typeof pos.y === 'number') {
+          positions[ds.id] = { x: pos.x, y: pos.y };
+          return;
+        }
+      }
+      
+      // Varsayılan grid pozisyonu
+      const col = index % COLS;
+      const row = Math.floor(index / COLS);
+      positions[ds.id] = {
+        x: col * (CARD_WIDTH + GAP) + 50,
+        y: row * (CARD_HEIGHT + GAP) + 50,
+      };
+    });
+
+    setCardPositions(positions);
+  }, [activeDataSources]);
+
+  // Pozisyon değişikliği kaydet (debounced)
+  const savePositions = useCallback(
+    debounce(async (positions: Record<string, CardPosition>) => {
+      // Manuel güncelleme - JSON formatında kaydet
+      for (const [dsId, pos] of Object.entries(positions)) {
+        await supabase
+          .from('data_sources')
+          .update({ model_position: { x: pos.x, y: pos.y } as any })
+          .eq('id', dsId);
+      }
+      setPositionsChanged(false);
+      toast.success('Pozisyonlar kaydedildi');
+    }, 1000),
+    []
+  );
+
+  // Kart pozisyonu değiştiğinde
+  const handlePositionChange = useCallback((id: string, position: CardPosition) => {
+    setCardPositions(prev => ({
+      ...prev,
+      [id]: position,
+    }));
+    setPositionsChanged(true);
+  }, []);
+
+  // Alan sürükleme başlat
+  const handleFieldDragStart = useCallback((dataSourceId: string, field: string, position: { x: number; y: number }) => {
+    setDragState({
+      isDragging: true,
+      sourceDataSourceId: dataSourceId,
+      sourceField: field,
+      startPosition: position,
+      currentPosition: position,
+    });
+  }, []);
+
+  // Mouse move - sürükleme çizgisi için
+  useEffect(() => {
+    if (!dragState?.isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      setDragState(prev => prev ? {
+        ...prev,
+        currentPosition: { x: e.clientX, y: e.clientY },
+      } : null);
+
+      // Drop hedefini bul
+      const element = document.elementFromPoint(e.clientX, e.clientY);
+      const fieldItem = element?.closest('.field-item');
+      if (fieldItem) {
+        const card = fieldItem.closest('[data-datasource-id]');
+        const dsId = card?.getAttribute('data-datasource-id');
+        const fieldName = fieldItem.textContent?.trim();
+        if (dsId && fieldName && dsId !== dragState.sourceDataSourceId) {
+          setDropTarget({ dataSourceId: dsId, field: fieldName });
+          return;
+        }
+      }
+      setDropTarget(null);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    return () => document.removeEventListener('mousemove', handleMouseMove);
+  }, [dragState?.isDragging, dragState?.sourceDataSourceId]);
+
+  // Alan bırakıldığında
+  const handleFieldDrop = useCallback((sourceDataSourceId: string, sourceField: string, position: { x: number; y: number }) => {
+    if (dropTarget && dropTarget.dataSourceId !== sourceDataSourceId) {
+      const sourceDs = activeDataSources.find(ds => ds.id === sourceDataSourceId);
+      const targetDs = activeDataSources.find(ds => ds.id === dropTarget.dataSourceId);
+      
+      if (sourceDs && targetDs) {
+        setNewRelationshipData({
+          sourceDs,
+          targetDs,
+          sourceField,
+          targetField: dropTarget.field,
+        });
+        setSelectedRelationship(null);
+        setEditorOpen(true);
+      }
+    }
+    
+    setDragState(null);
+    setDropTarget(null);
+  }, [dropTarget, activeDataSources]);
+
+  // İlişki çizgisine tıklandığında
+  const handleRelationshipClick = useCallback((relationship: DataSourceRelationship) => {
+    setSelectedRelationship(relationship);
+    setNewRelationshipData(null);
+    setEditorOpen(true);
+  }, []);
+
+  // İlişki kaydet
+  const handleSaveRelationship = async (data: RelationshipFormData) => {
+    if (selectedRelationship) {
+      await updateRelationship(selectedRelationship.id, data);
+    } else {
+      await createRelationship(data);
+    }
+  };
+
+  // Canvas pan
+  const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.target === canvasRef.current) {
+      setIsPanning(true);
+      panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+    }
+  }, [pan]);
+
+  useEffect(() => {
+    if (!isPanning) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (panStartRef.current) {
+        setPan({
+          x: e.clientX - panStartRef.current.x,
+          y: e.clientY - panStartRef.current.y,
+        });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsPanning(false);
+      panStartRef.current = null;
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isPanning]);
+
+  // Zoom
+  const handleZoom = useCallback((delta: number) => {
+    setZoom(prev => Math.max(0.25, Math.min(2, prev + delta)));
+  }, []);
+
+  // Fit to view
+  const handleFitToView = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, []);
+
+  // İlişki çizgileri için pozisyon hesapla
+  const getRelationshipPositions = useCallback((rel: DataSourceRelationship) => {
+    const sourcePos = cardPositions[rel.source_data_source_id];
+    const targetPos = cardPositions[rel.target_data_source_id];
+    
+    if (!sourcePos || !targetPos) return null;
+
+    // Kartın sağ kenarından çıkış, sol kenarına giriş
+    const CARD_WIDTH = 256;
+    const CARD_HEIGHT = 40; // Yaklaşık alan yüksekliği
+    
+    return {
+      source: {
+        x: sourcePos.x + CARD_WIDTH,
+        y: sourcePos.y + 60, // Header + alan offseti
+      },
+      target: {
+        x: targetPos.x,
+        y: targetPos.y + 60,
+      },
+    };
+  }, [cardPositions]);
+
+  const isLoading = dsLoading || relLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (activeDataSources.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center p-6">
+        <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-4">
+          <Database className="w-10 h-10 text-muted-foreground" />
+        </div>
+        <h3 className="text-lg font-semibold mb-2">Veri Kaynağı Bulunamadı</h3>
+        <p className="text-muted-foreground max-w-md">
+          İlişki kurmak için önce veri kaynaklarınızı oluşturun ve en az bir kez çalıştırarak 
+          alan bilgilerini alın.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-muted/30">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-background">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">
+            {activeDataSources.length} veri kaynağı • {relationships.length} ilişki
+          </span>
+        </div>
+        
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" onClick={() => handleZoom(0.1)}>
+            <ZoomIn className="w-4 h-4" />
+          </Button>
+          <span className="text-xs w-12 text-center">{Math.round(zoom * 100)}%</span>
+          <Button variant="ghost" size="icon" onClick={() => handleZoom(-0.1)}>
+            <ZoomOut className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={handleFitToView}>
+            <Maximize2 className="w-4 h-4" />
+          </Button>
+          {positionsChanged && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => savePositions(cardPositions)}
+              className="ml-2"
+            >
+              <Save className="w-4 h-4 mr-1" />
+              Kaydet
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Canvas */}
+      <div
+        ref={canvasRef}
+        className="flex-1 relative overflow-hidden cursor-grab"
+        style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+        onMouseDown={handleCanvasMouseDown}
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: '0 0',
+          }}
+        >
+          {/* SVG Layer - İlişki çizgileri */}
+          <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ overflow: 'visible' }}>
+            <RelationshipMarkers />
+            
+            {relationships.map(rel => {
+              const positions = getRelationshipPositions(rel);
+              if (!positions) return null;
+              
+              return (
+                <RelationshipLine
+                  key={rel.id}
+                  relationship={rel}
+                  sourcePosition={positions.source}
+                  targetPosition={positions.target}
+                  onClick={handleRelationshipClick}
+                  isSelected={selectedRelationship?.id === rel.id}
+                />
+              );
+            })}
+
+            {/* Sürükleme çizgisi */}
+            {dragState?.isDragging && (
+              <line
+                x1={dragState.startPosition.x - pan.x}
+                y1={dragState.startPosition.y - pan.y}
+                x2={dragState.currentPosition.x - pan.x}
+                y2={dragState.currentPosition.y - pan.y}
+                stroke="hsl(var(--primary))"
+                strokeWidth={2}
+                strokeDasharray="5,5"
+                className="pointer-events-none"
+              />
+            )}
+          </svg>
+
+          {/* Kartlar */}
+          {activeDataSources.map(ds => (
+            <div key={ds.id} data-datasource-id={ds.id}>
+              <DataSourceCard
+                dataSource={ds}
+                position={cardPositions[ds.id] || { x: 0, y: 0 }}
+                onPositionChange={handlePositionChange}
+                onFieldDragStart={handleFieldDragStart}
+                onFieldDrop={handleFieldDrop}
+                isDraggingField={!!dragState?.isDragging}
+                isDropTarget={dropTarget?.dataSourceId === ds.id}
+                highlightedField={dropTarget?.dataSourceId === ds.id ? dropTarget.field : undefined}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Mobil uyarı */}
+      <div className="md:hidden p-4">
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Veri modeli görünümü için lütfen daha geniş bir ekran kullanın.
+          </AlertDescription>
+        </Alert>
+      </div>
+
+      {/* İlişki Editörü */}
+      <RelationshipEditor
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        relationship={selectedRelationship}
+        sourceDataSource={selectedRelationship 
+          ? activeDataSources.find(ds => ds.id === selectedRelationship.source_data_source_id)
+          : newRelationshipData?.sourceDs
+        }
+        targetDataSource={selectedRelationship
+          ? activeDataSources.find(ds => ds.id === selectedRelationship.target_data_source_id)
+          : newRelationshipData?.targetDs
+        }
+        initialSourceField={newRelationshipData?.sourceField}
+        initialTargetField={newRelationshipData?.targetField}
+        onSave={handleSaveRelationship}
+        onDelete={deleteRelationship}
+        isLoading={isCreating || isUpdating || isDeleting}
+      />
+    </div>
+  );
+}
