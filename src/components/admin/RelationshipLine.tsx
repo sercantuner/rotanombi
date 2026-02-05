@@ -1,6 +1,7 @@
 // RelationshipLine - SVG ile iki veri kaynağı arasındaki ilişki çizgisi
 
 import React from 'react';
+import { cn } from '@/lib/utils';
 import { DataSourceRelationship, RelationshipType, CrossFilterDirection } from '@/hooks/useDataSourceRelationships';
 
 interface RelationshipLineProps {
@@ -66,6 +67,16 @@ export function RelationshipLine({
   // Orta nokta (etiket için)
   const midX = (sourcePosition.x + targetPosition.x) / 2;
   const midY = (sourcePosition.y + targetPosition.y) / 2;
+  
+  // İlişki tipine göre label metni
+  const typeLabel = relationship.relationship_type === 'one_to_many' ? '1:N' : 
+                    relationship.relationship_type === 'many_to_one' ? 'N:1' : '1:1';
+
+  // Alan adları kısaltma
+  const truncateField = (field: string, maxLen: number = 10) => {
+    if (field.length <= maxLen) return field;
+    return field.slice(0, maxLen - 2) + '..';
+  };
 
   return (
     <g onClick={() => onClick(relationship)} className="cursor-pointer">
@@ -97,27 +108,42 @@ export function RelationshipLine({
         }}
       />
 
-      {/* İlişki etiketi */}
-      {isSelected && (
-        <g transform={`translate(${midX}, ${midY})`}>
-          <rect
-            x="-30"
-            y="-12"
-            width="60"
-            height="24"
-            rx="4"
-            className="fill-background stroke-border"
-          />
-          <text
-            textAnchor="middle"
-            dominantBaseline="middle"
-            className="text-xs fill-foreground pointer-events-none"
-          >
-            {relationship.relationship_type === 'one_to_many' ? '1:N' : 
-             relationship.relationship_type === 'many_to_one' ? 'N:1' : '1:1'}
-          </text>
-        </g>
-      )}
+      {/* İlişki etiketi - her zaman görünür */}
+      <g transform={`translate(${midX}, ${midY})`}>
+        {/* Arka plan kutusu */}
+        <rect
+          x="-45"
+          y="-22"
+          width="90"
+          height="44"
+          rx="6"
+          className={cn(
+            "transition-colors",
+            isSelected ? "fill-primary/10 stroke-primary" : "fill-background stroke-border"
+          )}
+          strokeWidth={isSelected ? 2 : 1}
+        />
+        
+        {/* İlişki tipi */}
+        <text
+          textAnchor="middle"
+          y="-7"
+          className="text-[10px] font-bold pointer-events-none"
+          style={{ fill: isSelected ? 'hsl(var(--primary))' : 'hsl(var(--foreground))' }}
+        >
+          {typeLabel}
+        </text>
+        
+        {/* Alan adları */}
+        <text
+          textAnchor="middle"
+          y="8"
+          className="text-[9px] pointer-events-none"
+          style={{ fill: 'hsl(var(--muted-foreground))' }}
+        >
+          {truncateField(relationship.source_field)} → {truncateField(relationship.target_field)}
+        </text>
+      </g>
     </g>
   );
 }
