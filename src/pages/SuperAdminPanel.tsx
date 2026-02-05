@@ -19,7 +19,8 @@ import {
   Layers,
   MessageSquare,
   Sun,
-  Moon
+   Moon,
+   User
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +28,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { format, differenceInDays, isPast } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { UserLicenseModal } from '@/components/admin/UserLicenseModal';
@@ -65,6 +68,7 @@ export default function SuperAdminPanel() {
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [showLicenseModal, setShowLicenseModal] = useState(false);
   const [activeTab, setActiveTab] = useState('users');
+  const [userSearchOpen, setUserSearchOpen] = useState(false);
 
   // Tüm kullanıcıları yükle
   useEffect(() => {
@@ -191,127 +195,117 @@ export default function SuperAdminPanel() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-[calc(100vh-4rem)]">
-      {/* Sol Panel - Kullanıcı Listesi (Desktop: sidebar, Mobile: full width when users tab selected and not impersonating) */}
-      {activeTab === 'users' && (
-        <div className={cn(
-          "border-b md:border-b-0 md:border-r border-border bg-card transition-all duration-300",
-          isImpersonating ? "hidden md:block md:w-80" : "w-full md:w-96"
-        )}>
-          <div className="p-3 md:p-4 border-b border-border">
-            <div className="flex items-center gap-2 mb-3 md:mb-4">
-              <Crown className="w-4 h-4 md:w-5 md:h-5 text-warning" />
-              <h2 className="font-semibold text-sm md:text-base">Süper Admin Paneli</h2>
-            </div>
-            
-            {/* Arama */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Kullanıcı ara..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-          </div>
-
-          {/* Kullanıcı Listesi */}
-          <ScrollArea className="h-[50vh] md:h-[calc(100vh-12rem)]">
-            <div className="p-2 space-y-1">
-              {loading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                </div>
-              ) : filteredUsers.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  Kullanıcı bulunamadı
-                </div>
+    <div className="flex flex-col h-[calc(100vh-4rem)]">
+      {/* Üst Bar - Header */}
+      <div className="border-b border-border bg-card px-4 py-3 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Crown className="w-5 h-5 text-warning" />
+          <h2 className="font-semibold text-base hidden sm:block">Süper Admin Paneli</h2>
+        </div>
+        
+        {/* Kullanıcı Arama - Compact Combobox */}
+        <Popover open={userSearchOpen} onOpenChange={setUserSearchOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              aria-expanded={userSearchOpen}
+              className="w-[280px] md:w-[400px] justify-start text-muted-foreground"
+            >
+              <Search className="w-4 h-4 mr-2 shrink-0" />
+              {impersonatedProfile ? (
+                <span className="text-foreground truncate">
+                  {impersonatedProfile.display_name || impersonatedProfile.email}
+                </span>
               ) : (
-                filteredUsers.map(user => {
-                  const licenseStatus = getLicenseStatus(user);
-                  const isViewing = impersonatedUserId === user.user_id;
-                  
-                  return (
-                    <div
+                <span>Kullanıcı ara...</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[280px] md:w-[400px] p-0" align="start">
+            <Command>
+              <CommandInput 
+                placeholder="İsim, e-posta veya firma ara..." 
+                value={searchTerm}
+                onValueChange={setSearchTerm}
+              />
+              <CommandList>
+                <CommandEmpty>
+                  {loading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                    </div>
+                  ) : (
+                    'Kullanıcı bulunamadı'
+                  )}
+                </CommandEmpty>
+                <CommandGroup heading={`${filteredUsers.length} kullanıcı`}>
+                  {filteredUsers.slice(0, 10).map(user => (
+                    <CommandItem
                       key={user.user_id}
-                      className={cn(
-                        "p-3 rounded-lg border transition-all cursor-pointer",
-                        isViewing 
-                          ? "bg-primary/10 border-primary" 
-                          : "bg-card hover:bg-muted border-transparent"
-                      )}
-                      onClick={() => handleViewUser(user)}
+                      value={`${user.display_name} ${user.email} ${user.firma_adi}`}
+                      onSelect={() => {
+                        handleViewUser(user);
+                        setUserSearchOpen(false);
+                      }}
+                      className="flex items-center justify-between gap-2 py-2"
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
+                          <User className="w-4 h-4 text-muted-foreground" />
+                        </div>
+                        <div className="min-w-0 flex-1">
                           <p className="font-medium text-sm truncate">
                             {user.display_name || user.email?.split('@')[0] || 'Bilinmeyen'}
                           </p>
                           <p className="text-xs text-muted-foreground truncate">
                             {user.email}
                           </p>
-                          {user.firma_adi && (
-                            <p className="text-xs text-muted-foreground/70 truncate mt-0.5">
-                              {user.firma_adi}
-                            </p>
-                          )}
-                        </div>
-                        
-                        <div className="flex flex-col items-end gap-1">
-                          <Badge variant="outline" className="text-xs">
-                            {getUserRole(user)}
-                          </Badge>
-                          <Badge 
-                            variant={licenseStatus.variant === 'success' ? 'default' : licenseStatus.variant === 'warning' ? 'secondary' : licenseStatus.variant}
-                            className={cn(
-                              "text-xs",
-                              licenseStatus.variant === 'warning' && "bg-yellow-500/20 text-yellow-600 border-yellow-500/30",
-                              licenseStatus.variant === 'success' && "bg-green-500/20 text-green-600 border-green-500/30"
-                            )}
-                          >
-                            {user.license_type === 'demo' ? 'Demo' : 'Standart'} • {licenseStatus.label}
-                          </Badge>
                         </div>
                       </div>
-                      
-                      <div className="flex items-center gap-2 mt-2">
-                        <Button
-                          size="sm"
-                          variant={isViewing ? "default" : "outline"}
-                          className="flex-1 h-7 text-xs"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleViewUser(user);
-                          }}
-                        >
-                          <Eye className="w-3 h-3 mr-1" />
-                          {isViewing ? 'Görüntüleniyor' : 'Görüntüle'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditLicense(user);
-                          }}
-                        >
-                          <Calendar className="w-3 h-3 mr-1" />
-                          Lisans
-                        </Button>
-                      </div>
+                      <Button
+                        size="sm"
+                        variant={impersonatedUserId === user.user_id ? "default" : "ghost"}
+                        className="h-7 text-xs shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewUser(user);
+                          setUserSearchOpen(false);
+                        }}
+                      >
+                        <Eye className="w-3 h-3 mr-1" />
+                        Görüntüle
+                      </Button>
+                    </CommandItem>
+                  ))}
+                  {filteredUsers.length > 10 && (
+                    <div className="text-xs text-muted-foreground text-center py-2">
+                      +{filteredUsers.length - 10} kullanıcı daha...
                     </div>
-                  );
-                })
-              )}
-            </div>
-          </ScrollArea>
-        </div>
-      )}
-
-      {/* Sağ Panel - İçerik */}
-      <div className="flex-1 flex flex-col min-w-0">
+                  )}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+        
+        {/* Theme Toggle */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleTheme}
+          className="h-9 w-9 shrink-0"
+        >
+          {theme === 'dark' ? (
+            <Sun className="h-4 w-4" />
+          ) : (
+            <Moon className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+      
+      {/* Ana İçerik */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Impersonation Banner */}
         {isImpersonating && impersonatedProfile && (
           <div className="bg-warning/10 border-b border-warning/30 px-4 py-2 flex items-center justify-between">
@@ -321,6 +315,42 @@ export default function SuperAdminPanel() {
                 <span className="text-warning">{impersonatedProfile.display_name || impersonatedProfile.email}</span> 
                 <span className="text-muted-foreground"> kullanıcısı olarak görüntülüyorsunuz</span>
               </span>
+              {/* Lisans bilgileri */}
+              {users.find(u => u.user_id === impersonatedUserId) && (
+                <div className="hidden md:flex items-center gap-2 ml-4">
+                  {(() => {
+                    const user = users.find(u => u.user_id === impersonatedUserId);
+                    if (!user) return null;
+                    const licenseStatus = getLicenseStatus(user);
+                    return (
+                      <>
+                        <Badge variant="outline" className="text-xs">
+                          {getUserRole(user)}
+                        </Badge>
+                        <Badge 
+                          variant={licenseStatus.variant === 'success' ? 'default' : licenseStatus.variant === 'warning' ? 'secondary' : licenseStatus.variant}
+                          className={cn(
+                            "text-xs",
+                            licenseStatus.variant === 'warning' && "bg-yellow-500/20 text-yellow-600 border-yellow-500/30",
+                            licenseStatus.variant === 'success' && "bg-green-500/20 text-green-600 border-green-500/30"
+                          )}
+                        >
+                          {user.license_type === 'demo' ? 'Demo' : 'Standart'} • {licenseStatus.label}
+                        </Badge>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-xs"
+                          onClick={() => handleEditLicense(user)}
+                        >
+                          <Calendar className="w-3 h-3 mr-1" />
+                          Lisans Düzenle
+                        </Button>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
             <Button
               size="sm"
@@ -336,8 +366,8 @@ export default function SuperAdminPanel() {
 
         {/* Tab Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-          <div className="border-b border-border px-2 md:px-4 flex items-center justify-between overflow-x-auto">
-            <TabsList className="h-10 md:h-12 w-max md:w-auto gap-1">
+          <div className="border-b border-border px-2 md:px-4 overflow-x-auto">
+            <TabsList className="h-10 md:h-11 w-max md:w-auto gap-1">
               <TabsTrigger value="users" className="gap-1 md:gap-2 text-xs md:text-sm px-2 md:px-3">
                 <Users className="w-3 h-3 md:w-4 md:h-4" />
                 <span className="hidden sm:inline">Kullanıcı İzleme</span>
@@ -364,20 +394,6 @@ export default function SuperAdminPanel() {
                 <span className="md:hidden">G.B.</span>
               </TabsTrigger>
             </TabsList>
-            
-            {/* Theme Toggle */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleTheme}
-              className="h-8 w-8 md:h-9 md:w-9 flex-shrink-0 ml-2"
-            >
-              {theme === 'dark' ? (
-                <Sun className="h-4 w-4" />
-              ) : (
-                <Moon className="h-4 w-4" />
-              )}
-            </Button>
           </div>
 
           <div className="flex-1 overflow-auto">
@@ -391,7 +407,7 @@ export default function SuperAdminPanel() {
                   </div>
                   <h3 className="text-lg font-semibold mb-2">Kullanıcı Seçin</h3>
                   <p className="text-muted-foreground max-w-md">
-                    Sol panelden bir kullanıcı seçerek onun dashboard'unu görüntüleyebilir, 
+                    Yukarıdaki arama alanından bir kullanıcı seçerek onun dashboard'unu görüntüleyebilir, 
                     widget düzenlemelerini ve sayfa yapılandırmalarını inceleyebilirsiniz.
                   </p>
                 </div>
