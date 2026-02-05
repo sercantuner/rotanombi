@@ -54,11 +54,12 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { 
   Wand2, BarChart3, Settings2, Save, 
   Hash, TrendingUp, Activity, PieChart, Circle, Table, List, LayoutGrid, CheckCircle, Edit,
-  Database, Calculator, Sparkles, Calendar, Zap, Info, Filter, Eye, Layers, Code, Copy, Check
+  Database, Calculator, Sparkles, Calendar, Zap, Info, Filter, Eye, Layers, Code, Copy, Check, Link2
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useRelationshipAutoFill, GLOBAL_FILTER_LABELS, AffectedByFilter } from '@/hooks/useRelationshipAutoFill';
 
 // Genişletilmiş ikon listesi - 50+ ikon
 const AVAILABLE_ICONS = [
@@ -117,6 +118,7 @@ const getEmptyConfig = (): WidgetBuilderConfig => ({
 export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: WidgetBuilderProps) {
   const { createWidget, updateWidget, isLoading } = useWidgetAdmin();
   const { activeDataSources, getDataSourceById } = useDataSources();
+  const { getAllSuggestedFilters, isLoading: autoFillLoading } = useRelationshipAutoFill();
   const isEditMode = !!editWidget;
   const [activeTab, setActiveTab] = useState(isEditMode ? 'api' : 'templates');
   
@@ -182,6 +184,10 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
   // Kod görüntüleme
   const [generatedCode, setGeneratedCode] = useState('');
   const [codeCopied, setCodeCopied] = useState(false);
+  
+  // Otomatik önerilen filtreler (ilişkilerden)
+  const [suggestedFilters, setSuggestedFilters] = useState<AffectedByFilter[]>([]);
+  const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(new Set());
   
   // Görselleştirme için kullanılabilir alanlar (veri kaynağından)
   const availableFieldsForVisualization = useMemo(() => {
@@ -429,15 +435,53 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
           },
         },
       }));
+      
+      // Otomatik filtre önerilerini hesapla
+      const suggestions = getAllSuggestedFilters(dataSource.id);
+      setSuggestedFilters(suggestions);
+      setAppliedSuggestions(new Set());
+      
       toast.success(`"${dataSource.name}" veri kaynağı seçildi`);
     } else {
       setSelectedDataSourceId(null);
+      setSuggestedFilters([]);
+      setAppliedSuggestions(new Set());
       setConfig(prev => ({
         ...prev,
         dataSourceId: undefined,
         dataSourceSlug: undefined,
       }));
     }
+  };
+  
+  // Öneri uygulama
+  const handleApplySuggestion = (suggestion: AffectedByFilter) => {
+    const key = `${suggestion.globalFilterKey}:${suggestion.dataField}`;
+    setAppliedSuggestions(prev => new Set([...prev, key]));
+    
+    // Filter fields'a ekle
+    const newFilterField: FilterFieldConfig = {
+      key: suggestion.dataField,
+      label: GLOBAL_FILTER_LABELS[suggestion.globalFilterKey] || suggestion.globalFilterKey,
+      type: 'string',
+    };
+    
+    // Duplicate kontrolü
+    if (!filterFields.some(f => f.key === suggestion.dataField)) {
+      setFilterFields(prev => [...prev, newFilterField]);
+    }
+    
+    toast.success(`"${GLOBAL_FILTER_LABELS[suggestion.globalFilterKey] || suggestion.globalFilterKey}" filtresi eklendi`);
+  };
+  
+  // Tüm önerileri uygula
+  const handleApplyAllSuggestions = () => {
+    suggestedFilters.forEach(suggestion => {
+      const key = `${suggestion.globalFilterKey}:${suggestion.dataField}`;
+      if (!appliedSuggestions.has(key)) {
+        handleApplySuggestion(suggestion);
+      }
+    });
   };
   
   // Alan tıklama ile hedef alana atama
@@ -915,6 +959,51 @@ export function WidgetBuilder({ open, onOpenChange, onSave, editWidget }: Widget
                             bir veri kaynağı tanımlamanız gerekmektedir.
                           </p>
                         </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Otomatik filtre önerileri */}
+                  {selectedDataSourceId && suggestedFilters.length > 0 && (
+                    <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Link2 className="h-4 w-4 text-primary" />
+                          <span className="text-sm font-medium">Önerilen Global Filtreler</span>
+                          <Badge variant="secondary" className="text-xs">{suggestedFilters.length}</Badge>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={handleApplyAllSuggestions}
+                          disabled={appliedSuggestions.size === suggestedFilters.length}
+                        >
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Tümünü Uygula
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Veri modeli ilişkileri ve alan yapısına göre önerilen filtre bağlamaları:
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {suggestedFilters.map((suggestion, idx) => {
+                          const key = `${suggestion.globalFilterKey}:${suggestion.dataField}`;
+                          const isApplied = appliedSuggestions.has(key);
+                          return (
+                            <Button
+                              key={idx}
+                              size="sm"
+                              variant={isApplied ? "default" : "outline"}
+                              className="h-7 text-xs"
+                              onClick={() => !isApplied && handleApplySuggestion(suggestion)}
+                              disabled={isApplied}
+                            >
+                              {isApplied && <Check className="h-3 w-3 mr-1" />}
+                              {GLOBAL_FILTER_LABELS[suggestion.globalFilterKey] || suggestion.globalFilterKey}
+                              <span className="text-muted-foreground ml-1">→ {suggestion.dataField}</span>
+                            </Button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

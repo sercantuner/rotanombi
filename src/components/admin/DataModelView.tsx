@@ -10,12 +10,14 @@ import {
   Loader2,
   Database,
   LayoutGrid,
-  Shuffle
+  Shuffle,
+  Map
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 import { useDataSources, DataSource } from '@/hooks/useDataSources';
 import { useDataSourceRelationships, DataSourceRelationship, RelationshipFormData } from '@/hooks/useDataSourceRelationships';
 import { DataSourceCard } from './DataSourceCard';
@@ -86,6 +88,7 @@ export function DataModelView() {
   // Grid/snap ayarları
   const [showGrid, setShowGrid] = useState(true);
   const [snapToGridEnabled, setSnapToGridEnabled] = useState(true);
+  const [showMinimap, setShowMinimap] = useState(true);
 
   // Sürükleme durumu (alan sürükleme)
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -168,21 +171,21 @@ export function DataModelView() {
     if (activeDataSources.length === 0) return;
     
     // İlişkilere göre kartları grupla
-    const relationshipMap = new Map<string, Set<string>>();
+    const relationshipMap: Record<string, Set<string>> = {};
     
     activeDataSources.forEach(ds => {
-      relationshipMap.set(ds.id, new Set());
+      relationshipMap[ds.id] = new Set<string>();
     });
     
     relationships.forEach(rel => {
-      relationshipMap.get(rel.source_data_source_id)?.add(rel.target_data_source_id);
-      relationshipMap.get(rel.target_data_source_id)?.add(rel.source_data_source_id);
+      relationshipMap[rel.source_data_source_id]?.add(rel.target_data_source_id);
+      relationshipMap[rel.target_data_source_id]?.add(rel.source_data_source_id);
     });
     
     // En çok bağlantısı olan kartları merkeze yakın yerleştir
     const sortedByConnections = [...activeDataSources].sort((a, b) => {
-      const aConns = relationshipMap.get(a.id)?.size || 0;
-      const bConns = relationshipMap.get(b.id)?.size || 0;
+      const aConns = relationshipMap[a.id]?.size || 0;
+      const bConns = relationshipMap[b.id]?.size || 0;
       return bConns - aConns;
     });
     
@@ -209,7 +212,7 @@ export function DataModelView() {
       const ds = sortedByConnections[i];
       
       // İlişkili kartlara yakın yerleştir
-      const connectedTo = relationshipMap.get(ds.id);
+      const connectedTo = relationshipMap[ds.id];
       let targetX = centerX + Math.cos(angle) * radius;
       let targetY = centerY + Math.sin(angle) * radius;
       
@@ -390,6 +393,35 @@ export function DataModelView() {
     };
   }, [cardPositions]);
 
+  // Mini-map hesaplamaları
+  const minimapData = useMemo(() => {
+    if (Object.keys(cardPositions).length === 0) return null;
+    
+    const positions = Object.values(cardPositions);
+    const minX = Math.min(...positions.map(p => p.x)) - 50;
+    const minY = Math.min(...positions.map(p => p.y)) - 50;
+    const maxX = Math.max(...positions.map(p => p.x + CARD_WIDTH)) + 50;
+    const maxY = Math.max(...positions.map(p => p.y + CARD_HEIGHT)) + 50;
+    
+    const worldWidth = maxX - minX;
+    const worldHeight = maxY - minY;
+    
+    // Mini-map boyutları
+    const minimapWidth = 180;
+    const minimapHeight = 120;
+    const scale = Math.min(minimapWidth / worldWidth, minimapHeight / worldHeight);
+    
+    return {
+      minX,
+      minY,
+      worldWidth,
+      worldHeight,
+      scale,
+      minimapWidth,
+      minimapHeight,
+    };
+  }, [cardPositions]);
+
   const isLoading = dsLoading || relLoading;
 
   if (isLoading) {
@@ -433,6 +465,18 @@ export function DataModelView() {
             <Label htmlFor="showGrid" className="text-xs flex items-center gap-1">
               <LayoutGrid className="w-3 h-3" />
               Grid
+            </Label>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Switch
+              id="showMinimap"
+              checked={showMinimap}
+              onCheckedChange={setShowMinimap}
+            />
+            <Label htmlFor="showMinimap" className="text-xs flex items-center gap-1">
+              <Map className="w-3 h-3" />
+              Harita
             </Label>
           </div>
           
@@ -558,6 +602,78 @@ export function DataModelView() {
             </div>
           ))}
         </div>
+        
+        {/* Mini-map */}
+        {showMinimap && minimapData && (
+          <div 
+            className="absolute bottom-4 right-4 bg-background/95 border border-border rounded-lg shadow-lg overflow-hidden"
+            style={{ width: minimapData.minimapWidth, height: minimapData.minimapHeight }}
+          >
+            <svg width={minimapData.minimapWidth} height={minimapData.minimapHeight} className="absolute inset-0">
+              {/* Kartlar */}
+              {Object.entries(cardPositions).map(([dsId, pos]) => {
+                const ds = activeDataSources.find(d => d.id === dsId);
+                if (!ds) return null;
+                const x = (pos.x - minimapData.minX) * minimapData.scale;
+                const y = (pos.y - minimapData.minY) * minimapData.scale;
+                const w = CARD_WIDTH * minimapData.scale;
+                const h = CARD_HEIGHT * minimapData.scale;
+                return (
+                  <rect
+                    key={dsId}
+                    x={x}
+                    y={y}
+                    width={w}
+                    height={h}
+                    rx={2}
+                    className="fill-primary/20 stroke-primary"
+                    strokeWidth={0.5}
+                  />
+                );
+              })}
+              
+              {/* İlişki çizgileri */}
+              {relationships.map(rel => {
+                const sourcePos = cardPositions[rel.source_data_source_id];
+                const targetPos = cardPositions[rel.target_data_source_id];
+                if (!sourcePos || !targetPos) return null;
+                
+                const x1 = (sourcePos.x + CARD_WIDTH - minimapData.minX) * minimapData.scale;
+                const y1 = (sourcePos.y + CARD_HEIGHT / 2 - minimapData.minY) * minimapData.scale;
+                const x2 = (targetPos.x - minimapData.minX) * minimapData.scale;
+                const y2 = (targetPos.y + CARD_HEIGHT / 2 - minimapData.minY) * minimapData.scale;
+                
+                return (
+                  <line
+                    key={rel.id}
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    className="stroke-primary/50"
+                    strokeWidth={1}
+                  />
+                );
+              })}
+              
+              {/* Görünür alan göstergesi (viewport) */}
+              <rect
+                x={(-pan.x / zoom - minimapData.minX) * minimapData.scale}
+                y={(-pan.y / zoom - minimapData.minY) * minimapData.scale}
+                width={(canvasRef.current?.clientWidth || 800) / zoom * minimapData.scale}
+                height={(canvasRef.current?.clientHeight || 400) / zoom * minimapData.scale}
+                className="fill-primary/10 stroke-primary"
+                strokeWidth={1}
+                strokeDasharray="2,2"
+              />
+            </svg>
+            
+            {/* Mini-map başlık */}
+            <div className="absolute bottom-0 left-0 right-0 bg-background/90 text-[10px] text-muted-foreground text-center py-0.5 border-t border-border">
+              Harita
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Mobil uyarı */}

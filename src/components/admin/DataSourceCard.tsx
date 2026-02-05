@@ -1,10 +1,11 @@
 // DataSourceCard - Veri Modeli canvas'ında gösterilen sürüklenebilir kart
 
-import React, { useRef, useCallback } from 'react';
-import { Database, Key, Hash, GripVertical } from 'lucide-react';
+import React, { useRef, useCallback, useState, useMemo } from 'react';
+import { Database, Key, Hash, GripVertical, Search, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { DataSource } from '@/hooks/useDataSources';
 
@@ -48,11 +49,19 @@ export function DataSourceCard({
   highlightedField,
 }: DataSourceCardProps) {
   const [isDragging, setIsDragging] = React.useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const cardRef = useRef<HTMLDivElement>(null);
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
   const initialPos = useRef<{ x: number; y: number } | null>(null);
 
-  const fields = dataSource.last_fields || [];
+  const allFields = dataSource.last_fields || [];
+  
+  // Filtrelenmiş alanlar
+  const fields = useMemo(() => {
+    if (!searchTerm.trim()) return allFields;
+    const term = searchTerm.toLowerCase();
+    return allFields.filter(f => f.toLowerCase().includes(term));
+  }, [allFields, searchTerm]);
 
   // Kart sürükleme
   const handleCardMouseDown = useCallback((e: React.MouseEvent) => {
@@ -128,11 +137,11 @@ export function DataSourceCard({
       }}
       onMouseDown={handleCardMouseDown}
     >
-      <CardHeader className="p-3 pb-2 flex flex-row items-center justify-between space-y-0">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <GripVertical className="w-4 h-4 text-muted-foreground shrink-0" />
-          <Database className="w-4 h-4 text-primary shrink-0" />
-          <CardTitle className="text-sm font-medium truncate">
+      <CardHeader className="p-2 pb-1 flex flex-row items-center justify-between space-y-0">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <GripVertical className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          <Database className="w-3.5 h-3.5 text-primary shrink-0" />
+          <CardTitle className="text-xs font-medium truncate">
             {dataSource.name}
           </CardTitle>
         </div>
@@ -142,8 +151,36 @@ export function DataSourceCard({
       </CardHeader>
       
       <CardContent className="p-0">
+        {/* Arama alanı */}
+        <div className="px-2 py-1.5 border-t border-border">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+            <Input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Alan ara..."
+              className="h-6 text-xs pl-6 pr-6"
+              onMouseDown={(e) => e.stopPropagation()}
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                onMouseDown={(e) => e.stopPropagation()}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 hover:bg-muted rounded"
+              >
+                <X className="w-3 h-3 text-muted-foreground" />
+              </button>
+            )}
+          </div>
+        </div>
+        
         <div className="border-t border-border">
-          <ScrollArea className="h-48 px-2 py-1">
+          <ScrollArea className="h-40 px-2 py-1">
+            {fields.length === 0 && searchTerm && (
+              <div className="text-xs text-muted-foreground text-center py-3">
+                "{searchTerm}" ile eşleşen alan bulunamadı
+              </div>
+            )}
             {fields.map((field) => (
               <div
                 key={field}
@@ -171,8 +208,8 @@ export function DataSourceCard({
           </ScrollArea>
         </div>
 
-        <div className="border-t border-border px-2 py-1.5 text-xs text-muted-foreground text-center">
-          {fields.length} alan
+        <div className="border-t border-border px-2 py-1 text-[10px] text-muted-foreground text-center">
+          {searchTerm ? `${fields.length} / ${allFields.length} alan` : `${allFields.length} alan`}
         </div>
       </CardContent>
     </Card>
