@@ -623,29 +623,49 @@ function applyGlobalFilters(data: any[], globalFilters: GlobalFilters): any[] {
 
 // ============= VERİTABANINDAN VERİ OKUMA =============
 
-// company_data_cache tablosundan veri çek
+// company_data_cache tablosundan veri çek - sayfalama ile tüm veriyi çek
 async function fetchFromDatabase(
   dataSourceSlug: string,
   sunucuAdi: string,
   firmaKodu: string,
   donemKodu: number
 ): Promise<any[]> {
-  const { data, error } = await supabase
-    .from('company_data_cache')
-    .select('data')
-    .eq('data_source_slug', dataSourceSlug)
-    .eq('sunucu_adi', sunucuAdi)
-    .eq('firma_kodu', firmaKodu)
-    .eq('donem_kodu', donemKodu)
-    .eq('is_deleted', false);
+  const PAGE_SIZE = 5000; // Supabase max 1000 varsayılan, biz 5000 kullanıyoruz
+  let allData: any[] = [];
+  let from = 0;
+  let hasMore = true;
+  
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('company_data_cache')
+      .select('data')
+      .eq('data_source_slug', dataSourceSlug)
+      .eq('sunucu_adi', sunucuAdi)
+      .eq('firma_kodu', firmaKodu)
+      .eq('donem_kodu', donemKodu)
+      .eq('is_deleted', false)
+      .range(from, from + PAGE_SIZE - 1);
 
-  if (error) {
-    console.error('[DB] Error fetching from company_data_cache:', error);
-    throw error;
+    if (error) {
+      console.error('[DB] Error fetching from company_data_cache:', error);
+      throw error;
+    }
+
+    const rows = data || [];
+    allData = allData.concat(rows.map(row => row.data));
+    
+    // Eğer sayfa dolu değilse, daha fazla veri yok demektir
+    if (rows.length < PAGE_SIZE) {
+      hasMore = false;
+    } else {
+      from += PAGE_SIZE;
+    }
   }
-
+  
+  console.log(`[DB] Fetched ${allData.length} records from ${dataSourceSlug}`);
+  
   // JSONB data alanlarını düz obje olarak döndür
-  return (data || []).map(row => row.data);
+  return allData;
 }
 
 // Hook for using global filters in widgets
