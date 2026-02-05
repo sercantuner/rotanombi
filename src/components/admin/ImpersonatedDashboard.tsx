@@ -61,27 +61,25 @@ function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
         return true;
       }
 
-      // Yeni login gerekiyor
-      console.log('[ImpersonatedDashboard] Session expired or missing, performing fresh login');
+      // Yeni login gerekiyor - dia-api-test kullan (diaAutoLogin otomatik session alır)
+      console.log('[ImpersonatedDashboard] Session expired or missing, triggering auto-login via dia-api-test');
       
-      const { data: loginData, error: loginError } = await supabase.functions.invoke('dia-login', {
+      // dia-api-test edge function'ı hedef kullanıcı için otomatik login yapar
+      // Basit bir test isteği gönder - bu session'ı yenileyecek
+      const { data: testData, error: testError } = await supabase.functions.invoke('dia-api-test', {
         body: {
-          sunucuAdi: impersonatedProfile.dia_sunucu_adi,
-          wsKullanici: impersonatedProfile.dia_ws_kullanici,
-          wsSifre: impersonatedProfile.dia_ws_sifre,
-          apiKey: impersonatedProfile.dia_api_key,
-          firmaKodu: impersonatedProfile.firma_kodu,
-          donemKodu: impersonatedProfile.donem_kodu,
-          // Super admin olarak impersonated user için login yapıyoruz
           targetUserId: userId,
+          module: 'sis',
+          method: 'sube_listele',
+          limit: 1, // Sadece 1 kayıt - session test için yeterli
         }
       });
 
-      if (loginError || !loginData?.success) {
-        throw new Error(loginError?.message || loginData?.error || 'DIA bağlantısı kurulamadı');
+      if (testError || !testData?.success) {
+        throw new Error(testError?.message || testData?.error || 'DIA bağlantısı kurulamadı');
       }
 
-      console.log('[ImpersonatedDashboard] DIA login successful');
+      console.log('[ImpersonatedDashboard] DIA auto-login successful via dia-api-test');
       setDiaStatus('connected');
       setDiaConnected(true);
       return true;
