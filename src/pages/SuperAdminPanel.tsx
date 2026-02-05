@@ -207,42 +207,6 @@ export default function SuperAdminPanel() {
                 <span className="text-warning">{impersonatedProfile.display_name || impersonatedProfile.email}</span> 
                 <span className="text-muted-foreground"> kullanıcısı olarak görüntülüyorsunuz</span>
               </span>
-              {/* Lisans bilgileri */}
-              {users.find(u => u.user_id === impersonatedUserId) && (
-                <div className="hidden md:flex items-center gap-2 ml-4">
-                  {(() => {
-                    const user = users.find(u => u.user_id === impersonatedUserId);
-                    if (!user) return null;
-                    const licenseStatus = getLicenseStatus(user);
-                    return (
-                      <>
-                        <Badge variant="outline" className="text-xs">
-                          {getUserRole(user)}
-                        </Badge>
-                        <Badge 
-                          variant={licenseStatus.variant === 'success' ? 'default' : licenseStatus.variant === 'warning' ? 'secondary' : licenseStatus.variant}
-                          className={cn(
-                            "text-xs",
-                            licenseStatus.variant === 'warning' && "bg-yellow-500/20 text-yellow-600 border-yellow-500/30",
-                            licenseStatus.variant === 'success' && "bg-green-500/20 text-green-600 border-green-500/30"
-                          )}
-                        >
-                          {user.license_type === 'demo' ? 'Demo' : 'Standart'} • {licenseStatus.label}
-                        </Badge>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-6 text-xs"
-                          onClick={() => handleEditLicense(user)}
-                        >
-                          <Calendar className="w-3 h-3 mr-1" />
-                          Lisans Düzenle
-                        </Button>
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
             </div>
             <Button
               size="sm"
@@ -390,7 +354,13 @@ export default function SuperAdminPanel() {
           <div className="flex-1 min-h-0 overflow-hidden">
             <TabsContent value="users" className="h-full min-h-0 m-0">
               {isImpersonating && impersonatedUserId ? (
-                <ImpersonatedDashboard userId={impersonatedUserId} />
+                <ImpersonatedDashboard 
+                  userId={impersonatedUserId} 
+                  onEditLicense={() => {
+                    const user = users.find(u => u.user_id === impersonatedUserId);
+                    if (user) handleEditLicense(user);
+                  }}
+                />
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center p-6">
                   <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-4">
