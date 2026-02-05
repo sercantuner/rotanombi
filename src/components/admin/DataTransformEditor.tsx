@@ -717,6 +717,50 @@ export function DataTransformEditor({
     });
   }, [selectedColumns, previewData, allFields, columnRenames]);
 
+  // Sütun doluluk oranı hesapla (veri kalitesi)
+  const columnCompleteness = useMemo(() => {
+    if (previewData.length === 0) return {};
+    
+    const result: Record<string, { filled: number; total: number; percentage: number }> = {};
+    
+    tableColumns.forEach(col => {
+      // Orijinal sütun adını bul (rename varsa)
+      const originalCol = columnRenames.find(r => r.newName === col)?.originalName || col;
+      
+      let filledCount = 0;
+      previewData.forEach(row => {
+        const value = row[originalCol] ?? row[col];
+        // null, undefined, boş string veya sadece boşluk kontrolü
+        if (value !== null && value !== undefined && String(value).trim() !== '') {
+          filledCount++;
+        }
+      });
+      
+      result[col] = {
+        filled: filledCount,
+        total: previewData.length,
+        percentage: Math.round((filledCount / previewData.length) * 100)
+      };
+    });
+    
+    return result;
+  }, [previewData, tableColumns, columnRenames]);
+
+  // Doluluk oranına göre renk (semantic tokens ile)
+  const getCompletenessColor = (percentage: number) => {
+    if (percentage >= 90) return 'bg-chart-2'; // yeşil tonu
+    if (percentage >= 70) return 'bg-chart-4'; // sarı tonu
+    if (percentage >= 50) return 'bg-chart-3'; // turuncu tonu
+    return 'bg-destructive'; // kırmızı tonu
+  };
+  
+  const getCompletenessTextColor = (percentage: number) => {
+    if (percentage >= 90) return 'text-chart-2';
+    if (percentage >= 70) return 'text-chart-4';
+    if (percentage >= 50) return 'text-chart-3';
+    return 'text-destructive';
+  };
+
   // Adım sil
   const removeStep = (stepId: string) => {
     if (stepId === 'source') return;
@@ -1003,14 +1047,52 @@ export function DataTransformEditor({
                   <Table>
                     <TableHeader className="sticky top-0 bg-background z-10">
                       <TableRow>
-                        {tableColumns.map((col) => (
-                          <TableHead key={col} className="text-xs whitespace-nowrap">
-                            <div className="flex items-center gap-1.5">
-                              {getFieldTypeIcon(col)}
-                              <span>{col}</span>
-                            </div>
-                          </TableHead>
-                        ))}
+                        {tableColumns.map((col) => {
+                          const completeness = columnCompleteness[col];
+                          return (
+                            <TableHead key={col} className="text-xs whitespace-nowrap p-0">
+                              <div className="flex flex-col">
+                                {/* Doluluk oranı göstergesi */}
+                                {completeness && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="h-1.5 w-full bg-muted/50 cursor-help">
+                                        <div 
+                                          className={cn(
+                                            "h-full transition-all",
+                                            getCompletenessColor(completeness.percentage)
+                                          )}
+                                          style={{ width: `${completeness.percentage}%` }}
+                                        />
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-xs">
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="font-medium">Veri Kalitesi: %{completeness.percentage}</span>
+                                        <span className="text-muted-foreground">
+                                          {completeness.filled}/{completeness.total} dolu
+                                        </span>
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+                                {/* Sütun başlığı */}
+                                <div className="flex items-center gap-1.5 px-3 py-2">
+                                  {getFieldTypeIcon(col)}
+                                  <span>{col}</span>
+                                  {completeness && (
+                                    <span className={cn(
+                                      "text-[9px] font-medium ml-auto",
+                                      getCompletenessTextColor(completeness.percentage)
+                                    )}>
+                                      %{completeness.percentage}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </TableHead>
+                          );
+                        })}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
