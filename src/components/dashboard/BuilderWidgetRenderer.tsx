@@ -1,7 +1,7 @@
 // BuilderWidgetRenderer - Widget Builder ile oluşturulan widget'ları render eder
 // v3.1 - KPI, Custom Code, Recharts tam destek + Leaflet harita desteği
 
-import React, { useState, useMemo, useEffect, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import { WidgetBuilderConfig, AggregationType, DatePeriod } from '@/lib/widgetBuilderTypes';
 import { useDynamicWidgetData } from '@/hooks/useDynamicWidgetData';
 import { useChartColorPalette } from '@/hooks/useChartColorPalette';
@@ -12,6 +12,9 @@ import { StatCard } from './StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertCircle, Hash, Code, BarChart3 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
@@ -130,6 +133,13 @@ const UIScope = {
   DialogDescription,
   DialogFooter,
   Button,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Checkbox,
 };
 
 // Error Boundary bileşeni
@@ -238,7 +248,7 @@ export function BuilderWidgetRenderer({
   // CSS izolasyonu - konteyner stillerinin widget'ı etkilememesi için
   const isolatedClassName = cn(className, 'isolate overflow-visible');
   // Global filtreler - widget verilerini filtrelemek için
-  const { filters } = useGlobalFilters();
+  const { filters, crossFilter, setCrossFilter, clearCrossFilter } = useGlobalFilters();
   
   // Veri çekme - global filtreler ile
   const { data, rawData, isLoading, error, refetch } = useDynamicWidgetData(builderConfig, filters);
@@ -330,6 +340,22 @@ export function BuilderWidgetRenderer({
       setCustomDateRange(null);
     }
   };
+
+  // Cross-filter handler (Power BI tarzı widget tıklaması)
+  const handleCrossFilter = useCallback((field: string, value: string | string[], label?: string) => {
+    // Aynı widget'tan aynı değer tıklanırsa filtreyi temizle
+    if (crossFilter?.sourceWidgetId === widgetId && 
+        JSON.stringify(crossFilter.value) === JSON.stringify(value)) {
+      clearCrossFilter();
+    } else {
+      setCrossFilter({
+        sourceWidgetId: widgetId,
+        field,
+        value,
+        label,
+      });
+    }
+  }, [widgetId, crossFilter, setCrossFilter, clearCrossFilter]);
 
   // KPI drill-down (tüm veriyi göster)
   const handleKpiDrillDown = () => {
@@ -457,11 +483,13 @@ export function BuilderWidgetRenderer({
         'filters',  // Global filtreler - widget'lar aktif filtreleri görebilir
         'UI',       // UI bileşenleri (Dialog vb.)
         'Map',      // Leaflet harita bileşenleri
+        'crossFilter', // Aktif çapraz filtre state'i
+        'onCrossFilter', // Çapraz filtre oluşturma callback'i
         customCode
       );
       
-      // Custom widget'a colors, filters ve Map prop'ları geç
-      const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters, UIScope, mapScope);
+      // Custom widget'a colors, filters, crossFilter ve onCrossFilter prop'ları geç
+      const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters, UIScope, mapScope, crossFilter, handleCrossFilter);
       
       if (typeof WidgetComponent !== 'function') {
         return (
@@ -491,7 +519,13 @@ export function BuilderWidgetRenderer({
             }>
               {/* Custom widget'a data, colors ve filters prop'ları geçirilir - Leaflet için min-h zorunlu */}
               <div className="flex-1 h-full min-h-0 flex flex-col [&_.leaflet-container]:min-h-[350px]">
-                <WidgetComponent data={filteredData} colors={userColors} filters={filters} />
+                <WidgetComponent 
+                  data={filteredData} 
+                  colors={userColors} 
+                  filters={filters} 
+                  crossFilter={crossFilter}
+                  onCrossFilter={handleCrossFilter}
+                />
               </div>
             </ErrorBoundary>
           </CardContent>
