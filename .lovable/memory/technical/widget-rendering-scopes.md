@@ -39,3 +39,25 @@
  const [multiQueryData, setMultiQueryData] = useState<any[][] | null>(null);
  setMultiQueryData([...]);
  ```
+
+ ## DataSourceLoader Başlatma Sırası
+
+ `useDataSourceLoader` hook'u, veri kaynaklarını yüklemeden önce `useDataSources()` hook'unun React Query ile tam olarak yüklenmesini beklemelidir. Bu, `isDataSourcesLoading` state'i kontrol edilerek sağlanır:
+
+ ```typescript
+ // useDataSourceLoader.tsx
+ const { dataSources, getDataSourceById, isLoading: isDataSourcesLoading } = useDataSources();
+
+ // Veri yükleme öncesi kontrol
+ if (!pageId || loadingRef.current || isDataSourcesLoading) {
+   return; // dataSources henüz yüklenmedi, bekle
+ }
+
+ // useEffect dependency'leri
+ useEffect(() => {
+   const dataSourcesReady = dataSources.length > 0 && !isDataSourcesLoading;
+   // ...
+ }, [pageId, dataSources.length, hasInitialized, isDataSourcesLoading]);
+ ```
+
+ Bu pattern, multi-query widget'lardaki tüm veri kaynaklarının (örn: Cari Kart + Teklif + Sipariş) doğru şekilde tespit edilip yüklenmesini garanti eder.

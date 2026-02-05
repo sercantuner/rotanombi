@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useDiaDataCache } from '@/contexts/DiaDataCacheContext';
-import { useDataSources, DataSource } from './useDataSources';
+ import { useDataSources, DataSource } from './useDataSources';
 import { queuedDiaFetch } from '@/lib/diaRequestQueue';
 import { toast } from 'sonner';
 
@@ -55,7 +55,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
   const [hasInitialized, setHasInitialized] = useState(false); // Sayfa yenileme tespiti için
   const loadingRef = useRef(false);
   
-  const { dataSources, getDataSourceById, updateLastFetch } = useDataSources();
+   const { dataSources, getDataSourceById, updateLastFetch, isLoading: isDataSourcesLoading } = useDataSources();
   const { 
     getCachedData,
     getDataSourceData,
@@ -335,7 +335,12 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
 
   // Sayfa için veri kaynaklarını yükle - SADECE EKSİK OLANLARI
   const loadAllDataSources = useCallback(async (forceRefresh: boolean = false) => {
-    if (!pageId || loadingRef.current) return;
+     if (!pageId || loadingRef.current || isDataSourcesLoading) {
+       if (isDataSourcesLoading) {
+         console.log('[DataSourceLoader] Waiting for dataSources to load from React Query...');
+       }
+       return;
+     }
     
     loadingRef.current = true;
     setIsLoading(true);
@@ -517,7 +522,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
   // Sayfa değiştiğinde veya ilk yüklemede veri kaynaklarını kontrol et ve eksikleri yükle
   useEffect(() => {
     // Değişiklik var mı kontrol et
-    const dataSourcesReady = dataSources.length > 0;
+     const dataSourcesReady = dataSources.length > 0 && !isDataSourcesLoading;
     const stateChanged = prevInitStateRef.current.pageId !== pageId || 
                           prevInitStateRef.current.dataSourcesReady !== dataSourcesReady;
     
@@ -531,7 +536,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     if (initCalledRef.current) return;
     
     // pageId hazır VE dataSources yüklendi VE henüz başlatılmadı VE yükleme devam etmiyor
-    if (pageId && dataSources.length > 0 && !hasInitialized && !loadingRef.current) {
+     if (pageId && dataSources.length > 0 && !isDataSourcesLoading && !hasInitialized && !loadingRef.current) {
       // Önce flag'i set et - race condition önleme
       initCalledRef.current = true;
       
@@ -564,7 +569,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       })();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageId, dataSources.length, hasInitialized]);
+   }, [pageId, dataSources.length, hasInitialized, isDataSourcesLoading]);
 
   // Manuel refresh (force) - TÜM verileri yeniden çeker
   const refresh = useCallback(async () => {
