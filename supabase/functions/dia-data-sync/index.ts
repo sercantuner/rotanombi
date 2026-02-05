@@ -1,270 +1,166 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { getDiaSession } from "../_shared/diaAutoLogin.ts";
-import { 
-  cleanupStuckSyncRecords, 
-  NON_DIA_SOURCES, 
-  SyncRequest, 
-  SyncResult 
-} from "../_shared/diaDataSyncHelpers.ts";
-import { syncSingleSourcePeriod } from "../_shared/diaStreamingSync.ts";
+import { getDiaSession, ensureValidSession, invalidateSession } from "../_shared/diaAutoLogin.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const PAGE_SIZE = 200, BATCH_SIZE = 25, MAX_RECORDS = 50000;
+const NON_DIA = ['takvim', '_system_calendar', 'system_calendar'];
+
+function parse(r: any, m: string): any[] {
+  if (r.result) {
+    if (Array.isArray(r.result)) return r.result;
+    const k = Object.keys(r.result)[0];
+    if (k && Array.isArray(r.result[k])) return r.result[k];
+  }
+  return r.msg && Array.isArray(r.msg) ? r.msg : r[m] && Array.isArray(r[m]) ? r[m] : [];
+}
+
+async function cleanup(sb: any) {
+  await sb.from('sync_history').update({ status: 'failed', error: 'Timeout', completed_at: new Date().toISOString() })
+    .eq('status', 'running').lt('started_at', new Date(Date.now() - 5*60*1000).toISOString());
+}
+
+async function write(sb: any, sun: string, fk: string, dk: number, slug: string, recs: any[], keys: Set<number>) {
+  let w = 0;
+  for (let i = 0; i < recs.length; i += BATCH_SIZE) {
+    for (const r of recs.slice(i, i + BATCH_SIZE)) {
+      const k = r._key || r.id; if (!k) continue;
+      keys.add(Number(k));
+      const { error } = await sb.from('company_data_cache').upsert({ 
+        sunucu_adi: sun, firma_kodu: fk, donem_kodu: dk, data_source_slug: slug, 
+        dia_key: Number(k), data: r, is_deleted: false, updated_at: new Date().toISOString() 
+      }, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug,dia_key' });
+      if (!error) w++;
+    }
+  }
+  return w;
+}
+
+async function fetchPage(sb: any, uid: string, sess: any, mod: string, met: string, dk: number, off: number) {
+  const sr = await ensureValidSession(sb, uid, sess);
+  if (!sr.success || !sr.session) return { ok: false, data: [], err: sr.error || "Session fail" };
+  const s = sr.session, url = `https://${s.sunucuAdi}.ws.dia.com.tr/api/v3/${mod}/json`;
+  const fm = met.startsWith(`${mod}_`) ? met : `${mod}_${met}`;
+  const pl = { [fm]: { session_id: s.sessionId, firma_kodu: s.firmaKodu, donem_kodu: dk, limit: PAGE_SIZE, offset: off } };
+  try {
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pl) });
+    if (!res.ok) return { ok: false, data: [], err: `HTTP ${res.status}` };
+    const r = await res.json();
+    if (r.msg === 'INVALID_SESSION' || r.code === '401') {
+      await invalidateSession(sb, uid);
+      const ns = await getDiaSession(sb, uid);
+      if (!ns.success || !ns.session) return { ok: false, data: [], err: "Session refresh fail" };
+      pl[fm].session_id = ns.session.sessionId;
+      const rr = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pl) });
+      if (!rr.ok) return { ok: false, data: [], err: `HTTP ${rr.status} retry` };
+      const rj = await rr.json();
+      if (rj.code && rj.code !== "200") return { ok: false, data: [], err: rj.msg || `Error ${rj.code}` };
+      return { ok: true, data: parse(rj, fm), sess: ns.session };
+    }
+    if (r.code && r.code !== "200") return { ok: false, data: [], err: r.msg || `Error ${r.code}` };
+    if (r.error || r.hata) return { ok: false, data: [], err: r.error?.message || r.hata?.aciklama || "API error" };
+    return { ok: true, data: parse(r, fm), sess: s };
+  } catch (e) { return { ok: false, data: [], err: e instanceof Error ? e.message : "Fetch error" }; }
+}
+
+async function stream(sb: any, uid: string, sess: any, mod: string, met: string, dk: number, sun: string, fk: string, slug: string) {
+  let off = 0, more = true, fetched = 0, written = 0, pg = 0, cs = sess;
+  const keys = new Set<number>();
+  while (more && fetched < MAX_RECORDS) {
+    const r = await fetchPage(sb, uid, cs, mod, met, dk, off);
+    if (!r.ok) { if (pg === 0) return { ok: false, fetched, written, err: r.err }; break; }
+    if (r.sess) cs = r.sess;
+    if (r.data.length > 0) written += await write(sb, sun, fk, dk, slug, r.data, keys);
+    fetched += r.data.length; pg++;
+    more = r.data.length >= PAGE_SIZE; off += PAGE_SIZE;
+  }
+  return { ok: true, fetched, written };
+}
+
+async function syncOne(sb: any, uid: string, sess: any, src: any, pn: number, sun: string, fk: string, trig: string) {
+  const { data: h } = await sb.from('sync_history').insert({ sunucu_adi: sun, firma_kodu: fk, donem_kodu: pn, data_source_slug: src.slug, sync_type: 'single', triggered_by: trig, status: 'running' }).select().single();
+  try {
+    const r = await stream(sb, uid, sess, src.module, src.method, pn, sun, fk, src.slug);
+    if (!r.ok) { await sb.from('sync_history').update({ status: 'failed', error: r.err, completed_at: new Date().toISOString() }).eq('id', h?.id); return { success: false, slug: src.slug, pn, error: r.err }; }
+    await sb.from('sync_history').update({ status: 'completed', records_fetched: r.fetched, records_inserted: r.written, completed_at: new Date().toISOString() }).eq('id', h?.id);
+    await sb.from('period_sync_status').upsert({ sunucu_adi: sun, firma_kodu: fk, donem_kodu: pn, data_source_slug: src.slug, last_incremental_sync: new Date().toISOString(), total_records: r.fetched, updated_at: new Date().toISOString() }, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug' });
+    return { success: true, slug: src.slug, pn, fetched: r.fetched, written: r.written };
+  } catch (e) { const em = e instanceof Error ? e.message : "Error"; if (h?.id) await sb.from('sync_history').update({ status: 'failed', error: em, completed_at: new Date().toISOString() }).eq('id', h.id); return { success: false, slug: src.slug, pn, error: em }; }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ success: false, error: "Yetkilendirme gerekli" }), { 
-        status: 401, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Takılı kalan sync kayıtlarını temizle
-    await cleanupStuckSyncRecords(supabase);
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    
-    if (userError || !user) {
-      return new Response(JSON.stringify({ success: false, error: "Geçersiz token" }), { 
-        status: 401, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
-    }
-
-    const body: SyncRequest = await req.json();
-    const { action, dataSourceSlug, periodNo, targetUserId } = body;
-
-    let effectiveUserId = user.id;
-    
-    // Super admin kontrolü
+    const auth = req.headers.get("Authorization");
+    if (!auth) return new Response(JSON.stringify({ success: false, error: "Auth required" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    await cleanup(sb);
+    const { data: { user }, error: ue } = await sb.auth.getUser(auth.replace("Bearer ", ""));
+    if (ue || !user) return new Response(JSON.stringify({ success: false, error: "Invalid token" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const body = await req.json();
+    const { action, dataSourceSlug, periodNo, targetUserId, syncAllPeriods } = body;
+    let euid = user.id;
     if ((action === 'syncAllForUser' || action === 'syncSingleSource') && targetUserId) {
-      const { data: roleCheck } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('role', 'super_admin')
-        .single();
-      
-      if (!roleCheck) {
-        return new Response(JSON.stringify({ success: false, error: "Bu işlem için süper admin yetkisi gerekli" }), { 
-          status: 403, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        });
-      }
-      effectiveUserId = targetUserId;
+      const { data: rc } = await sb.from('user_roles').select('role').eq('user_id', user.id).eq('role', 'super_admin').single();
+      if (!rc) return new Response(JSON.stringify({ success: false, error: "Super admin required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      euid = targetUserId;
     }
-
-    // DIA session al
-    const diaResult = await getDiaSession(supabase, effectiveUserId);
-    if (!diaResult.success || !diaResult.session) {
-      return new Response(JSON.stringify({ success: false, error: diaResult.error || "DIA bağlantısı kurulamadı" }), { 
-        status: 400, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
-    }
-
-    const { session } = diaResult;
-    const sunucuAdi = session.sunucuAdi;
-    const firmaKodu = String(session.firmaKodu);
-
-    // ========== syncSingleSource: Tek kaynak + tek dönem ==========
+    const dr = await getDiaSession(sb, euid);
+    if (!dr.success || !dr.session) return new Response(JSON.stringify({ success: false, error: dr.error || "DIA connection failed" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const { session } = dr, sun = session.sunucuAdi, fk = String(session.firmaKodu);
+    
     if (action === 'syncSingleSource') {
-      if (!dataSourceSlug || periodNo === undefined) {
-        return new Response(JSON.stringify({ success: false, error: "dataSourceSlug ve periodNo gerekli" }), { 
-          status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        });
-      }
-
-      const { data: sourceData } = await supabase
-        .from('data_sources')
-        .select('slug, module, method, name')
-        .eq('slug', dataSourceSlug)
-        .eq('is_active', true)
-        .single();
-
-      if (!sourceData) {
-        return new Response(JSON.stringify({ success: false, error: `Veri kaynağı bulunamadı: ${dataSourceSlug}` }), { 
-          status: 404, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        });
-      }
-
-      const result = await syncSingleSourcePeriod(
-        supabase, effectiveUserId, session, sourceData, periodNo,
-        sunucuAdi, firmaKodu, user.id
-      );
-
-      return new Response(JSON.stringify(result), { 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+      if (!dataSourceSlug || periodNo === undefined) return new Response(JSON.stringify({ success: false, error: "dataSourceSlug and periodNo required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const { data: src } = await sb.from('data_sources').select('slug, module, method, name').eq('slug', dataSourceSlug).eq('is_active', true).single();
+      if (!src) return new Response(JSON.stringify({ success: false, error: `Source not found: ${dataSourceSlug}` }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify(await syncOne(sb, euid, session, src, periodNo, sun, fk, user.id)), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-
-    // ========== Diğer action'lar ==========
-    const { data: profile } = await supabase.from('profiles').select('donem_kodu').eq('user_id', effectiveUserId).single();
-    const currentDonem = parseInt(profile?.donem_kodu) || session.donemKodu;
-
+    
+    const { data: prof } = await sb.from('profiles').select('donem_kodu').eq('user_id', euid).single();
+    const curDon = parseInt(prof?.donem_kodu) || session.donemKodu;
+    
     if (action === 'getSyncStatus') {
-      const { data: syncHistory } = await supabase.from('sync_history').select('*').eq('sunucu_adi', sunucuAdi).eq('firma_kodu', firmaKodu).order('started_at', { ascending: false }).limit(10);
-      const { data: periodStatus } = await supabase.from('period_sync_status').select('*').eq('sunucu_adi', sunucuAdi).eq('firma_kodu', firmaKodu);
-      const { data: recordCounts } = await supabase.from('company_data_cache').select('data_source_slug').eq('sunucu_adi', sunucuAdi).eq('firma_kodu', firmaKodu).eq('is_deleted', false);
-      
-      const countBySource: Record<string, number> = {};
-      (recordCounts || []).forEach((r: any) => { countBySource[r.data_source_slug] = (countBySource[r.data_source_slug] || 0) + 1; });
-
-      return new Response(JSON.stringify({ 
-        success: true, 
-        syncHistory: syncHistory || [], 
-        periodStatus: periodStatus || [], 
-        recordCounts: countBySource, 
-        currentPeriod: currentDonem 
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const { data: sh } = await sb.from('sync_history').select('*').eq('sunucu_adi', sun).eq('firma_kodu', fk).order('started_at', { ascending: false }).limit(10);
+      const { data: ps } = await sb.from('period_sync_status').select('*').eq('sunucu_adi', sun).eq('firma_kodu', fk);
+      const { data: rc } = await sb.from('company_data_cache').select('data_source_slug').eq('sunucu_adi', sun).eq('firma_kodu', fk).eq('is_deleted', false);
+      const cnt: Record<string,number> = {}; (rc||[]).forEach((r:any) => { cnt[r.data_source_slug] = (cnt[r.data_source_slug]||0)+1; });
+      return new Response(JSON.stringify({ success: true, syncHistory: sh||[], periodStatus: ps||[], recordCounts: cnt, currentPeriod: curDon }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-
+    
     if (action === 'lockPeriod' && periodNo) {
-      await supabase.from('period_sync_status').upsert({ 
-        sunucu_adi: sunucuAdi, 
-        firma_kodu: firmaKodu, 
-        donem_kodu: periodNo, 
-        data_source_slug: dataSourceSlug || 'all', 
-        is_locked: true, 
-        updated_at: new Date().toISOString() 
-      }, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug' });
-      
-      return new Response(JSON.stringify({ success: true, message: `Dönem ${periodNo} kilitlendi` }), { 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+      await sb.from('period_sync_status').upsert({ sunucu_adi: sun, firma_kodu: fk, donem_kodu: periodNo, data_source_slug: dataSourceSlug||'all', is_locked: true, updated_at: new Date().toISOString() }, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug' });
+      return new Response(JSON.stringify({ success: true, message: `Period ${periodNo} locked` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-
-    // syncAll veya syncAllForUser için tüm kaynakları al
-    const { data: dataSources } = await supabase
-      .from('data_sources')
-      .select('slug, module, method, name')
-      .eq('is_active', true);
     
-    if (!dataSources?.length) {
-      return new Response(JSON.stringify({ success: false, error: "Aktif veri kaynağı bulunamadı" }), { 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
-    }
-
-    const diaDataSources = dataSources.filter(ds => 
-      !NON_DIA_SOURCES.includes(ds.slug) && !ds.slug.startsWith('_system')
-    );
+    const { data: ds } = await sb.from('data_sources').select('slug, module, method, name').eq('is_active', true);
+    if (!ds?.length) return new Response(JSON.stringify({ success: false, error: "No active data sources" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const dias = ds.filter(d => !NON_DIA.includes(d.slug) && !d.slug.startsWith('_system'));
+    const srcs = (action === 'syncAll' || action === 'syncAllForUser') ? dias : dias.filter(d => d.slug === dataSourceSlug);
+    if (!srcs.length) return new Response(JSON.stringify({ success: false, error: `Source not found: ${dataSourceSlug}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     
-    const sourcesToSync = (action === 'syncAll' || action === 'syncAllForUser') 
-      ? diaDataSources 
-      : diaDataSources.filter(ds => ds.slug === dataSourceSlug);
-    
-    if (!sourcesToSync.length) {
-      return new Response(JSON.stringify({ success: false, error: `DIA veri kaynağı bulunamadı: ${dataSourceSlug}` }), { 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
-    }
-
-    // Dönemleri belirle
-    const syncAllPeriods = body.syncAllPeriods ?? true;
-    let periodsToSync: number[] = [currentDonem];
-    
-    if (syncAllPeriods) {
-      let { data: firmaPeriods } = await supabase
-        .from('firma_periods')
-        .select('period_no')
-        .eq('sunucu_adi', sunucuAdi)
-        .eq('firma_kodu', firmaKodu)
-        .order('period_no', { ascending: false });
-      
-      if (!firmaPeriods?.length) {
-        console.log(`[DIA Sync] No periods found, fetching from DIA...`);
-        
-        const diaUrl = `https://${sunucuAdi}.ws.dia.com.tr/api/v3/sis/json`;
-        const periodsPayload = { sis_yetkili_firma_donem_sube_depo: { session_id: session.sessionId } };
-        
+    let periods = [curDon];
+    if (syncAllPeriods ?? true) {
+      let { data: fp } = await sb.from('firma_periods').select('period_no').eq('sunucu_adi', sun).eq('firma_kodu', fk).order('period_no', { ascending: false });
+      if (!fp?.length) {
         try {
-          const periodsResponse = await fetch(diaUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(periodsPayload),
-          });
-          
-          const periodsData = await periodsResponse.json();
-          
-          if (periodsData?.code === "200" && Array.isArray(periodsData?.result)) {
-            const targetFirma = periodsData.result.find((f: any) => String(f.firmakodu) === firmaKodu);
-            
-            if (targetFirma?.donemler?.length) {
-              for (const donem of targetFirma.donemler) {
-                await supabase.from('firma_periods').upsert({
-                  sunucu_adi: sunucuAdi,
-                  firma_kodu: firmaKodu,
-                  period_no: donem.donemkodu,
-                  period_name: donem.gorunendonemkodu || `Dönem ${donem.donemkodu}`,
-                  start_date: donem.baslangictarihi || null,
-                  end_date: donem.bitistarihi || null,
-                  is_current: donem.ontanimli === 't',
-                  fetched_at: new Date().toISOString(),
-                }, { onConflict: 'sunucu_adi,firma_kodu,period_no' });
-              }
-              
-              const { data: refreshedPeriods } = await supabase
-                .from('firma_periods')
-                .select('period_no')
-                .eq('sunucu_adi', sunucuAdi)
-                .eq('firma_kodu', firmaKodu)
-                .order('period_no', { ascending: false });
-              
-              firmaPeriods = refreshedPeriods;
-            }
+          const pr = await fetch(`https://${sun}.ws.dia.com.tr/api/v3/sis/json`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sis_yetkili_firma_donem_sube_depo: { session_id: session.sessionId } }) });
+          const pd = await pr.json();
+          if (pd?.code === "200" && Array.isArray(pd?.result)) {
+            const tf = pd.result.find((f:any) => String(f.firmakodu) === fk);
+            if (tf?.donemler?.length) { for (const d of tf.donemler) await sb.from('firma_periods').upsert({ sunucu_adi: sun, firma_kodu: fk, period_no: d.donemkodu, period_name: d.gorunendonemkodu||`D${d.donemkodu}`, start_date: d.baslangictarihi, end_date: d.bitistarihi, is_current: d.ontanimli==='t', fetched_at: new Date().toISOString() }, { onConflict: 'sunucu_adi,firma_kodu,period_no' }); }
+            const { data: rfp } = await sb.from('firma_periods').select('period_no').eq('sunucu_adi', sun).eq('firma_kodu', fk).order('period_no', { ascending: false });
+            fp = rfp;
           }
-        } catch (err) {
-          console.error(`[DIA Sync] Failed to fetch periods:`, err);
-        }
+        } catch {}
       }
-      
-      if (firmaPeriods?.length) {
-        periodsToSync = firmaPeriods.map(p => p.period_no);
-      }
+      if (fp?.length) periods = fp.map(p => p.period_no);
     }
-
-    console.log(`[DIA Sync] Will sync ${sourcesToSync.length} sources across ${periodsToSync.length} periods`);
-
-    const results: SyncResult[] = [];
-
-    for (const source of sourcesToSync) {
-      for (const pNo of periodsToSync) {
-        const result = await syncSingleSourcePeriod(
-          supabase, effectiveUserId, session, source, pNo,
-          sunucuAdi, firmaKodu, user.id
-        );
-        results.push(result);
-      }
-    }
-
-    return new Response(JSON.stringify({ 
-      success: results.some(r => r.success), 
-      results, 
-      totalSynced: results.filter(r => r.success).length, 
-      totalFailed: results.filter(r => !r.success).length,
-      periodsProcessed: periodsToSync.length
-    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Beklenmeyen hata";
-    console.error(`[DIA Sync] Error:`, errorMessage);
-    return new Response(JSON.stringify({ success: false, error: errorMessage }), { 
-      status: 500, 
-      headers: { ...corsHeaders, "Content-Type": "application/json" } 
-    });
-  }
+    
+    const results: any[] = [];
+    for (const src of srcs) for (const pn of periods) results.push(await syncOne(sb, euid, session, src, pn, sun, fk, user.id));
+    return new Response(JSON.stringify({ success: results.some(r=>r.success), results, totalSynced: results.filter(r=>r.success).length, totalFailed: results.filter(r=>!r.success).length, periodsProcessed: periods.length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  } catch (e) { return new Response(JSON.stringify({ success: false, error: e instanceof Error ? e.message : "Error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }); }
 });
