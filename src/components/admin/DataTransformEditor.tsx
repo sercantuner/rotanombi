@@ -481,8 +481,11 @@ export function DataTransformEditor({
 
       if (fnError) throw fnError;
 
-      if (data?.success && data?.data) {
-        let records = Array.isArray(data.data) ? data.data : [data.data];
+      // Edge function dönen verinin yapısını kontrol et
+      // sampleData (field stats modu) veya rawResponse (ham veri) olabilir
+      if (data?.success) {
+        const rawRecords = data?.sampleData || data?.rawResponse || data?.data || [];
+        let records = Array.isArray(rawRecords) ? rawRecords : [rawRecords];
         
         // Sütun adı değiştirme uygula
         if (columnRenames.length > 0) {
