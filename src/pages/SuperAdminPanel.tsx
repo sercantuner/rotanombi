@@ -195,9 +195,9 @@ export default function SuperAdminPanel() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
+     <div className="flex flex-col h-full min-h-0 bg-background">
       {/* Ana İçerik */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+       <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-background">
         {/* Impersonation Banner */}
 
         {/* Tab Navigation */}
@@ -332,7 +332,7 @@ export default function SuperAdminPanel() {
           </div>
 
           <div className="flex-1 min-h-0 overflow-hidden">
-            <TabsContent value="users" className="h-full min-h-0 m-0">
+             <TabsContent value="users" className="h-full min-h-0 m-0 bg-background">
               {isImpersonating && impersonatedUserId ? (
                 <ImpersonatedDashboard 
                   userId={impersonatedUserId} 
@@ -355,25 +355,25 @@ export default function SuperAdminPanel() {
               )}
             </TabsContent>
 
-            <TabsContent value="widgets" className="h-full m-0 p-6">
+             <TabsContent value="widgets" className="h-full m-0 p-6 bg-background">
               <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
                 <SuperAdminWidgetManager />
               </React.Suspense>
             </TabsContent>
 
-            <TabsContent value="categories" className="h-full m-0 p-6">
+             <TabsContent value="categories" className="h-full m-0 p-6 bg-background">
               <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
                 <CategoryManager />
               </React.Suspense>
             </TabsContent>
 
-            <TabsContent value="datasources" className="h-full m-0 p-6">
+             <TabsContent value="datasources" className="h-full m-0 p-6 bg-background">
               <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
                 <DataSourceManager />
               </React.Suspense>
             </TabsContent>
 
-            <TabsContent value="feedback" className="h-full m-0 p-6">
+             <TabsContent value="feedback" className="h-full m-0 p-6 bg-background">
               <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
                 <FeedbackManager />
               </React.Suspense>

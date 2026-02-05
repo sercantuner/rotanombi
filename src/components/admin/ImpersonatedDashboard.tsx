@@ -430,9 +430,9 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
 
   return (
     <DashboardFilterProvider>
-      <div className="flex h-full min-h-0">
+       <div className="flex h-full min-h-0 bg-background">
         {renderSidebar()}
-         <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pb-6">
+         <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-background">
            {isPageLoading && (
              <div className="p-6 pb-0 flex items-center gap-2 text-xs text-muted-foreground">
                <Loader2 className="w-3.5 h-3.5 animate-spin" />
