@@ -9,6 +9,7 @@ interface RelationshipLineProps {
   sourcePosition: { x: number; y: number };
   targetPosition: { x: number; y: number };
   onClick: (relationship: DataSourceRelationship) => void;
+  onHoverChange?: (relationship: DataSourceRelationship | null) => void;
   isSelected?: boolean;
 }
 
@@ -48,8 +49,11 @@ export function RelationshipLine({
   sourcePosition,
   targetPosition,
   onClick,
+  onHoverChange,
   isSelected,
 }: RelationshipLineProps) {
+  const [isHovered, setIsHovered] = React.useState(false);
+
   // Bezier eğrisi hesapla
   const dx = targetPosition.x - sourcePosition.x;
   const dy = targetPosition.y - sourcePosition.y;
@@ -79,7 +83,18 @@ export function RelationshipLine({
   };
 
   return (
-    <g onClick={() => onClick(relationship)} className="cursor-pointer">
+    <g
+      onClick={() => onClick(relationship)}
+      onMouseEnter={() => {
+        setIsHovered(true);
+        onHoverChange?.(relationship);
+      }}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        onHoverChange?.(null);
+      }}
+      className="cursor-pointer"
+    >
       {/* Ana çizgi - hover alanı için geniş */}
       <path
         d={path}
@@ -93,7 +108,7 @@ export function RelationshipLine({
       <path
         d={path}
         fill="none"
-        strokeWidth={isSelected ? 3 : 2}
+        strokeWidth={isSelected || isHovered ? 3 : 2}
         strokeDasharray={relationship.is_active ? undefined : "5,5"}
         markerEnd={getMarkerEnd(relationship.relationship_type)}
         markerStart={getMarkerStart(relationship.relationship_type, relationship.cross_filter_direction)}
@@ -104,7 +119,7 @@ export function RelationshipLine({
             : relationship.cross_filter_direction === 'both' 
               ? 'hsl(var(--primary))' 
               : 'hsl(var(--muted-foreground))',
-          opacity: relationship.is_active ? 1 : 0.5,
+          opacity: relationship.is_active ? (isHovered ? 1 : 0.9) : 0.5,
         }}
       />
 
@@ -119,9 +134,9 @@ export function RelationshipLine({
           rx="6"
           className={cn(
             "transition-colors",
-            isSelected ? "fill-primary/10 stroke-primary" : "fill-background stroke-border"
+            isSelected || isHovered ? "fill-primary/10 stroke-primary" : "fill-background stroke-border"
           )}
-          strokeWidth={isSelected ? 2 : 1}
+          strokeWidth={isSelected || isHovered ? 2 : 1}
         />
         
         {/* İlişki tipi */}
@@ -129,7 +144,7 @@ export function RelationshipLine({
           textAnchor="middle"
           y="-7"
           className="text-[10px] font-bold pointer-events-none"
-          style={{ fill: isSelected ? 'hsl(var(--primary))' : 'hsl(var(--foreground))' }}
+          style={{ fill: isSelected || isHovered ? 'hsl(var(--primary))' : 'hsl(var(--foreground))' }}
         >
           {typeLabel}
         </text>
