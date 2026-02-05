@@ -21,7 +21,8 @@ import {
   Sun,
   Moon,
   User,
-  Link2
+  Link2,
+  RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,6 +44,7 @@ const DataSourceManager = React.lazy(() => import('@/components/admin/DataSource
 const CategoryManager = React.lazy(() => import('@/components/admin/CategoryManager').then(m => ({ default: m.CategoryManager })));
 const FeedbackManager = React.lazy(() => import('@/components/admin/FeedbackManager').then(m => ({ default: m.FeedbackManager })));
 const DataModelView = React.lazy(() => import('@/components/admin/DataModelView').then(m => ({ default: m.DataModelView })));
+const BulkDataSyncManager = React.lazy(() => import('@/components/admin/BulkDataSyncManager').then(m => ({ default: m.BulkDataSyncManager })));
 
 // UserProfile, ImpersonatedProfile'ın bir parçasını kullanır - sadece gösterim için gerekli alanlar
 interface UserProfile {
@@ -230,6 +232,10 @@ export default function SuperAdminPanel() {
                 <MessageSquare className="w-3 h-3 md:w-4 md:h-4" />
                 <span>Geri Bildirimler</span>
               </TabsTrigger>
+              <TabsTrigger value="bulksync" className="gap-1.5 text-xs md:text-sm px-2 md:px-3">
+                <RefreshCw className="w-3 h-3 md:w-4 md:h-4" />
+                <span>Toplu Sync</span>
+              </TabsTrigger>
             </TabsList>
             
             <div className="flex items-center gap-2">
@@ -388,6 +394,12 @@ export default function SuperAdminPanel() {
              <TabsContent value="feedback" className="h-full m-0 p-6 bg-background">
               <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
                 <FeedbackManager />
+              </React.Suspense>
+            </TabsContent>
+
+             <TabsContent value="bulksync" className="h-full m-0 p-6 bg-background overflow-auto">
+              <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+                <BulkDataSyncManager />
               </React.Suspense>
             </TabsContent>
           </div>
