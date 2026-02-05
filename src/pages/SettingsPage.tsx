@@ -27,8 +27,10 @@ import {
   FlaskConical,
   Calendar,
   Download,
-  Palette
+  Palette,
+  HardDrive,
 } from 'lucide-react';
+import { DataManagementTab } from '@/components/settings/DataManagementTab';
 import {
   Select,
   SelectContent,
@@ -93,6 +95,7 @@ export function SettingsPage() {
   const tabs = [
     { id: 'genel', label: 'Genel', icon: User },
     { id: 'gorunum', label: 'Görünüm', icon: Palette },
+    { id: 'veri', label: 'Veri Yönetimi', icon: HardDrive },
     { id: 'demo', label: 'Demo Modu', icon: FlaskConical },
     { id: 'dia', label: 'DIA Bağlantısı', icon: Plug },
     { id: 'sunucu', label: 'Bağlantı', icon: Server },
@@ -442,6 +445,9 @@ export function SettingsPage() {
                 </div>
               </div>
             )}
+
+            {/* Data Management Tab */}
+            {activeTab === 'veri' && <DataManagementTab />}
 
             {/* Demo Mode Settings */}
             {activeTab === 'demo' && (
