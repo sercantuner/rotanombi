@@ -679,7 +679,7 @@ serve(async (req) => {
           if (periodResult.result) {
             if (Array.isArray(periodResult.result)) {
               periodData = periodResult.result;
-            } else if (typeof periodResult.result === 'object') {
+            } else if (typeof periodResult.result === 'object' && periodResult.result !== null) {
               const firstKey = Object.keys(periodResult.result)[0];
               if (firstKey && Array.isArray(periodResult.result[firstKey])) {
                 periodData = periodResult.result[firstKey];
@@ -687,6 +687,11 @@ serve(async (req) => {
             }
           } else if (periodResult.msg && Array.isArray(periodResult.msg)) {
             periodData = periodResult.msg;
+          }
+          
+          // Null koruması
+          if (!periodData || !Array.isArray(periodData)) {
+            periodData = [];
           }
           
           // Her kayda dönem bilgisini ekle
@@ -750,7 +755,7 @@ serve(async (req) => {
       if (result.result) {
         if (Array.isArray(result.result)) {
           data = result.result;
-        } else if (typeof result.result === 'object') {
+        } else if (typeof result.result === 'object' && result.result !== null) {
           const firstKey = Object.keys(result.result)[0];
           if (firstKey && Array.isArray(result.result[firstKey])) {
             data = result.result[firstKey];
@@ -758,6 +763,11 @@ serve(async (req) => {
         }
       } else if (result.msg && Array.isArray(result.msg)) {
         data = result.msg;
+      }
+
+      // Null koruması
+      if (!data || !Array.isArray(data)) {
+        data = [];
       }
 
       const { fields, fieldTypes, fieldStats } = data.length > 0 
@@ -805,7 +815,7 @@ serve(async (req) => {
     if (result.result) {
       if (Array.isArray(result.result)) {
         data = result.result;
-      } else if (typeof result.result === 'object') {
+      } else if (typeof result.result === 'object' && result.result !== null) {
         const firstKey = Object.keys(result.result)[0];
         if (firstKey && Array.isArray(result.result[firstKey])) {
           data = result.result[firstKey];
@@ -813,6 +823,11 @@ serve(async (req) => {
       }
     } else if (result.msg && Array.isArray(result.msg)) {
       data = result.msg;
+    }
+
+    // Null koruması - data her zaman bir array olmalı
+    if (!data || !Array.isArray(data)) {
+      data = [];
     }
 
     if (data.length === 0) {
