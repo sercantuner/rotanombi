@@ -109,13 +109,16 @@ export function BulkDataSyncManager() {
     const usersToSync = users.filter(u => selectedUsers.has(u.user_id));
     const newProgress = new Map<string, SyncProgress>();
     
+    // Aynı sunucu için zaten sync yapılmış olanları takip et
+    const syncedServers = new Set<string>();
+    
     // Tümünü pending olarak işaretle
     usersToSync.forEach(u => {
       newProgress.set(u.user_id, { userId: u.user_id, status: 'pending' });
     });
     setProgress(new Map(newProgress));
 
-    // Sırayla her kullanıcı için sync yap
+    // Sırayla her kullanıcı için sync yap (aynı sunucu kontrolü ile)
     for (let i = 0; i < usersToSync.length; i++) {
       // Acil stop kontrolü
       if (abortControllerRef.current?.signal.aborted) {
@@ -136,6 +139,18 @@ export function BulkDataSyncManager() {
 
       const user = usersToSync[i];
       setCurrentIndex(i + 1);
+      
+      // Aynı sunucu + firma için zaten sync yapıldıysa atla
+      const serverKey = `${user.dia_sunucu_adi}:${user.firma_kodu}`;
+      if (syncedServers.has(serverKey)) {
+        newProgress.set(user.user_id, { 
+          userId: user.user_id, 
+          status: 'success',
+          message: 'Aynı sunucu zaten senkronize edildi',
+        });
+        setProgress(new Map(newProgress));
+        continue;
+      }
       
       // Running olarak güncelle
       newProgress.set(user.user_id, { userId: user.user_id, status: 'running' });
@@ -168,6 +183,8 @@ export function BulkDataSyncManager() {
         
         if (data.success) {
           const totalRecords = data.results?.reduce((sum: number, r: any) => sum + (r.recordsFetched || 0), 0) || 0;
+          // Bu sunucuyu sync edilmiş olarak işaretle
+          syncedServers.add(serverKey);
           newProgress.set(user.user_id, { 
             userId: user.user_id, 
             status: 'success',
@@ -176,7 +193,7 @@ export function BulkDataSyncManager() {
           });
         } else {
           newProgress.set(user.user_id, { 
-            userId: user.user_id, 
+            userId: user.user_id,
             status: 'error',
             message: data.error || 'Bilinmeyen hata',
           });
