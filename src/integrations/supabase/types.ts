@@ -1197,6 +1197,7 @@ export type Database = {
       }
       widgets: {
         Row: {
+          ai_suggested_tags: string[] | null
           available_filters: Json | null
           available_sizes: string[] | null
           builder_config: Json | null
@@ -1216,17 +1217,22 @@ export type Database = {
           is_active: boolean
           is_default: boolean | null
           last_change_type: string | null
+          long_description: string | null
           min_height: string | null
           name: string
+          preview_image: string | null
+          short_description: string | null
           size: string
           sort_order: number | null
           target_pages: string[] | null
+          technical_notes: Json | null
           type: string
           updated_at: string
           version: number | null
           widget_key: string
         }
         Insert: {
+          ai_suggested_tags?: string[] | null
           available_filters?: Json | null
           available_sizes?: string[] | null
           builder_config?: Json | null
@@ -1246,17 +1252,22 @@ export type Database = {
           is_active?: boolean
           is_default?: boolean | null
           last_change_type?: string | null
+          long_description?: string | null
           min_height?: string | null
           name: string
+          preview_image?: string | null
+          short_description?: string | null
           size?: string
           sort_order?: number | null
           target_pages?: string[] | null
+          technical_notes?: Json | null
           type?: string
           updated_at?: string
           version?: number | null
           widget_key: string
         }
         Update: {
+          ai_suggested_tags?: string[] | null
           available_filters?: Json | null
           available_sizes?: string[] | null
           builder_config?: Json | null
@@ -1276,11 +1287,15 @@ export type Database = {
           is_active?: boolean
           is_default?: boolean | null
           last_change_type?: string | null
+          long_description?: string | null
           min_height?: string | null
           name?: string
+          preview_image?: string | null
+          short_description?: string | null
           size?: string
           sort_order?: number | null
           target_pages?: string[] | null
+          technical_notes?: Json | null
           type?: string
           updated_at?: string
           version?: number | null

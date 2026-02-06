@@ -7,8 +7,9 @@ import { useDataSources, DataSource as DataSourceType } from '@/hooks/useDataSou
 import { useDataSourceRelationships } from '@/hooks/useDataSourceRelationships';
 import { useWidgetAdmin, useWidgets } from '@/hooks/useWidgets';
 import { useWidgetCategories } from '@/hooks/useWidgetCategories';
-import { WidgetFormData, WIDGET_SIZES } from '@/lib/widgetTypes';
+import { WidgetFormData, WIDGET_SIZES, TechnicalNotes } from '@/lib/widgetTypes';
 import { MultiQueryConfig, DiaModelReference, AIRequirement, DEFAULT_AI_REQUIREMENTS, extractModelNameFromUrl } from '@/lib/widgetBuilderTypes';
+import html2canvas from 'html2canvas';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DataSourceSelector } from './DataSourceSelector';
@@ -544,6 +545,14 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   // Tam Prompt Görüntüleme Modal
   const [showFullPromptModal, setShowFullPromptModal] = useState(false);
   const [fullPromptContent, setFullPromptContent] = useState('');
+  
+  // AI Metadata State (YENİ)
+  const [aiSuggestedTags, setAiSuggestedTags] = useState<string[]>([]);
+  const [shortDescription, setShortDescription] = useState('');
+  const [longDescription, setLongDescription] = useState('');
+  const [technicalNotes, setTechnicalNotes] = useState<TechnicalNotes | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [isCapturingPreview, setIsCapturingPreview] = useState(false);
 
   // Adım geçiş kontrolü
   const canProceed = useCallback((step: number) => {
@@ -959,6 +968,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
           sampleData: dataToSend,
           mode: 'generate',
           isMultiQuery: isMultiQueryMode,
+          useMetadata: true, // YENİ: Metadata üretimini aktifleştir
         },
       });
 
@@ -966,9 +976,26 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
       
       const generatedCode = response.data?.code || response.data?.content;
       const metadata = response.data?.metadata;
+      const aiMetadata = response.data?.aiMetadata; // YENİ: AI tarafından üretilen metadata
       
       if (generatedCode) {
         setCustomCode(generatedCode);
+        
+        // AI Metadata'yı state'lere aktar
+        if (aiMetadata) {
+          if (aiMetadata.suggestedTags?.length) {
+            setAiSuggestedTags(aiMetadata.suggestedTags);
+          }
+          if (aiMetadata.shortDescription) {
+            setShortDescription(aiMetadata.shortDescription);
+          }
+          if (aiMetadata.longDescription) {
+            setLongDescription(aiMetadata.longDescription);
+          }
+          if (aiMetadata.technicalNotes) {
+            setTechnicalNotes(aiMetadata.technicalNotes);
+          }
+        }
         
         // Metadata bilgisi ile toast göster
         let toastMessage = 'Kod üretildi!';
@@ -977,6 +1004,9 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
           if (!metadata.isComplete) {
             toastMessage += ' ⚠️ Kod tam olmayabilir';
           }
+        }
+        if (metadata?.hasAiMetadata) {
+          toastMessage += ' + Metadata';
         }
         
         setChatHistory([
@@ -1111,7 +1141,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
     const formData: WidgetFormData = {
       widget_key: widgetKey,
       name: widgetName,
-      description: widgetDescription,
+      description: shortDescription || widgetDescription, // Kısa açıklamayı description olarak kullan
       category: widgetCategory as any,
       type: 'chart',
       data_source: 'genel',
@@ -1127,6 +1157,12 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
       is_default: false,
       sort_order: 100,
       builder_config: builderConfig as any,
+      // AI Metadata alanları
+      short_description: shortDescription || undefined,
+      long_description: longDescription || undefined,
+      technical_notes: technicalNotes || undefined,
+      preview_image: previewImage || undefined,
+      ai_suggested_tags: aiSuggestedTags.length > 0 ? aiSuggestedTags : undefined,
     };
 
     if (editingWidget) {
@@ -2288,18 +2324,62 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
     </div>
   );
 
+  // Önizleme görseli yakala (html2canvas)
+  const capturePreviewImage = async () => {
+    const previewElement = document.getElementById('widget-preview-container');
+    if (!previewElement) {
+      toast.error('Önizleme alanı bulunamadı');
+      return;
+    }
+    
+    setIsCapturingPreview(true);
+    try {
+      const canvas = await html2canvas(previewElement, {
+        backgroundColor: null,
+        scale: 0.5, // Düşük çözünürlük (thumbnail)
+        logging: false,
+        useCORS: true,
+      });
+      
+      const imageData = canvas.toDataURL('image/png');
+      setPreviewImage(imageData);
+      toast.success('Önizleme görseli oluşturuldu');
+    } catch (err) {
+      console.error('Preview capture error:', err);
+      toast.error('Görsel oluşturulamadı');
+    } finally {
+      setIsCapturingPreview(false);
+    }
+  };
+
   // Step 4: Önizle & Kaydet
   const renderStep4 = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
       {/* Sol: Önizleme (2/3) */}
       <Card className="lg:col-span-2 flex flex-col">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <DynamicIcon iconName={widgetIcon} className="h-4 w-4" />
-            {widgetName}
-          </CardTitle>
-          {widgetDescription && (
-            <CardDescription className="text-xs">{widgetDescription}</CardDescription>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <DynamicIcon iconName={widgetIcon} className="h-4 w-4" />
+              {widgetName}
+            </CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={capturePreviewImage}
+              disabled={isCapturingPreview || !PreviewResult.component}
+              className="gap-2 text-xs"
+            >
+              {isCapturingPreview ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <LucideIcons.Camera className="h-3 w-3" />
+              )}
+              {previewImage ? 'Görseli Güncelle' : 'Önizleme Görseli Oluştur'}
+            </Button>
+          </div>
+          {shortDescription && (
+            <CardDescription className="text-xs">{shortDescription}</CardDescription>
           )}
         </CardHeader>
         <CardContent className="flex-1">
@@ -2318,7 +2398,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
               </AlertDescription>
             </Alert>
           ) : PreviewResult.component ? (
-            <div className="h-[420px] border rounded-lg p-4 flex flex-col">
+            <div id="widget-preview-container" className="h-[420px] border rounded-lg p-4 flex flex-col bg-card">
               <ErrorBoundary fallback={
                 <div className="text-destructive text-sm flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" />
@@ -2336,57 +2416,208 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
               </div>
             </div>
           )}
+          
+          {/* Önizleme görseli thumbnail */}
+          {previewImage && (
+            <div className="mt-3 flex items-center gap-3 p-2 bg-muted/30 rounded-lg">
+              <img 
+                src={previewImage} 
+                alt="Widget önizleme" 
+                className="h-12 w-20 object-cover rounded border"
+              />
+              <div className="flex-1 text-xs text-muted-foreground">
+                Marketplace önizleme görseli hazır
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPreviewImage(null)}
+                className="h-6 w-6 p-0"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Sağ: Özet (1/3) */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-success" />
-            Widget Özeti
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Key:</span>
-              <span className="font-mono text-xs">{widgetKey}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Ad:</span>
-              <span className="font-medium">{widgetName}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Boyut:</span>
-              <Badge variant="outline">{widgetSize}</Badge>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Kategori:</span>
-              <Badge variant="outline">{getCategoryBySlug(widgetCategory)?.name || widgetCategory}</Badge>
-            </div>
-            <Separator />
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Veri Kaynağı:</span>
-              <span className="text-xs">
-                {isMultiQueryMode ? `${multiQuery?.queries?.length || 0} sorgu` : selectedDataSource?.name || '-'}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Kayıt:</span>
-              <span className="font-medium">{sampleData.length}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Kod Durumu:</span>
-              {codeError ? (
-                <Badge variant="destructive" className="text-xs">Hatalı</Badge>
-              ) : (
-                <Badge variant="outline" className="text-xs bg-success/10 text-success">Geçerli</Badge>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Sağ: Özet + Metadata (1/3) */}
+      <ScrollArea className="h-full">
+        <div className="space-y-4 pr-2">
+          {/* Widget Özeti */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-success" />
+                Widget Özeti
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Key:</span>
+                <span className="font-mono text-xs">{widgetKey}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ad:</span>
+                <span className="font-medium">{widgetName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Boyut:</span>
+                <Badge variant="outline">{widgetSize}</Badge>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Kategori:</span>
+                <Badge variant="outline">{getCategoryBySlug(widgetCategory)?.name || widgetCategory}</Badge>
+              </div>
+              <Separator />
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Veri Kaynağı:</span>
+                <span className="text-xs">
+                  {isMultiQueryMode ? `${multiQuery?.queries?.length || 0} sorgu` : selectedDataSource?.name || '-'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Kayıt:</span>
+                <span className="font-medium">{sampleData.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Kod Durumu:</span>
+                {codeError ? (
+                  <Badge variant="destructive" className="text-xs">Hatalı</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-xs bg-success/10 text-success">Geçerli</Badge>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* AI Metadata - Kısa Açıklama */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <LucideIcons.FileText className="h-4 w-4" />
+                Kısa Açıklama
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Input
+                value={shortDescription}
+                onChange={(e) => setShortDescription(e.target.value)}
+                placeholder="Widget'ın kısa açıklaması (Marketplace'de görünür)"
+                className="text-sm"
+                maxLength={100}
+              />
+              <div className="text-[10px] text-muted-foreground mt-1 text-right">
+                {shortDescription.length}/100
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* AI Önerilen Etiketler */}
+          {aiSuggestedTags.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <LucideIcons.Tags className="h-4 w-4" />
+                  Önerilen Etiketler
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-1">
+                  {aiSuggestedTags.map((tag, idx) => (
+                    <Badge key={idx} variant="secondary" className="text-xs">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Teknik Notlar */}
+          {technicalNotes && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <LucideIcons.Wrench className="h-4 w-4" />
+                  Teknik Notlar
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-xs">
+                {/* Kullanılan Alanlar */}
+                {technicalNotes.usedFields && technicalNotes.usedFields.length > 0 && (
+                  <Collapsible>
+                    <CollapsibleTrigger className="flex items-center gap-2 text-muted-foreground hover:text-foreground w-full">
+                      <LucideIcons.ChevronRight className="h-3 w-3" />
+                      Kullanılan Alanlar ({technicalNotes.usedFields.length})
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="pl-4 pt-2 space-y-1">
+                      {technicalNotes.usedFields.map((field, idx) => (
+                        <div key={idx} className="flex items-start gap-2">
+                          <span className="font-mono text-primary">{field.name}</span>
+                          <span className="text-muted-foreground">({field.type})</span>
+                          <span>- {field.usage}</span>
+                        </div>
+                      ))}
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+
+                {/* Hesaplamalar */}
+                {technicalNotes.calculations && technicalNotes.calculations.length > 0 && (
+                  <Collapsible>
+                    <CollapsibleTrigger className="flex items-center gap-2 text-muted-foreground hover:text-foreground w-full">
+                      <LucideIcons.ChevronRight className="h-3 w-3" />
+                      Hesaplamalar ({technicalNotes.calculations.length})
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="pl-4 pt-2 space-y-1">
+                      {technicalNotes.calculations.map((calc, idx) => (
+                        <div key={idx}>
+                          <span className="font-medium">{calc.name}:</span>
+                          <span className="font-mono text-primary ml-1">{calc.formula}</span>
+                          {calc.description && (
+                            <span className="text-muted-foreground ml-1">- {calc.description}</span>
+                          )}
+                        </div>
+                      ))}
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+
+                {/* Veri Akışı */}
+                {technicalNotes.dataFlow && (
+                  <Collapsible>
+                    <CollapsibleTrigger className="flex items-center gap-2 text-muted-foreground hover:text-foreground w-full">
+                      <LucideIcons.ChevronRight className="h-3 w-3" />
+                      Veri Akışı
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="pl-4 pt-2">
+                      <p className="text-muted-foreground">{technicalNotes.dataFlow}</p>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Uzun Açıklama */}
+          {longDescription && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <LucideIcons.BookOpen className="h-4 w-4" />
+                  Detaylı Açıklama
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-xs text-muted-foreground whitespace-pre-wrap max-h-32 overflow-y-auto">
+                  {longDescription}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </ScrollArea>
     </div>
   );
 

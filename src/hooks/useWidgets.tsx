@@ -68,6 +68,12 @@ export function useWidgets() {
           created_by: w.created_by,
           builder_config: w.builder_config || null,
           tags: tags.length > 0 ? tags : [w.category], // Etiket yoksa eski category kullan
+          // AI Metadata alanları
+          short_description: w.short_description || null,
+          long_description: w.long_description || null,
+          technical_notes: w.technical_notes || null,
+          preview_image: w.preview_image || null,
+          ai_suggested_tags: w.ai_suggested_tags || null,
         };
       });
 
