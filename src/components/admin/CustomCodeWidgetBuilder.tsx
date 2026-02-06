@@ -371,10 +371,13 @@ interface WidgetForEdit {
 }
 
 interface CustomCodeWidgetBuilderProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onSave?: () => void;
   editingWidget?: WidgetForEdit | null;
+  editWidgetId?: string; // URL'den gelen widget id
+  isFullPage?: boolean; // Tam sayfa modu
+  onClose?: () => void; // Tam sayfa modunda geri butonu için
 }
 
 // Dinamik icon renderer
@@ -439,7 +442,7 @@ interface ChatMessage {
   content: string;
 }
 
-export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWidget }: CustomCodeWidgetBuilderProps) {
+export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWidget, editWidgetId, isFullPage = false, onClose }: CustomCodeWidgetBuilderProps) {
   const { widgets } = useWidgets();
   const { createWidget, updateWidget, isLoading: isSaving } = useWidgetAdmin();
   const { activeDataSources, getDataSourceById, isLoading: isDataSourcesLoading, dataSources } = useDataSources();
@@ -2621,76 +2624,149 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
     </div>
   );
 
-  return (
-    <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl w-[95vw] md:w-full h-[95vh] md:h-[90vh] flex flex-col p-0 gap-0">
-        {/* Header */}
+  // Tam sayfa modu için content
+  const builderContent = (
+    <div className={cn(
+      "flex flex-col",
+      isFullPage ? "h-full" : "h-[95vh] md:h-[90vh]"
+    )}>
+      {/* Header - Dialog modunda DialogHeader kullanılır */}
+      {!isFullPage && (
         <DialogHeader className="px-4 md:px-6 py-3 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
             <Code className="h-5 w-5 text-primary" />
             {editingWidget ? 'Widget Düzenle' : 'Yeni Widget Oluştur'}
           </DialogTitle>
         </DialogHeader>
+      )}
 
-        {/* Stepper */}
-        <StepperHeader />
+      {/* Stepper */}
+      <StepperHeader />
 
-        {/* Content */}
-        <div className="flex-1 overflow-auto p-4">
-          {currentStep === 0 && renderStep1()}
-          {currentStep === 1 && renderStep2()}
-          {currentStep === 2 && renderStep3()}
-          {currentStep === 3 && renderStep4()}
-        </div>
+      {/* Content */}
+      <div className="flex-1 overflow-auto p-4">
+        {currentStep === 0 && renderStep1()}
+        {currentStep === 1 && renderStep2()}
+        {currentStep === 2 && renderStep3()}
+        {currentStep === 3 && renderStep4()}
+      </div>
 
-        {/* Footer Navigation */}
-        <DialogFooter className="px-4 md:px-6 py-3 border-t shrink-0">
-          <div className="flex items-center justify-between w-full">
+      {/* Footer Navigation */}
+      <div className={cn(
+        "px-4 md:px-6 py-3 border-t shrink-0 flex items-center justify-between",
+        isFullPage ? "" : ""
+      )}>
+        <Button 
+          variant="outline" 
+          onClick={isFullPage && currentStep === 0 ? onClose : handleBack}
+          className="gap-2"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          {isFullPage && currentStep === 0 ? 'İptal' : 'Geri'}
+        </Button>
+        
+        <div className="flex items-center gap-2">
+          {/* AI adımında Atla butonu */}
+          {currentStep === 1 && (
             <Button 
-              variant="outline" 
-              onClick={handleBack}
-              disabled={currentStep === 0}
+              variant="ghost" 
+              onClick={handleNext}
+              className="text-muted-foreground"
+            >
+              Atla →
+            </Button>
+          )}
+          
+          {currentStep < WIZARD_STEPS.length - 1 ? (
+            <Button 
+              onClick={handleNext}
+              disabled={!canProceed(currentStep)}
               className="gap-2"
             >
-              <ChevronLeft className="h-4 w-4" />
-              Geri
+              İleri
+              <ChevronRight className="h-4 w-4" />
             </Button>
+          ) : (
+            <Button 
+              onClick={handleSave}
+              disabled={isSaving || codeError !== null}
+              className="gap-2"
+            >
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {editingWidget ? 'Widget Güncelle' : 'Widget Oluştur'}
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  // Tam sayfa modunda sadece content döndür
+  if (isFullPage) {
+    return (
+      <>
+        {builderContent}
+        
+        {/* Tam Prompt Görüntüleme Modal */}
+        <Dialog open={showFullPromptModal} onOpenChange={setShowFullPromptModal}>
+          <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <LucideIcons.FileText className="h-5 w-5 text-primary" />
+                AI'ye Gönderilen Tam Prompt
+              </DialogTitle>
+              <DialogDescription>
+                Bu içeriği kopyalayıp başka AI'lere (ChatGPT, Claude vb.) gönderebilirsiniz.
+              </DialogDescription>
+            </DialogHeader>
             
-            <div className="flex items-center gap-2">
-              {/* AI adımında Atla butonu */}
-              {currentStep === 1 && (
-                <Button 
-                  variant="ghost" 
-                  onClick={handleNext}
-                  className="text-muted-foreground"
-                >
-                  Atla →
-                </Button>
-              )}
-              
-              {currentStep < WIZARD_STEPS.length - 1 ? (
-                <Button 
-                  onClick={handleNext}
-                  disabled={!canProceed(currentStep)}
-                  className="gap-2"
-                >
-                  İleri
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              ) : (
-                <Button 
-                  onClick={handleSave}
-                  disabled={isSaving || codeError !== null}
-                  className="gap-2"
-                >
-                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {editingWidget ? 'Widget Güncelle' : 'Widget Oluştur'}
-                </Button>
-              )}
+            <div className="flex-1 min-h-0">
+              <ScrollArea className="h-[55vh] border rounded-lg">
+                <pre className="p-4 text-xs font-mono whitespace-pre-wrap bg-muted/30">
+                  {fullPromptContent}
+                </pre>
+              </ScrollArea>
             </div>
-          </div>
-        </DialogFooter>
+            
+            <DialogFooter className="flex items-center gap-2">
+              <div className="text-xs text-muted-foreground mr-auto">
+                {fullPromptContent.length.toLocaleString('tr-TR')} karakter
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(fullPromptContent);
+                  toast.success('Prompt panoya kopyalandı!');
+                }}
+                className="gap-2"
+              >
+                <Copy className="h-4 w-4" />
+                Kopyala
+              </Button>
+              <Button variant="secondary" onClick={() => setShowFullPromptModal(false)}>
+                Kapat
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        
+        {/* Kategori Seçim Modal */}
+        <CategoryPickerModal
+          open={showCategoryModal}
+          onOpenChange={setShowCategoryModal}
+          selectedCategory={widgetCategory}
+          onSelect={(slug) => setWidgetCategory(slug)}
+        />
+      </>
+    );
+  }
+
+  // Dialog modu (mevcut davranış)
+  return (
+    <>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-6xl w-[95vw] md:w-full h-[95vh] md:h-[90vh] flex flex-col p-0 gap-0">
+        {builderContent}
       </DialogContent>
     </Dialog>
     
