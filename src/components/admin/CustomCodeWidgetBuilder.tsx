@@ -82,19 +82,43 @@ const RechartsScope = {
 let MapScope: any = null;
  let NivoScope: any = null;
 
+// Map yüklenirken gösterilecek placeholder bileşen
+const MapLoadingPlaceholder = ({ children, ...props }: any) => {
+  return React.createElement('div', {
+    style: {
+      width: '100%',
+      height: '100%',
+      minHeight: '300px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'hsl(var(--muted))',
+      borderRadius: '0.5rem',
+      color: 'hsl(var(--muted-foreground))',
+      fontSize: '14px'
+    }
+  }, 'Harita yükleniyor...');
+};
+
+// Boş placeholder bileşenler - children'ı yok sayar
+const EmptyComponent = () => null;
+
 const EmptyMapScope = {
-  MapContainer: () => null,
-  TileLayer: () => null,
-  Marker: () => null,
-  Popup: () => null,
-  CircleMarker: () => null,
-  Polyline: () => null,
-  Polygon: () => null,
-  // Hooks - boş placeholder
-  useMap: () => null,
+  MapContainer: MapLoadingPlaceholder,
+  TileLayer: EmptyComponent,
+  Marker: EmptyComponent,
+  Popup: EmptyComponent,
+  CircleMarker: EmptyComponent,
+  Polyline: EmptyComponent,
+  Polygon: EmptyComponent,
+  // Hooks - güvenli placeholder
+  useMap: () => ({ setView: () => {}, getZoom: () => 10, getCenter: () => ({ lat: 39, lng: 35 }) }),
   useMapEvents: () => null,
   useMapEvent: () => null,
-  L: null,
+  L: {
+    latLng: (lat: number, lng: number) => ({ lat, lng }),
+    icon: () => ({}),
+  },
 };
  
  // Nivo placeholder
@@ -537,6 +561,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
 
   // Custom code preview'da Map scope (opsiyonel)
   const [mapScope, setMapScope] = useState<any>(EmptyMapScope);
+  const [isMapLoading, setIsMapLoading] = useState(false);
    const [nivoScope, setNivoScope] = useState<any>(EmptyNivoScope);
 
   useEffect(() => {
@@ -544,10 +569,18 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
     const needsMap = /(^|[^a-zA-Z0-9_])Map\./.test(customCode);
     if (!needsMap) {
       setMapScope(EmptyMapScope);
+      setIsMapLoading(false);
       return;
     }
+    
+    // Map scope yüklenene kadar loading state
+    setIsMapLoading(true);
+    
     initMapScope().then((scope) => {
-      if (!cancelled) setMapScope(scope || EmptyMapScope);
+      if (!cancelled) {
+        setMapScope(scope || EmptyMapScope);
+        setIsMapLoading(false);
+      }
     });
     return () => {
       cancelled = true;
@@ -2554,8 +2587,15 @@ ${JSON.stringify(dataToSend, null, 2).slice(0, 1500)}`;
           )}
         </CardHeader>
         <CardContent className="flex-1">
-          {/* Kod varsa widget göster (veri yoksa mock data ile çalışır), yoksa uyarı */}
-          {codeError ? (
+          {/* Map yükleniyor durumu */}
+          {isMapLoading && /(^|[^a-zA-Z0-9_])Map\./.test(customCode) ? (
+            <div className="border-2 border-dashed rounded-lg p-4 min-h-[300px] flex items-center justify-center text-muted-foreground">
+              <div className="text-center">
+                <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin opacity-50" />
+                <p className="text-sm">Harita bileşenleri yükleniyor...</p>
+              </div>
+            </div>
+          ) : codeError ? (
             <Alert variant="destructive" className="min-h-[300px]">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
