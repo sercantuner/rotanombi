@@ -1,5 +1,6 @@
 // Super Admin Panel - Kullanıcı izleme, widget yönetimi ve lisans yönetimi
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useImpersonation, ImpersonatedProfile } from '@/contexts/ImpersonationContext';
 import { useTheme } from '@/hooks/useTheme';
@@ -65,6 +66,7 @@ export default function SuperAdminPanel() {
   const { isSuperAdmin, loading: permLoading } = usePermissions();
   const { impersonatedUserId, impersonatedProfile, startImpersonation, stopImpersonation, isImpersonating } = useImpersonation();
   const { theme, toggleTheme } = useTheme();
+  const [searchParams] = useSearchParams();
   
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,6 +75,26 @@ export default function SuperAdminPanel() {
   const [showLicenseModal, setShowLicenseModal] = useState(false);
   const [activeTab, setActiveTab] = useState('users');
   const [userSearchOpen, setUserSearchOpen] = useState(false);
+
+  // URL'den tab parametresiyle açılışta doğru sekmeyi seç
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (!tab) return;
+
+    const allowedTabs = new Set([
+      'users',
+      'widgets',
+      'categories',
+      'datasources',
+      'datamodel',
+      'feedback',
+      'bulksync',
+    ]);
+
+    if (allowedTabs.has(tab)) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   // Tüm kullanıcıları yükle
   useEffect(() => {

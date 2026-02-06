@@ -442,7 +442,7 @@ interface ChatMessage {
 }
 
 export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWidget: editingWidgetProp, editWidgetId, isFullPage = false, onClose }: CustomCodeWidgetBuilderProps) {
-  const { widgets, isLoading: isWidgetsLoading } = useWidgets();
+  const { widgets } = useWidgets();
   const { createWidget, updateWidget, isLoading: isSaving } = useWidgetAdmin();
   
   // editWidgetId varsa widgets listesinden bul, yoksa prop'tan gelen editingWidget'ı kullan
@@ -2757,7 +2757,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
   
   // Fixed Bottom Bar Component - Tam sayfa modu için
   const FixedBottomBar = () => (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t shadow-lg">
+    <div className="sticky bottom-0 z-50 bg-background border-t shadow-lg">
       <div className="flex items-center justify-between px-4 md:px-6 py-3 max-w-screen-2xl mx-auto">
         {/* Sol: Geri/İptal */}
         <Button 
