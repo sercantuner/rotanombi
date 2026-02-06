@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import { useDataSources } from '@/hooks/useDataSources';
 import { useSyncData, useSyncStatus } from '@/hooks/useSyncData';
 import { useDiaProfile } from '@/hooks/useDiaProfile';
+import { useCacheRecordCounts } from '@/hooks/useCacheRecordCounts';
 import {
   Database,
   RefreshCw,
@@ -36,13 +37,14 @@ export function DataManagementTab() {
   const { syncDataSource, syncAllDataSources, isSyncing, currentSyncSource, syncProgress } = useSyncData();
   const { lastSyncTime, syncHistory, isLoading: isSyncStatusLoading } = useSyncStatus();
   const diaProfile = useDiaProfile();
+  const { data: cacheRecordCounts, isLoading: isCacheCountsLoading } = useCacheRecordCounts();
 
   const [syncingSourceId, setSyncingSourceId] = useState<string | null>(null);
 
   const activeDataSources = dataSources.filter(ds => ds.is_active);
 
-  // Kayıt sayısını data source'dan al
-  const getRecordCount = (ds: typeof dataSources[0]) => ds.last_record_count || 0;
+  // Kayıt sayısını cache'den al (gerçek değer)
+  const getRecordCount = (slug: string) => cacheRecordCounts?.[slug] || 0;
 
   // Tek veri kaynağını senkronize et
   const handleSyncSource = async (dataSourceSlug: string, sourceId: string) => {
@@ -149,10 +151,10 @@ export function DataManagementTab() {
               <span className="text-xs">Toplam Kayıt</span>
             </div>
             <p className="text-2xl font-bold">
-              {isDataSourcesLoading ? (
+              {isDataSourcesLoading || isCacheCountsLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
-                activeDataSources.reduce((acc, ds) => acc + getRecordCount(ds), 0).toLocaleString('tr-TR')
+                activeDataSources.reduce((acc, ds) => acc + getRecordCount(ds.slug), 0).toLocaleString('tr-TR')
               )}
             </p>
           </div>
@@ -199,8 +201,8 @@ export function DataManagementTab() {
           <ScrollArea className="max-h-[400px]">
             <div className="space-y-2">
               <TooltipProvider>
-                {activeDataSources.map((ds) => {
-                  const recordCount = getRecordCount(ds);
+              {activeDataSources.map((ds) => {
+                  const recordCount = getRecordCount(ds.slug);
                   const isCurrentlySyncing = syncingSourceId === ds.id || (isSyncing && currentSyncSource === ds.name);
                   const lastFetched = ds.last_fetched_at;
 

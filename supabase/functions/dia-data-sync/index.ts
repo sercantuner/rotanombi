@@ -322,6 +322,13 @@ async function syncOne(sb: any, uid: string, sess: any, src: any, pn: number, su
     if (!r.ok) { await sb.from('sync_history').update({ status: 'failed', error: r.err, completed_at: new Date().toISOString() }).eq('id', h?.id); return { success: false, slug: src.slug, pn, error: r.err }; }
     await sb.from('sync_history').update({ status: 'completed', records_fetched: r.fetched, records_inserted: r.written, completed_at: new Date().toISOString() }).eq('id', h?.id);
     await sb.from('period_sync_status').upsert({ sunucu_adi: sun, firma_kodu: fk, donem_kodu: pn, data_source_slug: src.slug, last_incremental_sync: new Date().toISOString(), total_records: r.fetched, updated_at: new Date().toISOString() }, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug' });
+    
+    // Cache'deki gerçek kayıt sayısını çek ve data_sources.last_record_count'u güncelle
+    const { data: countData } = await sb.rpc('get_cache_record_counts', { p_sunucu_adi: sun, p_firma_kodu: fk });
+    const totalForSlug = countData?.find((c: any) => c.data_source_slug === src.slug)?.record_count || r.written;
+    await sb.from('data_sources').update({ last_record_count: totalForSlug, last_fetched_at: new Date().toISOString() }).eq('slug', src.slug);
+    console.log(`[syncOne] Updated data_sources.last_record_count for ${src.slug}: ${totalForSlug}`);
+    
     return { success: true, slug: src.slug, pn, fetched: r.fetched, written: r.written };
   } catch (e) { const em = e instanceof Error ? e.message : "Error"; if (h?.id) await sb.from('sync_history').update({ status: 'failed', error: em, completed_at: new Date().toISOString() }).eq('id', h.id); return { success: false, slug: src.slug, pn, error: em }; }
 }
