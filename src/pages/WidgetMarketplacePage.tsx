@@ -328,11 +328,12 @@ export function WidgetMarketplacePage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
+                        {/* Detay butonu - her zaman görünür */}
                         {hasMetadata && (
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="h-8 w-8 bg-primary/10 hover:bg-primary/20 text-primary rounded-full"
                             onClick={(e) => {
                               e.stopPropagation();
                               setDetailWidget(widget);
