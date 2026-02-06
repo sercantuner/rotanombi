@@ -15,7 +15,9 @@ import { diaGetGenelRapor, diaGetFinansRapor, getDiaConnectionInfo, DiaConnectio
 import type { DiaGenelRapor, DiaFinansRapor, VadeYaslandirma, DiaCari } from '@/lib/diaClient';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Plug, RefreshCw, Database } from 'lucide-react';
+import { Plug, RefreshCw, Database, Plus, Move, Check, X, Edit } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 
 function DashboardContent() {
   const navigate = useNavigate();
@@ -36,6 +38,18 @@ function DashboardContent() {
   const [diaConnectionInfo, setDiaConnectionInfo] = useState<DiaConnectionInfo | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [dashboardPageId, setDashboardPageId] = useState<string | null>(null);
+  
+  // FloatingActions state for bottom bar
+  const [floatingActionsState, setFloatingActionsState] = useState<{
+    isDragMode: boolean;
+    isWidgetEditMode: boolean;
+    hasChanges: boolean;
+    onContainerAdd: () => void;
+    onDragModeToggle: () => void;
+    onWidgetEditModeToggle: () => void;
+    onSave: () => void;
+    onCancel: () => void;
+  } | null>(null);
 
   // DataSource loader hook - dashboardPageId null olsa bile çağrılmalı
   const dataSourceLoader = useDataSourceLoader(dashboardPageId);
@@ -233,99 +247,191 @@ function DashboardContent() {
   const showLoadingScreen = dataSourcesInitialLoad && !hasCachedData && totalSources > 0;
 
   return (
-    <div className="flex-1 flex flex-col">
-      {/* Loading Screen - İlk yükleme sırasında göster */}
-      {showLoadingScreen && (
-        <DashboardLoadingScreen
-          progress={loadProgress}
-          loadedSources={loadedSources}
-          totalSources={totalSources}
-          currentSourceName={currentSourceName}
+    <TooltipProvider delayDuration={0}>
+      <div className="flex-1 flex flex-col pb-16">
+        {/* Loading Screen - İlk yükleme sırasında göster */}
+        {showLoadingScreen && (
+          <DashboardLoadingScreen
+            progress={loadProgress}
+            loadedSources={loadedSources}
+            totalSources={totalSources}
+            currentSourceName={currentSourceName}
+          />
+        )}
+        <Header 
+          title="Dashboard" 
+          subtitle="Günlük özet ve kritik bilgiler"
+          onRefresh={refreshDataSources}
+          isRefreshing={dataSourcesLoading}
+          currentPage="dashboard"
+          showWidgetPicker={false}
         />
-      )}
-      <Header 
-        title="Dashboard" 
-        subtitle="Günlük özet ve kritik bilgiler"
-        onRefresh={refreshDataSources}
-        isRefreshing={dataSourcesLoading}
-        currentPage="dashboard"
-        showWidgetPicker={false}
-      />
 
-      <main className="flex-1 p-2 md:p-4 overflow-auto">
-          {/* Filter Side Panel - Sağda gizlenebilir */}
-          <FilterSidePanel />
+        <main className="flex-1 p-2 md:p-4 overflow-auto">
+            {/* Filter Side Panel - Sağda gizlenebilir */}
+            <FilterSidePanel />
 
-        {/* DIA Connection Status */}
-        {!diaConnectionInfo?.connected && !dataSourcesLoading && loadedSources.length === 0 && (
-          <div className="mb-2 md:mb-4 p-2 md:p-3 rounded-lg bg-warning/10 border border-warning/30 flex items-center justify-between animate-fade-in">
-            <div className="flex items-center gap-3">
-              <Plug className="w-5 h-5 text-warning" />
-              <div>
-                <p className="font-medium text-warning">
-                  {diaConnectionInfo?.hasCredentials 
-                    ? 'DIA oturumu sona erdi' 
-                    : 'DIA ERP bağlantısı yok'}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {diaConnectionInfo?.hasCredentials 
-                    ? 'Yenile butonuna basarak tekrar bağlanabilirsiniz' 
-                    : 'Gerçek veriler için DIA ayarlarını yapın'}
-                </p>
+          {/* DIA Connection Status */}
+          {!diaConnectionInfo?.connected && !dataSourcesLoading && loadedSources.length === 0 && (
+            <div className="mb-2 md:mb-4 p-2 md:p-3 rounded-lg bg-warning/10 border border-warning/30 flex items-center justify-between animate-fade-in">
+              <div className="flex items-center gap-3">
+                <Plug className="w-5 h-5 text-warning" />
+                <div>
+                  <p className="font-medium text-warning">
+                    {diaConnectionInfo?.hasCredentials 
+                      ? 'DIA oturumu sona erdi' 
+                      : 'DIA ERP bağlantısı yok'}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {diaConnectionInfo?.hasCredentials 
+                      ? 'Yenile butonuna basarak tekrar bağlanabilirsiniz' 
+                      : 'Gerçek veriler için DIA ayarlarını yapın'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {diaConnectionInfo?.hasCredentials && (
+                  <button 
+                    onClick={refreshDataSources}
+                    disabled={dataSourcesLoading}
+                    className="btn-primary text-sm px-4 py-2 flex items-center gap-2"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${dataSourcesLoading ? 'animate-spin' : ''}`} />
+                    Yeniden Bağlan
+                  </button>
+                )}
+                <button 
+                  onClick={() => navigate('/ayarlar')}
+                  className="btn-secondary text-sm px-4 py-2"
+                >
+                  Ayarlar
+                </button>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              {diaConnectionInfo?.hasCredentials && (
-                <button 
-                  onClick={refreshDataSources}
-                  disabled={dataSourcesLoading}
-                  className="btn-primary text-sm px-4 py-2 flex items-center gap-2"
-                >
-                  <RefreshCw className={`w-4 h-4 ${dataSourcesLoading ? 'animate-spin' : ''}`} />
-                  Yeniden Bağlan
-                </button>
-              )}
-              <button 
-                onClick={() => navigate('/ayarlar')}
-                className="btn-secondary text-sm px-4 py-2"
-              >
-                Ayarlar
-              </button>
+          )}
+
+          {/* Dashboard Status Bar - Sadece yükleniyor göster */}
+          {dataSourcesLoading && (
+            <div className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium animate-pulse">
+                Yükleniyor...
+              </span>
             </div>
+          )}
+
+          {/* Container Based Dashboard */}
+          {dashboardPageId ? (
+            <ContainerBasedDashboard
+              pageId={dashboardPageId}
+              widgetData={widgetData}
+              isLoading={isLoading || dataSourcesLoading}
+              hideFloatingActions={true}
+              onFloatingActionsRender={setFloatingActionsState}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          )}
+
+          {/* Vade Detay Listesi - Shows when a bar is clicked (cross-filtering) */}
+          <div className="mt-2 md:mt-4">
+            <VadeDetayListesi 
+              cariler={cariler} 
+              yaslandirma={yaslandirma}
+            />
+          </div>
+        </main>
+
+        {/* Bottom Action Bar */}
+        {floatingActionsState && (
+          <div 
+            className="fixed bottom-0 right-0 z-40 h-14 bg-background/95 backdrop-blur-sm border-t border-border flex items-center justify-end px-4 gap-2"
+            style={{ left: 'var(--main-sidebar-width, 16rem)' }}
+          >
+            {floatingActionsState.isDragMode ? (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={floatingActionsState.onCancel}
+                      className="gap-2"
+                    >
+                      <X className="h-4 w-4" />
+                      İptal
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Değişiklikleri iptal et</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      size="sm"
+                      onClick={floatingActionsState.onSave} 
+                      disabled={!floatingActionsState.hasChanges}
+                      className="gap-2"
+                    >
+                      <Check className="h-4 w-4" />
+                      Kaydet
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Sıralamayı kaydet</TooltipContent>
+                </Tooltip>
+              </>
+            ) : (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant={floatingActionsState.isWidgetEditMode ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={floatingActionsState.onWidgetEditModeToggle}
+                      className="gap-2"
+                    >
+                      {floatingActionsState.isWidgetEditMode ? <Check className="h-4 w-4" /> : <Edit className="h-4 w-4" />}
+                      {floatingActionsState.isWidgetEditMode ? 'Bitir' : 'Widget Düzenle'}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {floatingActionsState.isWidgetEditMode ? 'Düzenlemeyi bitir' : 'Widget ekle/düzenle'}
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={floatingActionsState.onContainerAdd}
+                      className="gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Container
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Yeni container ekle</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={floatingActionsState.onDragModeToggle}
+                      className="gap-2"
+                    >
+                      <Move className="h-4 w-4" />
+                      Sırala
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Container sıralamasını değiştir</TooltipContent>
+                </Tooltip>
+              </>
+            )}
           </div>
         )}
-
-        {/* Dashboard Status Bar - Sadece yükleniyor göster */}
-        {dataSourcesLoading && (
-          <div className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium animate-pulse">
-              Yükleniyor...
-            </span>
-          </div>
-        )}
-
-        {/* Container Based Dashboard */}
-        {dashboardPageId ? (
-          <ContainerBasedDashboard
-            pageId={dashboardPageId}
-            widgetData={widgetData}
-            isLoading={isLoading || dataSourcesLoading}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
-        )}
-
-        {/* Vade Detay Listesi - Shows when a bar is clicked (cross-filtering) */}
-        <div className="mt-2 md:mt-4">
-          <VadeDetayListesi 
-            cariler={cariler} 
-            yaslandirma={yaslandirma}
-          />
-        </div>
-      </main>
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }
 
