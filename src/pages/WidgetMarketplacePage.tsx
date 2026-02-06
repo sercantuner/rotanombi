@@ -1,0 +1,329 @@
+// Widget Marketplace - Tam Sayfa Versiyon
+// Kullanıcıların widget ekleyebileceği arayüz
+
+import React, { useState, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useWidgets } from '@/hooks/useWidgets';
+import { useWidgetPermissions } from '@/hooks/useWidgetPermissions';
+import { useUserSettings } from '@/contexts/UserSettingsContext';
+import { Widget, WidgetCategory, WIDGET_TYPES, WIDGET_SIZES } from '@/lib/widgetTypes';
+import { useWidgetCategories } from '@/hooks/useWidgetCategories';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Plus, Search, Check, LayoutGrid, PieChart, Table2, List, Activity, Loader2, Info, ArrowLeft, Grid3X3 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import * as LucideIcons from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { WidgetDetailModal } from '@/components/dashboard/WidgetDetailModal';
+
+// Dinamik icon renderer
+const DynamicIcon = ({ iconName, className }: { iconName: string; className?: string }) => {
+  const Icon = (LucideIcons as any)[iconName];
+  if (!Icon) return <LayoutGrid className={className} />;
+  return <Icon className={className} />;
+};
+
+// Widget tipi için ikon
+const typeIcons: Record<string, React.ElementType> = {
+  kpi: Activity,
+  chart: PieChart,
+  table: Table2,
+  list: List,
+  summary: LayoutGrid,
+};
+
+export function WidgetMarketplacePage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const targetPage = (searchParams.get('page') || 'dashboard') as WidgetCategory;
+  
+  const { widgets, isLoading } = useWidgets();
+  const { filterAccessibleWidgets, canAddWidget } = useWidgetPermissions();
+  const { getPageLayout, addWidgetToPage } = useUserSettings();
+  const { activeCategories, isLoading: isCategoriesLoading } = useWidgetCategories();
+  
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [addingWidgetId, setAddingWidgetId] = useState<string | null>(null);
+  
+  // Widget detay modalı
+  const [detailWidget, setDetailWidget] = useState<Widget | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+
+  // Mevcut sayfadaki widget'ları al
+  const currentLayout = getPageLayout(targetPage);
+  const currentWidgetKeys = currentLayout.widgets.map(w => w.id);
+
+  // Kullanılabilir widget'ları filtrele
+  const availableWidgets = useMemo(() => {
+    const accessibleWidgets = filterAccessibleWidgets(widgets);
+    
+    return accessibleWidgets.filter(w => {
+      if (!w.is_active || currentWidgetKeys.includes(w.widget_key)) return false;
+      if (!canAddWidget(w.id)) return false;
+      
+      const matchesSearch = w.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (w.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesCategory = selectedCategory === 'all' || 
+        w.category === selectedCategory || 
+        w.tags?.includes(selectedCategory);
+      
+      return matchesSearch && matchesCategory;
+    });
+  }, [widgets, filterAccessibleWidgets, canAddWidget, currentWidgetKeys, searchTerm, selectedCategory]);
+
+  // Kategori sayaçları
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: 0 };
+    
+    const accessibleWidgets = filterAccessibleWidgets(widgets).filter(w => 
+      w.is_active && !currentWidgetKeys.includes(w.widget_key) && canAddWidget(w.id)
+    );
+    
+    counts.all = accessibleWidgets.length;
+    
+    activeCategories.forEach(cat => {
+      counts[cat.slug] = accessibleWidgets.filter(w => 
+        w.category === cat.slug || w.tags?.includes(cat.slug)
+      ).length;
+    });
+    
+    return counts;
+  }, [widgets, filterAccessibleWidgets, canAddWidget, currentWidgetKeys, activeCategories]);
+
+  // Widget ekle
+  const handleAddWidget = async (widgetKey: string) => {
+    setAddingWidgetId(widgetKey);
+    await addWidgetToPage(widgetKey, targetPage);
+    setAddingWidgetId(null);
+    navigate(-1); // Geri dön
+  };
+
+  return (
+    <div className="h-full flex flex-col bg-background">
+      {/* Header */}
+      <div className="flex-shrink-0 border-b bg-card px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold flex items-center gap-2">
+                <Grid3X3 className="h-6 w-6 text-primary" />
+                Widget Marketplace
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {activeCategories.find(c => c.slug === targetPage)?.name || targetPage} sayfasına widget ekleyin
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>{availableWidgets.length} widget eklenebilir</span>
+            <span>•</span>
+            <span>{currentWidgetKeys.length} widget sayfada mevcut</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Search & Filters */}
+      <div className="flex-shrink-0 px-6 py-4 space-y-4 border-b bg-card/50">
+        {/* Search */}
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Widget ara..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+
+        {/* Category Pills */}
+        {isCategoriesLoading ? (
+          <div className="flex items-center justify-center py-2">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <ScrollArea className="w-full" type="scroll">
+            <div className="flex gap-2 pb-2">
+              <button
+                onClick={() => setSelectedCategory('all')}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
+                  "border",
+                  selectedCategory === 'all'
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background hover:bg-muted border-border text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                Tümü
+                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs bg-background/50">
+                  {categoryCounts.all}
+                </Badge>
+              </button>
+              
+              {activeCategories.map(cat => {
+                const count = categoryCounts[cat.slug] || 0;
+                const isSelected = selectedCategory === cat.slug;
+                
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategory(cat.slug)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
+                      "border",
+                      isSelected
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background hover:bg-muted border-border text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <DynamicIcon iconName={cat.icon || 'Folder'} className="h-3.5 w-3.5" />
+                    {cat.name}
+                    {count > 0 && (
+                      <Badge 
+                        variant="secondary" 
+                        className={cn(
+                          "ml-1 h-5 px-1.5 text-xs",
+                          isSelected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted"
+                        )}
+                      >
+                        {count}
+                      </Badge>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        )}
+      </div>
+
+      {/* Widget Grid */}
+      <div className="flex-1 overflow-auto p-6">
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {[...Array(8)].map((_, i) => (
+              <Skeleton key={i} className="h-48" />
+            ))}
+          </div>
+        ) : availableWidgets.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <LayoutGrid className="h-16 w-16 text-muted-foreground/50 mb-6" />
+            <h3 className="text-xl font-medium">Widget bulunamadı</h3>
+            <p className="text-sm text-muted-foreground mt-2 max-w-md">
+              {currentWidgetKeys.length > 0 
+                ? 'Tüm uygun widget\'lar zaten sayfada mevcut'
+                : 'Arama kriterlerinize uygun widget yok'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {availableWidgets.map((widget) => {
+              const TypeIcon = typeIcons[widget.type] || LayoutGrid;
+              const isAdding = addingWidgetId === widget.widget_key;
+              const hasMetadata = widget.short_description || widget.long_description || widget.technical_notes || widget.preview_image;
+              
+              return (
+                <Card
+                  key={widget.id}
+                  className="cursor-pointer transition-all hover:border-primary hover:shadow-lg group flex flex-col"
+                  onClick={() => !isAdding && handleAddWidget(widget.widget_key)}
+                >
+                  <CardHeader className="pb-2 flex-shrink-0">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        {widget.preview_image ? (
+                          <img 
+                            src={widget.preview_image} 
+                            alt={widget.name}
+                            className="w-12 h-12 object-cover rounded-lg"
+                          />
+                        ) : (
+                          <div className="p-2.5 rounded-lg bg-muted">
+                            <DynamicIcon iconName={widget.icon || 'LayoutGrid'} className="h-6 w-6" />
+                          </div>
+                        )}
+                        <div>
+                          <CardTitle className="text-base font-semibold">{widget.name}</CardTitle>
+                          <div className="flex items-center gap-1 mt-1">
+                            <Badge variant="secondary" className="text-xs">
+                              {activeCategories.find(c => c.slug === widget.category)?.name || widget.category}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {hasMetadata && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDetailWidget(widget);
+                              setShowDetailModal(true);
+                            }}
+                          >
+                            <Info className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                          disabled={isAdding}
+                        >
+                          {isAdding ? (
+                            <Check className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <Plus className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0 flex-1 flex flex-col">
+                    <p className="text-sm text-muted-foreground line-clamp-2 flex-1">
+                      {widget.short_description || widget.description || 'Açıklama yok'}
+                    </p>
+                    <div className="flex items-center gap-2 mt-3 pt-3 border-t">
+                      <TypeIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">
+                        {WIDGET_TYPES.find(t => t.id === widget.type)?.name}
+                      </span>
+                      <span className="text-xs text-muted-foreground">•</span>
+                      <span className="text-xs text-muted-foreground">
+                        {WIDGET_SIZES.find(s => s.id === widget.size)?.name}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Widget Detay Modalı */}
+      <WidgetDetailModal
+        widget={detailWidget}
+        open={showDetailModal}
+        onOpenChange={setShowDetailModal}
+        onAddWidget={(widgetKey) => {
+          handleAddWidget(widgetKey);
+          setShowDetailModal(false);
+        }}
+        isAdding={addingWidgetId === detailWidget?.widget_key}
+      />
+    </div>
+  );
+}
+
+export default WidgetMarketplacePage;

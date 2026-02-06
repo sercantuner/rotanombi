@@ -16,6 +16,8 @@ import { TeamManagementPage } from "@/pages/TeamManagementPage";
 import AdminPage from "@/pages/AdminPage";
 import SuperAdminPanel from "@/pages/SuperAdminPanel";
 import SuperAdminUsersPage from "@/pages/SuperAdminUsersPage";
+import WidgetMarketplacePage from "@/pages/WidgetMarketplacePage";
+import WidgetBuilderPage from "@/pages/WidgetBuilderPage";
 import { DynamicPage } from "@/components/pages/DynamicPage";
 import NotFound from "./pages/NotFound";
 
@@ -56,6 +58,10 @@ const App = () => (
                   <Route path="/super-admin-panel" element={<AppLayout><SuperAdminPanel /></AppLayout>} />
                   <Route path="/super-admin/users" element={<AppLayout><SuperAdminUsersPage /></AppLayout>} />
                   <Route path="/takim" element={<AppLayout><TeamManagementPage /></AppLayout>} />
+                  
+                  {/* Widget Marketplace & Builder - Tam Sayfa */}
+                  <Route path="/marketplace" element={<AppLayout><WidgetMarketplacePage /></AppLayout>} />
+                  <Route path="/widget-builder" element={<AppLayout><WidgetBuilderPage /></AppLayout>} />
                   
                   {/* Dynamic user pages */}
                   <Route path="/page/:pageSlug" element={<AppLayout><DynamicPage /></AppLayout>} />
