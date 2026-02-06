@@ -234,10 +234,68 @@ export function useWidgetAdmin() {
     }
   };
   
+  // Eksik etiketleri widget_categories'e otomatik ekle
+  const ensureTagsExist = async (tagSlugs: string[]): Promise<void> => {
+    if (!tagSlugs || tagSlugs.length === 0) return;
+    
+    try {
+      // Mevcut etiketleri al
+      const { data: existingCategories, error: fetchError } = await supabase
+        .from('widget_categories')
+        .select('slug')
+        .in('slug', tagSlugs);
+      
+      if (fetchError) throw fetchError;
+      
+      const existingSlugs = (existingCategories || []).map(c => c.slug);
+      const missingSlugs = tagSlugs.filter(slug => !existingSlugs.includes(slug));
+      
+      // Eksik etiketleri oluştur
+      if (missingSlugs.length > 0) {
+        // Varsayılan ikon ve isim için mapping
+        const iconMap: Record<string, string> = {
+          'finans': 'Wallet', 'satis': 'ShoppingCart', 'stok': 'Package',
+          'cari': 'Users', 'performans': 'TrendingUp', 'ozet': 'FileText',
+          'analiz': 'BarChart3', 'rapor': 'ClipboardCheck', 'grafik': 'LineChart',
+          'trend': 'Activity', 'banka': 'Landmark', 'kasa': 'Wallet',
+          'nakit': 'Banknote', 'doviz': 'DollarSign', 'cek': 'Receipt',
+          'borc-alacak': 'Scale', 'odeme': 'CreditCard', 'yaslandirma': 'Clock',
+          'harita': 'Map', 'cografi': 'MapPin', 'depo': 'Warehouse',
+          'uyari': 'AlertTriangle', 'kontrol': 'Shield', 'gorev': 'CheckSquare',
+          'is-takibi': 'ClipboardList', 'pazarlama': 'Megaphone', 'sektor': 'Building',
+          'crm': 'UserCircle', 'nakit-akisi': 'Workflow',
+        };
+        
+        const newCategories = missingSlugs.map((slug, index) => ({
+          slug: slug,
+          name: slug.charAt(0).toUpperCase() + slug.slice(1).replace(/-/g, ' '),
+          icon: iconMap[slug] || 'Tag',
+          sort_order: 100 + index,
+          is_active: true,
+        }));
+        
+        const { error: insertError } = await supabase
+          .from('widget_categories')
+          .insert(newCategories);
+        
+        if (insertError) {
+          console.error('Error creating missing tags:', insertError);
+        } else {
+          console.log(`Created ${missingSlugs.length} new tags:`, missingSlugs);
+        }
+      }
+    } catch (err) {
+      console.error('Error ensuring tags exist:', err);
+    }
+  };
+
   // Widget etiketlerini kaydet
   const saveWidgetTags = async (widgetId: string, tagSlugs: string[]): Promise<void> => {
     try {
-      // Önce widget_categories'den slug'lara göre id'leri al
+      // Önce eksik etiketleri oluştur
+      await ensureTagsExist(tagSlugs);
+      
+      // Sonra widget_categories'den slug'lara göre id'leri al
       const { data: categories, error: catError } = await supabase
         .from('widget_categories')
         .select('id, slug')
