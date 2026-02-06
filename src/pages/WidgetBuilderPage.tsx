@@ -13,7 +13,7 @@ export function WidgetBuilderPage() {
   const editWidgetId = searchParams.get('edit');
   
   const handleClose = () => {
-    navigate(-1);
+    navigate('/dashboard');
   };
 
   const handleSave = () => {
