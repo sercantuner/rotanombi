@@ -1817,7 +1817,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, sampleData, chatHistory, mode, useMetadata, existingCode } = await req.json();
+    const { prompt, sampleData, chatHistory, mode, useMetadata, existingCode, dataSourceInfo, dataAnalysis, multiQueryInfo } = await req.json();
 
     if (!prompt) {
       throw new Error("Prompt gerekli");
@@ -1828,7 +1828,7 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY yapılandırılmamış");
     }
 
-    console.log("[AI Code Generator v2.3] Mod:", mode || 'generate', "- Metadata:", useMetadata ? 'aktif' : 'pasif', "- ExistingCode:", existingCode ? 'var' : 'yok');
+    console.log("[AI Code Generator v2.4] Mod:", mode || 'generate', "- Metadata:", useMetadata ? 'aktif' : 'pasif', "- ExistingCode:", existingCode ? 'var' : 'yok', "- DataSourceInfo:", dataSourceInfo ? 'var' : 'yok');
 
     // Mesajları oluştur
     let messages: Array<{ role: string; content: string }>;
@@ -1888,20 +1888,65 @@ Widget kodunu ürettikten sonra aşağıdaki metadata bilgilerini de sağlamalı
 
     if (mode === 'metadata-only' && existingCode) {
       // Sadece metadata üretimi - kod zaten var
-      // Kodu kısaltarak token tasarrufu sağla (ilk 3000 karakter yeterli)
-      const truncatedCode = existingCode.length > 3000 
-        ? existingCode.substring(0, 3000) + '\n// ... (kod devam ediyor)'
+      // Metadata modunda KODU kısaltma - tamamını gönder (max 8000)
+      const truncatedCode = existingCode.length > 8000 
+        ? existingCode.substring(0, 8000) + '\n// ... (kod devam ediyor)'
         : existingCode;
       
-      const metadataOnlySystemPrompt = `Sen bir widget analiz uzmanısın. Sana verilen widget kodunu analiz edip metadata oluşturacaksın.
+      // Zenginleştirilmiş system prompt
+      const metadataOnlySystemPrompt = `Sen bir widget analiz uzmanısın. Sana verilen widget KODU, VERİ KAYNAĞI ve ALAN İSTATİSTİKLERİNİ dikkatlice analiz edip doğru metadata oluşturacaksın.
 
 SADECE generate_widget_with_metadata tool'unu çağır. Başka hiçbir şey yazma.
 
-Widget'ın yaptığı işlemi, kullandığı alanları, hesaplamaları analiz et ve uygun metadata üret.`;
+⚠️ KRİTİK KURALLAR:
+1. Açıklamaları KODU ve VERİ BİLGİLERİNİ analiz ederek yaz - varsayım yapma!
+2. Kodda hangi alanlar kullanılıyor, hangi hesaplamalar yapılıyor dikkatlice bak
+3. Veri kaynağı bilgisini (module, method, alanlar) dikkate al
+4. Alan istatistiklerini (min, max, toplam, tip) inceleyerek widget'ın ne yaptığını anla
+5. Grafik tipini (bar, line, pie, map, radar vb.) doğru tespit et
+
+Widget'ın yaptığı işlemi, kullandığı alanları, hesaplamaları analiz et ve DOĞRU metadata üret.`;
+
+      // Zenginleştirilmiş prompt - frontend'den gelen tüm bağlamı kullan
+      let enrichedPrompt = prompt; // Frontend'den gelen zengin prompt'u kullan
+      
+      // Eğer frontend zengin prompt göndermediyse, eski format için fallback
+      if (!prompt.includes('VERİ KAYNAĞI BİLGİSİ') && dataSourceInfo) {
+        enrichedPrompt = `Bu widget kodunu analiz et ve metadata oluştur.
+
+═══════════════════════════════════════════════════════════════
+                    VERİ KAYNAĞI BİLGİSİ
+═══════════════════════════════════════════════════════════════
+
+📊 Veri Kaynağı: ${dataSourceInfo.name || 'Bilinmiyor'}
+   - API: ${dataSourceInfo.module || '?'}.${dataSourceInfo.method || '?'}
+   - Toplam Kayıt: ${dataSourceInfo.recordCount || '?'}
+   - Alanlar: ${Array.isArray(dataSourceInfo.allFields) ? dataSourceInfo.allFields.join(', ') : 'Bilinmiyor'}
+   ${dataSourceInfo.description ? '- Açıklama: ' + dataSourceInfo.description : ''}
+
+${multiQueryInfo ? '📊 ÇOKLU VERİ KAYNAĞI:\\n' + multiQueryInfo.map((q: any) => '   • ' + q.queryName + ' (' + q.dataSourceName + '): ' + q.recordCount + ' kayıt').join('\\n') + '\\n' : ''}
+
+${dataAnalysis && Object.keys(dataAnalysis).length > 0 ? '═══════════════════════════════════════════════════════════════\\n                    ALAN İSTATİSTİKLERİ\\n═══════════════════════════════════════════════════════════════\\n\\n' + Object.entries(dataAnalysis).map(([field, stats]: [string, any]) => {
+  let info = '📈 ' + field + ': Tip=' + stats.type + ', Benzersiz=' + stats.uniqueCount;
+  if (stats.min !== undefined) info += ', Min=' + stats.min + ', Max=' + stats.max + ', Toplam=' + stats.sum;
+  if (stats.minDate) info += ', Tarih: ' + stats.minDate + ' - ' + stats.maxDate;
+  return info;
+}).join('\\n') + '\\n' : ''}
+
+═══════════════════════════════════════════════════════════════
+                    WIDGET KODU
+═══════════════════════════════════════════════════════════════
+
+\\\`\\\`\\\`javascript
+${truncatedCode}
+\\\`\\\`\\\`
+
+${sampleData ? '═══════════════════════════════════════════════════════════════\\n                    ÖRNEK VERİ\\n═══════════════════════════════════════════════════════════════\\n\\n' + JSON.stringify(sampleData, null, 2).slice(0, 2000) + '\\n' : ''}`;
+      }
 
       messages = [
         { role: 'system', content: metadataOnlySystemPrompt + metadataInstructions },
-        { role: 'user', content: `Bu widget kodunu analiz et ve metadata oluştur:\n\n${truncatedCode}` }
+        { role: 'user', content: enrichedPrompt }
       ];
     } else if (mode === 'refine' && chatHistory && chatHistory.length > 0) {
       // İyileştirme modu - chat geçmişini kullan (metadata yok)
