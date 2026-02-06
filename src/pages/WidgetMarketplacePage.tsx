@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Search, Check, LayoutGrid, PieChart, Table2, List, Activity, Loader2, Info, ArrowLeft, Grid3X3, Star, Tag, X } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import * as LucideIcons from 'lucide-react';
@@ -21,6 +20,7 @@ import { cn } from '@/lib/utils';
 import { WidgetDetailModal } from '@/components/dashboard/WidgetDetailModal';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { TagFilterPopover } from '@/components/marketplace/TagFilterPopover';
 
 // Dinamik icon renderer
 const DynamicIcon = ({ iconName, className }: { iconName: string; className?: string }) => {
@@ -218,87 +218,84 @@ export function WidgetMarketplacePage() {
             />
           </div>
           
-          {/* Seçili etiketler */}
-          {selectedTags.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Tag className="h-4 w-4 text-muted-foreground" />
-              <div className="flex flex-wrap gap-1">
-                {selectedTags.map(tag => (
-                  <Badge 
-                    key={tag} 
-                    variant="default" 
-                    className="gap-1 cursor-pointer hover:bg-primary/80"
-                    onClick={() => setSelectedTags(prev => prev.filter(t => t !== tag))}
-                  >
-                    {activeCategories.find(c => c.slug === tag)?.name || tag}
-                    <X className="h-3 w-3" />
-                  </Badge>
-                ))}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs"
-                  onClick={() => setSelectedTags([])}
-                >
-                  Temizle
-                </Button>
-              </div>
-            </div>
-          )}
+          {/* Tag Filter Popover */}
+          <TagFilterPopover
+            categories={activeCategories}
+            selectedTags={selectedTags}
+            onTagsChange={setSelectedTags}
+            tagCounts={categoryCounts}
+            isLoading={isCategoriesLoading}
+          />
         </div>
 
-        {/* Category Pills - Click to filter, Shift+Click to multi-tag */}
+        {/* Seçili etiketler badge'leri */}
+        {selectedTags.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <Tag className="h-4 w-4 text-muted-foreground" />
+            {selectedTags.map(tag => (
+              <Badge 
+                key={tag} 
+                variant="default" 
+                className="gap-1 cursor-pointer hover:bg-primary/80"
+                onClick={() => setSelectedTags(prev => prev.filter(t => t !== tag))}
+              >
+                {activeCategories.find(c => c.slug === tag)?.name || tag}
+                <X className="h-3 w-3" />
+              </Badge>
+            ))}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={() => setSelectedTags([])}
+            >
+              Tümünü Temizle
+            </Button>
+          </div>
+        )}
+
+        {/* Popular Category Pills - Sadece en popüler 6 kategori */}
         {isCategoriesLoading ? (
           <div className="flex items-center justify-center py-2">
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <ScrollArea className="w-full" type="scroll">
-            <div className="flex gap-2 pb-2">
-              <button
-                onClick={() => {
-                  setSelectedCategory('all');
-                  setSelectedTags([]);
-                }}
-                className={cn(
-                  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
-                  "border",
-                  selectedCategory === 'all' && selectedTags.length === 0
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background hover:bg-muted border-border text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <LayoutGrid className="h-3.5 w-3.5" />
-                Tümü
-                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs bg-background/50">
-                  {categoryCounts.all}
-                </Badge>
-              </button>
-              
-              {activeCategories.map(cat => {
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => {
+                setSelectedCategory('all');
+                setSelectedTags([]);
+              }}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
+                "border",
+                selectedCategory === 'all' && selectedTags.length === 0
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background hover:bg-muted border-border text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              Tümü
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs bg-background/50">
+                {categoryCounts.all}
+              </Badge>
+            </button>
+            
+            {/* Sadece popüler 6 kategori (widget sayısına göre sıralı) */}
+            {activeCategories
+              .filter(cat => (categoryCounts[cat.slug] || 0) > 0)
+              .sort((a, b) => (categoryCounts[b.slug] || 0) - (categoryCounts[a.slug] || 0))
+              .slice(0, 6)
+              .map(cat => {
                 const count = categoryCounts[cat.slug] || 0;
-                const isSelectedAsCategory = selectedCategory === cat.slug;
-                const isSelectedAsTag = selectedTags.includes(cat.slug);
-                const isSelected = isSelectedAsCategory || isSelectedAsTag;
+                const isSelected = selectedCategory === cat.slug;
                 
                 return (
                   <button
                     key={cat.id}
-                    onClick={(e) => {
-                      if (e.shiftKey) {
-                        // Shift+Click: Etiket olarak ekle/çıkar
-                        setSelectedTags(prev => 
-                          prev.includes(cat.slug) 
-                            ? prev.filter(t => t !== cat.slug)
-                            : [...prev, cat.slug]
-                        );
-                      } else {
-                        // Normal click: Kategori olarak seç
-                        setSelectedCategory(isSelectedAsCategory ? 'all' : cat.slug);
-                        setSelectedTags([]);
-                      }
+                    onClick={() => {
+                      setSelectedCategory(isSelected ? 'all' : cat.slug);
                     }}
-                    title={`Click: Kategori filtrele | Shift+Click: Etiket ekle`}
                     className={cn(
                       "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
                       "border",
@@ -309,22 +306,19 @@ export function WidgetMarketplacePage() {
                   >
                     <DynamicIcon iconName={cat.icon || 'Folder'} className="h-3.5 w-3.5" />
                     {cat.name}
-                    {count > 0 && (
-                      <Badge 
-                        variant="secondary" 
-                        className={cn(
-                          "ml-1 h-5 px-1.5 text-xs",
-                          isSelected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted"
-                        )}
-                      >
-                        {count}
-                      </Badge>
-                    )}
+                    <Badge 
+                      variant="secondary" 
+                      className={cn(
+                        "ml-1 h-5 px-1.5 text-xs",
+                        isSelected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted"
+                      )}
+                    >
+                      {count}
+                    </Badge>
                   </button>
                 );
               })}
-            </div>
-          </ScrollArea>
+          </div>
         )}
       </div>
 
