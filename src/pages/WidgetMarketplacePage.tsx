@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, Check, LayoutGrid, PieChart, Table2, List, Activity, Loader2, Info, ArrowLeft, Grid3X3, Star } from 'lucide-react';
+import { Plus, Search, Check, LayoutGrid, PieChart, Table2, List, Activity, Loader2, Info, ArrowLeft, Grid3X3, Star, Tag, X } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import * as LucideIcons from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -55,6 +55,7 @@ export function WidgetMarketplacePage() {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [addingWidgetId, setAddingWidgetId] = useState<string | null>(null);
   const [avgRatings, setAvgRatings] = useState<Record<string, number | null>>({});
   
@@ -81,9 +82,13 @@ export function WidgetMarketplacePage() {
         w.category === selectedCategory || 
         w.tags?.includes(selectedCategory);
       
-      return matchesSearch && matchesCategory;
+      // Etiket filtresi: seçilen tüm etiketlere sahip olmalı
+      const matchesTags = selectedTags.length === 0 || 
+        selectedTags.every(tag => w.tags?.includes(tag) || w.ai_suggested_tags?.includes(tag));
+      
+      return matchesSearch && matchesCategory && matchesTags;
     });
-  }, [widgets, filterAccessibleWidgets, canAddWidget, currentWidgetKeys, searchTerm, selectedCategory]);
+  }, [widgets, filterAccessibleWidgets, canAddWidget, currentWidgetKeys, searchTerm, selectedCategory, selectedTags]);
 
   // Kategori sayaçları
   const categoryCounts = useMemo(() => {
@@ -200,18 +205,49 @@ export function WidgetMarketplacePage() {
 
       {/* Search & Filters */}
       <div className="flex-shrink-0 px-6 py-4 space-y-4 border-b bg-card/50">
-        {/* Search */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Widget ara..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
+        {/* Search + Tag Filter Row */}
+        <div className="flex items-center gap-4">
+          {/* Search */}
+          <div className="relative max-w-md flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Widget ara..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          
+          {/* Seçili etiketler */}
+          {selectedTags.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Tag className="h-4 w-4 text-muted-foreground" />
+              <div className="flex flex-wrap gap-1">
+                {selectedTags.map(tag => (
+                  <Badge 
+                    key={tag} 
+                    variant="default" 
+                    className="gap-1 cursor-pointer hover:bg-primary/80"
+                    onClick={() => setSelectedTags(prev => prev.filter(t => t !== tag))}
+                  >
+                    {activeCategories.find(c => c.slug === tag)?.name || tag}
+                    <X className="h-3 w-3" />
+                  </Badge>
+                ))}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => setSelectedTags([])}
+                >
+                  Temizle
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Category Pills */}
+        {/* Category Pills - Click to filter, Shift+Click to multi-tag */}
         {isCategoriesLoading ? (
           <div className="flex items-center justify-center py-2">
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -220,11 +256,14 @@ export function WidgetMarketplacePage() {
           <ScrollArea className="w-full" type="scroll">
             <div className="flex gap-2 pb-2">
               <button
-                onClick={() => setSelectedCategory('all')}
+                onClick={() => {
+                  setSelectedCategory('all');
+                  setSelectedTags([]);
+                }}
                 className={cn(
                   "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
                   "border",
-                  selectedCategory === 'all'
+                  selectedCategory === 'all' && selectedTags.length === 0
                     ? "bg-primary text-primary-foreground border-primary"
                     : "bg-background hover:bg-muted border-border text-muted-foreground hover:text-foreground"
                 )}
@@ -238,12 +277,28 @@ export function WidgetMarketplacePage() {
               
               {activeCategories.map(cat => {
                 const count = categoryCounts[cat.slug] || 0;
-                const isSelected = selectedCategory === cat.slug;
+                const isSelectedAsCategory = selectedCategory === cat.slug;
+                const isSelectedAsTag = selectedTags.includes(cat.slug);
+                const isSelected = isSelectedAsCategory || isSelectedAsTag;
                 
                 return (
                   <button
                     key={cat.id}
-                    onClick={() => setSelectedCategory(cat.slug)}
+                    onClick={(e) => {
+                      if (e.shiftKey) {
+                        // Shift+Click: Etiket olarak ekle/çıkar
+                        setSelectedTags(prev => 
+                          prev.includes(cat.slug) 
+                            ? prev.filter(t => t !== cat.slug)
+                            : [...prev, cat.slug]
+                        );
+                      } else {
+                        // Normal click: Kategori olarak seç
+                        setSelectedCategory(isSelectedAsCategory ? 'all' : cat.slug);
+                        setSelectedTags([]);
+                      }
+                    }}
+                    title={`Click: Kategori filtrele | Shift+Click: Etiket ekle`}
                     className={cn(
                       "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
                       "border",
