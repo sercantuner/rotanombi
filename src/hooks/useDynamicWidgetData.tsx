@@ -1074,8 +1074,12 @@ export function useDynamicWidgetData(
   
   useEffect(() => {
     // dataSources henüz yüklenmediyse bekle (isLoading yerine array kontrolü)
-    if (dataSourcesReadyKey === 'loading' && config?.dataSourceId) {
-      console.log('[Widget] Waiting for dataSources to load...');
+    // ÖNEMLİ: Hem tekil dataSourceId hem de multiQuery widget'ları için dataSources gerekli
+    const needsDataSources = config?.dataSourceId || 
+      (config?.multiQuery?.queries && config.multiQuery.queries.some(q => q.dataSourceId));
+    
+    if (dataSourcesReadyKey === 'loading' && needsDataSources) {
+      console.log('[Widget] Waiting for dataSources to load... (multiQuery:', !!config?.multiQuery, ')');
       return;
     }
     
