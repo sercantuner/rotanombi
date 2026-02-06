@@ -1733,6 +1733,14 @@ const getWidgetMetadataTool = () => ({
           type: "string", 
           description: "Widget JavaScript kodu - function Widget({ data, colors, filters }) ile başlayıp return Widget; ile bitmeli" 
         },
+        suggestedName: {
+          type: "string",
+          description: "Widget için önerilen isim (her kelimenin ilk harfi büyük, Türkçe). Örnek: 'Cari Bakiye Özeti', 'Günlük Satış Trendi', 'Stok Kritik Uyarılar'"
+        },
+        suggestedIcon: {
+          type: "string",
+          description: "Widget için önerilen Lucide ikon adı. Finans: DollarSign, CreditCard, Wallet, PiggyBank. Satış: ShoppingCart, TrendingUp, Store. Stok: Package, Box, Archive. Cari: Users, Building, UserCheck. Performans: Target, Award, Activity, Gauge. Grafik: BarChart2, PieChart, LineChart. Uyarı: AlertTriangle, AlertCircle, Bell. Zaman: Clock, Calendar, Timer."
+        },
         suggestedTags: { 
           type: "array", 
           items: { type: "string" },
@@ -1777,7 +1785,7 @@ const getWidgetMetadataTool = () => ({
           description: "Verinin işlenme akışı - filtre, gruplama, sıralama adımları" 
         }
       },
-      required: ["code", "suggestedTags", "shortDescription", "longDescription", "usedFields", "dataFlow"]
+      required: ["code", "suggestedName", "suggestedIcon", "suggestedTags", "shortDescription", "longDescription", "usedFields", "dataFlow"]
     }
   }
 });
@@ -1814,7 +1822,27 @@ serve(async (req) => {
 
 Widget kodunu ürettikten sonra aşağıdaki metadata bilgilerini de sağlamalısın:
 
-📌 ETİKET ÖNERİLERİ (suggestedTags):
+📝 İSİM ÖNERİSİ (suggestedName) - ZORUNLU:
+   - Her kelimenin ilk harfi büyük (Title Case)
+   - Türkçe karakterler kullan
+   - Kısa ve açıklayıcı (2-5 kelime)
+   - Örnekler: "Cari Bakiye Özeti", "Günlük Satış Trendi", "Stok Uyarıları", "Vadesi Geçen Çekler"
+
+📌 İKON ÖNERİSİ (suggestedIcon) - ZORUNLU:
+   Widget'ın içeriğine uygun Lucide ikon adı seç:
+   
+   | Kategori     | Önerilen İkonlar                           |
+   |--------------|-------------------------------------------|
+   | Finans       | DollarSign, CreditCard, Wallet, PiggyBank |
+   | Satış        | ShoppingCart, TrendingUp, Store           |
+   | Stok         | Package, Box, Archive                     |
+   | Cari         | Users, Building, UserCheck                |
+   | Performans   | Target, Award, Activity, Gauge            |
+   | Grafik       | BarChart2, PieChart, LineChart, TrendingUp|
+   | Uyarı        | AlertTriangle, AlertCircle, Bell          |
+   | Zaman        | Clock, Calendar, Timer, History           |
+
+🏷️ ETİKET ÖNERİLERİ (suggestedTags):
    - Widget'ın içeriğine uygun 3-5 etiket öner
    - Mevcut kategorilerden seç: finans, satis, cari, stok, performans, rapor, analiz, ozet
 
@@ -1920,6 +1948,8 @@ Widget kodunu ürettikten sonra aşağıdaki metadata bilgilerini de sağlamalı
           
           // Metadata'yı ayıkla
           aiMetadata = {
+            suggestedName: args.suggestedName || "",
+            suggestedIcon: args.suggestedIcon || "Code",
             suggestedTags: args.suggestedTags || [],
             shortDescription: args.shortDescription || "",
             longDescription: args.longDescription || "",
@@ -1931,7 +1961,11 @@ Widget kodunu ürettikten sonra aşağıdaki metadata bilgilerini de sağlamalı
             }
           };
           
-          console.log("[AI Code Generator v2.2] Tool calling başarılı, metadata alındı");
+          console.log("[AI Code Generator v2.3] Tool calling başarılı, metadata alındı:", {
+            suggestedName: aiMetadata.suggestedName,
+            suggestedIcon: aiMetadata.suggestedIcon,
+            tagsCount: aiMetadata.suggestedTags.length
+          });
         } catch (parseError) {
           console.error("[AI Code Generator] Tool arguments parse hatası:", parseError);
           // Fallback: raw content kullan

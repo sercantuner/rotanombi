@@ -15,7 +15,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { DataSourceSelector } from './DataSourceSelector';
 import { MultiQueryBuilder } from './MultiQueryBuilder';
 import { ExampleWidgetPickerModal } from './ExampleWidgetPickerModal';
-import { CategoryPickerModal } from './CategoryPickerModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -463,9 +462,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   const [widgetSize, setWidgetSize] = useState<'sm' | 'md' | 'lg' | 'xl' | 'full'>('lg');
   const [widgetCategory, setWidgetCategory] = useState<string>('dashboard');
   
-  // Kategori seçim modal
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
-  
+
   // Veri kaynağı (tek kaynak modu)
   const [selectedDataSourceId, setSelectedDataSourceId] = useState<string | null>(null);
   const selectedDataSource = selectedDataSourceId ? getDataSourceById(selectedDataSourceId) : null;
@@ -986,12 +983,39 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
         
         // AI Metadata'yı state'lere aktar
         if (aiMetadata) {
+          // Widget adını AI'dan al
+          if (aiMetadata.suggestedName) {
+            setWidgetName(aiMetadata.suggestedName);
+            // Widget key'i de addan oluştur
+            const cleanedName = aiMetadata.suggestedName
+              .toLowerCase()
+              .replace(/[^a-z0-9ğüşıöçĞÜŞİÖÇ\s]/g, '')
+              .replace(/[ğ]/g, 'g').replace(/[ü]/g, 'u').replace(/[ş]/g, 's')
+              .replace(/[ı]/g, 'i').replace(/[ö]/g, 'o').replace(/[ç]/g, 'c')
+              .replace(/\s+/g, '_');
+            setWidgetKey('ai_' + cleanedName + '_' + Date.now().toString(36));
+          }
+          
+          // Widget ikonunu AI'dan al
+          if (aiMetadata.suggestedIcon) {
+            setWidgetIcon(aiMetadata.suggestedIcon);
+          }
+          
+          // Önerilen etiketler
           if (aiMetadata.suggestedTags?.length) {
             setAiSuggestedTags(aiMetadata.suggestedTags);
+            // İlk etiket kategori olarak kullanılır
+            if (aiMetadata.suggestedTags[0]) {
+              setWidgetCategory(aiMetadata.suggestedTags[0]);
+            }
           }
+          
+          // Kısa açıklama - hem widgetDescription hem shortDescription'a yaz
           if (aiMetadata.shortDescription) {
             setShortDescription(aiMetadata.shortDescription);
+            setWidgetDescription(aiMetadata.shortDescription);
           }
+          
           if (aiMetadata.longDescription) {
             setLongDescription(aiMetadata.longDescription);
           }
@@ -1145,12 +1169,12 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
       widget_key: widgetKey,
       name: widgetName,
       description: shortDescription || widgetDescription, // Kısa açıklamayı description olarak kullan
-      category: widgetCategory as any,
+      category: aiSuggestedTags[0] || widgetCategory as any, // İlk etiket kategori olarak
       type: 'chart',
       data_source: 'genel',
       size: widgetSize,
       icon: widgetIcon,
-      default_page: widgetCategory as any,
+      default_page: (aiSuggestedTags[0] || widgetCategory || 'dashboard') as any, // İlk etiket
       default_visible: true,
       available_filters: [],
       default_filters: {},
@@ -1160,6 +1184,8 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
       is_default: false,
       sort_order: 100,
       builder_config: builderConfig as any,
+      // AI tarafından üretilen etiketler widget_tags tablosuna kaydedilecek
+      tags: aiSuggestedTags.length > 0 ? aiSuggestedTags : ['dashboard'],
       // AI Metadata alanları
       short_description: shortDescription || undefined,
       long_description: longDescription || undefined,
@@ -1315,18 +1341,21 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
                 <Input
                   value={widgetKey}
                   onChange={(e) => setWidgetKey(e.target.value.toLowerCase().replace(/\s+/g, '_'))}
-                  placeholder="custom_widget_key"
+                  placeholder="ai_widget_key"
                   className="h-9"
+                  disabled
                 />
+                <span className="text-[10px] text-muted-foreground">AI tarafından oluşturulur</span>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Widget Adı</Label>
                 <Input
                   value={widgetName}
                   onChange={(e) => setWidgetName(e.target.value)}
-                  placeholder="Özel Widget"
+                  placeholder="AI tarafından oluşturulacak"
                   className="h-9"
                 />
+                <span className="text-[10px] text-muted-foreground">AI tarafından önerilir</span>
               </div>
             </div>
 
@@ -1335,74 +1364,45 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
               <Input
                 value={widgetDescription}
                 onChange={(e) => setWidgetDescription(e.target.value)}
-                placeholder="Widget açıklaması"
+                placeholder="AI tarafından oluşturulacak"
                 className="h-9"
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Boyut</Label>
-                <Select value={widgetSize} onValueChange={(v: any) => setWidgetSize(v)}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {WIDGET_SIZES.map(s => (
-                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Kategori</Label>
-                <Button 
-                  variant="outline" 
-                  className="w-full justify-between h-9 text-sm"
-                  onClick={() => setShowCategoryModal(true)}
-                  disabled={isCategoriesLoading}
-                >
-                  <span className="flex items-center gap-2">
-                    {isCategoriesLoading ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Yükleniyor...
-                      </>
-                    ) : getCategoryBySlug(widgetCategory) ? (
-                      <>
-                        <DynamicIcon iconName={getCategoryBySlug(widgetCategory)?.icon || 'Folder'} className="h-3.5 w-3.5" />
-                        {getCategoryBySlug(widgetCategory)?.name}
-                      </>
-                    ) : (
-                      <>
-                        <Folder className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="text-muted-foreground">Kategori seçin</span>
-                      </>
-                    )}
-                  </span>
-                  <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                </Button>
-              </div>
+              <span className="text-[10px] text-muted-foreground">AI kısa açıklama üretir</span>
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">İkon</Label>
-              <div className="grid grid-cols-8 gap-1 p-2 border rounded-lg max-h-24 overflow-y-auto">
-                {AVAILABLE_ICONS.slice(0, 32).map(iconName => (
-                  <button
-                    key={iconName}
-                    onClick={() => setWidgetIcon(iconName)}
-                    className={cn(
-                      "p-1.5 rounded hover:bg-accent transition-colors",
-                      widgetIcon === iconName && "bg-primary/20 ring-1 ring-primary"
-                    )}
-                    title={iconName}
-                  >
-                    <DynamicIcon iconName={iconName} className="h-4 w-4" />
-                  </button>
-                ))}
-              </div>
+              <Label className="text-xs">Boyut</Label>
+              <Select value={widgetSize} onValueChange={(v: any) => setWidgetSize(v)}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {WIDGET_SIZES.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+
+            {/* AI Önerilen Etiketler gösterimi */}
+            {aiSuggestedTags.length > 0 && (
+              <div className="p-2 bg-muted/30 rounded-lg">
+                <Label className="text-xs text-muted-foreground">AI Önerilen Etiketler</Label>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {aiSuggestedTags.map((tag, idx) => (
+                    <Badge key={idx} variant="secondary" className="text-xs">{tag}</Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* AI Önerilen İkon gösterimi */}
+            {widgetIcon && widgetIcon !== 'Code' && (
+              <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
+                <DynamicIcon iconName={widgetIcon} className="h-5 w-5" />
+                <span className="text-xs text-muted-foreground">AI Önerilen İkon: {widgetIcon}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -2749,14 +2749,6 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
             </DialogFooter>
           </DialogContent>
         </Dialog>
-        
-        {/* Kategori Seçim Modal */}
-        <CategoryPickerModal
-          open={showCategoryModal}
-          onOpenChange={setShowCategoryModal}
-          selectedCategory={widgetCategory}
-          onSelect={(slug) => setWidgetCategory(slug)}
-        />
       </>
     );
   }
@@ -2812,14 +2804,6 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
         </DialogFooter>
       </DialogContent>
     </Dialog>
-    
-    {/* Kategori Seçim Modal */}
-    <CategoryPickerModal
-      open={showCategoryModal}
-      onOpenChange={setShowCategoryModal}
-      selectedCategory={widgetCategory}
-      onSelect={(slug) => setWidgetCategory(slug)}
-    />
     </>
   );
 }
