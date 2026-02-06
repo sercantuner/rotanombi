@@ -1305,7 +1305,11 @@ export type Database = {
     }
     Functions: {
       get_cache_record_counts: {
-        Args: { p_firma_kodu: string; p_sunucu_adi: string }
+        Args: {
+          p_donem_kodu?: number
+          p_firma_kodu: string
+          p_sunucu_adi: string
+        }
         Returns: {
           data_source_slug: string
           record_count: number
