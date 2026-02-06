@@ -1304,6 +1304,13 @@ export type Database = {
       }
     }
     Functions: {
+      get_cache_record_counts: {
+        Args: { p_firma_kodu: string; p_sunucu_adi: string }
+        Returns: {
+          data_source_slug: string
+          record_count: number
+        }[]
+      }
       get_safe_profile: {
         Args: { _target_user_id: string }
         Returns: {

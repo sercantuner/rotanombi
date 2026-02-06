@@ -74,6 +74,7 @@ export function useSyncData() {
       // Cache'i invalidate et
       queryClient.invalidateQueries({ queryKey: ['company-data', dataSourceSlug] });
       queryClient.invalidateQueries({ queryKey: ['sync-history'] });
+      queryClient.invalidateQueries({ queryKey: ['cache-record-counts'] });
 
       return {
         success: true,
@@ -136,6 +137,7 @@ export function useSyncData() {
     // Cache'leri invalidate et
     queryClient.invalidateQueries({ queryKey: ['company-data'] });
     queryClient.invalidateQueries({ queryKey: ['sync-history'] });
+    queryClient.invalidateQueries({ queryKey: ['cache-record-counts'] });
   }, [diaProfile, dataSources, syncDataSource, queryClient]);
 
   return {
