@@ -1,13 +1,13 @@
 // Dinamik Konteyner Render Bileşeni
 
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useContainerWidgets } from '@/hooks/useUserPages';
 // NOT: useDataSourceLoader KALDIRILDI - her container için ayrı instance oluşturuyordu!
 // loadSingleDataSource artık prop olarak alınıyor
 import { useChartColorPalette, COLOR_PALETTES } from '@/hooks/useChartColorPalette';
 import { PageContainer, CONTAINER_TEMPLATES, ContainerType } from '@/lib/pageTypes';
 import { Widget } from '@/lib/widgetTypes';
-import { WidgetSlotPicker } from './WidgetSlotPicker';
 import { ContainerSettingsModal, getContainerStyleClasses } from './ContainerSettingsModal';
 import { DynamicWidgetRenderer } from '@/components/dashboard/DynamicWidgetRenderer';
 import { Button } from '@/components/ui/button';
@@ -53,11 +53,10 @@ export function ContainerRenderer({
   pageId = null,
   loadSingleDataSource
 }: ContainerRendererProps) {
+  const navigate = useNavigate();
   const { widgets: containerWidgets, addWidget, removeWidget, refreshWidgets } = useContainerWidgets(container.id);
   const { currentPaletteName, setPalette } = useChartColorPalette();
-  const [widgetPickerOpen, setWidgetPickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState<number>(0);
   const [widgetDetails, setWidgetDetails] = useState<Record<string, Widget>>({});
   const [localContainer, setLocalContainer] = useState(container);
 
@@ -137,23 +136,16 @@ export function ContainerRenderer({
     // Bu slotta zaten widget var mı?
     const existingWidget = containerWidgets.find(w => w.slot_index === slotIndex);
     if (!existingWidget) {
-      setSelectedSlot(slotIndex);
-      setWidgetPickerOpen(true);
+      // Tam sayfa marketplace'e yönlendir
+      const params = new URLSearchParams();
+      if (pageId) params.set('page', pageId);
+      params.set('container', container.id);
+      params.set('slot', slotIndex.toString());
+      navigate(`/marketplace?${params.toString()}`);
     }
   };
 
-  const handleWidgetSelect = async (widget: Widget) => {
-    await addWidget(widget.id, selectedSlot);
-    refreshWidgets();
-    toast.success(`${widget.name} eklendi`);
-    
-    // Widget'ın veri kaynağını hemen yükle (varsa ve loadSingleDataSource prop'u geçildiyse)
-    const builderConfig = widget.builder_config as any;
-    if (builderConfig?.dataSourceId && loadSingleDataSource) {
-      console.log(`[ContainerRenderer] Loading data source for new widget: ${builderConfig.dataSourceId}`);
-      loadSingleDataSource(builderConfig.dataSourceId);
-    }
-  };
+  // handleWidgetSelect artık marketplace'den yapılıyor
 
   const handleRemoveWidget = async (containerWidgetId: string, widgetName?: string) => {
     try {
@@ -233,8 +225,12 @@ export function ContainerRenderer({
                 className="h-6 text-[10px] px-2"
                 onClick={() => {
                   handleRemoveWidget(slotWidget.id);
-                  setSelectedSlot(slotIndex);
-                  setWidgetPickerOpen(true);
+                  // Marketplace'e yönlendir
+                  const params = new URLSearchParams();
+                  if (pageId) params.set('page', pageId);
+                  params.set('container', container.id);
+                  params.set('slot', slotIndex.toString());
+                  navigate(`/marketplace?${params.toString()}`);
                 }}
               >
                 <Plus className="h-3 w-3 mr-1" />
@@ -453,14 +449,6 @@ export function ContainerRenderer({
           </div>
         </CardContent>
       </Card>
-
-      {/* Widget Picker */}
-      <WidgetSlotPicker
-        open={widgetPickerOpen}
-        onOpenChange={setWidgetPickerOpen}
-        onSelectWidget={handleWidgetSelect}
-        slotIndex={selectedSlot}
-      />
 
       {/* Settings Modal */}
       <ContainerSettingsModal

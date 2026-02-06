@@ -18,6 +18,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import * as LucideIcons from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WidgetDetailModal } from '@/components/dashboard/WidgetDetailModal';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 // Dinamik icon renderer
 const DynamicIcon = ({ iconName, className }: { iconName: string; className?: string }) => {
@@ -38,7 +40,11 @@ const typeIcons: Record<string, React.ElementType> = {
 export function WidgetMarketplacePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  
+  // URL parametrelerini oku
   const targetPage = (searchParams.get('page') || 'dashboard') as WidgetCategory;
+  const containerId = searchParams.get('container');
+  const slotIndex = searchParams.get('slot');
   
   const { widgets, isLoading } = useWidgets();
   const { filterAccessibleWidgets, canAddWidget } = useWidgetPermissions();
@@ -53,9 +59,9 @@ export function WidgetMarketplacePage() {
   const [detailWidget, setDetailWidget] = useState<Widget | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
 
-  // Mevcut sayfadaki widget'ları al
+  // Mevcut sayfadaki widget'ları al (sadece sayfa modu için)
   const currentLayout = getPageLayout(targetPage);
-  const currentWidgetKeys = currentLayout.widgets.map(w => w.id);
+  const currentWidgetKeys = containerId ? [] : currentLayout.widgets.map(w => w.id);
 
   // Kullanılabilir widget'ları filtrele
   const availableWidgets = useMemo(() => {
@@ -96,9 +102,34 @@ export function WidgetMarketplacePage() {
   }, [widgets, filterAccessibleWidgets, canAddWidget, currentWidgetKeys, activeCategories]);
 
   // Widget ekle
-  const handleAddWidget = async (widgetKey: string) => {
+  const handleAddWidget = async (widgetKey: string, widgetId: string) => {
     setAddingWidgetId(widgetKey);
-    await addWidgetToPage(widgetKey, targetPage);
+    
+    try {
+      // Container slot modunda mı?
+      if (containerId && slotIndex !== null) {
+        // Container slot'una ekle
+        const { error } = await supabase
+          .from('container_widgets')
+          .insert({
+            container_id: containerId,
+            widget_id: widgetId,
+            slot_index: parseInt(slotIndex)
+          });
+        
+        if (error) throw error;
+        toast.success('Widget eklendi');
+      } else {
+        // Sayfa layout'una ekle (eski davranış)
+        await addWidgetToPage(widgetKey, targetPage);
+      }
+    } catch (error) {
+      console.error('Widget ekleme hatası:', error);
+      toast.error('Widget eklenemedi');
+      setAddingWidgetId(null);
+      return;
+    }
+    
     setAddingWidgetId(null);
     navigate(-1); // Geri dön
   };
@@ -118,7 +149,10 @@ export function WidgetMarketplacePage() {
                 Widget Marketplace
               </h1>
               <p className="text-sm text-muted-foreground">
-                {activeCategories.find(c => c.slug === targetPage)?.name || targetPage} sayfasına widget ekleyin
+                {containerId 
+                  ? `Container slot #${slotIndex}'a widget ekleyin`
+                  : `${activeCategories.find(c => c.slug === targetPage)?.name || targetPage} sayfasına widget ekleyin`
+                }
               </p>
             </div>
           </div>
@@ -234,7 +268,7 @@ export function WidgetMarketplacePage() {
                 <Card
                   key={widget.id}
                   className="cursor-pointer transition-all hover:border-primary hover:shadow-lg group flex flex-col"
-                  onClick={() => !isAdding && handleAddWidget(widget.widget_key)}
+                  onClick={() => !isAdding && handleAddWidget(widget.widget_key, widget.id)}
                 >
                   <CardHeader className="pb-2 flex-shrink-0">
                     <div className="flex items-start justify-between">
@@ -317,7 +351,9 @@ export function WidgetMarketplacePage() {
         open={showDetailModal}
         onOpenChange={setShowDetailModal}
         onAddWidget={(widgetKey) => {
-          handleAddWidget(widgetKey);
+          if (detailWidget) {
+            handleAddWidget(widgetKey, detailWidget.id);
+          }
           setShowDetailModal(false);
         }}
         isAdding={addingWidgetId === detailWidget?.widget_key}
