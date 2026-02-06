@@ -1797,7 +1797,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, sampleData, chatHistory, mode, useMetadata } = await req.json();
+    const { prompt, sampleData, chatHistory, mode, useMetadata, existingCode } = await req.json();
 
     if (!prompt) {
       throw new Error("Prompt gerekli");
@@ -1808,7 +1808,7 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY yapılandırılmamış");
     }
 
-    console.log("[AI Code Generator v2.2] Mod:", mode || 'generate', "- Metadata:", useMetadata ? 'aktif' : 'pasif');
+    console.log("[AI Code Generator v2.3] Mod:", mode || 'generate', "- Metadata:", useMetadata ? 'aktif' : 'pasif', "- ExistingCode:", existingCode ? 'var' : 'yok');
 
     // Mesajları oluştur
     let messages: Array<{ role: string; content: string }>;
@@ -1866,7 +1866,18 @@ Widget kodunu ürettikten sonra aşağıdaki metadata bilgilerini de sağlamalı
 
 `;
 
-    if (mode === 'refine' && chatHistory && chatHistory.length > 0) {
+    if (mode === 'metadata-only' && existingCode) {
+      // Sadece metadata üretimi - kod zaten var
+      const metadataOnlySystemPrompt = `Sen bir widget analiz uzmanısın. Sana verilen widget kodunu analiz edip metadata oluşturacaksın.
+Kod veya başka bir şey YAZMA. Sadece metadata bilgilerini döndür.
+
+Widget'ın yaptığı işlemi, kullandığı alanları, hesaplamaları analiz et ve uygun metadata üret.`;
+
+      messages = [
+        { role: 'system', content: metadataOnlySystemPrompt + metadataInstructions },
+        { role: 'user', content: prompt }
+      ];
+    } else if (mode === 'refine' && chatHistory && chatHistory.length > 0) {
       // İyileştirme modu - chat geçmişini kullan (metadata yok)
       messages = [
         { role: 'system', content: getRefinementSystemPrompt() },
@@ -1892,11 +1903,11 @@ Widget kodunu ürettikten sonra aşağıdaki metadata bilgilerini de sağlamalı
     const requestBody: any = {
       model: "google/gemini-3-pro-preview",
       messages,
-      max_tokens: 64000,
+      max_tokens: mode === 'metadata-only' ? 4000 : 64000, // Metadata için daha az token yeterli
       temperature: 0.7,
     };
     
-    // Tool calling ekle (sadece generate modunda ve useMetadata true ise)
+    // Tool calling ekle (generate ve metadata-only modlarında, refine hariç)
     if (mode !== 'refine' && useMetadata) {
       requestBody.tools = [getWidgetMetadataTool()];
       requestBody.tool_choice = { type: "function", function: { name: "generate_widget_with_metadata" } };
@@ -1985,7 +1996,28 @@ Widget kodunu ürettikten sonra aşağıdaki metadata bilgilerini de sağlamalı
       .replace(/```\n?/g, "")
       .trim();
 
-    console.log("[AI Code Generator v2.2] İlk yanıt - uzunluk:", generatedCode.length, "finish_reason:", finishReason, "metadata:", !!aiMetadata);
+    console.log("[AI Code Generator v2.3] İlk yanıt - uzunluk:", generatedCode.length, "finish_reason:", finishReason, "metadata:", !!aiMetadata, "mode:", mode);
+
+    // metadata-only modunda kod üretimi atlanır, mevcut kod kullanılır
+    if (mode === 'metadata-only') {
+      console.log("[AI Code Generator v2.3] Metadata-only modu - kod üretimi atlandı");
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          code: existingCode || "",
+          aiMetadata: aiMetadata,
+          metadata: {
+            totalAttempts: 1,
+            wasPartial: false,
+            isComplete: true,
+            codeLength: existingCode?.length || 0,
+            finishReason: "metadata-only",
+            hasAiMetadata: !!aiMetadata,
+          }
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Auto-continue mekanizması (sadece tool calling olmadığında)
     let attempts = 0;
@@ -1998,7 +2030,7 @@ Widget kodunu ürettikten sonra aşağıdaki metadata bilgilerini de sağlamalı
       ) {
         attempts++;
         wasPartial = true;
-        console.log(`[AI Code Generator v2.2] Kod yarım, devam ediliyor (${attempts}/${MAX_CONTINUE_ATTEMPTS})...`);
+        console.log(`[AI Code Generator v2.3] Kod yarım, devam ediliyor (${attempts}/${MAX_CONTINUE_ATTEMPTS})...`);
         
         try {
           const continuation = await continueGeneration(
@@ -2012,15 +2044,15 @@ Widget kodunu ürettikten sonra aşağıdaki metadata bilgilerini de sağlamalı
           generatedCode = mergeCodeParts(generatedCode, continuation.code);
           finishReason = continuation.finishReason;
           
-          console.log(`[AI Code Generator v2.2] Devam ${attempts} - yeni uzunluk:`, generatedCode.length);
+          console.log(`[AI Code Generator v2.3] Devam ${attempts} - yeni uzunluk:`, generatedCode.length);
           
           // Eğer kod tamamlandıysa çık
           if (isCodeComplete(generatedCode)) {
-            console.log("[AI Code Generator v2.2] Kod tamamlandı!");
+            console.log("[AI Code Generator v2.3] Kod tamamlandı!");
             break;
           }
         } catch (continueError) {
-          console.error(`[AI Code Generator v2.2] Devam hatası (${attempts}):`, continueError);
+          console.error(`[AI Code Generator v2.3] Devam hatası (${attempts}):`, continueError);
           // Hata olsa bile mevcut kodla devam et
           break;
         }
@@ -2031,10 +2063,10 @@ Widget kodunu ürettikten sonra aşağıdaki metadata bilgilerini de sağlamalı
     const codeIsComplete = isCodeComplete(generatedCode);
     
     if (!codeIsComplete && attempts >= MAX_CONTINUE_ATTEMPTS) {
-      console.warn("[AI Code Generator v2.2] Maksimum deneme sayısına ulaşıldı, kod hala tamamlanmadı");
+      console.warn("[AI Code Generator v2.3] Maksimum deneme sayısına ulaşıldı, kod hala tamamlanmadı");
     }
 
-    console.log("[AI Code Generator v2.2] Sonuç - uzunluk:", generatedCode.length, "tamamlandı:", codeIsComplete, "toplam deneme:", attempts + 1);
+    console.log("[AI Code Generator v2.3] Sonuç - uzunluk:", generatedCode.length, "tamamlandı:", codeIsComplete, "toplam deneme:", attempts + 1);
 
     return new Response(
       JSON.stringify({ 

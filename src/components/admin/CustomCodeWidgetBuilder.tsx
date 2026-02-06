@@ -1088,6 +1088,102 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
     }
   };
 
+  // Sadece metadata üret (kod zaten varken)
+  const generateMetadataWithAI = async () => {
+    if (!customCode || customCode === getDefaultCodeTemplate()) {
+      toast.error('Önce widget kodu oluşturun');
+      return;
+    }
+
+    setIsGeneratingCode(true);
+    try {
+      // Veri örneği hazırla
+      const dataToSend = isMultiQueryMode 
+        ? getMultiQueryJsonData() 
+        : sampleData.slice(0, 3);
+
+      // Metadata üretimi için prompt
+      const metadataPrompt = `Bu widget kodunu analiz et ve aşağıdaki metadata'yı üret:
+1. suggestedName: Widget için kısa, açıklayıcı Türkçe isim (Title Case, 2-4 kelime)
+2. suggestedIcon: Uygun Lucide ikon adı
+3. suggestedTags: En uygun 1-3 etiket (finans, satis, stok, cari, performans, ozet vb.)
+4. shortDescription: 1 cümlelik kısa açıklama (maks 100 karakter)
+5. longDescription: Widget'ın ne yaptığını anlatan detaylı açıklama
+6. technicalNotes: Kullanılan alanlar, hesaplamalar ve veri akışı
+
+Widget Kodu:
+\`\`\`javascript
+${customCode}
+\`\`\`
+
+Örnek Veri Yapısı:
+${JSON.stringify(dataToSend, null, 2).slice(0, 1500)}`;
+
+      const response = await supabase.functions.invoke('ai-code-generator', {
+        body: {
+          prompt: metadataPrompt,
+          sampleData: dataToSend,
+          mode: 'metadata-only', // Sadece metadata üret, kod üretme
+          existingCode: customCode,
+          useMetadata: true,
+        },
+      });
+
+      if (response.error) throw response.error;
+      
+      const aiMetadata = response.data?.aiMetadata;
+      
+      if (aiMetadata) {
+        // Widget adını AI'dan al
+        if (aiMetadata.suggestedName) {
+          setWidgetName(aiMetadata.suggestedName);
+          // Widget key'i de addan oluştur
+          const cleanedName = aiMetadata.suggestedName
+            .toLowerCase()
+            .replace(/[^a-z0-9ğüşıöçĞÜŞİÖÇ\s]/g, '')
+            .replace(/[ğ]/g, 'g').replace(/[ü]/g, 'u').replace(/[ş]/g, 's')
+            .replace(/[ı]/g, 'i').replace(/[ö]/g, 'o').replace(/[ç]/g, 'c')
+            .replace(/\s+/g, '_');
+          setWidgetKey('ai_' + cleanedName + '_' + Date.now().toString(36));
+        }
+        
+        // Widget ikonunu AI'dan al
+        if (aiMetadata.suggestedIcon) {
+          setWidgetIcon(aiMetadata.suggestedIcon);
+        }
+        
+        // Önerilen etiketler
+        if (aiMetadata.suggestedTags?.length) {
+          setAiSuggestedTags(aiMetadata.suggestedTags);
+          if (aiMetadata.suggestedTags[0]) {
+            setWidgetCategory(aiMetadata.suggestedTags[0]);
+          }
+        }
+        
+        // Açıklamalar
+        if (aiMetadata.shortDescription) {
+          setShortDescription(aiMetadata.shortDescription);
+          setWidgetDescription(aiMetadata.shortDescription);
+        }
+        if (aiMetadata.longDescription) {
+          setLongDescription(aiMetadata.longDescription);
+        }
+        if (aiMetadata.technicalNotes) {
+          setTechnicalNotes(aiMetadata.technicalNotes);
+        }
+        
+        toast.success('Meta bilgiler oluşturuldu!');
+      } else {
+        throw new Error('AI metadata üretemedi');
+      }
+    } catch (err: any) {
+      console.error('AI metadata üretimi hatası:', err);
+      toast.error(err.message || 'Meta bilgiler üretilemedi');
+    } finally {
+      setIsGeneratingCode(false);
+    }
+  };
+
   // Chat ile kod iyileştir
   const sendChatMessage = async () => {
     if (!chatInput.trim()) return;
@@ -2525,6 +2621,28 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
                   <Badge variant="outline" className="text-xs bg-success/10 text-success">Geçerli</Badge>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Meta Bilgi Oluştur Butonu */}
+          <Card className="border-dashed">
+            <CardContent className="pt-4">
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={generateMetadataWithAI}
+                disabled={isGeneratingCode || !customCode || customCode === getDefaultCodeTemplate()}
+              >
+                {isGeneratingCode ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                {isGeneratingCode ? 'Üretiliyor...' : 'AI ile Meta Bilgi Oluştur'}
+              </Button>
+              <p className="text-[10px] text-muted-foreground text-center mt-2">
+                İsim, açıklama, ikon ve etiketleri otomatik oluşturur
+              </p>
             </CardContent>
           </Card>
 
