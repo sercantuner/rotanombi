@@ -428,27 +428,36 @@ return Widget;
 `;
 
 // Mock preview data - tutarlı görselleştirme için
-const getMockPreviewData = () => {
-  const mockRecords = [
+const getMockPreviewData = (type: string = 'generic') => {
+  // Widget tipine göre uygun mock veri dönüş
+  const baseRecords = [
     { label: 'Kategori A', value: 125000, percentage: 35 },
     { label: 'Kategori B', value: 98000, percentage: 27 },
     { label: 'Kategori C', value: 76000, percentage: 21 },
     { label: 'Kategori D', value: 61000, percentage: 17 },
   ];
   
-  return mockRecords.map((r, i) => ({
+  const commonFields = {
+    cariAdi: ['ABC Ltd. Şirketi', 'XYZ A.Ş.', 'Delta Sanayi', 'Omega Ticaret'],
+    stokkodu: ['STK001', 'STK002', 'STK003', 'STK004'],
+    stokadi: ['Ürün Alpha', 'Ürün Beta', 'Ürün Gamma', 'Ürün Delta'],
+    birimfiyat: [250, 180, 320, 150],
+    adet: [500, 544, 237, 406],
+  };
+  
+  return baseRecords.map((r, i) => ({
     ...r,
-    cariAdi: ['ABC Ltd. Şirketi', 'XYZ A.Ş.', 'Delta Sanayi', 'Omega Ticaret'][i],
+    cariAdi: commonFields.cariAdi[i],
     bakiye: r.value,
     toplambakiye: r.value,
     borc: r.value * 1.2,
     alacak: r.value * 0.2,
     tarih: new Date(Date.now() - i * 86400000).toISOString(),
     miktar: Math.floor(r.value / 1000),
-    stokkodu: ['STK001', 'STK002', 'STK003', 'STK004'][i],
-    stokadi: ['Ürün Alpha', 'Ürün Beta', 'Ürün Gamma', 'Ürün Delta'][i],
-    birimfiyat: [250, 180, 320, 150][i],
-    adet: [500, 544, 237, 406][i],
+    stokkodu: commonFields.stokkodu[i],
+    stokadi: commonFields.stokadi[i],
+    birimfiyat: commonFields.birimfiyat[i],
+    adet: commonFields.adet[i],
   }));
 };
 
@@ -2495,8 +2504,8 @@ ${JSON.stringify(dataToSend, null, 2).slice(0, 1500)}`;
     // Mevcut veriyi sakla
     const originalData = sampleData;
     
-    // Mock data ile geçici render
-    const mockData = getMockPreviewData();
+    // Mock data ile geçici render - widget tipine göre
+    const mockData = getMockPreviewData(widgetName || 'generic');
     setSampleData(mockData);
     
     // DOM güncellenmesini bekle
