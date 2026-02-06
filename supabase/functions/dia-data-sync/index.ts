@@ -54,15 +54,19 @@ function extractKey(r: any, idx: number): number | null {
   if (r.carikodu) {
     // carikodu + vade bilgilerinden benzersiz hash oluştur
     const hashStr = `${r.carikodu}_${r.vade_tarihi || ''}_${r.bakiye || ''}_${idx}`;
-    return Math.abs(hashString(hashStr));
+    const hashed = Math.abs(hashString(hashStr));
+    return hashed % 9223372036854775807; // INT64 max value'ye kısıtla
   }
   if (r.stokkodu) {
     const hashStr = `${r.stokkodu}_${r.depo || ''}_${idx}`;
-    return Math.abs(hashString(hashStr));
+    const hashed = Math.abs(hashString(hashStr));
+    return hashed % 9223372036854775807;
   }
   
-  // Son çare: index bazlı benzersiz numara (zaman damgası + index)
-  return Date.now() + idx;
+  // Son çare: index bazlı benzersiz numara
+  // Timestamp'i kısıtla ve idx ile combine et (overflow risk yok)
+  const baseKey = (Math.floor(Date.now() / 1000000) % 1000000000) * 10000 + (idx % 10000);
+  return Math.abs(baseKey);
 }
 
 // Basit hash fonksiyonu
