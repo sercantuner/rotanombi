@@ -249,23 +249,47 @@ const initMapScope = async () => {
   }
 };
 
-// Başlangıçta boş bir placeholder - harita kullanılırsa yüklenir
+// Map yüklenirken gösterilecek placeholder bileşen
+const MapLoadingPlaceholder = ({ children, ...props }: any) => {
+  return React.createElement('div', {
+    style: {
+      width: '100%',
+      height: '100%',
+      minHeight: '300px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'hsl(var(--muted))',
+      borderRadius: '0.5rem',
+      color: 'hsl(var(--muted-foreground))',
+      fontSize: '14px'
+    }
+  }, 'Harita yükleniyor...');
+};
+
+// Boş placeholder bileşenler
+const EmptyMapComponent = ({ children }: any) => null;
+
+// Başlangıçta loading placeholder - harita kullanılırsa yüklenir
 const EmptyMapScope = {
-  MapContainer: () => null,
-  TileLayer: () => null,
-  Marker: () => null,
-  Popup: () => null,
-  Tooltip: () => null,  // Harita tooltip placeholder
-  CircleMarker: () => null,
-  Polyline: () => null,
-  Polygon: () => null,
-  Rectangle: () => null,
-  Circle: () => null,
-  // Hooks - boş placeholder (harita yüklenene kadar)
-  useMap: () => null,
+  MapContainer: MapLoadingPlaceholder,
+  TileLayer: EmptyMapComponent,
+  Marker: EmptyMapComponent,
+  Popup: EmptyMapComponent,
+  Tooltip: EmptyMapComponent,
+  CircleMarker: EmptyMapComponent,
+  Polyline: EmptyMapComponent,
+  Polygon: EmptyMapComponent,
+  Rectangle: EmptyMapComponent,
+  Circle: EmptyMapComponent,
+  // Hooks - güvenli placeholder
+  useMap: () => ({ setView: () => {}, getZoom: () => 10, getCenter: () => ({ lat: 39, lng: 35 }) }),
   useMapEvents: () => null,
   useMapEvent: () => null,
-  L: null
+  L: {
+    latLng: (lat: number, lng: number) => ({ lat, lng }),
+    icon: () => ({}),
+  }
 };
 
 // Recharts bileşenlerini scope'a ekle (customCode için)
