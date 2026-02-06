@@ -1,101 +1,78 @@
 
-# Vade Yaşlandırma ve Veri Yönetimi Düzeltme Planı
+# Dashboard "Failed to fetch" Hatasının Düzeltme Planı
 
-## Tespit Edilen Sorunlar
+## Tespit Edilen Sorun
 
-### Sorun 1: Vade Yaşlandırma Widget'ı Çalışmıyor
-- **Sebep:** `Cari_vade_bakiye_listele` veri kaynağı `company_data_cache` tablosunda YOK
-- Cache'de hiç kayıt bulunmuyor
-- `data_sources` tablosunda `last_record_count: 75` yazıyor ama bu veriler cache'e hiç yazılmamış
+Dashboard yüklendiğinde tüm veri kaynakları için "Failed to fetch" hatası alınıyor. Console loglarında şu hata görülüyor:
 
-### Sorun 2: Veri Yönetimi'nde Yanlış Kayıt Sayısı
-- **Sebep:** Sayfa `data_sources.last_record_count` kolonunu okuyor
-- Bu kolon sync sırasında güncelleniyor ama cache'deki gerçek sayıyı yansıtmıyor
-- Örnek: Cari Kart için cache'de 610 kayıt var, ama `last_record_count` 100 gösteriyor
+```
+[DataSourceLoader] DB-FIRST: No profile config, skipping DB check for Çek Senet Listesi
+[DataSourceLoader] DB-FIRST: No profile config, skipping DB check for Stok Listesi
+```
 
-### Sorun 3: CRM Sayfası Düzgün Çalışıyor
-- CRM sayfası `useDataSourceLoader` hook'u ile `company_data_cache` tablosundan veri çekiyor
-- Cache'de 610 kayıt olduğu için düzgün çalışıyor
-- Ayarlar sayfasındaki "100" değeri sadece yanlış metadata gösterimi
+### Kök Neden
+
+`useDataSourceLoader` hook'u veri çekmeye başlarken `useDiaProfile` hook'u henüz veritabanından DIA profil bilgilerini (sunucuAdi, firmaKodu) yüklememiş oluyor.
+
+**Akış:**
+1. Dashboard yükleniyor
+2. `useDiaProfile` async olarak profiles tablosundan veri çekmeye başlıyor
+3. Aynı anda `useDataSourceLoader` veri yüklemeye başlıyor
+4. `diaProfile.sunucuAdi = null` olduğu için DB kontrolü atlanıyor
+5. Direkt API'ye istek atılıyor ama bu da başarısız oluyor
+
+### Neden API de Başarısız?
+
+DB'de aslında veri var (Cari_vade_bakiye_listele: 72 kayıt, cari_kart_listesi: 1220 kayıt vs.) ama profil yüklenmeden önce atılan istekler başarısız oluyor.
 
 ---
 
 ## Çözüm Planı
 
-### Adım 1: Veri Yönetimi Sayfasında Gerçek Kayıt Sayısını Göster
-**Dosya:** `src/components/settings/DataManagementTab.tsx`
+### Adım 1: DIA Profile Yüklenmesini Bekle
+**Dosya:** `src/hooks/useDataSourceLoader.tsx`
 
-Mevcut durum: `data_sources.last_record_count` değeri gösteriliyor (yanlış olabilir)
-
-Yeni yaklaşım: Her veri kaynağı için `company_data_cache` tablosundan gerçek kayıt sayısını çek
+`useDiaProfile()` hook'undan gelen `isLoading` durumunu kontrol ederek, profil tamamen yüklenene kadar veri çekme işlemini başlatmayacağız.
 
 ```typescript
-// Yeni hook: useCacheRecordCounts
-const useCacheRecordCounts = () => {
-  const { sunucuAdi, firmaKodu, donemKodu } = useDiaProfile();
+// useDiaProfile hook'undan isLoading durumunu al
+const diaProfile = useDiaProfile();
+const isDiaProfileLoading = diaProfile.isLoading;
+
+// loadAllDataSources içinde profil yüklenme kontrolü ekle
+const loadAllDataSources = useCallback(async (forceRefresh: boolean = false) => {
+  // DIA profili henüz yüklenmediyse bekle
+  if (isDiaProfileLoading) {
+    console.log('[DataSourceLoader] Waiting for DIA profile to load...');
+    return;
+  }
   
-  return useQuery({
-    queryKey: ['cache-record-counts', sunucuAdi, firmaKodu],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('company_data_cache')
-        .select('data_source_slug')
-        .eq('sunucu_adi', sunucuAdi)
-        .eq('firma_kodu', firmaKodu)
-        .eq('is_deleted', false);
-      
-      // Slug bazlı sayım
-      const counts: Record<string, number> = {};
-      data?.forEach(row => {
-        counts[row.data_source_slug] = (counts[row.data_source_slug] || 0) + 1;
-      });
-      return counts;
-    }
-  });
-};
+  // ... mevcut kod
+}, [isDiaProfileLoading, /* diğer deps */]);
 ```
 
-Veya daha performanslı: RPC fonksiyonu ile SQL COUNT
+### Adım 2: Effect Dependency'e isLoading Ekle
+**Dosya:** `src/hooks/useDataSourceLoader.tsx`
 
-### Adım 2: Sync Sonrası Kayıt Sayısını Düzelt
-**Dosya:** `supabase/functions/dia-data-sync/index.ts`
+Sayfa ilk yüklendiğinde veri kaynakları yüklemesini tetikleyen effect'e profil loading durumunu ekleyeceğiz:
 
-`last_record_count` güncelleme mantığını düzelt:
-- Sync sonrası cache'e yazılan gerçek kayıt sayısını kullan
-- `written` değişkeni zaten doğru sayıyı içeriyor
-
-Mevcut durum (satır ~323):
 ```typescript
-// Burada r.fetched API'dan çekilen sayı, r.written cache'e yazılan sayı
-await sb.from('sync_history').update({ 
-  records_fetched: r.fetched, 
-  records_inserted: r.written 
-});
+useEffect(() => {
+  // DIA profili yüklenene kadar başlatma
+  if (isDiaProfileLoading) return;
+  
+  // ... mevcut başlatma mantığı
+}, [pageId, dataSources.length, hasInitialized, isDataSourcesLoading, isDiaProfileLoading]);
 ```
 
-Düzeltme: `data_sources.last_record_count` güncellemesi ekle
+### Adım 3: Loglama İyileştirmesi
+Profil bekleme durumunu açıkça logla:
 
-### Adım 3: Cache Kayıt Sayısı için SQL Fonksiyonu (Opsiyonel)
-Performans için veritabanı fonksiyonu:
-
-```sql
-CREATE OR REPLACE FUNCTION get_cache_record_counts(
-  p_sunucu_adi TEXT,
-  p_firma_kodu TEXT
-)
-RETURNS TABLE (data_source_slug TEXT, record_count BIGINT)
-LANGUAGE SQL
-SECURITY DEFINER
-AS $$
-  SELECT 
-    data_source_slug,
-    COUNT(*) as record_count
-  FROM company_data_cache
-  WHERE sunucu_adi = p_sunucu_adi
-    AND firma_kodu = p_firma_kodu
-    AND is_deleted = false
-  GROUP BY data_source_slug;
-$$;
+```typescript
+if (!sunucuAdi || !firmaKodu) {
+  console.log(`[DataSourceLoader] DB-FIRST: Profile not ready (sunucu: ${sunucuAdi || 'null'}, firma: ${firmaKodu || 'null'}), skipping DB check`);
+  return null;
+}
 ```
 
 ---
@@ -104,24 +81,21 @@ $$;
 
 | Dosya | Değişiklik |
 |-------|------------|
-| `src/components/settings/DataManagementTab.tsx` | Cache'den gerçek kayıt sayısı çekme |
-| `src/hooks/useSyncData.tsx` | Sync sonrası `last_record_count` güncelleme |
-| `supabase/functions/dia-data-sync/index.ts` | `data_sources.last_record_count` güncelleme mantığı |
+| `src/hooks/useDataSourceLoader.tsx` | `isLoading` durumu kontrolü ve dependency güncellemesi |
 
 ---
 
-## Acil Eylem: Vade Verisi Sync
+## Değişiklik Özeti
 
-Vade Yaşlandırma widget'ının çalışması için `Cari_vade_bakiye_listele` veri kaynağının sync edilmesi gerekiyor.
-
-Kullanıcı adımları:
-1. Ayarlar > Veri Yönetimi sayfasına git
-2. `Cari_vade_bakiye` satırındaki yenile butonuna tıkla
-3. Sync tamamlandıktan sonra dashboard'a geri dön
+1. **Line ~63**: `diaProfile.isLoading` değişkeni ayıkla
+2. **Line ~432**: `loadAllDataSources` içinde profil yükleme kontrolü ekle
+3. **Line ~617-666**: Effect dependency'e `isDiaProfileLoading` ekle
 
 ---
 
-## Test Planı
-1. Veri Yönetimi sayfasında gerçek kayıt sayılarının gösterildiğini doğrula
-2. Sync işlemi sonrası kayıt sayılarının güncellenmesini kontrol et
-3. Vade Yaşlandırma widget'ının veri gösterdiğini doğrula
+## Beklenen Sonuç
+
+- Dashboard yüklendiğinde önce DIA profili yüklenecek
+- Profil yüklendikten sonra DB-FIRST stratejisi düzgün çalışacak
+- Cache'deki veriler kullanılacak, gereksiz API çağrıları önlenecek
+- "Failed to fetch" hataları ortadan kalkacak
