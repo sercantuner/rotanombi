@@ -1,10 +1,10 @@
 // Super Admin Widget Manager - Widget ve kategori yönetimi
 // v2.0 - Sadece AI tabanlı widget oluşturma (No-code builder kaldırıldı)
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useWidgets, useWidgetAdmin } from '@/hooks/useWidgets';
 import { useWidgetCategories } from '@/hooks/useWidgetCategories';
 import { Widget, WidgetFormData } from '@/lib/widgetTypes';
-import { CustomCodeWidgetBuilder } from '@/components/admin/CustomCodeWidgetBuilder';
 import { 
   Plus, 
   Search, 
@@ -18,7 +18,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
@@ -55,17 +54,14 @@ function getEmptyFormData(): WidgetFormData {
 }
 
 export default function SuperAdminWidgetManager() {
+  const navigate = useNavigate();
   const { widgets, isLoading: loading, refetch: fetchWidgets } = useWidgets();
-  const { createWidget, updateWidget, deleteWidget, activateWidget, permanentlyDeleteWidget } = useWidgetAdmin();
+  const { deleteWidget, activateWidget, permanentlyDeleteWidget } = useWidgetAdmin();
   const { categories } = useWidgetCategories();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  
-  const [showCodeBuilder, setShowCodeBuilder] = useState(false);
-  const [editingWidget, setEditingWidget] = useState<Widget | null>(null);
-  const [formData, setFormData] = useState<WidgetFormData>(getEmptyFormData());
   
   const [deleteConfirmWidget, setDeleteConfirmWidget] = useState<Widget | null>(null);
 
@@ -81,55 +77,14 @@ export default function SuperAdminWidgetManager() {
     return matchesSearch && matchesCategory && matchesStatus;
   });
 
-  // Yeni widget oluştur (AI tabanlı)
+  // Yeni widget oluştur - Tam sayfa builder'a yönlendir
   const handleCreateWidget = () => {
-    setEditingWidget(null);
-    setFormData(getEmptyFormData());
-    setShowCodeBuilder(true);
+    navigate('/widget-builder?from=super-admin');
   };
 
-  // Widget düzenle - Tümü artık AI builder ile açılıyor
+  // Widget düzenle - Tam sayfa builder'a yönlendir
   const handleEditWidget = (widget: Widget) => {
-    setEditingWidget(widget);
-    setFormData({
-      name: widget.name,
-      widget_key: widget.widget_key,
-      type: widget.type,
-      category: widget.category,
-      data_source: widget.data_source,
-      size: widget.size,
-      description: widget.description || '',
-      is_active: widget.is_active,
-      default_visible: widget.default_visible,
-      is_default: widget.is_default,
-      default_page: widget.default_page,
-      sort_order: widget.sort_order || 0,
-      icon: widget.icon || 'BarChart2',
-      min_height: widget.min_height || '',
-      grid_cols: widget.grid_cols || null,
-      available_filters: widget.available_filters || [],
-      default_filters: widget.default_filters || {},
-      builder_config: widget.builder_config
-    });
-    
-    // Tüm widgetlar artık AI builder ile düzenleniyor
-    setShowCodeBuilder(true);
-  };
-
-  const handleSaveWidget = async (data: WidgetFormData) => {
-    try {
-      if (editingWidget) {
-        await updateWidget(editingWidget.id, data);
-        toast.success('Widget güncellendi');
-      } else {
-        await createWidget(data);
-        toast.success('Widget oluşturuldu');
-      }
-      setShowCodeBuilder(false);
-      fetchWidgets();
-    } catch (error) {
-      toast.error('İşlem başarısız');
-    }
+    navigate(`/widget-builder?edit=${widget.id}&from=super-admin`);
   };
 
   const handleToggleActive = async (widget: Widget) => {
@@ -288,16 +243,6 @@ export default function SuperAdminWidgetManager() {
         </div>
       )}
 
-      {/* AI Widget Builder Dialog */}
-      <CustomCodeWidgetBuilder
-        open={showCodeBuilder}
-        onOpenChange={setShowCodeBuilder}
-        onSave={() => {
-          fetchWidgets();
-          setShowCodeBuilder(false);
-        }}
-        editingWidget={editingWidget || undefined}
-      />
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteConfirmWidget} onOpenChange={() => setDeleteConfirmWidget(null)}>

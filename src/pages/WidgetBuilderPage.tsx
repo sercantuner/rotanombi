@@ -4,51 +4,44 @@
 import React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CustomCodeWidgetBuilder } from '@/components/admin/CustomCodeWidgetBuilder';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft, Wand2 } from 'lucide-react';
 
 export function WidgetBuilderPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const editWidgetId = searchParams.get('edit');
+  const fromParam = searchParams.get('from');
+  
+  // Akıllı navigasyon: from parametresine göre dön
+  const getReturnPath = () => {
+    if (fromParam === 'super-admin') {
+      return '/super-admin-panel';
+    }
+    // containerId veya pageId varsa o sayfaya dön
+    const containerId = searchParams.get('container');
+    const pageId = searchParams.get('pageId');
+    if (containerId || pageId) {
+      return `/page/${pageId || 'dashboard'}`;
+    }
+    return '/dashboard';
+  };
   
   const handleClose = () => {
-    navigate('/dashboard');
+    navigate(getReturnPath());
   };
 
   const handleSave = () => {
-    navigate('/dashboard');
+    navigate(getReturnPath());
   };
 
   return (
     <div className="h-full flex flex-col bg-background">
-      {/* Header */}
-      <div className="flex-shrink-0 border-b bg-card px-6 py-4">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={handleClose}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Wand2 className="h-6 w-6 text-primary" />
-              AI Widget Builder
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {editWidgetId ? 'Widget düzenle' : 'AI ile yeni widget oluştur'}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Builder Content */}
-      <div className="flex-1 overflow-hidden">
-        <CustomCodeWidgetBuilder
-          onClose={handleClose}
-          onSave={handleSave}
-          editWidgetId={editWidgetId || undefined}
-          isFullPage={true}
-        />
-      </div>
+      {/* Builder Content - Full Page */}
+      <CustomCodeWidgetBuilder
+        onClose={handleClose}
+        onSave={handleSave}
+        editWidgetId={editWidgetId || undefined}
+        isFullPage={true}
+      />
     </div>
   );
 }
