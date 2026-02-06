@@ -1167,35 +1167,133 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
 
     setIsGeneratingCode(true);
     try {
-      // Veri örneği hazırla
+      // Zengin veri bağlamı hazırla
       const dataToSend = isMultiQueryMode 
         ? getMultiQueryJsonData() 
-        : sampleData.slice(0, 3);
+        : sampleData.slice(0, 10); // Daha fazla örnek veri
 
-      // Metadata üretimi için prompt
-      const metadataPrompt = `Bu widget kodunu analiz et ve aşağıdaki metadata'yı üret:
-1. suggestedName: Widget için kısa, açıklayıcı Türkçe isim (Title Case, 2-4 kelime)
-2. suggestedIcon: Uygun Lucide ikon adı
-3. suggestedTags: En uygun 1-3 etiket (finans, satis, stok, cari, performans, ozet vb.)
-4. shortDescription: 1 cümlelik kısa açıklama (maks 100 karakter)
-5. longDescription: Widget'ın ne yaptığını anlatan detaylı açıklama
-6. technicalNotes: Kullanılan alanlar, hesaplamalar ve veri akışı
+      // Veri analizi - alan istatistikleri
+      const dataAnalysis = isMultiQueryMode 
+        ? {} 
+        : analyzeDataForAI(sampleData);
 
-Widget Kodu:
+      // Veri kaynağı bilgisi
+      const dataSourceInfo = selectedDataSource ? {
+        name: selectedDataSource.name,
+        slug: selectedDataSource.slug,
+        module: selectedDataSource.module,
+        method: selectedDataSource.method,
+        description: selectedDataSource.description,
+        recordCount: selectedDataSource.last_record_count || sampleData.length,
+        allFields: selectedDataSource.last_fields || (sampleData[0] ? Object.keys(sampleData[0]) : []),
+      } : null;
+
+      // Multi-query bilgisi
+      const multiQueryInfo = isMultiQueryMode && multiQuery?.queries?.length ? 
+        multiQuery.queries.map(q => {
+          const qData = mergedQueryData[q.id] || [];
+          const analysis = qData.length > 0 ? analyzeDataForAI(qData) : {};
+          return {
+            queryName: q.name,
+            dataSourceName: q.dataSourceName,
+            recordCount: qData.length,
+            fields: qData[0] ? Object.keys(qData[0]) : [],
+            fieldStats: analysis,
+          };
+        }) : null;
+
+      // İlişkili veri kaynaklarının bilgisi
+      const dataModelContext = getDataModelContext();
+
+      // Zenginleştirilmiş metadata prompt
+      const metadataPrompt = `Bu widget kodunu analiz et ve metadata üret.
+
+═══════════════════════════════════════════════════════════════
+                    VERİ KAYNAĞI BİLGİSİ
+═══════════════════════════════════════════════════════════════
+
+${dataSourceInfo ? `📊 Veri Kaynağı: ${dataSourceInfo.name}
+   - API: ${dataSourceInfo.module}.${dataSourceInfo.method}
+   - Toplam Kayıt: ${dataSourceInfo.recordCount}
+   - Tüm Alanlar: ${dataSourceInfo.allFields.join(', ')}
+   ${dataSourceInfo.description ? `- Açıklama: ${dataSourceInfo.description}` : ''}
+` : ''}
+
+${multiQueryInfo ? `📊 ÇOKLU VERİ KAYNAĞI:
+${multiQueryInfo.map(q => `   • ${q.queryName} (${q.dataSourceName}): ${q.recordCount} kayıt
+     Alanlar: ${q.fields.join(', ')}`).join('\n')}
+` : ''}
+
+═══════════════════════════════════════════════════════════════
+                    ALAN İSTATİSTİKLERİ
+═══════════════════════════════════════════════════════════════
+
+${Object.entries(dataAnalysis).length > 0 ? Object.entries(dataAnalysis).map(([field, stats]) => {
+  const s = stats as any;
+  let info = `📈 ${field}:
+   - Tip: ${s.type}
+   - Benzersiz Değer: ${s.uniqueCount}`;
+  if (s.min !== undefined) info += `\n   - Min: ${formatNumber(s.min)}, Max: ${formatNumber(s.max)}, Toplam: ${formatNumber(s.sum)}, Ortalama: ${formatNumber(s.avg || 0)}`;
+  if (s.minDate) info += `\n   - Tarih Aralığı: ${s.minDate} - ${s.maxDate}`;
+  if (s.sampleValues?.length) info += `\n   - Örnek Değerler: ${s.sampleValues.slice(0, 3).join(', ')}`;
+  return info;
+}).join('\n\n') : 'Alan istatistikleri hesaplanıyor...'}
+
+${dataModelContext?.relatedSources?.length ? `
+═══════════════════════════════════════════════════════════════
+                    VERİ MODELİ İLİŞKİLERİ
+═══════════════════════════════════════════════════════════════
+
+🔗 İlişkili Kaynaklar:
+${dataModelContext.relatedSources.map(rel => 
+  `   • ${rel.name} → ${rel.relationField} = ${rel.targetField} (${rel.type})`
+).join('\n')}
+` : ''}
+
+═══════════════════════════════════════════════════════════════
+                    WIDGET KODU
+═══════════════════════════════════════════════════════════════
+
 \`\`\`javascript
 ${customCode}
 \`\`\`
 
-Örnek Veri Yapısı:
-${JSON.stringify(dataToSend, null, 2).slice(0, 1500)}`;
+═══════════════════════════════════════════════════════════════
+                    ÖRNEK VERİ (${Array.isArray(dataToSend) ? dataToSend.length : 'N/A'} kayıt)
+═══════════════════════════════════════════════════════════════
+
+${JSON.stringify(dataToSend, null, 2).slice(0, 3000)}
+
+═══════════════════════════════════════════════════════════════
+                    BEKLENEN META BİLGİLER
+═══════════════════════════════════════════════════════════════
+
+Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
+1. suggestedName: Widget için kısa, açıklayıcı Türkçe isim (Title Case, 2-4 kelime)
+   - Veri kaynağı ve grafiğin amacına uygun olmalı
+2. suggestedIcon: Uygun Lucide ikon adı (widget içeriğini yansıtmalı)
+3. suggestedTags: En uygun 1-3 etiket (finans, satis, stok, cari, performans, ozet vb.)
+4. shortDescription: Widget'ın ne gösterdiğini anlatan 1 cümle (maks 100 karakter)
+   - Hangi veriyi, nasıl görselleştirdiğini açıkla
+5. longDescription: Detaylı açıklama (Markdown destekli)
+   - Ne gösteriyor, nasıl kullanılır, dikkat edilmesi gerekenler
+6. usedFields: Kodda kullanılan alanlar ve rolleri (hangi alan hangi amaçla kullanılıyor)
+7. calculations: Yapılan hesaplamalar (sum, avg, group by vb.)
+8. dataFlow: Verinin nasıl işlendiğini açıkla (filtreleme → gruplama → hesaplama → görselleştirme)
+
+ÖNEMLİ: Açıklamaları varsayımlarla değil, KODU ve VERİYİ analiz ederek yaz!`;
 
       const response = await supabase.functions.invoke('ai-code-generator', {
         body: {
           prompt: metadataPrompt,
           sampleData: dataToSend,
-          mode: 'metadata-only', // Sadece metadata üret, kod üretme
+          mode: 'metadata-only',
           existingCode: customCode,
           useMetadata: true,
+          // Ek bağlam bilgileri
+          dataSourceInfo,
+          dataAnalysis,
+          multiQueryInfo,
         },
       });
 
@@ -1238,7 +1336,15 @@ ${JSON.stringify(dataToSend, null, 2).slice(0, 1500)}`;
         if (aiMetadata.longDescription) {
           setLongDescription(aiMetadata.longDescription);
         }
-        if (aiMetadata.technicalNotes) {
+        
+        // Teknik notları usedFields, calculations, dataFlow'dan oluştur
+        if (aiMetadata.usedFields || aiMetadata.calculations || aiMetadata.dataFlow) {
+          setTechnicalNotes({
+            usedFields: aiMetadata.usedFields || [],
+            calculations: aiMetadata.calculations || [],
+            dataFlow: aiMetadata.dataFlow || '',
+          });
+        } else if (aiMetadata.technicalNotes) {
           setTechnicalNotes(aiMetadata.technicalNotes);
         }
         
