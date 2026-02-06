@@ -427,6 +427,31 @@ function Widget({ data, colors }) {
 return Widget;
 `;
 
+// Mock preview data - tutarlı görselleştirme için
+const getMockPreviewData = () => {
+  const mockRecords = [
+    { label: 'Kategori A', value: 125000, percentage: 35 },
+    { label: 'Kategori B', value: 98000, percentage: 27 },
+    { label: 'Kategori C', value: 76000, percentage: 21 },
+    { label: 'Kategori D', value: 61000, percentage: 17 },
+  ];
+  
+  return mockRecords.map((r, i) => ({
+    ...r,
+    cariAdi: ['ABC Ltd. Şirketi', 'XYZ A.Ş.', 'Delta Sanayi', 'Omega Ticaret'][i],
+    bakiye: r.value,
+    toplambakiye: r.value,
+    borc: r.value * 1.2,
+    alacak: r.value * 0.2,
+    tarih: new Date(Date.now() - i * 86400000).toISOString(),
+    miktar: Math.floor(r.value / 1000),
+    stokkodu: ['STK001', 'STK002', 'STK003', 'STK004'][i],
+    stokadi: ['Ürün Alpha', 'Ürün Beta', 'Ürün Gamma', 'Ürün Delta'][i],
+    birimfiyat: [250, 180, 320, 150][i],
+    adet: [500, 544, 237, 406][i],
+  }));
+};
+
 // Wizard adım tanımları
 const WIZARD_STEPS = [
   { id: 0, key: 'data', title: 'Veri Kaynağı', icon: Database, description: 'Widget bilgileri ve veri seçimi' },
@@ -2457,7 +2482,7 @@ ${JSON.stringify(dataToSend, null, 2).slice(0, 1500)}`;
     </div>
   );
 
-  // Önizleme görseli yakala (html2canvas)
+  // Önizleme görseli yakala (html2canvas) - Mock data ile
   const capturePreviewImage = async () => {
     const previewElement = document.getElementById('widget-preview-container');
     if (!previewElement) {
@@ -2466,6 +2491,17 @@ ${JSON.stringify(dataToSend, null, 2).slice(0, 1500)}`;
     }
     
     setIsCapturingPreview(true);
+    
+    // Mevcut veriyi sakla
+    const originalData = sampleData;
+    
+    // Mock data ile geçici render
+    const mockData = getMockPreviewData();
+    setSampleData(mockData);
+    
+    // DOM güncellenmesini bekle
+    await new Promise(resolve => setTimeout(resolve, 150));
+    
     try {
       const canvas = await html2canvas(previewElement, {
         backgroundColor: null,
@@ -2476,11 +2512,13 @@ ${JSON.stringify(dataToSend, null, 2).slice(0, 1500)}`;
       
       const imageData = canvas.toDataURL('image/png');
       setPreviewImage(imageData);
-      toast.success('Önizleme görseli oluşturuldu');
+      toast.success('Önizleme görseli oluşturuldu (örnek veri ile)');
     } catch (err) {
       console.error('Preview capture error:', err);
       toast.error('Görsel oluşturulamadı');
     } finally {
+      // Orijinal veriyi geri yükle
+      setSampleData(originalData);
       setIsCapturingPreview(false);
     }
   };
