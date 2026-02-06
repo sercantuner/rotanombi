@@ -101,7 +101,7 @@ const MapLoadingPlaceholder = ({ children, ...props }: any) => {
 };
 
 // Boş placeholder bileşenler - children'ı yok sayar
-const EmptyComponent = () => null;
+const EmptyComponent = ({ children }: any) => null;
 
 const EmptyMapScope = {
   MapContainer: MapLoadingPlaceholder,
@@ -111,6 +111,7 @@ const EmptyMapScope = {
   CircleMarker: EmptyComponent,
   Polyline: EmptyComponent,
   Polygon: EmptyComponent,
+  Tooltip: EmptyComponent, // Widget'larda Map.Tooltip kullanılıyor
   // Hooks - güvenli placeholder
   useMap: () => ({ setView: () => {}, getZoom: () => 10, getCenter: () => ({ lat: 39, lng: 35 }) }),
   useMapEvents: () => null,
@@ -196,6 +197,7 @@ const initMapScope = async () => {
       CircleMarker: reactLeaflet.CircleMarker,
       Polyline: reactLeaflet.Polyline,
       Polygon: reactLeaflet.Polygon,
+      Tooltip: reactLeaflet.Tooltip, // Widget'larda Map.Tooltip kullanılıyor
       // Hooks
       useMap: reactLeaflet.useMap,
       useMapEvents: reactLeaflet.useMapEvents,
@@ -334,6 +336,7 @@ const UIScope = {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  Button, // Widget'larda UI.Button kullanılıyor
 };
 
 // Error Boundary bileşeni
