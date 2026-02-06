@@ -2652,16 +2652,21 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
       )}
       
       {isFullPage && (
-        <div className="px-4 md:px-6 py-3 border-b shrink-0 flex items-center gap-3 bg-card">
-          <Button variant="ghost" size="icon" onClick={onClose}>
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-lg font-semibold flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              {editingWidget ? 'Widget Düzenle' : 'AI Widget Builder'}
-            </h1>
+        <div className="px-4 md:px-6 py-3 border-b shrink-0 flex items-center justify-between bg-card">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={onClose}>
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+            <div>
+              <h1 className="text-lg font-semibold flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                {editingWidget ? 'Widget Düzenle' : 'AI Widget Builder'}
+              </h1>
+            </div>
           </div>
+          <Button variant="ghost" size="icon" onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="h-5 w-5" />
+          </Button>
         </div>
       )}
 
