@@ -1,6 +1,5 @@
-// CategoryPickerModal - Etiket seçimi ve ekleme için modal
-// Terminoloji: Kategori yerine Etiket (Tag) sistemi
-// Geriye uyumluluk için tek seçim modu korunuyor
+// TagPickerModal - Çoklu etiket seçimi ve ekleme için modal
+// CategoryPickerModal'ın multi-select versiyonu
 
 import React, { useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -10,17 +9,19 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useWidgetCategories, WidgetCategory } from '@/hooks/useWidgetCategories';
 import { Search, Folder, Check, Loader2, Plus, ChevronLeft, Tag } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-interface CategoryPickerModalProps {
+interface TagPickerModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  selectedCategory?: string;
-  onSelect: (categorySlug: string) => void;
+  selectedTags?: string[];
+  onSelect: (tagSlugs: string[]) => void;
+  maxTags?: number; // Maksimum seçilebilir etiket sayısı
 }
 
 // Dinamik ikon renderer
@@ -37,24 +38,33 @@ const POPULAR_ICONS = [
   'CreditCard', 'PieChart', 'Target', 'Award', 'Calendar', 'Clock',
 ];
 
-export function CategoryPickerModal({
+export function TagPickerModal({
   open,
   onOpenChange,
-  selectedCategory,
+  selectedTags = [],
   onSelect,
-}: CategoryPickerModalProps) {
+  maxTags,
+}: TagPickerModalProps) {
   const { categories, isLoading, createCategory, isCreating } = useWidgetCategories();
   const [searchTerm, setSearchTerm] = useState('');
+  const [localSelection, setLocalSelection] = useState<string[]>(selectedTags);
   
-  // Yeni kategori ekleme modu
+  // Yeni etiket ekleme modu
   const [isAddMode, setIsAddMode] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [newCategorySlug, setNewCategorySlug] = useState('');
-  const [newCategoryIcon, setNewCategoryIcon] = useState('Folder');
-  const [newCategoryDescription, setNewCategoryDescription] = useState('');
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagSlug, setNewTagSlug] = useState('');
+  const [newTagIcon, setNewTagIcon] = useState('Tag');
+  const [newTagDescription, setNewTagDescription] = useState('');
 
-  // Kategorileri filtrele
-  const filteredCategories = useMemo(() => {
+  // Modal açıldığında seçimi güncelle
+  React.useEffect(() => {
+    if (open) {
+      setLocalSelection(selectedTags);
+    }
+  }, [open, selectedTags]);
+
+  // Etiketleri filtrele
+  const filteredTags = useMemo(() => {
     if (!searchTerm.trim()) return categories;
     const term = searchTerm.toLowerCase();
     return categories.filter(cat => 
@@ -64,15 +74,27 @@ export function CategoryPickerModal({
     );
   }, [categories, searchTerm]);
 
-  const handleSelect = (category: WidgetCategory) => {
-    onSelect(category.slug);
+  const toggleTag = (slug: string) => {
+    setLocalSelection(prev => {
+      if (prev.includes(slug)) {
+        return prev.filter(s => s !== slug);
+      }
+      if (maxTags && prev.length >= maxTags) {
+        toast.error(`En fazla ${maxTags} etiket seçebilirsiniz`);
+        return prev;
+      }
+      return [...prev, slug];
+    });
+  };
+
+  const handleConfirm = () => {
+    onSelect(localSelection);
     onOpenChange(false);
   };
 
   // Slug otomatik oluştur
   const handleNameChange = (name: string) => {
-    setNewCategoryName(name);
-    // Sadece slug boşsa veya otomatik oluşturulmuşsa güncelle
+    setNewTagName(name);
     const autoSlug = name
       .toLowerCase()
       .replace(/[^a-z0-9ğüşıöç]/g, '_')
@@ -84,38 +106,37 @@ export function CategoryPickerModal({
       .replace(/ç/g, 'c')
       .replace(/_+/g, '_')
       .replace(/^_|_$/g, '');
-    setNewCategorySlug(autoSlug);
+    setNewTagSlug(autoSlug);
   };
 
-  // Yeni kategori ekle
-  const handleAddCategory = async () => {
-    if (!newCategoryName.trim() || !newCategorySlug.trim()) {
-      toast.error('Kategori adı ve slug zorunludur');
+  // Yeni etiket ekle
+  const handleAddTag = async () => {
+    if (!newTagName.trim() || !newTagSlug.trim()) {
+      toast.error('Etiket adı ve slug zorunludur');
       return;
     }
 
     try {
       await createCategory({
-        name: newCategoryName.trim(),
-        slug: newCategorySlug.trim(),
-        icon: newCategoryIcon,
-        description: newCategoryDescription.trim() || undefined,
+        name: newTagName.trim(),
+        slug: newTagSlug.trim(),
+        icon: newTagIcon,
+        description: newTagDescription.trim() || undefined,
         is_active: true,
         sort_order: categories.length,
       });
       
       // Formu temizle ve seçim moduna dön
-      setNewCategoryName('');
-      setNewCategorySlug('');
-      setNewCategoryIcon('Folder');
-      setNewCategoryDescription('');
+      setNewTagName('');
+      setNewTagSlug('');
+      setNewTagIcon('Tag');
+      setNewTagDescription('');
       setIsAddMode(false);
       
-      // Yeni kategoriyi otomatik seç
-      onSelect(newCategorySlug.trim());
-      onOpenChange(false);
+      // Yeni etiketi otomatik seç
+      setLocalSelection(prev => [...prev, newTagSlug.trim()]);
     } catch (error) {
-      console.error('Kategori oluşturma hatası:', error);
+      console.error('Etiket oluşturma hatası:', error);
     }
   };
 
@@ -123,10 +144,10 @@ export function CategoryPickerModal({
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
       setIsAddMode(false);
-      setNewCategoryName('');
-      setNewCategorySlug('');
-      setNewCategoryIcon('Folder');
-      setNewCategoryDescription('');
+      setNewTagName('');
+      setNewTagSlug('');
+      setNewTagIcon('Tag');
+      setNewTagDescription('');
       setSearchTerm('');
     }
     onOpenChange(newOpen);
@@ -159,19 +180,19 @@ export function CategoryPickerModal({
           <DialogDescription>
             {isAddMode 
               ? 'Yeni bir widget etiketi oluşturun' 
-              : 'Widget\'a atamak istediğiniz etiketi seçin veya yeni bir etiket ekleyin'
+              : 'Widget\'a atamak istediğiniz etiketleri seçin (birden fazla seçebilirsiniz)'
             }
           </DialogDescription>
         </DialogHeader>
 
         {isAddMode ? (
-          // YENİ KATEGORİ EKLEME FORMU
+          // YENİ ETİKET EKLEME FORMU
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Etiket Adı *</Label>
                 <Input
-                  value={newCategoryName}
+                  value={newTagName}
                   onChange={(e) => handleNameChange(e.target.value)}
                   placeholder="Satış Raporları"
                 />
@@ -179,8 +200,8 @@ export function CategoryPickerModal({
               <div className="space-y-2">
                 <Label>Slug *</Label>
                 <Input
-                  value={newCategorySlug}
-                  onChange={(e) => setNewCategorySlug(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
+                  value={newTagSlug}
+                  onChange={(e) => setNewTagSlug(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
                   placeholder="satis_raporlari"
                 />
               </div>
@@ -189,9 +210,9 @@ export function CategoryPickerModal({
             <div className="space-y-2">
               <Label>Açıklama</Label>
               <Input
-                value={newCategoryDescription}
-                onChange={(e) => setNewCategoryDescription(e.target.value)}
-                placeholder="Kategori açıklaması (opsiyonel)"
+                value={newTagDescription}
+                onChange={(e) => setNewTagDescription(e.target.value)}
+                placeholder="Etiket açıklaması (opsiyonel)"
               />
             </div>
 
@@ -199,16 +220,16 @@ export function CategoryPickerModal({
               <Label>İkon</Label>
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                  <DynamicIcon iconName={newCategoryIcon} className="h-5 w-5" />
+                  <DynamicIcon iconName={newTagIcon} className="h-5 w-5" />
                 </div>
                 <div className="flex-1 grid grid-cols-9 gap-1">
                   {POPULAR_ICONS.map(icon => (
                     <Button
                       key={icon}
-                      variant={newCategoryIcon === icon ? 'default' : 'ghost'}
+                      variant={newTagIcon === icon ? 'default' : 'ghost'}
                       size="icon"
                       className="h-8 w-8"
-                      onClick={() => setNewCategoryIcon(icon)}
+                      onClick={() => setNewTagIcon(icon)}
                       title={icon}
                     >
                       <DynamicIcon iconName={icon} className="h-4 w-4" />
@@ -225,8 +246,8 @@ export function CategoryPickerModal({
                 İptal
               </Button>
               <Button 
-                onClick={handleAddCategory} 
-                disabled={isCreating || !newCategoryName.trim() || !newCategorySlug.trim()}
+                onClick={handleAddTag} 
+                disabled={isCreating || !newTagName.trim() || !newTagSlug.trim()}
               >
                 {isCreating ? (
                   <>
@@ -245,6 +266,27 @@ export function CategoryPickerModal({
         ) : (
           // ETİKET SEÇİM LİSTESİ
           <>
+            {/* Seçili etiketler */}
+            {localSelection.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pb-2 border-b">
+                {localSelection.map(slug => {
+                  const tag = categories.find(c => c.slug === slug);
+                  return (
+                    <Badge 
+                      key={slug} 
+                      variant="default"
+                      className="gap-1 cursor-pointer hover:bg-primary/80"
+                      onClick={() => toggleTag(slug)}
+                    >
+                      <DynamicIcon iconName={tag?.icon || 'Tag'} className="h-3 w-3" />
+                      {tag?.name || slug}
+                      <LucideIcons.X className="h-3 w-3 ml-0.5" />
+                    </Badge>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Arama + Ekle Butonu */}
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
@@ -273,7 +315,7 @@ export function CategoryPickerModal({
                   <Loader2 className="h-4 w-4 animate-spin" />
                   <span>Yükleniyor...</span>
                 </div>
-              ) : filteredCategories.length === 0 ? (
+              ) : filteredTags.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                   <Tag className="h-8 w-8 mb-2 opacity-50" />
                   <p className="text-sm">
@@ -291,13 +333,13 @@ export function CategoryPickerModal({
                 </div>
               ) : (
                 <div className="p-2 space-y-1">
-                  {filteredCategories.map((category) => {
-                    const isSelected = selectedCategory === category.slug;
+                  {filteredTags.map((tag) => {
+                    const isSelected = localSelection.includes(tag.slug);
                     
                     return (
                       <button
-                        key={category.id}
-                        onClick={() => handleSelect(category)}
+                        key={tag.id}
+                        onClick={() => toggleTag(tag.slug)}
                         className={cn(
                           "w-full flex items-center gap-3 p-3 rounded-lg text-left transition-all",
                           isSelected 
@@ -305,36 +347,40 @@ export function CategoryPickerModal({
                             : "hover:bg-muted"
                         )}
                       >
+                        <Checkbox 
+                          checked={isSelected}
+                          className={cn(
+                            "pointer-events-none",
+                            isSelected && "border-primary-foreground data-[state=checked]:bg-primary-foreground data-[state=checked]:text-primary"
+                          )}
+                        />
+                        
                         <div className={cn(
                           "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
                           isSelected ? "bg-primary-foreground/20" : "bg-muted"
                         )}>
-                        <DynamicIcon 
-                            iconName={category.icon || 'Tag'} 
+                          <DynamicIcon 
+                            iconName={tag.icon || 'Tag'} 
                             className="h-5 w-5"
                           />
                         </div>
                         
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium">{category.name}</div>
-                          {category.description && (
+                          <div className="font-medium">{tag.name}</div>
+                          {tag.description && (
                             <div className={cn(
                               "text-xs truncate",
                               isSelected ? "opacity-80" : "text-muted-foreground"
                             )}>
-                              {category.description}
+                              {tag.description}
                             </div>
                           )}
                         </div>
 
-                        {!category.is_active && (
+                        {!tag.is_active && (
                           <Badge variant="outline" className="text-[10px]">
                             Pasif
                           </Badge>
-                        )}
-
-                        {isSelected && (
-                          <Check className="h-5 w-5 shrink-0" />
                         )}
                       </button>
                     );
@@ -345,10 +391,19 @@ export function CategoryPickerModal({
 
             {/* Footer */}
             <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-              <span>{filteredCategories.length} etiket</span>
-              <Button variant="outline" size="sm" onClick={() => handleOpenChange(false)}>
-                İptal
-              </Button>
+              <span>
+                {localSelection.length} etiket seçili
+                {maxTags && ` (max ${maxTags})`}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => handleOpenChange(false)}>
+                  İptal
+                </Button>
+                <Button size="sm" onClick={handleConfirm}>
+                  <Check className="h-4 w-4 mr-1" />
+                  Onayla
+                </Button>
+              </div>
             </div>
           </>
         )}
