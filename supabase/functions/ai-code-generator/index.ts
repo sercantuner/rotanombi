@@ -1868,14 +1868,20 @@ Widget kodunu ürettikten sonra aşağıdaki metadata bilgilerini de sağlamalı
 
     if (mode === 'metadata-only' && existingCode) {
       // Sadece metadata üretimi - kod zaten var
+      // Kodu kısaltarak token tasarrufu sağla (ilk 3000 karakter yeterli)
+      const truncatedCode = existingCode.length > 3000 
+        ? existingCode.substring(0, 3000) + '\n// ... (kod devam ediyor)'
+        : existingCode;
+      
       const metadataOnlySystemPrompt = `Sen bir widget analiz uzmanısın. Sana verilen widget kodunu analiz edip metadata oluşturacaksın.
-Kod veya başka bir şey YAZMA. Sadece metadata bilgilerini döndür.
+
+SADECE generate_widget_with_metadata tool'unu çağır. Başka hiçbir şey yazma.
 
 Widget'ın yaptığı işlemi, kullandığı alanları, hesaplamaları analiz et ve uygun metadata üret.`;
 
       messages = [
         { role: 'system', content: metadataOnlySystemPrompt + metadataInstructions },
-        { role: 'user', content: prompt }
+        { role: 'user', content: `Bu widget kodunu analiz et ve metadata oluştur:\n\n${truncatedCode}` }
       ];
     } else if (mode === 'refine' && chatHistory && chatHistory.length > 0) {
       // İyileştirme modu - chat geçmişini kullan (metadata yok)
@@ -1903,7 +1909,7 @@ Widget'ın yaptığı işlemi, kullandığı alanları, hesaplamaları analiz et
     const requestBody: any = {
       model: "google/gemini-3-pro-preview",
       messages,
-      max_tokens: mode === 'metadata-only' ? 4000 : 64000, // Metadata için daha az token yeterli
+      max_tokens: mode === 'metadata-only' ? 8000 : 64000, // Metadata için artırıldı (tool response için)
       temperature: 0.7,
     };
     
