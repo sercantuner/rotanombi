@@ -159,13 +159,17 @@ export function WidgetDetailModal({
 
             {/* Uzun Açıklama */}
             {widget.long_description && (
-              <div>
-                <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium flex items-center gap-2">
                   <BookOpen className="h-4 w-4 text-primary" />
                   Detaylı Açıklama
                 </h4>
-                <div className="text-sm text-muted-foreground whitespace-pre-wrap bg-muted/30 rounded-lg p-3 max-h-40 overflow-y-auto">
-                  {widget.long_description}
+                <div className="bg-muted/30 rounded-lg border">
+                  <ScrollArea className="h-[120px] w-full">
+                    <div className="text-sm text-muted-foreground whitespace-pre-wrap p-3 pr-4">
+                      {widget.long_description}
+                    </div>
+                  </ScrollArea>
                 </div>
               </div>
             )}
