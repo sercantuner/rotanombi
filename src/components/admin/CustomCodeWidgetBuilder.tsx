@@ -2042,40 +2042,51 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
             </Collapsible>
           </ScrollArea>
           
-          <div className="flex items-center gap-2 pt-2 border-t">
-            <Button
-              onClick={generateCodeWithAI}
-              disabled={isGeneratingCode || !aiPrompt.trim() || sampleData.length === 0}
-              className="gap-2"
-            >
-              {isGeneratingCode ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
+          {/* Inline butonlar sadece Dialog modunda göster - tam sayfada bottom bar'da */}
+          {!isFullPage && (
+            <div className="flex items-center gap-2 pt-2 border-t">
+              <Button
+                onClick={generateCodeWithAI}
+                disabled={isGeneratingCode || !aiPrompt.trim() || sampleData.length === 0}
+                className="gap-2"
+              >
+                {isGeneratingCode ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                {isGeneratingCode ? 'Kod Üretiliyor...' : 'AI ile Kod Üret'}
+              </Button>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setFullPromptContent(generateFullPromptPreview());
+                  setShowFullPromptModal(true);
+                }}
+                className="gap-2"
+              >
+                <LucideIcons.FileText className="h-4 w-4" />
+                Prompt'u Göster
+              </Button>
+              
+              {sampleData.length === 0 && (
+                <span className="text-xs text-destructive">
+                  Önce veri kaynağı seçin
+                </span>
               )}
-              {isGeneratingCode ? 'Kod Üretiliyor...' : 'AI ile Kod Üret'}
-            </Button>
-            
-            {/* Tam Prompt Görüntüle Butonu */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setFullPromptContent(generateFullPromptPreview());
-                setShowFullPromptModal(true);
-              }}
-              className="gap-2"
-            >
-              <LucideIcons.FileText className="h-4 w-4" />
-              Prompt'u Göster
-            </Button>
-            
-            {sampleData.length === 0 && (
+            </div>
+          )}
+          
+          {/* Tam sayfa modunda sadece uyarı göster */}
+          {isFullPage && sampleData.length === 0 && (
+            <div className="pt-2 border-t">
               <span className="text-xs text-destructive">
                 Önce veri kaynağı seçin
               </span>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Seçili Filtre Alanları */}
           {selectedFilterFields.length > 0 && (
@@ -2628,9 +2639,9 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
   const builderContent = (
     <div className={cn(
       "flex flex-col",
-      isFullPage ? "h-full" : "h-[95vh] md:h-[90vh]"
+      isFullPage ? "h-full pb-16" : "h-[95vh] md:h-[90vh]"
     )}>
-      {/* Header - Dialog modunda DialogHeader kullanılır */}
+      {/* Header - Dialog modunda DialogHeader kullanılır, tam sayfada üstte göster */}
       {!isFullPage && (
         <DialogHeader className="px-4 md:px-6 py-3 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
@@ -2639,34 +2650,130 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
           </DialogTitle>
         </DialogHeader>
       )}
+      
+      {isFullPage && (
+        <div className="px-4 md:px-6 py-3 border-b shrink-0 flex items-center gap-3 bg-card">
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-lg font-semibold flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              {editingWidget ? 'Widget Düzenle' : 'AI Widget Builder'}
+            </h1>
+          </div>
+        </div>
+      )}
 
       {/* Stepper */}
       <StepperHeader />
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className={cn(
+        "flex-1 overflow-auto p-4",
+        isFullPage && currentStep === 1 ? "pb-4" : ""
+      )}>
         {currentStep === 0 && renderStep1()}
         {currentStep === 1 && renderStep2()}
         {currentStep === 2 && renderStep3()}
         {currentStep === 3 && renderStep4()}
       </div>
 
-      {/* Footer Navigation */}
-      <div className={cn(
-        "px-4 md:px-6 py-3 border-t shrink-0 flex items-center justify-between",
-        isFullPage ? "" : ""
-      )}>
+      {/* Footer Navigation - Dialog modu */}
+      {!isFullPage && (
+        <div className="px-4 md:px-6 py-3 border-t shrink-0 flex items-center justify-between">
+          <Button 
+            variant="outline" 
+            onClick={handleBack}
+            className="gap-2"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Geri
+          </Button>
+          
+          <div className="flex items-center gap-2">
+            {currentStep === 1 && (
+              <Button 
+                variant="ghost" 
+                onClick={handleNext}
+                className="text-muted-foreground"
+              >
+                Atla →
+              </Button>
+            )}
+            
+            {currentStep < WIZARD_STEPS.length - 1 ? (
+              <Button 
+                onClick={handleNext}
+                disabled={!canProceed(currentStep)}
+                className="gap-2"
+              >
+                İleri
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleSave}
+                disabled={isSaving || codeError !== null}
+                className="gap-2"
+              >
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {editingWidget ? 'Widget Güncelle' : 'Widget Oluştur'}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+  
+  // Fixed Bottom Bar Component - Tam sayfa modu için
+  const FixedBottomBar = () => (
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t shadow-lg">
+      <div className="flex items-center justify-between px-4 md:px-6 py-3 max-w-screen-2xl mx-auto">
+        {/* Sol: Geri/İptal */}
         <Button 
           variant="outline" 
-          onClick={isFullPage && currentStep === 0 ? onClose : handleBack}
+          onClick={currentStep === 0 ? onClose : handleBack}
           className="gap-2"
         >
           <ChevronLeft className="h-4 w-4" />
-          {isFullPage && currentStep === 0 ? 'İptal' : 'Geri'}
+          {currentStep === 0 ? 'İptal' : 'Geri'}
         </Button>
         
+        {/* Orta: Step 2'de AI butonları */}
+        {currentStep === 1 && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setFullPromptContent(generateFullPromptPreview());
+                setShowFullPromptModal(true);
+              }}
+              className="gap-2"
+            >
+              <LucideIcons.FileText className="h-4 w-4" />
+              <span className="hidden md:inline">Prompt'u Göster</span>
+            </Button>
+            
+            <Button
+              onClick={generateCodeWithAI}
+              disabled={isGeneratingCode || !aiPrompt.trim() || sampleData.length === 0}
+              className="gap-2"
+            >
+              {isGeneratingCode ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              {isGeneratingCode ? 'Üretiliyor...' : 'AI ile Kod Üret'}
+            </Button>
+          </div>
+        )}
+        
+        {/* Sağ: İleri/Kaydet */}
         <div className="flex items-center gap-2">
-          {/* AI adımında Atla butonu */}
           {currentStep === 1 && (
             <Button 
               variant="ghost" 
@@ -2693,7 +2800,7 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
               className="gap-2"
             >
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {editingWidget ? 'Widget Güncelle' : 'Widget Oluştur'}
+              {editingWidget ? 'Güncelle' : 'Oluştur'}
             </Button>
           )}
         </div>
@@ -2701,11 +2808,14 @@ Kullanıcı isteği: ${buildEnhancedPrompt()}`;
     </div>
   );
 
-  // Tam sayfa modunda sadece content döndür
+  // Tam sayfa modunda sadece content döndür + Fixed Bottom Bar
   if (isFullPage) {
     return (
       <>
         {builderContent}
+        
+        {/* Fixed Bottom Bar */}
+        <FixedBottomBar />
         
         {/* Tam Prompt Görüntüleme Modal */}
         <Dialog open={showFullPromptModal} onOpenChange={setShowFullPromptModal}>
