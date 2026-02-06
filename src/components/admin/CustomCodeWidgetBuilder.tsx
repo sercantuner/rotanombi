@@ -441,9 +441,31 @@ interface ChatMessage {
   content: string;
 }
 
-export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWidget, editWidgetId, isFullPage = false, onClose }: CustomCodeWidgetBuilderProps) {
-  const { widgets } = useWidgets();
+export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWidget: editingWidgetProp, editWidgetId, isFullPage = false, onClose }: CustomCodeWidgetBuilderProps) {
+  const { widgets, isLoading: isWidgetsLoading } = useWidgets();
   const { createWidget, updateWidget, isLoading: isSaving } = useWidgetAdmin();
+  
+  // editWidgetId varsa widgets listesinden bul, yoksa prop'tan gelen editingWidget'ı kullan
+  const editingWidget = React.useMemo(() => {
+    if (editingWidgetProp) return editingWidgetProp;
+    if (editWidgetId && widgets.length > 0) {
+      const found = widgets.find(w => w.id === editWidgetId);
+      if (found) {
+        // Widget tipini WidgetForEdit'e dönüştür
+        return {
+          id: found.id,
+          widget_key: found.widget_key,
+          name: found.name,
+          description: found.description || '',
+          icon: found.icon || 'Code',
+          size: found.size,
+          default_page: found.default_page,
+          builder_config: found.builder_config,
+        } as WidgetForEdit;
+      }
+    }
+    return null;
+  }, [editingWidgetProp, editWidgetId, widgets]);
   const { activeDataSources, getDataSourceById, isLoading: isDataSourcesLoading, dataSources } = useDataSources();
   const { relationships, getRelationshipsForDataSource } = useDataSourceRelationships();
   const { activeCategories, isLoading: isCategoriesLoading, getCategoryBySlug } = useWidgetCategories();
@@ -602,7 +624,8 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   // Düzenleme modunda widget verilerini yükle
   useEffect(() => {
     // dataSources henüz yüklenmediyse bekle
-    if (editingWidget && open && !isDataSourcesLoading && dataSources.length > 0) {
+    const isActive = isFullPage || open;
+    if (editingWidget && isActive && !isDataSourcesLoading && dataSources.length > 0) {
       const config = editingWidget.builder_config;
       setWidgetKey(editingWidget.widget_key);
       setWidgetName(editingWidget.name);
@@ -653,7 +676,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
           }
         }
       }
-    } else if (!editingWidget && open) {
+    } else if (!editingWidget && isActive) {
       // Yeni widget - form sıfırla
       setWidgetKey('custom_widget_' + Date.now());
       setWidgetName('Özel Widget');
@@ -678,7 +701,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
       setNewCustomRule('');
       setSelectedFilterFields([]);
     }
-  }, [editingWidget, open, isDataSourcesLoading, dataSources, getDataSourceById]);
+  }, [editingWidget, open, isFullPage, isDataSourcesLoading, dataSources, getDataSourceById]);
 
   // Multi-query verilerini yükle
   const loadMultiQueryData = async (config: MultiQueryConfig) => {
