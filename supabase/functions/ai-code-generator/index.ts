@@ -453,7 +453,8 @@ function Widget({ data, colors, filters }) {
     // ═══════════════════════════════════════════════════════════════════════
     React.createElement(UI.Dialog, { open: isOpen, onOpenChange: setIsOpen },
       React.createElement(UI.DialogContent, { 
-        className: 'w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col overflow-hidden' 
+        className: 'w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col overflow-hidden ' +
+                   'max-md:w-screen max-md:h-screen max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0'
       },
         React.createElement(UI.DialogHeader, null,
           React.createElement(UI.DialogTitle, { className: 'flex items-center gap-2' },
@@ -499,11 +500,30 @@ return Widget;
 
 ❌ POPUP YASAKLARI:
    - Custom div+backdrop popup kullanma (UI.Dialog tercih et)
-   - w-full veya çok geniş modal (50vw aşılmasın)
+   - w-full veya çok geniş modal (50vw aşılmasın - masaüstünde)
    - max-h olmadan modal (ekranı taşar)
    - overflow-hidden ile liste (scroll olmaz, veri kesilir)
    - rounded-xl, p-4+ (kompakt değil)
    - Portal/createPortal kullanma (UI.Dialog otomatik portal kullanır)
+
+📱 MOBİL TAM EKRAN POPUP KURALI (ZORUNLU!)
+───────────────────────────────────────────────────────────────────────────────
+Tüm widget popup/modal'ları mobil cihazlarda (768px altı) TAM EKRAN açılmalıdır.
+DialogContent className'ine şu sınıflar EKLENMELİDİR:
+
+className: 'w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col overflow-hidden ' +
+           'max-md:w-screen max-md:h-screen max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0'
+
+Mobil sınıfları AÇIKLAMA:
+- max-md:w-screen     → Tam genişlik
+- max-md:h-screen     → Tam yükseklik  
+- max-md:max-w-none   → Max genişlik sınırı kaldır
+- max-md:max-h-none   → Max yükseklik sınırı kaldır
+- max-md:rounded-none → Köşe yuvarlaklığı kaldır
+- max-md:m-0          → Margin sıfırla
+
+❌ YANLIŞ: Sadece masaüstü boyutlarını tanımlamak
+✅ DOĞRU: Hem masaüstü hem mobil sınıflarını eklemek
 
 📌 TOOLTIP Z-INDEX KURALI (ZORUNLU - İKİ ADIM!)
 ───────────────────────────────────────────────────────────────────────────────
