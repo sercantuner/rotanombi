@@ -2,7 +2,10 @@
 
 import { WidgetBuilderConfig } from './widgetBuilderTypes';
 
+// Legacy type - artık dinamik kategoriler kullanılıyor
 export type WidgetCategory = 'dashboard' | 'satis' | 'finans' | 'cari';
+// Alias: Etiket sistemi için
+export type WidgetTag = string;
 export type WidgetType = 'kpi' | 'chart' | 'table' | 'list' | 'summary';
 export type WidgetSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 export type DataSource = 'genel' | 'satis' | 'finans' | 'mock';
@@ -51,6 +54,8 @@ export interface Widget {
   target_pages?: WidgetCategory[];
   filter_fields?: FilterFieldConfig[];
   builder_config: WidgetBuilderConfig | null; // Widget Builder yapılandırması
+  // Çoklu etiket desteği
+  tags?: string[]; // widget_tags tablosundan gelen etiket slug'ları
 }
 
 // Kullanıcı layout'unda widget yerleşimi
@@ -89,6 +94,8 @@ export interface WidgetFormData {
   available_sizes?: WidgetSize[];
   target_pages?: WidgetCategory[];
   filter_fields?: FilterFieldConfig[];
+  // Çoklu etiket desteği
+  tags?: string[]; // Seçili etiket slug'ları
 }
 
 // Sayfa kategorileri

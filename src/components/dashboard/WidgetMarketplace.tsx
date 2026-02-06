@@ -83,8 +83,10 @@ export function WidgetMarketplace({
       const matchesSearch = w.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            (w.description || '').toLowerCase().includes(searchTerm.toLowerCase());
       
-      // Kategori filtresi
-      const matchesCategory = selectedCategory === 'all' || w.category === selectedCategory;
+      // Kategori/etiket filtresi (çoklu etiket desteği)
+      const matchesCategory = selectedCategory === 'all' || 
+        w.category === selectedCategory || 
+        w.tags?.includes(selectedCategory);
       
       return matchesSearch && matchesCategory;
     });
@@ -101,9 +103,12 @@ export function WidgetMarketplace({
      
      counts.all = accessibleWidgets.length;
      
-     activeCategories.forEach(cat => {
-       counts[cat.slug] = accessibleWidgets.filter(w => w.category === cat.slug).length;
-     });
+      activeCategories.forEach(cat => {
+        // Etiket bazlı sayım (çoklu etiket desteği)
+        counts[cat.slug] = accessibleWidgets.filter(w => 
+          w.category === cat.slug || w.tags?.includes(cat.slug)
+        ).length;
+      });
      
      return counts;
    }, [widgets, filterAccessibleWidgets, canAddWidget, currentWidgetKeys, activeCategories]);

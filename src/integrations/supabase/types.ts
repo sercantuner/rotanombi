@@ -1159,6 +1159,42 @@ export type Database = {
           },
         ]
       }
+      widget_tags: {
+        Row: {
+          category_id: string
+          created_at: string | null
+          id: string
+          widget_id: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string | null
+          id?: string
+          widget_id: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string | null
+          id?: string
+          widget_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "widget_tags_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "widget_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "widget_tags_widget_id_fkey"
+            columns: ["widget_id"]
+            isOneToOne: false
+            referencedRelation: "widgets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       widgets: {
         Row: {
           available_filters: Json | null

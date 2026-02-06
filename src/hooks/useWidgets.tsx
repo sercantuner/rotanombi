@@ -12,15 +12,26 @@ export function useWidgets() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Widget listesini çek
+  // Widget listesini çek (widget_tags ile birlikte)
   const fetchWidgets = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
+      // Widget'ları ve etiketlerini çek
       const { data, error: fetchError } = await supabase
         .from('widgets')
-        .select('*')
+        .select(`
+          *,
+          widget_tags (
+            category_id,
+            widget_categories!inner (
+              slug,
+              name,
+              icon
+            )
+          )
+        `)
         .order('sort_order', { ascending: true });
 
       if (fetchError) {
@@ -28,29 +39,37 @@ export function useWidgets() {
       }
 
       // Map database response to Widget type
-      const mappedWidgets: Widget[] = (data || []).map((w: any) => ({
-        id: w.id,
-        widget_key: w.widget_key,
-        name: w.name,
-        description: w.description,
-        category: w.category as WidgetCategory,
-        type: w.type,
-        data_source: w.data_source,
-        size: w.size,
-        icon: w.icon,
-        default_page: w.default_page as WidgetCategory,
-        default_visible: w.default_visible,
-        available_filters: Array.isArray(w.available_filters) ? w.available_filters : [],
-        default_filters: w.default_filters || {},
-        min_height: w.min_height,
-        grid_cols: w.grid_cols,
-        is_active: w.is_active,
-        sort_order: w.sort_order,
-        created_at: w.created_at,
-        updated_at: w.updated_at,
-        created_by: w.created_by,
-        builder_config: w.builder_config || null,
-      }));
+      const mappedWidgets: Widget[] = (data || []).map((w: any) => {
+        // Etiketleri ayıkla
+        const tags = (w.widget_tags || [])
+          .map((wt: any) => wt.widget_categories?.slug)
+          .filter(Boolean);
+        
+        return {
+          id: w.id,
+          widget_key: w.widget_key,
+          name: w.name,
+          description: w.description,
+          category: w.category as WidgetCategory,
+          type: w.type,
+          data_source: w.data_source,
+          size: w.size,
+          icon: w.icon,
+          default_page: w.default_page as WidgetCategory,
+          default_visible: w.default_visible,
+          available_filters: Array.isArray(w.available_filters) ? w.available_filters : [],
+          default_filters: w.default_filters || {},
+          min_height: w.min_height,
+          grid_cols: w.grid_cols,
+          is_active: w.is_active,
+          sort_order: w.sort_order,
+          created_at: w.created_at,
+          updated_at: w.updated_at,
+          created_by: w.created_by,
+          builder_config: w.builder_config || null,
+          tags: tags.length > 0 ? tags : [w.category], // Etiket yoksa eski category kullan
+        };
+      });
 
       setWidgets(mappedWidgets);
     } catch (err) {
@@ -70,9 +89,16 @@ export function useWidgets() {
     return widgets.find(w => w.widget_key === widgetKey);
   }, [widgets]);
 
-  // Kategoriye göre widget'ları getir
+  // Kategoriye/etikete göre widget'ları getir
   const getWidgetsByCategory = useCallback((category: WidgetCategory): Widget[] => {
-    return widgets.filter(w => w.category === category && w.is_active);
+    return widgets.filter(w => 
+      w.is_active && (w.category === category || w.tags?.includes(category))
+    );
+  }, [widgets]);
+
+  // Etikete göre widget'ları getir (çoklu etiket desteği)
+  const getWidgetsByTag = useCallback((tag: string): Widget[] => {
+    return widgets.filter(w => w.is_active && w.tags?.includes(tag));
   }, [widgets]);
 
   // Varsayılan sayfaya göre widget'ları getir
@@ -94,10 +120,15 @@ export function useWidgets() {
     return { widgets: pageWidgets };
   }, [widgets]);
 
-  // Sayfa için kullanılabilir tüm widget'ları getir
+  // Sayfa için kullanılabilir tüm widget'ları getir (etiket bazlı)
   const getAvailableWidgetsForPage = useCallback((page: WidgetCategory): Widget[] => {
     return widgets.filter(w => 
-      w.is_active && (w.default_page === page || w.category === page || w.category === 'dashboard')
+      w.is_active && (
+        w.default_page === page || 
+        w.category === page || 
+        w.tags?.includes(page) ||
+        w.category === 'dashboard'
+      )
     );
   }, [widgets]);
 
@@ -108,6 +139,7 @@ export function useWidgets() {
     refetch: fetchWidgets,
     getWidgetByKey,
     getWidgetsByCategory,
+    getWidgetsByTag,
     getWidgetsByDefaultPage,
     getDefaultLayoutForPage,
     getAvailableWidgetsForPage,
@@ -172,6 +204,14 @@ export function useWidgetAdmin() {
 
       if (error) throw error;
       
+      // Widget etiketlerini kaydet (widget_tags)
+      if (createdWidget && data.tags && data.tags.length > 0) {
+        await saveWidgetTags(createdWidget.id, data.tags);
+      } else if (createdWidget && data.category) {
+        // Etiket yoksa varsayılan olarak category'yi kaydet
+        await saveWidgetTags(createdWidget.id, [data.category]);
+      }
+      
       // Changelog kaydı oluştur
       if (createdWidget) {
         await logChange(createdWidget.id, 1, 'created', changeNotes || `${data.name} widget'ı oluşturuldu`);
@@ -185,6 +225,43 @@ export function useWidgetAdmin() {
       return false;
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  // Widget etiketlerini kaydet
+  const saveWidgetTags = async (widgetId: string, tagSlugs: string[]): Promise<void> => {
+    try {
+      // Önce widget_categories'den slug'lara göre id'leri al
+      const { data: categories, error: catError } = await supabase
+        .from('widget_categories')
+        .select('id, slug')
+        .in('slug', tagSlugs);
+      
+      if (catError) throw catError;
+      
+      // Mevcut etiketleri sil
+      await supabase
+        .from('widget_tags')
+        .delete()
+        .eq('widget_id', widgetId);
+      
+      // Yeni etiketleri ekle
+      if (categories && categories.length > 0) {
+        const tagInserts = categories.map(cat => ({
+          widget_id: widgetId,
+          category_id: cat.id,
+        }));
+        
+        const { error: insertError } = await supabase
+          .from('widget_tags')
+          .insert(tagInserts);
+        
+        if (insertError) {
+          console.error('Error inserting widget tags:', insertError);
+        }
+      }
+    } catch (err) {
+      console.error('Error saving widget tags:', err);
     }
   };
 
@@ -202,9 +279,12 @@ export function useWidgetAdmin() {
         .single();
 
       const newVersion = (currentWidget?.version || 1) + 1;
+      
+      // tags alanını data'dan çıkar (ayrı tablo)
+      const { tags, ...restData } = data as WidgetFormData;
 
       const updateData: any = {
-        ...data,
+        ...restData,
         updated_at: new Date().toISOString(),
         version: newVersion,
         last_change_type: 'updated',
@@ -217,6 +297,11 @@ export function useWidgetAdmin() {
         .eq('id', id);
 
       if (error) throw error;
+      
+      // Widget etiketlerini güncelle (widget_tags)
+      if (tags && tags.length > 0) {
+        await saveWidgetTags(id, tags);
+      }
       
       // Changelog kaydı oluştur
       await logChange(id, newVersion, 'updated', changeNotes || `${currentWidget?.name || 'Widget'} güncellendi`);

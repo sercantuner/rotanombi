@@ -1,4 +1,5 @@
-// Category Manager - Widget kategorilerini yönetme paneli
+// Tag Manager - Widget etiketlerini yönetme paneli
+// Terminoloji: Kategori yerine Etiket sistemi
 import React, { useState } from 'react';
 import { useWidgetCategories, WidgetCategory, WidgetCategoryFormData } from '@/hooks/useWidgetCategories';
 import { Button } from '@/components/ui/button';
@@ -214,19 +215,19 @@ export function CategoryManager() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Kategori Yönetimi</h2>
-          <p className="text-muted-foreground">Widget kategorilerini oluşturun ve düzenleyin</p>
+          <h2 className="text-2xl font-bold">Etiket Yönetimi</h2>
+          <p className="text-muted-foreground">Widget etiketlerini oluşturun ve düzenleyin</p>
         </div>
         <Button onClick={handleCreate} className="gap-2">
           <Plus className="w-4 h-4" />
-          Yeni Kategori
+          Yeni Etiket
         </Button>
       </div>
 
-      {/* Kategori Tablosu */}
+      {/* Etiket Tablosu */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Kategoriler ({categories.length})</CardTitle>
+          <CardTitle className="text-lg">Etiketler ({categories.length})</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -245,7 +246,7 @@ export function CategoryManager() {
               {categories.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    Henüz kategori oluşturulmamış
+                    Henüz etiket oluşturulmamış
                   </TableCell>
                 </TableRow>
               ) : (
@@ -310,7 +311,7 @@ export function CategoryManager() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {editingCategory ? 'Kategori Düzenle' : 'Yeni Kategori'}
+              {editingCategory ? 'Etiket Düzenle' : 'Yeni Etiket'}
             </DialogTitle>
           </DialogHeader>
 
@@ -453,10 +454,10 @@ export function CategoryManager() {
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Kategori Silinecek</AlertDialogTitle>
+            <AlertDialogTitle>Etiket Silinecek</AlertDialogTitle>
             <AlertDialogDescription>
-              <strong>{deletingCategory?.name}</strong> kategorisini silmek istediğinizden emin misiniz?
-              Bu işlem geri alınamaz ve bu kategoriye bağlı widget'lar etkilenebilir.
+              <strong>{deletingCategory?.name}</strong> etiketini silmek istediğinizden emin misiniz?
+              Bu işlem geri alınamaz ve bu etikete bağlı widget'lar etkilenebilir.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

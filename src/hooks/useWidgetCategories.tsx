@@ -1,10 +1,12 @@
-// useWidgetCategories - Dinamik widget kategorileri yönetimi
+// useWidgetCategories / useWidgetTags - Dinamik widget etiketleri yönetimi
+// Terminoloji: Kategori yerine Etiket (Tag) sistemi
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
+// Etiket tipi (eski WidgetCategory adı korunuyor geriye uyumluluk için)
 export interface WidgetCategory {
   id: string;
   slug: string;
@@ -18,6 +20,9 @@ export interface WidgetCategory {
   updated_at: string;
 }
 
+// Alias: Etiket sistemi için
+export type WidgetTag = WidgetCategory;
+
 export interface WidgetCategoryFormData {
   slug: string;
   name: string;
@@ -27,6 +32,9 @@ export interface WidgetCategoryFormData {
   sort_order?: number;
   is_active?: boolean;
 }
+
+// Alias: Etiket sistemi için
+export type WidgetTagFormData = WidgetCategoryFormData;
 
 export function useWidgetCategories() {
   const { user } = useAuth();
@@ -135,19 +143,35 @@ export function useWidgetCategories() {
   }));
 
   return {
+    // Geriye uyumluluk için eski isimler
     categories: data || [],
     activeCategories,
     categoryOptions,
-    isLoading,
-    error,
-    refetch,
     getCategoryBySlug,
     createCategory: createMutation.mutateAsync,
     updateCategory: (id: string, data: Partial<WidgetCategoryFormData>) => 
       updateMutation.mutateAsync({ id, data }),
     deleteCategory: deleteMutation.mutateAsync,
+    
+    // Yeni etiket sistemi için alias'lar
+    tags: data || [],
+    activeTags: activeCategories,
+    tagOptions: categoryOptions,
+    getTagBySlug: getCategoryBySlug,
+    createTag: createMutation.mutateAsync,
+    updateTag: (id: string, data: Partial<WidgetCategoryFormData>) => 
+      updateMutation.mutateAsync({ id, data }),
+    deleteTag: deleteMutation.mutateAsync,
+    
+    // Ortak
+    isLoading,
+    error,
+    refetch,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
   };
 }
+
+// Alias: Etiket hook'u
+export const useWidgetTags = useWidgetCategories;
