@@ -711,7 +711,7 @@ export function useDynamicWidgetData(
   } = useDiaDataCache();
   
   // Veri kaynağı bilgilerini çek (slug almak için)
-  const { dataSources } = useDataSources();
+  const { dataSources, isLoading: isDataSourcesLoading } = useDataSources();
   
   // OPTIMIZATION: sharedData ref ile tut
   const sharedDataRef = useRef(sharedData);
@@ -1063,18 +1063,27 @@ export function useDynamicWidgetData(
 
   // DIA profil değişikliği veya config değiştiğinde veri çek
   const prevConfigRef = useRef(configKey);
+  // dataSources yüklenmesini izlemek için ref
+  const dataSourcesLoadedRef = useRef(false);
   
   useEffect(() => {
+    // dataSources henüz yüklenmediyse bekle
+    if (isDataSourcesLoading) {
+      console.log('[Widget] Waiting for dataSources to load...');
+      return;
+    }
+    
     // Config değiştiyse veya ilk mount'ta fetch yap
     if (config && sunucuAdi && firmaKodu) {
       // isPageDataReady bekleme - doğrudan DB'den okuyoruz
-      if (prevConfigRef.current !== configKey || !hasInitialDataRef.current) {
+      if (prevConfigRef.current !== configKey || !hasInitialDataRef.current || !dataSourcesLoadedRef.current) {
+        dataSourcesLoadedRef.current = true;
         fetchData();
       }
     }
     prevConfigRef.current = configKey;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configKey, sunucuAdi, firmaKodu, effectiveDonem]);
+  }, [configKey, sunucuAdi, firmaKodu, effectiveDonem, isDataSourcesLoading]);
 
   // Filtre değişikliklerini izle - raw veri üzerinde yeniden işle (API çağrısı yapmadan)
   const globalFiltersKey = useMemo(() => {
