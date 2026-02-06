@@ -164,7 +164,7 @@ export function WidgetDetailModal({
                   <BookOpen className="h-4 w-4 text-primary" />
                   Detaylı Açıklama
                 </h4>
-                <div className="text-sm text-muted-foreground whitespace-pre-wrap bg-muted/30 rounded-lg p-3">
+                <div className="text-sm text-muted-foreground whitespace-pre-wrap bg-muted/30 rounded-lg p-3 max-h-40 overflow-y-auto">
                   {widget.long_description}
                 </div>
               </div>
