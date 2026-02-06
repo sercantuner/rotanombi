@@ -50,7 +50,9 @@ import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   FunnelChart, Funnel, LabelList,
   ReferenceLine, ReferenceDot, ReferenceArea,
-  Treemap
+  Treemap,
+  // RadialBarChart - yeni eklendi
+  RadialBarChart, RadialBar
 } from 'recharts';
 
 // Recharts bileşenlerini scope'a ekle
@@ -66,6 +68,8 @@ const RechartsScope = {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   // Funnel (huni) grafik
   FunnelChart, Funnel, LabelList,
+  // RadialBar grafik
+  RadialBarChart, RadialBar,
   // Treemap
   Treemap,
   // Referans çizgileri ve işaretleyiciler
@@ -95,13 +99,46 @@ const EmptyMapScope = {
  
  // Nivo placeholder
  const EmptyNivoScope = {
+   // Mevcut
    ResponsiveSankey: () => null,
    ResponsiveSunburst: () => null,
    ResponsiveChord: () => null,
    ResponsiveRadar: () => null,
-    ResponsiveFunnel: () => null,
+   ResponsiveFunnel: () => null,
    ResponsiveChoropleth: () => null,
    ResponsiveGeoMap: () => null,
+   
+   // Yeni bileşenler
+   ResponsiveBar: () => null,
+   ResponsiveLine: () => null,
+   ResponsivePie: () => null,
+   ResponsiveScatterPlot: () => null,
+   ResponsiveCalendar: () => null,
+   ResponsiveCalendarCanvas: () => null,
+   ResponsiveCirclePacking: () => null,
+   ResponsiveCirclePackingCanvas: () => null,
+   ResponsiveHeatMap: () => null,
+   ResponsiveHeatMapCanvas: () => null,
+   ResponsiveMarimekko: () => null,
+   ResponsiveNetwork: () => null,
+   ResponsiveNetworkCanvas: () => null,
+   ResponsiveParallelCoordinates: () => null,
+   ResponsiveParallelCoordinatesCanvas: () => null,
+   ResponsiveRadialBar: () => null,
+   ResponsiveStream: () => null,
+   ResponsiveSwarmPlot: () => null,
+   ResponsiveSwarmPlotCanvas: () => null,
+   ResponsiveTreeMap: () => null,
+   ResponsiveTreeMapCanvas: () => null,
+   ResponsiveTreeMapHtml: () => null,
+   ResponsiveVoronoi: () => null,
+   ResponsiveWaffle: () => null,
+   ResponsiveWaffleCanvas: () => null,
+   ResponsiveWaffleHtml: () => null,
+   ResponsiveBump: () => null,
+   ResponsiveAreaBump: () => null,
+   ResponsiveBullet: () => null,
+   
    useTheme: () => ({}),
    getTheme: () => ({})
  };
@@ -155,12 +192,11 @@ const initMapScope = async () => {
    
    try {
      const [
-       nivoSankey,
-       nivoSunburst,
-       nivoChord,
-       nivoRadar,
-       nivoGeo,
-        nivoFunnel,
+       nivoSankey, nivoSunburst, nivoChord, nivoRadar, nivoGeo, nivoFunnel,
+       nivoBar, nivoLine, nivoPie, nivoScatterplot, nivoCalendar,
+       nivoCirclePacking, nivoHeatmap, nivoMarimekko, nivoNetwork,
+       nivoParallelCoordinates, nivoRadialBar, nivoStream, nivoSwarmplot,
+       nivoTreemap, nivoVoronoi, nivoWaffle, nivoBump, nivoBullet,
        _nivoCore
      ] = await Promise.all([
        import('@nivo/sankey'),
@@ -168,18 +204,70 @@ const initMapScope = async () => {
        import('@nivo/chord'),
        import('@nivo/radar'),
        import('@nivo/geo'),
-        import('@nivo/funnel'),
+       import('@nivo/funnel'),
+       import('@nivo/bar'),
+       import('@nivo/line'),
+       import('@nivo/pie'),
+       import('@nivo/scatterplot'),
+       import('@nivo/calendar'),
+       import('@nivo/circle-packing'),
+       import('@nivo/heatmap'),
+       import('@nivo/marimekko'),
+       import('@nivo/network'),
+       import('@nivo/parallel-coordinates'),
+       import('@nivo/radial-bar'),
+       import('@nivo/stream'),
+       import('@nivo/swarmplot'),
+       import('@nivo/treemap'),
+       import('@nivo/voronoi'),
+       import('@nivo/waffle'),
+       import('@nivo/bump'),
+       import('@nivo/bullet'),
        import('@nivo/core')
      ]);
      
      NivoScope = {
+       // Mevcut bileşenler
        ResponsiveSankey: nivoSankey.ResponsiveSankey,
        ResponsiveSunburst: nivoSunburst.ResponsiveSunburst,
        ResponsiveChord: nivoChord.ResponsiveChord,
        ResponsiveRadar: nivoRadar.ResponsiveRadar,
-        ResponsiveFunnel: nivoFunnel.ResponsiveFunnel,
+       ResponsiveFunnel: nivoFunnel.ResponsiveFunnel,
        ResponsiveChoropleth: nivoGeo.ResponsiveChoropleth,
        ResponsiveGeoMap: nivoGeo.ResponsiveGeoMap,
+       
+       // Yeni bileşenler
+       ResponsiveBar: nivoBar.ResponsiveBar,
+       ResponsiveLine: nivoLine.ResponsiveLine,
+       ResponsivePie: nivoPie.ResponsivePie,
+       ResponsiveScatterPlot: nivoScatterplot.ResponsiveScatterPlot,
+       ResponsiveCalendar: nivoCalendar.ResponsiveCalendar,
+       ResponsiveCalendarCanvas: nivoCalendar.ResponsiveCalendarCanvas,
+       ResponsiveCirclePacking: nivoCirclePacking.ResponsiveCirclePacking,
+       ResponsiveCirclePackingCanvas: nivoCirclePacking.ResponsiveCirclePackingCanvas,
+       ResponsiveHeatMap: nivoHeatmap.ResponsiveHeatMap,
+       ResponsiveHeatMapCanvas: nivoHeatmap.ResponsiveHeatMapCanvas,
+       ResponsiveMarimekko: nivoMarimekko.ResponsiveMarimekko,
+       ResponsiveNetwork: nivoNetwork.ResponsiveNetwork,
+       ResponsiveNetworkCanvas: nivoNetwork.ResponsiveNetworkCanvas,
+       ResponsiveParallelCoordinates: nivoParallelCoordinates.ResponsiveParallelCoordinates,
+       ResponsiveParallelCoordinatesCanvas: nivoParallelCoordinates.ResponsiveParallelCoordinatesCanvas,
+       ResponsiveRadialBar: nivoRadialBar.ResponsiveRadialBar,
+       ResponsiveStream: nivoStream.ResponsiveStream,
+       ResponsiveSwarmPlot: nivoSwarmplot.ResponsiveSwarmPlot,
+       ResponsiveSwarmPlotCanvas: nivoSwarmplot.ResponsiveSwarmPlotCanvas,
+       ResponsiveTreeMap: nivoTreemap.ResponsiveTreeMap,
+       ResponsiveTreeMapCanvas: nivoTreemap.ResponsiveTreeMapCanvas,
+       ResponsiveTreeMapHtml: nivoTreemap.ResponsiveTreeMapHtml,
+       ResponsiveVoronoi: nivoVoronoi.ResponsiveVoronoi,
+       ResponsiveWaffle: nivoWaffle.ResponsiveWaffle,
+       ResponsiveWaffleCanvas: nivoWaffle.ResponsiveWaffleCanvas,
+       ResponsiveWaffleHtml: nivoWaffle.ResponsiveWaffleHtml,
+       ResponsiveBump: nivoBump.ResponsiveBump,
+       ResponsiveAreaBump: nivoBump.ResponsiveAreaBump,
+       ResponsiveBullet: nivoBullet.ResponsiveBullet,
+       
+       // Tema oluşturucu (dark/light mode uyumu)
        getTheme: (isDark: boolean) => ({
          background: 'transparent',
          textColor: isDark ? 'hsl(0 0% 90%)' : 'hsl(0 0% 20%)',
