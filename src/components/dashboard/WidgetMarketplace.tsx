@@ -136,6 +136,7 @@ export function WidgetMarketplace({
   };
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {!hideTrigger && (
         <DialogTrigger asChild>
