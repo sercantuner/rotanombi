@@ -1,19 +1,20 @@
 // Widget Marketplace - Tam Sayfa Versiyon
 // Kullanıcıların widget ekleyebileceği arayüz
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useWidgets } from '@/hooks/useWidgets';
 import { useWidgetPermissions } from '@/hooks/useWidgetPermissions';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
 import { Widget, WidgetCategory, WIDGET_TYPES, WIDGET_SIZES } from '@/lib/widgetTypes';
 import { useWidgetCategories } from '@/hooks/useWidgetCategories';
+import { useWidgetFeedback } from '@/hooks/useWidgetFeedback';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, Check, LayoutGrid, PieChart, Table2, List, Activity, Loader2, Info, ArrowLeft, Grid3X3 } from 'lucide-react';
+import { Plus, Search, Check, LayoutGrid, PieChart, Table2, List, Activity, Loader2, Info, ArrowLeft, Grid3X3, Star } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import * as LucideIcons from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -50,10 +51,12 @@ export function WidgetMarketplacePage() {
   const { filterAccessibleWidgets, canAddWidget } = useWidgetPermissions();
   const { getPageLayout, addWidgetToPage } = useUserSettings();
   const { activeCategories, isLoading: isCategoriesLoading } = useWidgetCategories();
+  const { getWidgetAverageRating } = useWidgetFeedback();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [addingWidgetId, setAddingWidgetId] = useState<string | null>(null);
+  const [avgRatings, setAvgRatings] = useState<Record<string, number | null>>({});
   
   // Widget detay modalı
   const [detailWidget, setDetailWidget] = useState<Widget | null>(null);
@@ -101,7 +104,38 @@ export function WidgetMarketplacePage() {
     return counts;
   }, [widgets, filterAccessibleWidgets, canAddWidget, currentWidgetKeys, activeCategories]);
 
+  // Widget ortalama puanlarını yükle
+  useEffect(() => {
+    const loadRatings = async () => {
+      if (availableWidgets.length === 0) return;
+      
+      const ratings: Record<string, number | null> = {};
+      // Paralel olarak tüm rating'leri çek
+      await Promise.all(
+        availableWidgets.map(async (widget) => {
+          const avg = await getWidgetAverageRating(widget.id);
+          ratings[widget.id] = avg;
+        })
+      );
+      setAvgRatings(ratings);
+    };
+    
+    loadRatings();
+  }, [availableWidgets.length, getWidgetAverageRating]);
+
   // Widget ekle
+  // Akıllı geri dönüş - navigate(-1) yerine URL parametrelerine göre
+  const getReturnPath = () => {
+    if (containerId && targetPage) {
+      // Container modunda ise sayfaya dön
+      return targetPage === 'dashboard' ? '/dashboard' : `/page/${targetPage}`;
+    }
+    if (targetPage && targetPage !== 'dashboard') {
+      return `/page/${targetPage}`;
+    }
+    return '/dashboard';
+  };
+
   const handleAddWidget = async (widgetKey: string, widgetId: string) => {
     setAddingWidgetId(widgetKey);
     
@@ -131,7 +165,7 @@ export function WidgetMarketplacePage() {
     }
     
     setAddingWidgetId(null);
-    navigate(-1); // Geri dön
+    navigate(getReturnPath()); // Akıllı geri dön
   };
 
   return (
@@ -140,7 +174,7 @@ export function WidgetMarketplacePage() {
       <div className="flex-shrink-0 border-b bg-card px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+            <Button variant="ghost" size="icon" onClick={() => navigate(getReturnPath())}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
@@ -327,15 +361,24 @@ export function WidgetMarketplacePage() {
                     <p className="text-sm text-muted-foreground line-clamp-2 flex-1">
                       {widget.short_description || widget.description || 'Açıklama yok'}
                     </p>
-                    <div className="flex items-center gap-2 mt-3 pt-3 border-t">
-                      <TypeIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground">
-                        {WIDGET_TYPES.find(t => t.id === widget.type)?.name}
-                      </span>
-                      <span className="text-xs text-muted-foreground">•</span>
-                      <span className="text-xs text-muted-foreground">
-                        {WIDGET_SIZES.find(s => s.id === widget.size)?.name}
-                      </span>
+                    <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t">
+                      <div className="flex items-center gap-2">
+                        <TypeIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">
+                          {WIDGET_TYPES.find(t => t.id === widget.type)?.name}
+                        </span>
+                        <span className="text-xs text-muted-foreground">•</span>
+                        <span className="text-xs text-muted-foreground">
+                          {WIDGET_SIZES.find(s => s.id === widget.size)?.name}
+                        </span>
+                      </div>
+                      {/* Yıldız Puanı */}
+                      {avgRatings[widget.id] !== undefined && avgRatings[widget.id] !== null && (
+                        <div className="flex items-center gap-1">
+                          <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
+                          <span className="text-xs font-medium">{avgRatings[widget.id]!.toFixed(1)}</span>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

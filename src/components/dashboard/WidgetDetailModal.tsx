@@ -1,7 +1,7 @@
 // Widget Detail Modal - Marketplace'de widget detaylarını gösteren modal
 // Preview image, teknik notlar, açıklamalar ve etiketler gösterilir
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Widget, TechnicalNotes } from '@/lib/widgetTypes';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -11,11 +11,12 @@ import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { 
   Plus, ChevronRight, Database, Calculator, GitBranch, 
-  FileText, BookOpen, Tags, LayoutGrid, Clock
+  FileText, BookOpen, Tags, LayoutGrid, Clock, Star
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWidgetCategories } from '@/hooks/useWidgetCategories';
+import { useWidgetFeedback } from '@/hooks/useWidgetFeedback';
 import { WIDGET_TYPES, WIDGET_SIZES } from '@/lib/widgetTypes';
 
 interface WidgetDetailModalProps {
@@ -41,6 +42,17 @@ export function WidgetDetailModal({
   isAdding = false 
 }: WidgetDetailModalProps) {
   const { activeCategories } = useWidgetCategories();
+  const { getWidgetAverageRating } = useWidgetFeedback();
+  const [averageRating, setAverageRating] = useState<number | null>(null);
+  
+  // Widget değiştiğinde rating'i yükle
+  useEffect(() => {
+    if (widget && open) {
+      getWidgetAverageRating(widget.id).then(setAverageRating);
+    } else {
+      setAverageRating(null);
+    }
+  }, [widget?.id, open, getWidgetAverageRating]);
   
   if (!widget) return null;
 
@@ -77,8 +89,27 @@ export function WidgetDetailModal({
                 {widget.short_description || widget.description || 'Açıklama yok'}
               </DialogDescription>
               
-              {/* Etiketler */}
-              <div className="flex flex-wrap gap-1 mt-2">
+              {/* Etiketler ve Rating */}
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                {/* Yıldız Puanı */}
+                {averageRating !== null && (
+                  <div className="flex items-center gap-1 mr-2">
+                    <div className="flex items-center">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star 
+                          key={star}
+                          className={cn(
+                            "h-3.5 w-3.5",
+                            star <= Math.round(averageRating)
+                              ? "fill-amber-500 text-amber-500"
+                              : "text-muted-foreground"
+                          )}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-xs font-medium ml-1">{averageRating.toFixed(1)}</span>
+                  </div>
+                )}
                 {(widget.tags || [widget.category]).slice(0, 5).map((tag, idx) => {
                   const category = activeCategories.find(c => c.slug === tag);
                   return (
