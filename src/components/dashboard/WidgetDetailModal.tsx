@@ -59,9 +59,11 @@ export function WidgetDetailModal({
   const technicalNotes = widget.technical_notes as TechnicalNotes | null;
   const hasMetadata = widget.short_description || widget.long_description || technicalNotes;
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0 max-md:w-screen max-md:h-screen max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0">
         {/* Header */}
         <DialogHeader className="px-6 py-4 border-b shrink-0">
           <div className="flex items-start gap-4 pr-8">
