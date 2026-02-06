@@ -30,21 +30,70 @@ async function cleanup(sb: any) {
     .eq('status', 'running').lt('started_at', new Date(Date.now() - CLEANUP_TIMEOUT_MS).toISOString());
 }
 
+// Kayıttan benzersiz anahtar çıkarma - DIA metodlarına göre genişletildi
+function extractKey(r: any, idx: number): number | null {
+  // Öncelikli anahtarlar
+  if (r._key) return Number(r._key);
+  if (r.id) return Number(r.id);
+  
+  // Cari kart için alternatif anahtarlar
+  if (r.carikart_key) return Number(r.carikart_key);
+  if (r.cari_key) return Number(r.cari_key);
+  if (r._key_scf_carikart && typeof r._key_scf_carikart === 'object' && r._key_scf_carikart._key) {
+    return Number(r._key_scf_carikart._key);
+  }
+  
+  // Stok için alternatif anahtarlar
+  if (r.stokkart_key) return Number(r.stokkart_key);
+  if (r.stok_key) return Number(r.stok_key);
+  
+  // Fatura için alternatif anahtarlar
+  if (r.fatura_key) return Number(r.fatura_key);
+  
+  // Hash tabanlı anahtar oluştur (carikodu, stokkodu vb. varsa)
+  if (r.carikodu) {
+    // carikodu + vade bilgilerinden benzersiz hash oluştur
+    const hashStr = `${r.carikodu}_${r.vade_tarihi || ''}_${r.bakiye || ''}_${idx}`;
+    return Math.abs(hashString(hashStr));
+  }
+  if (r.stokkodu) {
+    const hashStr = `${r.stokkodu}_${r.depo || ''}_${idx}`;
+    return Math.abs(hashString(hashStr));
+  }
+  
+  // Son çare: index bazlı benzersiz numara (zaman damgası + index)
+  return Date.now() + idx;
+}
+
+// Basit hash fonksiyonu
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // 32-bit integer'a dönüştür
+  }
+  return hash;
+}
+
 // Batch upsert - bellek ve DB optimizasyonu için
 async function writeBatch(sb: any, sun: string, fk: string, dk: number, slug: string, recs: any[]) {
   let written = 0;
   
   for (let i = 0; i < recs.length; i += UPSERT_BATCH_SIZE) {
     const batch = recs.slice(i, i + UPSERT_BATCH_SIZE)
-      .map(r => {
-        const k = r._key || r.id;
-        if (!k) return null;
+      .map((r, batchIdx) => {
+        const k = extractKey(r, i + batchIdx);
+        if (!k) {
+          console.log(`[writeBatch] No key found for record:`, JSON.stringify(r).substring(0, 200));
+          return null;
+        }
         return { 
           sunucu_adi: sun, 
           firma_kodu: fk, 
           donem_kodu: dk, 
           data_source_slug: slug, 
-          dia_key: Number(k), 
+          dia_key: k, 
           data: r, 
           is_deleted: false, 
           updated_at: new Date().toISOString() 
@@ -60,7 +109,11 @@ async function writeBatch(sb: any, sun: string, fk: string, dk: number, slug: st
         onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug,dia_key' 
       });
     
-    if (!error) written += batch.length;
+    if (error) {
+      console.log(`[writeBatch] Upsert error:`, error.message);
+    } else {
+      written += batch.length;
+    }
   }
   
   return written;
@@ -72,16 +125,19 @@ async function write(sb: any, sun: string, fk: string, dk: number, slug: string,
   
   for (let i = 0; i < recs.length; i += UPSERT_BATCH_SIZE) {
     const batch = recs.slice(i, i + UPSERT_BATCH_SIZE)
-      .map(r => {
-        const k = r._key || r.id;
-        if (!k) return null;
-        keys.add(Number(k));
+      .map((r, batchIdx) => {
+        const k = extractKey(r, i + batchIdx);
+        if (!k) {
+          console.log(`[write] No key found for record:`, JSON.stringify(r).substring(0, 200));
+          return null;
+        }
+        keys.add(k);
         return { 
           sunucu_adi: sun, 
           firma_kodu: fk, 
           donem_kodu: dk, 
           data_source_slug: slug, 
-          dia_key: Number(k), 
+          dia_key: k, 
           data: r, 
           is_deleted: false, 
           updated_at: new Date().toISOString() 
@@ -97,7 +153,11 @@ async function write(sb: any, sun: string, fk: string, dk: number, slug: string,
         onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug,dia_key' 
       });
     
-    if (!error) written += batch.length;
+    if (error) {
+      console.log(`[write] Upsert error:`, error.message);
+    } else {
+      written += batch.length;
+    }
   }
   
   return written;
