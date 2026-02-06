@@ -2491,25 +2491,18 @@ ${JSON.stringify(dataToSend, null, 2).slice(0, 1500)}`;
     </div>
   );
 
-  // Önizleme görseli yakala (html2canvas) - Mock data ile
+  // Önizleme görseli yakala (html2canvas) - Widget zaten mock data ile render ediliyor
   const capturePreviewImage = async () => {
     const previewElement = document.getElementById('widget-preview-container');
     if (!previewElement) {
-      toast.error('Önizleme alanı bulunamadı');
+      toast.error('Önizleme alanı bulunamadı - önce widget kodunu yazın');
       return;
     }
     
     setIsCapturingPreview(true);
     
-    // Mevcut veriyi sakla
-    const originalData = sampleData;
-    
-    // Mock data ile geçici render - widget tipine göre
-    const mockData = getMockPreviewData(widgetName || 'generic');
-    setSampleData(mockData);
-    
-    // DOM güncellenmesini bekle
-    await new Promise(resolve => setTimeout(resolve, 150));
+    // DOM stabilitesi için kısa bekleme
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     try {
       const canvas = await html2canvas(previewElement, {
@@ -2521,13 +2514,11 @@ ${JSON.stringify(dataToSend, null, 2).slice(0, 1500)}`;
       
       const imageData = canvas.toDataURL('image/png');
       setPreviewImage(imageData);
-      toast.success('Önizleme görseli oluşturuldu (örnek veri ile)');
+      toast.success('Önizleme görseli oluşturuldu');
     } catch (err) {
       console.error('Preview capture error:', err);
       toast.error('Görsel oluşturulamadı');
     } finally {
-      // Orijinal veriyi geri yükle
-      setSampleData(originalData);
       setIsCapturingPreview(false);
     }
   };
@@ -2563,14 +2554,8 @@ ${JSON.stringify(dataToSend, null, 2).slice(0, 1500)}`;
           )}
         </CardHeader>
         <CardContent className="flex-1">
-          {sampleData.length === 0 ? (
-            <div className="border-2 border-dashed rounded-lg p-4 min-h-[300px] flex items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                <Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Veri yüklenmedi</p>
-              </div>
-            </div>
-          ) : codeError ? (
+          {/* Kod varsa widget göster (veri yoksa mock data ile çalışır), yoksa uyarı */}
+          {codeError ? (
             <Alert variant="destructive" className="min-h-[300px]">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
@@ -2585,14 +2570,18 @@ ${JSON.stringify(dataToSend, null, 2).slice(0, 1500)}`;
                   Widget render hatası
                 </div>
               }>
-                {React.createElement(PreviewResult.component, { data: sampleData, colors: PreviewResult.colors, filters: {} })}
+                {React.createElement(PreviewResult.component, { 
+                  data: sampleData.length > 0 ? sampleData : getMockPreviewData(widgetName || 'generic'), 
+                  colors: PreviewResult.colors, 
+                  filters: {} 
+                })}
               </ErrorBoundary>
             </div>
           ) : (
             <div className="border-2 border-dashed rounded-lg p-4 min-h-[300px] flex items-center justify-center text-muted-foreground">
               <div className="text-center">
                 <Code className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Kod yazılmadı</p>
+                <p className="text-sm">Kod yazılmadı veya yüklenemiyor</p>
               </div>
             </div>
           )}
