@@ -1720,6 +1720,68 @@ function mergeCodeParts(originalCode: string, continuationCode: string): string 
 
 const MAX_CONTINUE_ATTEMPTS = 3;
 
+// Tool calling için metadata şablonu
+const getWidgetMetadataTool = () => ({
+  type: "function",
+  function: {
+    name: "generate_widget_with_metadata",
+    description: "Widget kodu ve açıklayıcı metadata bilgilerini döndür",
+    parameters: {
+      type: "object",
+      properties: {
+        code: { 
+          type: "string", 
+          description: "Widget JavaScript kodu - function Widget({ data, colors, filters }) ile başlayıp return Widget; ile bitmeli" 
+        },
+        suggestedTags: { 
+          type: "array", 
+          items: { type: "string" },
+          description: "Widget için önerilen etiketler (finans, satis, cari, stok, performans, rapor vb.) - maks 5" 
+        },
+        shortDescription: { 
+          type: "string", 
+          description: "Widget'ın kısa açıklaması - Marketplace kartında görünecek (maks 100 karakter)" 
+        },
+        longDescription: { 
+          type: "string", 
+          description: "Widget'ın detaylı açıklaması - ne gösterdiği, nasıl kullanılacağı (Markdown destekli)" 
+        },
+        usedFields: {
+          type: "array",
+          description: "Widget'ta kullanılan veri alanları ve rolleri",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Alan adı (örn: bakiye, unvan)" },
+              type: { type: "string", description: "Alan tipi (number, string, date, boolean)" },
+              usage: { type: "string", description: "Alanın widget'ta nasıl kullanıldığı (örn: Y ekseni değeri, gruplama alanı)" }
+            },
+            required: ["name", "type", "usage"]
+          }
+        },
+        calculations: {
+          type: "array",
+          description: "Widget'ta yapılan hesaplamalar",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Hesaplama adı (örn: Toplam Bakiye)" },
+              formula: { type: "string", description: "Hesaplama formülü (örn: sum(bakiye))" },
+              description: { type: "string", description: "Hesaplamanın açıklaması" }
+            },
+            required: ["name", "formula", "description"]
+          }
+        },
+        dataFlow: { 
+          type: "string", 
+          description: "Verinin işlenme akışı - filtre, gruplama, sıralama adımları" 
+        }
+      },
+      required: ["code", "suggestedTags", "shortDescription", "longDescription", "usedFields", "dataFlow"]
+    }
+  }
+});
+
 serve(async (req) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -1727,7 +1789,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, sampleData, chatHistory, mode } = await req.json();
+    const { prompt, sampleData, chatHistory, mode, useMetadata } = await req.json();
 
     if (!prompt) {
       throw new Error("Prompt gerekli");
@@ -1738,13 +1800,46 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY yapılandırılmamış");
     }
 
-    console.log("[AI Code Generator v2.1] Mod:", mode || 'generate', "- Kod üretiliyor...");
+    console.log("[AI Code Generator v2.2] Mod:", mode || 'generate', "- Metadata:", useMetadata ? 'aktif' : 'pasif');
 
     // Mesajları oluştur
     let messages: Array<{ role: string; content: string }>;
+    
+    // System prompt'a metadata talimatlarını ekle (sadece generate modunda)
+    const metadataInstructions = `
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 KOD ÜRETİMİ SONRASI META VERİ (ZORUNLU!)
+═══════════════════════════════════════════════════════════════════════════════
+
+Widget kodunu ürettikten sonra aşağıdaki metadata bilgilerini de sağlamalısın:
+
+📌 ETİKET ÖNERİLERİ (suggestedTags):
+   - Widget'ın içeriğine uygun 3-5 etiket öner
+   - Mevcut kategorilerden seç: finans, satis, cari, stok, performans, rapor, analiz, ozet
+
+📝 KISA AÇIKLAMA (shortDescription):
+   - Widget'ın ne yaptığını tek cümlede özetle (max 100 karakter)
+   - Örnek: "Müşteri bazlı satış performansı karşılaştırması"
+
+📖 UZUN AÇIKLAMA (longDescription):
+   - Widget'ın detaylı açıklaması (Markdown destekli)
+   - Ne gösterdiği, nasıl kullanılacağı, dikkat edilecek noktalar
+
+🔧 TEKNİK NOTLAR:
+   usedFields: Kullanılan veri alanları ve rolleri
+     Örnek: [{ name: "bakiye", type: "number", usage: "Y ekseni değeri" }]
+   
+   calculations: Yapılan hesaplamalar
+     Örnek: [{ name: "Toplam", formula: "sum(bakiye)", description: "Bakiye toplamı" }]
+   
+   dataFlow: Verinin işlenme akışı
+     Örnek: "Cari kartlar bakiyeye göre filtrelenir, sektör koduna göre gruplandırılır, toplam bakiye hesaplanır"
+
+`;
 
     if (mode === 'refine' && chatHistory && chatHistory.length > 0) {
-      // İyileştirme modu - chat geçmişini kullan
+      // İyileştirme modu - chat geçmişini kullan (metadata yok)
       messages = [
         { role: 'system', content: getRefinementSystemPrompt() },
         ...chatHistory.map((msg: { role: string; content: string }) => ({
@@ -1754,11 +1849,29 @@ serve(async (req) => {
         { role: 'user', content: prompt }
       ];
     } else {
-      // Normal üretim modu
+      // Normal üretim modu - metadata talimatlarını ekle
+      const systemPrompt = useMetadata 
+        ? getGenerationSystemPrompt() + metadataInstructions
+        : getGenerationSystemPrompt();
+        
       messages = [
-        { role: 'system', content: getGenerationSystemPrompt() },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt }
       ];
+    }
+
+    // API isteği oluştur
+    const requestBody: any = {
+      model: "google/gemini-3-pro-preview",
+      messages,
+      max_tokens: 64000,
+      temperature: 0.7,
+    };
+    
+    // Tool calling ekle (sadece generate modunda ve useMetadata true ise)
+    if (mode !== 'refine' && useMetadata) {
+      requestBody.tools = [getWidgetMetadataTool()];
+      requestBody.tool_choice = { type: "function", function: { name: "generate_widget_with_metadata" } };
     }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -1767,12 +1880,7 @@ serve(async (req) => {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: "google/gemini-3-pro-preview",
-        messages,
-        max_tokens: 64000,
-        temperature: 0.7,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -1794,8 +1902,46 @@ serve(async (req) => {
     }
 
     const result = await response.json();
-    let generatedCode = result.choices?.[0]?.message?.content || "";
+    
+    let generatedCode = "";
+    let aiMetadata: any = null;
     let finishReason = result.choices?.[0]?.finish_reason || "unknown";
+    
+    // Tool calling yanıtı mı kontrol et
+    const toolCalls = result.choices?.[0]?.message?.tool_calls;
+    
+    if (toolCalls && toolCalls.length > 0) {
+      // Tool calling yanıtı
+      const toolCall = toolCalls[0];
+      if (toolCall.function?.name === "generate_widget_with_metadata") {
+        try {
+          const args = JSON.parse(toolCall.function.arguments);
+          generatedCode = args.code || "";
+          
+          // Metadata'yı ayıkla
+          aiMetadata = {
+            suggestedTags: args.suggestedTags || [],
+            shortDescription: args.shortDescription || "",
+            longDescription: args.longDescription || "",
+            technicalNotes: {
+              usedFields: args.usedFields || [],
+              calculations: args.calculations || [],
+              dataFlow: args.dataFlow || "",
+              generatedAt: new Date().toISOString(),
+            }
+          };
+          
+          console.log("[AI Code Generator v2.2] Tool calling başarılı, metadata alındı");
+        } catch (parseError) {
+          console.error("[AI Code Generator] Tool arguments parse hatası:", parseError);
+          // Fallback: raw content kullan
+          generatedCode = result.choices?.[0]?.message?.content || "";
+        }
+      }
+    } else {
+      // Normal yanıt (refine modu veya tool calling kullanılmadı)
+      generatedCode = result.choices?.[0]?.message?.content || "";
+    }
 
     // Markdown code block'larını temizle
     generatedCode = generatedCode
@@ -1805,43 +1951,45 @@ serve(async (req) => {
       .replace(/```\n?/g, "")
       .trim();
 
-    console.log("[AI Code Generator v2.1] İlk yanıt - uzunluk:", generatedCode.length, "finish_reason:", finishReason);
+    console.log("[AI Code Generator v2.2] İlk yanıt - uzunluk:", generatedCode.length, "finish_reason:", finishReason, "metadata:", !!aiMetadata);
 
-    // Auto-continue mekanizması
+    // Auto-continue mekanizması (sadece tool calling olmadığında)
     let attempts = 0;
     let wasPartial = false;
     
-    while (
-      (finishReason === "length" || !isCodeComplete(generatedCode)) && 
-      attempts < MAX_CONTINUE_ATTEMPTS
-    ) {
-      attempts++;
-      wasPartial = true;
-      console.log(`[AI Code Generator v2.1] Kod yarım, devam ediliyor (${attempts}/${MAX_CONTINUE_ATTEMPTS})...`);
-      
-      try {
-        const continuation = await continueGeneration(
-          generatedCode, 
-          LOVABLE_API_KEY, 
-          attempts,
-          mode || 'generate'
-        );
+    if (!toolCalls) {
+      while (
+        (finishReason === "length" || !isCodeComplete(generatedCode)) && 
+        attempts < MAX_CONTINUE_ATTEMPTS
+      ) {
+        attempts++;
+        wasPartial = true;
+        console.log(`[AI Code Generator v2.2] Kod yarım, devam ediliyor (${attempts}/${MAX_CONTINUE_ATTEMPTS})...`);
         
-        // Kodları birleştir
-        generatedCode = mergeCodeParts(generatedCode, continuation.code);
-        finishReason = continuation.finishReason;
-        
-        console.log(`[AI Code Generator v2.1] Devam ${attempts} - yeni uzunluk:`, generatedCode.length);
-        
-        // Eğer kod tamamlandıysa çık
-        if (isCodeComplete(generatedCode)) {
-          console.log("[AI Code Generator v2.1] Kod tamamlandı!");
+        try {
+          const continuation = await continueGeneration(
+            generatedCode, 
+            LOVABLE_API_KEY, 
+            attempts,
+            mode || 'generate'
+          );
+          
+          // Kodları birleştir
+          generatedCode = mergeCodeParts(generatedCode, continuation.code);
+          finishReason = continuation.finishReason;
+          
+          console.log(`[AI Code Generator v2.2] Devam ${attempts} - yeni uzunluk:`, generatedCode.length);
+          
+          // Eğer kod tamamlandıysa çık
+          if (isCodeComplete(generatedCode)) {
+            console.log("[AI Code Generator v2.2] Kod tamamlandı!");
+            break;
+          }
+        } catch (continueError) {
+          console.error(`[AI Code Generator v2.2] Devam hatası (${attempts}):`, continueError);
+          // Hata olsa bile mevcut kodla devam et
           break;
         }
-      } catch (continueError) {
-        console.error(`[AI Code Generator v2.1] Devam hatası (${attempts}):`, continueError);
-        // Hata olsa bile mevcut kodla devam et
-        break;
       }
     }
 
@@ -1849,21 +1997,23 @@ serve(async (req) => {
     const codeIsComplete = isCodeComplete(generatedCode);
     
     if (!codeIsComplete && attempts >= MAX_CONTINUE_ATTEMPTS) {
-      console.warn("[AI Code Generator v2.1] Maksimum deneme sayısına ulaşıldı, kod hala tamamlanmadı");
+      console.warn("[AI Code Generator v2.2] Maksimum deneme sayısına ulaşıldı, kod hala tamamlanmadı");
     }
 
-    console.log("[AI Code Generator v2.1] Sonuç - uzunluk:", generatedCode.length, "tamamlandı:", codeIsComplete, "toplam deneme:", attempts + 1);
+    console.log("[AI Code Generator v2.2] Sonuç - uzunluk:", generatedCode.length, "tamamlandı:", codeIsComplete, "toplam deneme:", attempts + 1);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         code: generatedCode,
+        aiMetadata: aiMetadata, // Yeni: AI tarafından üretilen metadata
         metadata: {
           totalAttempts: attempts + 1,
           wasPartial,
           isComplete: codeIsComplete,
           codeLength: generatedCode.length,
           finishReason,
+          hasAiMetadata: !!aiMetadata,
         }
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

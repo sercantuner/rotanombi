@@ -1,22 +1,23 @@
- // Widget Marketplace - Kullanıcıların widget ekleyebileceği arayüz
- // Dinamik kategori desteği ile
+// Widget Marketplace - Kullanıcıların widget ekleyebileceği arayüz
+// Dinamik kategori desteği + Widget detay modalı ile
 
 import React, { useState, useMemo } from 'react';
 import { useWidgets } from '@/hooks/useWidgets';
 import { useWidgetPermissions } from '@/hooks/useWidgetPermissions';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
- import { Widget, WidgetCategory, WIDGET_TYPES, WIDGET_SIZES } from '@/lib/widgetTypes';
- import { useWidgetCategories } from '@/hooks/useWidgetCategories';
+import { Widget, WidgetCategory, WIDGET_TYPES, WIDGET_SIZES } from '@/lib/widgetTypes';
+import { useWidgetCategories } from '@/hooks/useWidgetCategories';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
- import { Plus, Search, Check, LayoutGrid, PieChart, Table2, List, Activity, Loader2 } from 'lucide-react';
+import { Plus, Search, Check, LayoutGrid, PieChart, Table2, List, Activity, Loader2, Info } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import * as LucideIcons from 'lucide-react';
- import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+import { WidgetDetailModal } from './WidgetDetailModal';
 
 interface WidgetMarketplaceProps {
   currentPage: WidgetCategory;
@@ -58,6 +59,10 @@ export function WidgetMarketplace({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [addingWidgetId, setAddingWidgetId] = useState<string | null>(null);
+  
+  // Widget detay modalı
+  const [detailWidget, setDetailWidget] = useState<Widget | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   // Kontrollü veya kontrolsüz mod
   const isOpen = controlledOpen !== undefined ? controlledOpen : internalOpen;
@@ -247,6 +252,7 @@ export function WidgetMarketplace({
               {availableWidgets.map((widget) => {
                 const TypeIcon = typeIcons[widget.type] || LayoutGrid;
                 const isAdding = addingWidgetId === widget.widget_key;
+                const hasMetadata = widget.short_description || widget.long_description || widget.technical_notes || widget.preview_image;
                 
                 return (
                   <Card
@@ -257,9 +263,18 @@ export function WidgetMarketplace({
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-2">
-                          <div className="p-2 rounded-md bg-muted">
-                            <DynamicIcon iconName={widget.icon || 'LayoutGrid'} className="h-5 w-5" />
-                          </div>
+                          {/* Preview image veya icon */}
+                          {widget.preview_image ? (
+                            <img 
+                              src={widget.preview_image} 
+                              alt={widget.name}
+                              className="w-10 h-10 object-cover rounded-md"
+                            />
+                          ) : (
+                            <div className="p-2 rounded-md bg-muted">
+                              <DynamicIcon iconName={widget.icon || 'LayoutGrid'} className="h-5 w-5" />
+                            </div>
+                          )}
                           <div>
                             <CardTitle className="text-sm font-medium">{widget.name}</CardTitle>
                             <div className="flex items-center gap-1 mt-1">
@@ -269,23 +284,40 @@ export function WidgetMarketplace({
                             </div>
                           </div>
                         </div>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                          disabled={isAdding}
-                        >
-                          {isAdding ? (
-                            <Check className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <Plus className="h-4 w-4" />
+                        <div className="flex items-center gap-1">
+                          {/* Detay butonu */}
+                          {hasMetadata && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDetailWidget(widget);
+                                setShowDetailModal(true);
+                              }}
+                            >
+                              <Info className="h-3.5 w-3.5" />
+                            </Button>
                           )}
-                        </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                            disabled={isAdding}
+                          >
+                            {isAdding ? (
+                              <Check className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <Plus className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent className="pt-0">
                       <p className="text-xs text-muted-foreground line-clamp-2">
-                        {widget.description || 'Açıklama yok'}
+                        {widget.short_description || widget.description || 'Açıklama yok'}
                       </p>
                       <div className="flex items-center gap-2 mt-2">
                         <TypeIcon className="h-3 w-3 text-muted-foreground" />
@@ -312,5 +344,18 @@ export function WidgetMarketplace({
         </div>
       </DialogContent>
     </Dialog>
+    
+    {/* Widget Detay Modalı */}
+    <WidgetDetailModal
+      widget={detailWidget}
+      open={showDetailModal}
+      onOpenChange={setShowDetailModal}
+      onAddWidget={(widgetKey) => {
+        handleAddWidget(widgetKey);
+        setShowDetailModal(false);
+      }}
+      isAdding={addingWidgetId === detailWidget?.widget_key}
+    />
+    </>
   );
 }

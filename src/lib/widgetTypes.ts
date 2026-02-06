@@ -26,6 +26,15 @@ export interface WidgetFilter {
   satisElemanlari?: string[];
 }
 
+// Technical notes yapısı - AI tarafından üretilen teknik açıklamalar
+export interface TechnicalNotes {
+  usedFields?: { name: string; type: string; usage: string }[];
+  calculations?: { name: string; formula: string; description: string }[];
+  dataFlow?: string;
+  chartType?: string;
+  generatedAt?: string;
+}
+
 // Veritabanından gelen widget tanımı
 export interface Widget {
   id: string;
@@ -56,6 +65,12 @@ export interface Widget {
   builder_config: WidgetBuilderConfig | null; // Widget Builder yapılandırması
   // Çoklu etiket desteği
   tags?: string[]; // widget_tags tablosundan gelen etiket slug'ları
+  // AI Metadata alanları
+  short_description?: string | null;
+  long_description?: string | null;
+  technical_notes?: TechnicalNotes | null;
+  preview_image?: string | null;
+  ai_suggested_tags?: string[] | null;
 }
 
 // Kullanıcı layout'unda widget yerleşimi
@@ -96,6 +111,12 @@ export interface WidgetFormData {
   filter_fields?: FilterFieldConfig[];
   // Çoklu etiket desteği
   tags?: string[]; // Seçili etiket slug'ları
+  // AI Metadata alanları
+  short_description?: string;
+  long_description?: string;
+  technical_notes?: TechnicalNotes;
+  preview_image?: string;
+  ai_suggested_tags?: string[];
 }
 
 // Sayfa kategorileri
