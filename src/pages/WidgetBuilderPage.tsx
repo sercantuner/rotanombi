@@ -14,7 +14,8 @@ export function WidgetBuilderPage() {
   // Akıllı navigasyon: from parametresine göre dön
   const getReturnPath = () => {
     if (fromParam === 'super-admin') {
-      return '/super-admin-panel';
+      // Super admin içinde widget sekmesine dön
+      return '/super-admin-panel?tab=widgets';
     }
     // containerId veya pageId varsa o sayfaya dön
     const containerId = searchParams.get('container');
