@@ -18,6 +18,15 @@ import {
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
+// Veri durumu bilgisi - Stale-While-Revalidate için
+export interface DataStatusInfo {
+  source: 'cache' | 'api' | 'pending';
+  lastSyncedAt: Date | null;
+  isStale: boolean;
+  isRevalidating: boolean;
+  error?: string | null;
+}
+
 interface DynamicWidgetDataResult {
   data: any;
   rawData: any[];
@@ -27,6 +36,8 @@ interface DynamicWidgetDataResult {
   isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+  // YENİ: Veri durumu bilgisi (Stale-While-Revalidate)
+  dataStatus: DataStatusInfo;
 }
 
 // Tarih aralığı hesaplama
@@ -624,26 +635,34 @@ function applyGlobalFilters(data: any[], globalFilters: GlobalFilters): any[] {
 // ============= VERİTABANINDAN VERİ OKUMA =============
 
 // company_data_cache tablosundan veri çek - sayfalama ile tüm veriyi çek
+// lastSyncedAt da döndürür (Stale-While-Revalidate için)
+interface DbFetchResult {
+  data: any[];
+  lastSyncedAt: Date | null;
+}
+
 async function fetchFromDatabase(
   dataSourceSlug: string,
   sunucuAdi: string,
   firmaKodu: string,
   donemKodu: number
-): Promise<any[]> {
+): Promise<DbFetchResult> {
   const PAGE_SIZE = 1000; // Supabase max 1000 satır döndürür
   let allData: any[] = [];
   let from = 0;
   let hasMore = true;
+  let lastUpdatedAt: string | null = null;
   
   while (hasMore) {
     const { data, error } = await supabase
       .from('company_data_cache')
-      .select('data')
+      .select('data, updated_at')
       .eq('data_source_slug', dataSourceSlug)
       .eq('sunucu_adi', sunucuAdi)
       .eq('firma_kodu', firmaKodu)
       .eq('donem_kodu', donemKodu)
       .eq('is_deleted', false)
+      .order('updated_at', { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
 
     if (error) {
@@ -654,6 +673,11 @@ async function fetchFromDatabase(
     const rows = data || [];
     allData = allData.concat(rows.map(row => row.data));
     
+    // İlk sayfadan en son güncelleme tarihini al
+    if (from === 0 && rows.length > 0 && rows[0].updated_at) {
+      lastUpdatedAt = rows[0].updated_at;
+    }
+    
     // Eğer sayfa dolu değilse, daha fazla veri yok demektir
     if (rows.length < PAGE_SIZE) {
       hasMore = false;
@@ -662,10 +686,13 @@ async function fetchFromDatabase(
     }
   }
   
-  console.log(`[DB] Fetched ${allData.length} records from ${dataSourceSlug}`);
+  console.log(`[DB] Fetched ${allData.length} records from ${dataSourceSlug}${lastUpdatedAt ? ` (last sync: ${lastUpdatedAt})` : ''}`);
   
   // JSONB data alanlarını düz obje olarak döndür
-  return allData;
+  return {
+    data: allData,
+    lastSyncedAt: lastUpdatedAt ? new Date(lastUpdatedAt) : null,
+  };
 }
 
 // Hook for using global filters in widgets
@@ -677,6 +704,15 @@ export function useDynamicWidgetData(
   const [rawData, setRawData] = useState<any[]>([]);
   const [isFetching, setIsFetching] = useState(false); // İç fetch state
   const [error, setError] = useState<string | null>(null);
+  
+  // YENİ: Veri durumu state (Stale-While-Revalidate)
+  const [dataStatus, setDataStatus] = useState<DataStatusInfo>({
+    source: 'pending',
+    lastSyncedAt: null,
+    isStale: false,
+    isRevalidating: false,
+    error: null,
+  });
   
   // DIA profil bilgileri - DB sorgusunda kullanılacak
   const { sunucuAdi, firmaKodu, donemKodu: profileDonem, isConfigured } = useDiaProfile();
@@ -917,6 +953,9 @@ export function useDynamicWidgetData(
         return dataSource?.slug || null;
       };
       
+      // Sonuç: lastSyncedAt bilgisini de takip ediyoruz
+      let lastSyncedAt: Date | null = null;
+      
       // Helper: DB'den veya memory cache'den veri çek
       const fetchDataForSource = async (dataSourceId: string): Promise<any[]> => {
         const slug = getDataSourceSlug(dataSourceId);
@@ -930,25 +969,64 @@ export function useDynamicWidgetData(
         if (cachedSourceData && !isStale) {
           console.log(`[Widget] Memory Cache HIT - DataSource ${dataSourceId}: ${cachedSourceData.length} kayıt`);
           incHit();
+          // Cache'den geliyorsa, dataStatus'u güncelle
+          setDataStatus(prev => ({
+            ...prev,
+            source: 'cache',
+            isStale: false,
+          }));
           return cachedSourceData;
         }
         
         // 2. Memory cache boş veya stale - DB'den oku
         console.log(`[Widget] Fetching from DB - DataSource: ${slug} (sunucu: ${sunucuAdi}, firma: ${firmaKodu}, dönem: ${effectiveDonem})`);
         
+        // Cache'den gösteriyorsak önce cache'i kullan
+        if (cachedSourceData && isStale) {
+          setDataStatus(prev => ({
+            ...prev,
+            source: 'cache',
+            isStale: true,
+          }));
+        }
+        
         try {
-          const dbData = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, effectiveDonem);
+          const dbResult = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, effectiveDonem);
           
-          if (dbData.length > 0) {
-            console.log(`[Widget] DB HIT - DataSource ${slug}: ${dbData.length} kayıt`);
+          if (dbResult.data.length > 0) {
+            console.log(`[Widget] DB HIT - DataSource ${slug}: ${dbResult.data.length} kayıt`);
             // Memory cache'i güncelle
-            setDsData(dataSourceId, dbData);
+            setDsData(dataSourceId, dbResult.data);
             incHit();
-            return dbData;
+            
+            // lastSyncedAt güncelle
+            if (dbResult.lastSyncedAt) {
+              lastSyncedAt = dbResult.lastSyncedAt;
+            }
+            
+            // dataStatus güncelle - DB'den geldi (cache sayılır)
+            const hoursSinceSync = dbResult.lastSyncedAt 
+              ? (Date.now() - dbResult.lastSyncedAt.getTime()) / (1000 * 60 * 60)
+              : 999;
+            
+            setDataStatus(prev => ({
+              ...prev,
+              source: 'cache',
+              lastSyncedAt: dbResult.lastSyncedAt,
+              isStale: hoursSinceSync > 1, // 1 saatten eski = stale
+              isRevalidating: false,
+            }));
+            
+            return dbResult.data;
           } else {
             // DB'de veri yok - memory cache'de stale veri varsa onu kullan
             if (cachedSourceData) {
               console.log(`[Widget] DB empty, using stale cache for ${dataSourceId}: ${cachedSourceData.length} kayıt`);
+              setDataStatus(prev => ({
+                ...prev,
+                source: 'cache',
+                isStale: true,
+              }));
               return cachedSourceData;
             }
             console.log(`[Widget] DB empty for ${slug} - no data`);
@@ -960,6 +1038,12 @@ export function useDynamicWidgetData(
           // DB hatası durumunda stale cache'i kullan
           if (cachedSourceData) {
             console.log(`[Widget] DB error, using stale cache for ${dataSourceId}`);
+            setDataStatus(prev => ({
+              ...prev,
+              source: 'cache',
+              isStale: true,
+              error: 'DB erişim hatası',
+            }));
             return cachedSourceData;
           }
           throw dbError;
@@ -1152,5 +1236,5 @@ export function useDynamicWidgetData(
     prevFiltersKeyRef.current = globalFiltersKey;
   }, [globalFiltersKey, processDataWithFilters]);
 
-  return { data, rawData, multiQueryData, isLoading, error, refetch: fetchData };
+  return { data, rawData, multiQueryData, isLoading, error, refetch: fetchData, dataStatus };
 }

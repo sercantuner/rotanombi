@@ -1,13 +1,26 @@
+# ✅ Widget Veri Yükleme Stratejisi: Stale-While-Revalidate + Durum Göstergesi
 
-# Widget Veri Yükleme Stratejisi: Stale-While-Revalidate + Durum Göstergesi
+**TAMAMLANDI**: 2025-02-07
+
+## Yapılan Değişiklikler
+
+1. **DataStatusBadge bileşeni** - `src/components/dashboard/DataStatusBadge.tsx`
+   - Veri durumunu gösteren badge (Güncel, Önbellek, Güncelleniyor, Eski, Hata)
+   - Tooltip ile son güncelleme zamanı
+   - Kompakt mod desteği
+
+2. **useDynamicWidgetData hook** - `src/hooks/useDynamicWidgetData.tsx`
+   - `DataStatusInfo` interface eklendi (source, lastSyncedAt, isStale, isRevalidating, error)
+   - `dataStatus` state eklendi
+   - `fetchFromDatabase` fonksiyonu `updated_at` alanını da çeker
+   - Cache/DB'den veri geldiğinde dataStatus güncellenir
+
+3. **BuilderWidgetRenderer** - `src/components/dashboard/BuilderWidgetRenderer.tsx`
+   - DataStatusBadge import edildi
+   - ChartHeader bileşenine DataStatusBadge entegre edildi
+   - dataStatus hook'tan alınıp badge'e aktarılıyor
 
 ## Mevcut Durum Analizi
-
-Şu anda sistem şöyle çalışıyor:
-1. Widget açıldığında `useDynamicWidgetData` hook'u çağrılıyor
-2. Önce Memory Cache → sonra Supabase DB (`company_data_cache`) kontrol ediliyor
-3. DB'de veri varsa gösteriliyor, DIA API'ye gidilmiyor
-4. DB boşsa veya Force Refresh yapılırsa DIA API'den veri çekiliyor
 
 **Problem**: Kullanıcı hangi verinin gösterildiğini bilmiyor (cache mi, taze mi, ne zaman güncellendi).
 
