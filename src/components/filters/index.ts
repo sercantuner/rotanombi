@@ -1,6 +1,4 @@
-// Filter Components Index
+// Filter Components Index - Active exports only
 export { GlobalFilterBar } from './GlobalFilterBar';
-export { FilterSidebar } from './FilterSidebar';
 export { FilterSidePanel } from './FilterSidePanel';
 export { DateRangeFilter } from './DateRangeFilter';
-export { MultiSelectFilter } from './MultiSelectFilter';

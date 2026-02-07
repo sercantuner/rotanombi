@@ -11,7 +11,15 @@ import {
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { DataStatus } from './DataStatusBadge';
+
+// DataStatus interface - Stale-While-Revalidate stratejisi için veri durumu
+export interface DataStatus {
+  source: 'cache' | 'api' | 'pending';
+  lastSyncedAt: Date | null;
+  isStale: boolean;
+  isRevalidating: boolean;
+  error?: string | null;
+}
 
 interface DataStatusIndicatorProps {
   status: DataStatus;
