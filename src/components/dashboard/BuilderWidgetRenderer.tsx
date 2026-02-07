@@ -683,6 +683,10 @@ export function BuilderWidgetRenderer({
             icon={IconComponent}
             variant="default"
           />
+          {/* Sağ alt köşe veri durumu göstergesi - KPI için */}
+          {dataStatus && dataStatus.source !== 'pending' && (
+            <DataStatusIndicator status={dataStatus} />
+          )}
         </div>
         <DrillDownModal
           open={drillDownOpen}
@@ -736,7 +740,7 @@ export function BuilderWidgetRenderer({
       }
       
       return (
-        <Card className={cn(isolatedClassName, 'h-full flex flex-col !border-0 relative')}>
+        <Card className={cn(isolatedClassName, 'h-full flex flex-col !border-0 relative overflow-visible')}>
           <ChartHeader />
           <CardContent className="flex-1 flex flex-col min-h-0 p-4 pt-3">
             <ErrorBoundary fallback={
