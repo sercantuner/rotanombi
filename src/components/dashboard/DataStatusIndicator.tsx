@@ -40,44 +40,42 @@ function isDataFresh(lastSyncedAt: Date | null): boolean {
 
 export function DataStatusIndicator({ status, className }: DataStatusIndicatorProps) {
   // Durum ve renk belirleme
-  let colorClass = '';
+  let fillColor = '';
   let tooltipTitle = '';
   let tooltipDetail = '';
   let showIndicator = true;
+  let isAnimating = false;
 
   // Hata durumu - Kırmızı
   if (status.error) {
-    colorClass = 'border-b-destructive';
+    fillColor = 'rgb(239 68 68)'; // red-500
     tooltipTitle = 'Hata';
     tooltipDetail = status.error;
   }
   // Güncelleniyor - Primary/Mavi animasyonlu
   else if (status.isRevalidating) {
-    colorClass = 'border-b-primary animate-pulse';
+    fillColor = 'hsl(var(--primary))';
     tooltipTitle = 'Güncelleniyor';
     tooltipDetail = 'DIA\'dan veri çekiliyor...';
+    isAnimating = true;
   }
   // Eski veri (> 24 saat) - Turuncu
   else if (status.source === 'cache' && isDataOld(status.lastSyncedAt)) {
-    colorClass = 'border-b-orange-500';
+    fillColor = 'rgb(249 115 22)'; // orange-500
     tooltipTitle = 'Eski Veri';
     tooltipDetail = `Son güncelleme: ${formatLastSync(status.lastSyncedAt)}`;
   }
   // Stale cache - Sarı
   else if (status.source === 'cache' && status.isStale) {
-    colorClass = 'border-b-yellow-500';
+    fillColor = 'rgb(234 179 8)'; // yellow-500
     tooltipTitle = 'Önbellek';
     tooltipDetail = `Son güncelleme: ${formatLastSync(status.lastSyncedAt)}`;
   }
-  // Taze veri (< 5 dk) - Yeşil
-  else if (status.source === 'api' || isDataFresh(status.lastSyncedAt)) {
-    colorClass = 'border-b-green-500';
+  // Taze veri (< 5 dk) veya stale olmayan cache - Yeşil (her zaman göster)
+  else if (status.source === 'api' || isDataFresh(status.lastSyncedAt) || (status.source === 'cache' && !status.isStale)) {
+    fillColor = 'rgb(34 197 94)'; // green-500
     tooltipTitle = 'Güncel';
-    tooltipDetail = `Son güncelleme: ${formatLastSync(status.lastSyncedAt)}`;
-  }
-  // Cache'den ama stale değil - gösterme
-  else if (status.source === 'cache' && !status.isStale) {
-    showIndicator = false;
+    tooltipDetail = status.lastSyncedAt ? `Son güncelleme: ${formatLastSync(status.lastSyncedAt)}` : 'Veri güncel';
   }
   // Pending - gösterme
   else if (status.source === 'pending') {
@@ -87,7 +85,8 @@ export function DataStatusIndicator({ status, className }: DataStatusIndicatorPr
     showIndicator = false;
   }
 
-  if (!showIndicator) return null;
+  // fillColor boşsa gösterme
+  if (!showIndicator || !fillColor) return null;
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -95,15 +94,16 @@ export function DataStatusIndicator({ status, className }: DataStatusIndicatorPr
         <TooltipTrigger asChild>
           <div 
             className={cn(
-              "absolute bottom-0 right-0 w-0 h-0 cursor-help z-10",
-              "border-l-[12px] border-l-transparent",
-              "border-b-[12px]",
-              colorClass,
+              "absolute bottom-0 right-0 cursor-help z-20",
+              isAnimating && "animate-pulse",
               className
             )}
             style={{ 
-              // Rounded corner için clip-path
-              borderBottomRightRadius: 'inherit'
+              width: 0,
+              height: 0,
+              borderStyle: 'solid',
+              borderWidth: '0 0 16px 16px',
+              borderColor: `transparent transparent ${fillColor} transparent`,
             }}
           />
         </TooltipTrigger>
