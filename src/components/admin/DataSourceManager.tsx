@@ -457,7 +457,7 @@ export function DataSourceManager() {
       
       {/* Form Dialog */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="max-w-3xl w-[95vw] h-[85vh] flex flex-col overflow-hidden">
+        <DialogContent className="max-w-3xl w-[95vw] h-[85vh] flex flex-col overflow-hidden max-md:w-screen max-md:h-screen max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0">
           <DialogHeader className="flex-shrink-0">
             <DialogTitle>
               {editingSourceId ? 'Veri Kaynağı Düzenle' : 'Yeni Veri Kaynağı'}

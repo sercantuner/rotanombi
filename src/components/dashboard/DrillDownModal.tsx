@@ -132,7 +132,7 @@ export function DrillDownModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col p-0 gap-0 rounded border border-border">
+      <DialogContent className="w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col p-0 gap-0 rounded border border-border max-md:w-screen max-md:h-screen max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0">
         {/* Header - 3 bölgeli düzen: sol (başlık+badge) | orta (bilgiler) | sağ (X butonu - DialogContent tarafından sağlanır) */}
         <div className="flex items-center justify-between p-3 border-b border-border flex-shrink-0 gap-4 pr-12">
           <div className="flex items-center gap-2 min-w-0">

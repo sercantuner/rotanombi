@@ -36,7 +36,7 @@ export function CreatePageModal({ open, onOpenChange, onCreatePage }: CreatePage
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-md:w-screen max-md:h-screen max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0">
         <DialogHeader>
           <DialogTitle>Yeni Sayfa Oluştur</DialogTitle>
           <DialogDescription>

@@ -137,7 +137,7 @@ export function KpiFilterModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-md:w-screen max-md:h-screen max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span>Widget Filtreleri</span>

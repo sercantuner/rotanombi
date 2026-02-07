@@ -53,7 +53,7 @@ export function WidgetFeedbackButton({ widgetId, widgetName }: WidgetFeedbackBut
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-md:w-screen max-md:h-screen max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0">
           <DialogHeader>
             <DialogTitle>Widget Değerlendirmesi</DialogTitle>
             <DialogDescription>

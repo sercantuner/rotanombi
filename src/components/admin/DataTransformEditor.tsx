@@ -1295,7 +1295,7 @@ export function DataTransformEditor({
 
       {/* Sütun Adı Değiştir Modal */}
       <Dialog open={renameModalOpen} onOpenChange={setRenameModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-md:w-screen max-md:h-screen max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Pencil className="w-5 h-5 text-blue-500" />
@@ -1347,7 +1347,7 @@ export function DataTransformEditor({
 
       {/* Veri Tipi Dönüştür Modal */}
       <Dialog open={typeChangeModalOpen} onOpenChange={setTypeChangeModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-md:w-screen max-md:h-screen max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Binary className="w-5 h-5 text-purple-500" />

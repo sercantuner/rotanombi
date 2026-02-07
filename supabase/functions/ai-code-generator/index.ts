@@ -316,10 +316,15 @@ React.createElement('div', {
    - UI.DialogFooter: Alt alan
 
 📐 BOYUT VE KONUM KURALLARI:
-   - Genişlik: w-[50vw] veya max-w-[50%] (sayfanın yarısı)
-   - Yükseklik: max-h-[80vh] (sayfayı geçmeyecek)
+   - Desktop: w-[50vw] veya max-w-[50%] (sayfanın yarısı)
+   - Desktop: max-h-[80vh] (sayfayı geçmeyecek)
    - DialogContent otomatik ortalar (fixed inset-0)
    - Scroll: overflow-y-auto (liste uzarsa scroll)
+
+📱 MOBİL TAM EKRAN KURALI (ZORUNLU!):
+   - Mobil cihazlarda (max-md) TÜM popup'lar TAM EKRAN açılmalı!
+   - ZORUNLU mobil class'ları: max-md:w-screen max-md:h-screen max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0
+   - Bu kuralı ihlal etme! Mobil kullanıcı deneyimi için kritik!
 
 ⚠️ KRİTİK HEADER PADDİNG KURALI (ZORUNLU!):
    - DialogContent X kapatma butonu sağ üstte ABSOLUTE pozisyonda otomatik eklenir!
@@ -351,11 +356,12 @@ function Widget({ data, colors, filters }) {
       React.createElement('p', { className: 'text-[10px] text-muted-foreground' }, 'Detay için tıklayın')
     ),
     
-    // UI.Dialog Popup (Merkezi Portal)
     // ⚠️ KRİTİK: Header div'e "pr-12" ekle - X butonu sağ üstte absolute!
+    // ⚠️ MOBİL: max-md class'ları ile tam ekran aç!
     React.createElement(UI.Dialog, { open: isOpen, onOpenChange: setIsOpen },
       React.createElement(UI.DialogContent, { 
-        className: 'w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col p-0 gap-0 rounded border border-border' 
+        className: 'w-[50vw] max-w-[50vw] max-h-[80vh] flex flex-col p-0 gap-0 rounded border border-border ' +
+                   'max-md:w-screen max-md:h-screen max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0'
       },
         // ⚠️ HEADER - "pr-12" ZORUNLU! X butonu sağ üstte absolute konumda!
         React.createElement('div', { 
