@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useDiaDataCache } from '@/contexts/DiaDataCacheContext';
 import { useDataSources } from '@/hooks/useDataSources';
-import { Database, Zap, TrendingUp, Clock, CheckCircle2, RefreshCw, ChevronDown, ChevronUp, Trash2, Eye, X, Table as TableIcon } from 'lucide-react';
+import { Database, Zap, TrendingUp, Clock, CheckCircle2, RefreshCw, ChevronDown, ChevronUp, Trash2, Eye, Table as TableIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,22 +27,34 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
+import { formatDistanceToNow } from 'date-fns';
+import { tr } from 'date-fns/locale';
 
 interface PreviewSource {
   id: string;
   name: string;
   module: string;
   method: string;
+  syncTime: Date | null;
 }
 
 export function DiaQueryStats() {
-  const { stats, getFetchedDataSources, clearFetchedRegistry, resetStats, invalidateCache, getDataSourceData } = useDiaDataCache();
+  const { 
+    stats, 
+    getFetchedDataSources, 
+    clearFetchedRegistry, 
+    resetStats, 
+    invalidateCache, 
+    getDataSourceData,
+    getAllDataSourceSyncTimes,
+  } = useDiaDataCache();
   const { dataSources } = useDataSources();
   const [isOpen, setIsOpen] = useState(false);
   const [previewSource, setPreviewSource] = useState<PreviewSource | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
   const fetchedIds = getFetchedDataSources();
+  const syncTimes = getAllDataSourceSyncTimes();
   
   // Hiç sorgu yapılmadıysa gösterme
   if (stats.totalQueries === 0 && fetchedIds.length === 0) return null;
@@ -51,16 +63,23 @@ export function DiaQueryStats() {
     ? Math.round((stats.cacheHits / stats.totalQueries) * 100) 
     : 0;
 
-  // Veri kaynağı ID'lerini isimlere çevir
-  const fetchedSources = fetchedIds.map(id => {
+  // Veri kaynağı ID'lerini isimlere çevir ve sync zamanlarını ekle
+  const fetchedSources: PreviewSource[] = fetchedIds.map(id => {
     const ds = dataSources.find(d => d.id === id);
     return {
       id,
       name: ds?.name || id.slice(0, 8) + '...',
       module: ds?.module || '-',
       method: ds?.method || '-',
+      syncTime: syncTimes.get(id) || null,
     };
   });
+
+  // Relative time formatla (Türkçe)
+  const formatSyncTime = (date: Date | null): string => {
+    if (!date) return 'Bilinmiyor';
+    return formatDistanceToNow(date, { addSuffix: true, locale: tr });
+  };
 
   // Son API çağrısı zamanını formatla
   const formatLastApiTime = () => {
@@ -206,6 +225,11 @@ export function DiaQueryStats() {
                         <div className="font-medium truncate">{source.name}</div>
                         <div className="text-muted-foreground text-[10px]">
                           {source.module}/{source.method}
+                        </div>
+                        {/* YENİ: Son sync zamanı */}
+                        <div className="text-muted-foreground text-[10px] flex items-center gap-1">
+                          <Clock className="h-2.5 w-2.5" />
+                          {formatSyncTime(source.syncTime)}
                         </div>
                       </div>
                       <Button

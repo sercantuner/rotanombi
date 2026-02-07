@@ -41,6 +41,11 @@ interface DiaDataCacheContextType {
   getFetchedDataSources: () => string[];
   clearFetchedRegistry: () => void; // Manuel yenileme için
   
+  // YENİ: Veri kaynağı sync zamanları takibi
+  setDataSourceSyncTime: (dataSourceId: string, time: Date) => void;
+  getDataSourceSyncTime: (dataSourceId: string) => Date | null;
+  getAllDataSourceSyncTimes: () => Map<string, Date>;
+  
   // Sayfa seviyesi yükleme durumu
   isPageDataReady: boolean;
   setPageDataReady: (ready: boolean) => void;
@@ -117,6 +122,9 @@ export function DiaDataCacheProvider({ children, userId }: DiaDataCacheProviderP
   // GLOBAL: Arka planda yenilenmekte olan veri kaynakları
   // Bu sayede aynı kaynak için birden fazla widget revalidate çağırmaz
   const revalidatingSourcesRef = useRef<Set<string>>(new Set());
+  
+  // YENİ: Her veri kaynağının son sync zamanı
+  const dataSourceSyncTimesRef = useRef<Map<string, Date>>(new Map());
   
   // Kullanıcı değişikliği takibi için
   const previousUserIdRef = useRef<string | null>(null);
@@ -336,7 +344,22 @@ export function DiaDataCacheProvider({ children, userId }: DiaDataCacheProviderP
 
   const clearFetchedRegistry = useCallback(() => {
     fetchedDataSourcesRef.current.clear();
+    dataSourceSyncTimesRef.current.clear(); // Sync zamanlarını da temizle
     console.log('[GlobalRegistry] Cleared - next page load will refetch all sources');
+  }, []);
+
+  // YENİ: Veri kaynağı sync zamanı fonksiyonları
+  const setDataSourceSyncTime = useCallback((dataSourceId: string, time: Date) => {
+    dataSourceSyncTimesRef.current.set(dataSourceId, time);
+    console.log(`[SyncTime] Set for ${dataSourceId}: ${time.toISOString()}`);
+  }, []);
+
+  const getDataSourceSyncTime = useCallback((dataSourceId: string): Date | null => {
+    return dataSourceSyncTimesRef.current.get(dataSourceId) || null;
+  }, []);
+
+  const getAllDataSourceSyncTimes = useCallback((): Map<string, Date> => {
+    return new Map(dataSourceSyncTimesRef.current);
   }, []);
 
   // Background Revalidation Tracker fonksiyonları
@@ -420,6 +443,9 @@ export function DiaDataCacheProvider({ children, userId }: DiaDataCacheProviderP
     markDataSourceFetched,
     getFetchedDataSources,
     clearFetchedRegistry,
+    setDataSourceSyncTime,
+    getDataSourceSyncTime,
+    getAllDataSourceSyncTimes,
     isPageDataReady,
     setPageDataReady,
     sharedData,
@@ -442,6 +468,7 @@ export function DiaDataCacheProvider({ children, userId }: DiaDataCacheProviderP
     getDataSourceData, getDataSourceDataWithStale, setDataSourceData, 
     isDataSourceLoading, setDataSourceLoading,
     isDataSourceFetched, markDataSourceFetched, getFetchedDataSources, clearFetchedRegistry,
+    setDataSourceSyncTime, getDataSourceSyncTime, getAllDataSourceSyncTimes,
     isPageDataReady, setPageDataReady,
     sharedData, setSharedData, isDiaConnected, setDiaConnected,
     stats, resetStats, incrementCacheHit, incrementCacheMiss, recordApiCall,
@@ -474,6 +501,9 @@ export function useDiaDataCache(): DiaDataCacheContextType {
       markDataSourceFetched: () => {},
       getFetchedDataSources: () => [],
       clearFetchedRegistry: () => {},
+      setDataSourceSyncTime: () => {},
+      getDataSourceSyncTime: () => null,
+      getAllDataSourceSyncTimes: () => new Map(),
       isPageDataReady: false,
       setPageDataReady: () => {},
       sharedData: { cariListesi: null, vadeBakiye: null },
