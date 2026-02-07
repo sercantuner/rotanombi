@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Skeleton } from '@/components/ui/skeleton';
+import { WidgetLoadingSkeleton } from './WidgetLoadingSkeleton';
 import { AlertCircle, Hash, Code, BarChart3 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { 
@@ -594,16 +594,7 @@ export function BuilderWidgetRenderer({
   // Sadece İLK yüklemede VE veri yoksa skeleton göster
   // Cache'den gelen veri varsa (stale bile olsa) skeleton gösterme - flicker önleme
   if (isLoading && (!data || (Array.isArray(data) && data.length === 0))) {
-    return (
-      <Card className={isolatedClassName}>
-        <CardHeader>
-          <Skeleton className="h-5 w-32" />
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-24 w-full" />
-        </CardContent>
-      </Card>
-    );
+    return <WidgetLoadingSkeleton className={isolatedClassName} />;
   }
 
   if (error) {

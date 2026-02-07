@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/Header';
 import { VadeDetayListesi } from '@/components/dashboard/VadeDetayListesi';
 import { ContainerBasedDashboard } from '@/components/dashboard/ContainerBasedDashboard';
-import { DashboardLoadingScreen } from '@/components/dashboard/DashboardLoadingScreen';
+
 import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
 import { FilterSidePanel } from '@/components/filters/FilterSidePanel';
 import { useDiaDataCache } from '@/contexts/DiaDataCacheContext';
@@ -240,24 +240,9 @@ function DashboardContent() {
     toplamBankaBakiye: finansRapor?.toplamBankaBakiyesi || 0,
   }), [genelRapor, finansRapor, cariler, yaslandirma]);
 
-  // Cache-first loading screen mantığı:
-  // Cache tamamen boşken VE ilk yüklemeyse loading screen göster
-  // Sayfa geçişlerinde cache dolu olacağından loading screen görünmeyecek
-  const hasCachedData = loadedSources.length > 0 || totalSources === 0;
-  const showLoadingScreen = dataSourcesInitialLoad && !hasCachedData && totalSources > 0;
-
   return (
     <TooltipProvider delayDuration={0}>
       <div className="flex-1 flex flex-col pb-16">
-        {/* Loading Screen - İlk yükleme sırasında göster */}
-        {showLoadingScreen && (
-          <DashboardLoadingScreen
-            progress={loadProgress}
-            loadedSources={loadedSources}
-            totalSources={totalSources}
-            currentSourceName={currentSourceName}
-          />
-        )}
         <Header 
           title="Dashboard" 
           subtitle="Günlük özet ve kritik bilgiler"
