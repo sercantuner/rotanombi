@@ -1617,11 +1617,11 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
     </div>
   );
 
-  // Step 1: Veri Kaynağı
+  // Step 1: Veri Kaynağı - Mobil'de dikey stack
   const renderStep1 = () => (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
+    <div className="flex flex-col lg:grid lg:grid-cols-2 gap-3 md:gap-4 h-full overflow-auto">
       {/* Sol: Widget Bilgileri */}
-      <div className="space-y-4">
+      <div className="space-y-3 md:space-y-4">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">
@@ -1777,15 +1777,16 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
         </Card>
       </div>
 
-      {/* Sağ: JSON Önizleme */}
-      <Card className="flex flex-col">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center justify-between">
+      {/* Sağ: JSON Önizleme - Mobilde gizli veya daraltılabilir */}
+      <Card className="flex flex-col min-h-[200px] lg:min-h-0">
+        <CardHeader className="pb-2 md:pb-3">
+          <CardTitle className="text-xs md:text-sm flex items-center justify-between gap-2">
             <span className="flex items-center gap-2">
-              <FileJson className="h-4 w-4" />
-              JSON Veri Önizleme
+              <FileJson className="h-3.5 w-3.5 md:h-4 md:w-4" />
+              <span className="hidden sm:inline">JSON Veri Önizleme</span>
+              <span className="sm:hidden">JSON</span>
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 md:gap-2">
               {sampleData.length > 0 && (
                 <>
                   <Slider
@@ -1794,12 +1795,12 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
                     min={5}
                     max={Math.min(100, sampleData.length)}
                     step={5}
-                    className="w-20"
+                    className="w-12 md:w-20"
                   />
-                  <span className="text-xs font-mono w-6">{jsonPreviewCount}</span>
+                  <span className="text-[10px] md:text-xs font-mono w-4 md:w-6">{jsonPreviewCount}</span>
                 </>
               )}
-              <Button size="sm" variant="ghost" onClick={() => {
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
                 const jsonData = isMultiQueryMode ? getMultiQueryJsonData() : sampleData;
                 navigator.clipboard.writeText(JSON.stringify(jsonData, null, 2));
                 toast.success('JSON kopyalandı');
@@ -1809,9 +1810,9 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
             </div>
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex-1 overflow-hidden">
-          <ScrollArea className="h-full border rounded-lg">
-            <pre className="p-3 text-xs font-mono whitespace-pre-wrap">
+        <CardContent className="flex-1 overflow-hidden p-2 md:p-4 pt-0">
+          <ScrollArea className="h-full max-h-[180px] lg:max-h-none border rounded-lg">
+            <pre className="p-2 md:p-3 text-[10px] md:text-xs font-mono whitespace-pre-wrap">
               {isMultiQueryMode && multiQuery?.queries?.length ? (
                 JSON.stringify(getMultiQueryJsonData(), null, 2)
               ) : sampleData.length > 0 ? (
@@ -2143,21 +2144,22 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
     return fullPrompt;
   }, [isMultiQueryMode, multiQuery, mergedQueryData, sampleData, selectedDataSource, buildEnhancedPrompt, analyzeDataForAI, formatNumber]);
 
-  // Step 2: AI Kod Üret
+  // Step 2: AI Kod Üret - Mobilde tam genişlik
   const renderStep2 = () => (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
+    <div className="flex flex-col lg:grid lg:grid-cols-3 gap-3 md:gap-4 h-full overflow-auto">
       {/* Sol: AI Prompt (2/3) */}
       <Card className="lg:col-span-2 flex flex-col">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
+        <CardHeader className="pb-2 md:pb-3">
+          <CardTitle className="text-xs md:text-sm flex items-center gap-2">
+            <Sparkles className="h-3.5 w-3.5 md:h-4 md:w-4 text-primary" />
             AI ile Widget Kodu Üret
           </CardTitle>
-          <CardDescription className="text-xs">
-            Ne tür bir widget istediğinizi açıklayın. Sağdaki alanlara tıklayarak prompt'a ekleyebilirsiniz.
+          <CardDescription className="text-[10px] md:text-xs">
+            <span className="hidden sm:inline">Ne tür bir widget istediğinizi açıklayın. Sağdaki alanlara tıklayarak prompt'a ekleyebilirsiniz.</span>
+            <span className="sm:hidden">Widget'ınızı tarif edin</span>
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex-1 flex flex-col gap-3 overflow-hidden">
+        <CardContent className="flex-1 flex flex-col gap-2 md:gap-3 overflow-hidden p-3 md:p-6 pt-0">
           <ScrollArea className="flex-1">
             {/* Örnek Widget Seç - Büyüteç ile Modal */}
             <div className="mb-3">
@@ -2245,12 +2247,12 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
               </CollapsibleContent>
             </Collapsible>
 
-            {/* AI Prompt */}
+            {/* AI Prompt - Mobilde daha büyük */}
             <Textarea
               value={aiPrompt}
               onChange={(e) => setAiPrompt(e.target.value)}
-              placeholder="Örnek: Vade yaşlandırma grafiği oluştur. X ekseninde vade dilimleri (90+ gün, 60-90, 30-60, 0-30, bugün, gelecek) Y ekseninde toplam bakiye göster..."
-              className="min-h-[150px] resize-none"
+              placeholder="Örnek: Vade yaşlandırma grafiği oluştur. X ekseninde vade dilimleri, Y ekseninde bakiye göster..."
+              className="min-h-[120px] md:min-h-[150px] resize-none text-sm"
             />
             
             {/* AI Zorunlulukları */}
@@ -2408,43 +2410,44 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
         </CardContent>
       </Card>
 
-      {/* Sağ: Kullanılabilir Alanlar (1/3) */}
-      <Card className="flex flex-col">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <LucideIcons.ListFilter className="h-4 w-4" />
-            Kullanılabilir Alanlar
-            <Badge variant="secondary" className="text-xs ml-auto">
+      {/* Sağ: Kullanılabilir Alanlar (1/3) - Mobilde collapsible */}
+      <Card className="flex flex-col min-h-[180px] lg:min-h-0">
+        <CardHeader className="pb-2 md:pb-3">
+          <CardTitle className="text-xs md:text-sm flex items-center gap-2">
+            <LucideIcons.ListFilter className="h-3.5 w-3.5 md:h-4 md:w-4" />
+            <span className="hidden sm:inline">Kullanılabilir Alanlar</span>
+            <span className="sm:hidden">Alanlar</span>
+            <Badge variant="secondary" className="text-[10px] md:text-xs ml-auto">
               {getAllAvailableFields().length}
             </Badge>
           </CardTitle>
-          <CardDescription className="text-xs">
+          <CardDescription className="text-[10px] md:text-xs hidden sm:block">
             Tıkla: prompt'a ekle • Sağ tık: filtre olarak seç
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex-1 flex flex-col gap-3 overflow-hidden">
+        <CardContent className="flex-1 flex flex-col gap-2 md:gap-3 overflow-hidden p-3 md:p-6 pt-0">
           {/* Arama */}
           <div className="relative">
-            <LucideIcons.Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <LucideIcons.Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 md:h-3.5 md:w-3.5 text-muted-foreground" />
             <Input
               placeholder="Alan ara..."
               value={fieldSearchTerm}
               onChange={(e) => setFieldSearchTerm(e.target.value)}
-              className="pl-8 h-8 text-sm"
+              className="pl-7 md:pl-8 h-7 md:h-8 text-xs md:text-sm"
             />
           </div>
 
           {/* Alan Listesi */}
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 max-h-[140px] lg:max-h-none">
             {filteredFields.length > 0 ? (
-              <div className="space-y-1 pr-2">
+              <div className="space-y-0.5 md:space-y-1 pr-2">
                 {filteredFields.map(field => {
                   const isFilterSelected = selectedFilterFields.includes(field.key);
                   return (
                     <div
                       key={field.key}
                       className={cn(
-                        "group flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors cursor-pointer",
+                        "group flex items-center gap-1.5 md:gap-2 px-1.5 md:px-2 py-1 md:py-1.5 rounded-md text-xs md:text-sm transition-colors cursor-pointer",
                         "hover:bg-accent",
                         isFilterSelected && "bg-primary/10 border border-primary/30"
                       )}
@@ -2457,22 +2460,22 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
                       {/* Tip ikonu */}
                       <div className="shrink-0">
                         {field.sourceType === 'main' ? (
-                          <LucideIcons.Database className="h-3 w-3 text-primary" />
+                          <LucideIcons.Database className="h-2.5 w-2.5 md:h-3 md:w-3 text-primary" />
                         ) : field.sourceType === 'merged' ? (
-                          <LucideIcons.Link2 className="h-3 w-3 text-blue-500" />
+                          <LucideIcons.Link2 className="h-2.5 w-2.5 md:h-3 md:w-3 text-info" />
                         ) : (
-                          <LucideIcons.Calculator className="h-3 w-3 text-amber-500" />
+                          <LucideIcons.Calculator className="h-2.5 w-2.5 md:h-3 md:w-3 text-warning" />
                         )}
                       </div>
                       
                       {/* Alan adı */}
-                      <span className="flex-1 truncate font-mono text-xs">{field.key}</span>
+                      <span className="flex-1 truncate font-mono text-[10px] md:text-xs">{field.key}</span>
                       
                       {/* Filtre ikonu */}
                       {isFilterSelected ? (
-                        <LucideIcons.Filter className="h-3 w-3 text-primary shrink-0" />
+                        <LucideIcons.Filter className="h-2.5 w-2.5 md:h-3 md:w-3 text-primary shrink-0" />
                       ) : (
-                        <LucideIcons.Plus className="h-3 w-3 opacity-0 group-hover:opacity-50 shrink-0" />
+                        <LucideIcons.Plus className="h-2.5 w-2.5 md:h-3 md:w-3 opacity-0 group-hover:opacity-50 shrink-0" />
                       )}
                     </div>
                   );
@@ -2480,25 +2483,25 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
               </div>
             ) : sampleData.length === 0 ? (
               <div className="h-full flex items-center justify-center text-muted-foreground">
-                <div className="text-center py-8">
-                  <LucideIcons.Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Veri yüklenmedi</p>
-                  <p className="text-xs">Önceki adımda veri kaynağı seçin</p>
+                <div className="text-center py-4 md:py-8">
+                  <LucideIcons.Database className="h-6 w-6 md:h-8 md:w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-xs md:text-sm">Veri yüklenmedi</p>
+                  <p className="text-[10px] md:text-xs">Önceki adımda veri kaynağı seçin</p>
                 </div>
               </div>
             ) : (
-              <div className="text-center py-4 text-muted-foreground text-sm">
+              <div className="text-center py-4 text-muted-foreground text-xs md:text-sm">
                 Eşleşen alan bulunamadı
               </div>
             )}
           </ScrollArea>
 
-          {/* Alt bilgi */}
-          <div className="text-[10px] text-muted-foreground border-t pt-2">
+          {/* Alt bilgi - sadece desktop */}
+          <div className="text-[10px] text-muted-foreground border-t pt-2 hidden md:block">
             <div className="flex items-center gap-1.5 mb-1">
               <LucideIcons.Database className="h-3 w-3 text-primary" />
               <span>Ana Sorgu</span>
-              <LucideIcons.Link2 className="h-3 w-3 text-blue-500 ml-2" />
+              <LucideIcons.Link2 className="h-3 w-3 text-info ml-2" />
               <span>Birleşik</span>
             </div>
             <span>Sağ tık ile filtre alanı olarak işaretle</span>
@@ -2508,73 +2511,73 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
     </div>
   );
 
-  // Step 3: Kod Düzenle
+  // Step 3: Kod Düzenle - Mobil responsive
   const renderStep3 = () => (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
+    <div className="flex flex-col lg:grid lg:grid-cols-3 gap-3 md:gap-4 h-full overflow-auto">
       {/* Sol: Kod Editörü (2/3) */}
       <Card className="lg:col-span-2 flex flex-col">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center justify-between">
+        <CardHeader className="pb-2 md:pb-3">
+          <CardTitle className="text-xs md:text-sm flex items-center justify-between">
             <span className="flex items-center gap-2">
-              <Code className="h-4 w-4" />
+              <Code className="h-3.5 w-3.5 md:h-4 md:w-4" />
               Kod Editörü
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 md:gap-2">
               {codeError ? (
-                <Badge variant="destructive" className="text-xs gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  Hata
+                <Badge variant="destructive" className="text-[10px] md:text-xs gap-1">
+                  <AlertCircle className="h-2.5 w-2.5 md:h-3 md:w-3" />
+                  <span className="hidden sm:inline">Hata</span>
                 </Badge>
               ) : customCode.trim() && (
-                <Badge variant="outline" className="text-xs gap-1 bg-success/10 text-success">
-                  <Check className="h-3 w-3" />
-                  Geçerli
+                <Badge variant="outline" className="text-[10px] md:text-xs gap-1 bg-success/10 text-success">
+                  <Check className="h-2.5 w-2.5 md:h-3 md:w-3" />
+                  <span className="hidden sm:inline">Geçerli</span>
                 </Badge>
               )}
-              <Button size="sm" variant="ghost" onClick={copyCode}>
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={copyCode}>
                 {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
               </Button>
             </div>
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex-1 flex flex-col gap-3">
+        <CardContent className="flex-1 flex flex-col gap-2 md:gap-3 p-3 md:p-6 pt-0">
           <Textarea
             value={customCode}
             onChange={(e) => setCustomCode(e.target.value)}
-            className="flex-1 font-mono text-xs resize-none min-h-[300px]"
+            className="flex-1 font-mono text-[10px] md:text-xs resize-none min-h-[200px] md:min-h-[300px]"
             placeholder="Widget kodunuzu buraya yazın..."
           />
           
           {codeError && (
             <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="text-xs">{codeError}</AlertDescription>
+              <AlertCircle className="h-3.5 w-3.5 md:h-4 md:w-4" />
+              <AlertDescription className="text-[10px] md:text-xs">{codeError}</AlertDescription>
             </Alert>
           )}
         </CardContent>
       </Card>
 
       {/* Sağ: AI Chat (1/3) */}
-      <Card className="flex flex-col">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <MessageSquare className="h-4 w-4 text-primary" />
+      <Card className="flex flex-col min-h-[200px] lg:min-h-0">
+        <CardHeader className="pb-2 md:pb-3">
+          <CardTitle className="text-xs md:text-sm flex items-center gap-2">
+            <MessageSquare className="h-3.5 w-3.5 md:h-4 md:w-4 text-primary" />
             AI ile Geliştir
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex-1 flex flex-col gap-3">
+        <CardContent className="flex-1 flex flex-col gap-2 md:gap-3 p-3 md:p-6 pt-0">
           {/* Chat geçmişi */}
           {chatHistory.length > 0 && (
-            <ScrollArea className="flex-1 border rounded-lg p-2 bg-muted/30 max-h-40">
-              <div className="space-y-2">
+            <ScrollArea className="flex-1 border rounded-lg p-2 bg-muted/30 max-h-28 md:max-h-40">
+              <div className="space-y-1.5 md:space-y-2">
                 {chatHistory.map((msg, i) => (
                   <div 
                     key={i} 
                     className={cn(
-                      "text-xs p-2 rounded",
+                      "text-[10px] md:text-xs p-1.5 md:p-2 rounded",
                       msg.role === 'user' 
-                        ? 'bg-primary/10 text-primary ml-4' 
-                        : 'bg-secondary text-secondary-foreground mr-4'
+                        ? 'bg-primary/10 text-primary ml-2 md:ml-4' 
+                        : 'bg-secondary text-secondary-foreground mr-2 md:mr-4'
                     )}
                   >
                     {msg.content}
@@ -2591,7 +2594,7 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
                 key={i}
                 variant="outline"
                 size="sm"
-                className="text-xs h-7"
+                className="text-[10px] md:text-xs h-6 md:h-7 px-2"
                 onClick={() => setChatInput(
                   action.includes('Renk') ? 'Renkleri daha canlı yap' :
                   action.includes('Türkçe') ? 'Metinleri Türkçeleştir' :
@@ -2617,15 +2620,15 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
               }}
               placeholder="Değişiklik isteği..."
               disabled={isChatLoading}
-              className="min-h-[60px] resize-none text-xs"
+              className="min-h-[50px] md:min-h-[60px] resize-none text-xs"
             />
             <Button 
               size="icon" 
               onClick={sendChatMessage}
               disabled={isChatLoading || !chatInput.trim()}
-              className="shrink-0"
+              className="shrink-0 h-8 w-8 md:h-10 md:w-10"
             >
-              {isChatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {isChatLoading ? <Loader2 className="h-3.5 w-3.5 md:h-4 md:w-4 animate-spin" /> : <Send className="h-3.5 w-3.5 md:h-4 md:w-4" />}
             </Button>
           </div>
         </CardContent>
@@ -2665,57 +2668,57 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
     }
   };
 
-  // Step 4: Önizle & Kaydet
+  // Step 4: Önizle & Kaydet - Mobil responsive
   const renderStep4 = () => (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
+    <div className="flex flex-col lg:grid lg:grid-cols-3 gap-3 md:gap-4 h-full overflow-auto">
       {/* Sol: Önizleme (2/3) */}
       <Card className="lg:col-span-2 flex flex-col">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <DynamicIcon iconName={widgetIcon} className="h-4 w-4" />
-              {widgetName}
+        <CardHeader className="pb-2 md:pb-3">
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-xs md:text-sm flex items-center gap-2 truncate">
+              <DynamicIcon iconName={widgetIcon} className="h-3.5 w-3.5 md:h-4 md:w-4 shrink-0" />
+              <span className="truncate">{widgetName}</span>
             </CardTitle>
             <Button
               variant="outline"
               size="sm"
               onClick={capturePreviewImage}
               disabled={isCapturingPreview || !PreviewResult.component}
-              className="gap-2 text-xs"
+              className="gap-1 md:gap-2 text-[10px] md:text-xs h-7 md:h-8 px-2 md:px-3 shrink-0"
             >
               {isCapturingPreview ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
               ) : (
                 <LucideIcons.Camera className="h-3 w-3" />
               )}
-              {previewImage ? 'Görseli Güncelle' : 'Önizleme Görseli Oluştur'}
+              <span className="hidden sm:inline">{previewImage ? 'Görseli Güncelle' : 'Görsel Oluştur'}</span>
             </Button>
           </div>
           {shortDescription && (
-            <CardDescription className="text-xs">{shortDescription}</CardDescription>
+            <CardDescription className="text-[10px] md:text-xs truncate">{shortDescription}</CardDescription>
           )}
         </CardHeader>
-        <CardContent className="flex-1">
+        <CardContent className="flex-1 p-3 md:p-6 pt-0">
           {/* Map yükleniyor durumu */}
           {isMapLoading && /(^|[^a-zA-Z0-9_])Map\./.test(customCode) ? (
-            <div className="border-2 border-dashed rounded-lg p-4 min-h-[300px] flex items-center justify-center text-muted-foreground">
+            <div className="border-2 border-dashed rounded-lg p-4 min-h-[200px] md:min-h-[300px] flex items-center justify-center text-muted-foreground">
               <div className="text-center">
-                <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin opacity-50" />
-                <p className="text-sm">Harita bileşenleri yükleniyor...</p>
+                <Loader2 className="h-6 w-6 md:h-8 md:w-8 mx-auto mb-2 animate-spin opacity-50" />
+                <p className="text-xs md:text-sm">Harita bileşenleri yükleniyor...</p>
               </div>
             </div>
           ) : codeError ? (
-            <Alert variant="destructive" className="min-h-[300px]">
-              <AlertCircle className="h-4 w-4" />
+            <Alert variant="destructive" className="min-h-[200px] md:min-h-[300px]">
+              <AlertCircle className="h-3.5 w-3.5 md:h-4 md:w-4" />
               <AlertDescription>
-                <pre className="text-xs whitespace-pre-wrap mt-2">{codeError}</pre>
+                <pre className="text-[10px] md:text-xs whitespace-pre-wrap mt-2">{codeError}</pre>
               </AlertDescription>
             </Alert>
           ) : PreviewResult.component ? (
-            <div id="widget-preview-container" className="h-[420px] border rounded-lg p-4 flex flex-col bg-card">
+            <div id="widget-preview-container" className="h-[280px] md:h-[420px] border rounded-lg p-2 md:p-4 flex flex-col bg-card">
               <ErrorBoundary fallback={
-                <div className="text-destructive text-sm flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4" />
+                <div className="text-destructive text-xs md:text-sm flex items-center gap-2">
+                  <AlertCircle className="h-3.5 w-3.5 md:h-4 md:w-4" />
                   Widget render hatası
                 </div>
               }>
@@ -2727,24 +2730,25 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
               </ErrorBoundary>
             </div>
           ) : (
-            <div className="border-2 border-dashed rounded-lg p-4 min-h-[300px] flex items-center justify-center text-muted-foreground">
+            <div className="border-2 border-dashed rounded-lg p-4 min-h-[200px] md:min-h-[300px] flex items-center justify-center text-muted-foreground">
               <div className="text-center">
-                <Code className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Kod yazılmadı veya yüklenemiyor</p>
+                <Code className="h-6 w-6 md:h-8 md:w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-xs md:text-sm">Kod yazılmadı veya yüklenemiyor</p>
               </div>
             </div>
           )}
           
           {/* Önizleme görseli thumbnail */}
           {previewImage && (
-            <div className="mt-3 flex items-center gap-3 p-2 bg-muted/30 rounded-lg">
+            <div className="mt-2 md:mt-3 flex items-center gap-2 md:gap-3 p-2 bg-muted/30 rounded-lg">
               <img 
                 src={previewImage} 
                 alt="Widget önizleme" 
-                className="h-12 w-20 object-cover rounded border"
+                className="h-10 w-16 md:h-12 md:w-20 object-cover rounded border"
               />
-              <div className="flex-1 text-xs text-muted-foreground">
-                Marketplace önizleme görseli hazır
+              <div className="flex-1 text-[10px] md:text-xs text-muted-foreground">
+                <span className="hidden sm:inline">Marketplace önizleme görseli hazır</span>
+                <span className="sm:hidden">Görsel hazır</span>
               </div>
               <Button
                 variant="ghost"
@@ -2961,37 +2965,40 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
     </div>
   );
 
-  // Tam sayfa modu için content
+  // Tam sayfa modu için content - Mobil responsive
   const builderContent = (
     <div className={cn(
       "flex flex-col",
-      isFullPage ? "h-full pb-16" : "h-[95vh] md:h-[90vh]"
+      isFullPage ? "h-full pb-14 md:pb-16" : "h-[95vh] md:h-[90vh]"
     )}>
       {/* Header - Dialog modunda DialogHeader kullanılır, tam sayfada üstte göster */}
       {!isFullPage && (
-        <DialogHeader className="px-4 md:px-6 py-3 border-b shrink-0">
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <Code className="h-5 w-5 text-primary" />
+        <DialogHeader className="px-3 md:px-6 py-2 md:py-3 border-b shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-sm md:text-base">
+            <Code className="h-4 w-4 md:h-5 md:w-5 text-primary" />
             {editingWidget ? 'Widget Düzenle' : 'Yeni Widget Oluştur'}
           </DialogTitle>
         </DialogHeader>
       )}
       
       {isFullPage && (
-        <div className="px-4 md:px-6 py-3 border-b shrink-0 flex items-center justify-between bg-card">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <ChevronLeft className="h-5 w-5" />
+        <div className="px-2 sm:px-4 md:px-6 py-2 md:py-3 border-b shrink-0 flex items-center justify-between bg-card gap-2">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0">
+            <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 md:h-9 md:w-9 shrink-0">
+              <ChevronLeft className="h-4 w-4 md:h-5 md:w-5" />
             </Button>
-            <div>
-              <h1 className="text-lg font-semibold flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-primary" />
-                {editingWidget ? 'Widget Düzenle' : 'AI Widget Builder'}
+            <div className="min-w-0">
+              <h1 className="text-sm md:text-lg font-semibold flex items-center gap-1.5 md:gap-2">
+                <Sparkles className="h-4 w-4 md:h-5 md:w-5 text-primary shrink-0" />
+                <span className="truncate">
+                  <span className="hidden sm:inline">{editingWidget ? 'Widget Düzenle' : 'AI Widget Builder'}</span>
+                  <span className="sm:hidden">{editingWidget ? 'Düzenle' : 'Widget Builder'}</span>
+                </span>
               </h1>
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} className="text-muted-foreground hover:text-foreground">
-            <X className="h-5 w-5" />
+          <Button variant="ghost" size="icon" onClick={onClose} className="text-muted-foreground hover:text-foreground h-8 w-8 md:h-9 md:w-9 shrink-0">
+            <X className="h-4 w-4 md:h-5 md:w-5" />
           </Button>
         </div>
       )}
@@ -2999,10 +3006,10 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
       {/* Stepper */}
       <StepperHeader />
 
-      {/* Content */}
+      {/* Content - Mobil'de daha az padding */}
       <div className={cn(
-        "flex-1 overflow-auto p-4",
-        isFullPage && currentStep === 1 ? "pb-4" : ""
+        "flex-1 overflow-auto p-2 sm:p-3 md:p-4",
+        isFullPage && currentStep === 1 ? "pb-2 md:pb-4" : ""
       )}>
         {currentStep === 0 && renderStep1()}
         {currentStep === 1 && renderStep2()}
@@ -3058,23 +3065,24 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
     </div>
   );
   
-  // Fixed Bottom Bar Component - Tam sayfa modu için
+  // Fixed Bottom Bar Component - Tam sayfa modu için - Mobil responsive
   const FixedBottomBar = () => (
     <div className="sticky bottom-0 z-50 bg-background border-t shadow-lg">
-      <div className="flex items-center justify-between px-4 md:px-6 py-3 max-w-screen-2xl mx-auto">
+      <div className="flex items-center justify-between px-2 sm:px-4 md:px-6 py-2 md:py-3 max-w-screen-2xl mx-auto gap-2">
         {/* Sol: Geri/İptal */}
         <Button 
           variant="outline" 
+          size="sm"
           onClick={currentStep === 0 ? onClose : handleBack}
-          className="gap-2"
+          className="gap-1 md:gap-2 h-8 md:h-9 px-2 md:px-3"
         >
-          <ChevronLeft className="h-4 w-4" />
-          {currentStep === 0 ? 'İptal' : 'Geri'}
+          <ChevronLeft className="h-3.5 w-3.5 md:h-4 md:w-4" />
+          <span className="hidden sm:inline">{currentStep === 0 ? 'İptal' : 'Geri'}</span>
         </Button>
         
         {/* Orta: Step 2'de AI butonları */}
         {currentStep === 1 && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 flex-1 justify-center">
             <Button
               variant="outline"
               size="sm"
@@ -3082,56 +3090,61 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
                 setFullPromptContent(generateFullPromptPreview());
                 setShowFullPromptModal(true);
               }}
-              className="gap-2"
+              className="gap-1 md:gap-2 h-8 md:h-9 px-2 md:px-3"
             >
-              <LucideIcons.FileText className="h-4 w-4" />
+              <LucideIcons.FileText className="h-3.5 w-3.5 md:h-4 md:w-4" />
               <span className="hidden md:inline">Prompt'u Göster</span>
             </Button>
             
             <Button
               onClick={generateCodeWithAI}
               disabled={isGeneratingCode || !aiPrompt.trim() || sampleData.length === 0}
-              className="gap-2"
+              className="gap-1 md:gap-2 h-8 md:h-9 px-2 md:px-4"
             >
               {isGeneratingCode ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 md:h-4 md:w-4 animate-spin" />
               ) : (
-                <Send className="h-4 w-4" />
+                <Send className="h-3.5 w-3.5 md:h-4 md:w-4" />
               )}
-              {isGeneratingCode ? 'Üretiliyor...' : 'AI ile Kod Üret'}
+              <span className="hidden sm:inline">{isGeneratingCode ? 'Üretiliyor...' : 'AI ile Üret'}</span>
+              <span className="sm:hidden">{isGeneratingCode ? '...' : 'Üret'}</span>
             </Button>
           </div>
         )}
         
         {/* Sağ: İleri/Kaydet */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 md:gap-2">
           {currentStep === 1 && (
             <Button 
               variant="ghost" 
+              size="sm"
               onClick={handleNext}
-              className="text-muted-foreground"
+              className="text-muted-foreground h-8 md:h-9 px-2"
             >
-              Atla →
+              <span className="hidden sm:inline">Atla →</span>
+              <span className="sm:hidden">→</span>
             </Button>
           )}
           
           {currentStep < WIZARD_STEPS.length - 1 ? (
             <Button 
+              size="sm"
               onClick={handleNext}
               disabled={!canProceed(currentStep)}
-              className="gap-2"
+              className="gap-1 md:gap-2 h-8 md:h-9 px-2 md:px-4"
             >
-              İleri
-              <ChevronRight className="h-4 w-4" />
+              <span className="hidden sm:inline">İleri</span>
+              <ChevronRight className="h-3.5 w-3.5 md:h-4 md:w-4" />
             </Button>
           ) : (
             <Button 
+              size="sm"
               onClick={handleSave}
               disabled={isSaving || codeError !== null}
-              className="gap-2"
+              className="gap-1 md:gap-2 h-8 md:h-9 px-2 md:px-4"
             >
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {editingWidget ? 'Güncelle' : 'Oluştur'}
+              {isSaving ? <Loader2 className="h-3.5 w-3.5 md:h-4 md:w-4 animate-spin" /> : <Save className="h-3.5 w-3.5 md:h-4 md:w-4" />}
+              <span className="hidden sm:inline">{editingWidget ? 'Güncelle' : 'Oluştur'}</span>
             </Button>
           )}
         </div>
