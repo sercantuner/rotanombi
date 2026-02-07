@@ -3,11 +3,12 @@
 
 import React, { useState, useMemo, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import { WidgetBuilderConfig, AggregationType, DatePeriod } from '@/lib/widgetBuilderTypes';
-import { useDynamicWidgetData } from '@/hooks/useDynamicWidgetData';
+import { useDynamicWidgetData, DataStatusInfo } from '@/hooks/useDynamicWidgetData';
 import { useChartColorPalette } from '@/hooks/useChartColorPalette';
 import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
 import { DrillDownModal } from './DrillDownModal';
 import { WidgetDateFilter, getDateRangeForPeriod } from './WidgetDateFilter';
+import { DataStatusBadge } from './DataStatusBadge';
 import { StatCard } from './StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -444,7 +445,7 @@ export function BuilderWidgetRenderer({
   const { filters, crossFilter, setCrossFilter, clearCrossFilter } = useGlobalFilters();
   
   // Veri çekme - global filtreler ile
-  const { data, rawData, multiQueryData, isLoading, error, refetch } = useDynamicWidgetData(builderConfig, filters);
+  const { data, rawData, multiQueryData, isLoading, error, refetch, dataStatus } = useDynamicWidgetData(builderConfig, filters);
   
   // DEBUG: Widget veri durumu - SADECE development modunda
   if (process.env.NODE_ENV === 'development') {
@@ -455,6 +456,7 @@ export function BuilderWidgetRenderer({
       error,
       dataSourceId: builderConfig?.dataSourceId,
       vizType: builderConfig?.visualization?.type,
+      dataStatus: dataStatus,
     });
   }
   
@@ -642,20 +644,31 @@ export function BuilderWidgetRenderer({
   const dateFilterConfig = builderConfig.dateFilter;
   const showDateFilter = dateFilterConfig?.enabled && dateFilterConfig?.showInWidget;
 
-  // Header bileşeni - sadece tarih seçici (widget ismi gizli, feedback butonu ContainerRenderer'da)
+  // Header bileşeni - DataStatusBadge ve tarih seçici
   const ChartHeader = () => {
-    // Sadece tarih filtresi varsa header göster, yoksa null döndür
-    if (!showDateFilter) return null;
+    // dataStatus veya tarih filtresi varsa header göster
+    const showHeader = showDateFilter || (dataStatus && dataStatus.source !== 'pending');
+    if (!showHeader) return null;
     
     return (
       <CardHeader className="pb-2 pt-3 px-4">
-        <div className="flex items-center justify-end">
-          <WidgetDateFilter
-            config={dateFilterConfig!}
-            currentPeriod={selectedDatePeriod}
-            onPeriodChange={handleDatePeriodChange}
-            compact
-          />
+        <div className="flex items-center justify-between gap-2">
+          {/* Veri durumu badge'i - sol taraf */}
+          <div className="flex items-center gap-2">
+            {dataStatus && dataStatus.source !== 'pending' && (
+              <DataStatusBadge status={dataStatus} compact />
+            )}
+          </div>
+          
+          {/* Tarih filtresi - sağ taraf */}
+          {showDateFilter && (
+            <WidgetDateFilter
+              config={dateFilterConfig!}
+              currentPeriod={selectedDatePeriod}
+              onPeriodChange={handleDatePeriodChange}
+              compact
+            />
+          )}
         </div>
       </CardHeader>
     );
