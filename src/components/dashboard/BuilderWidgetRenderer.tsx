@@ -42,9 +42,9 @@ const initWordCloudScope = async () => {
   if (WordCloudScope) return WordCloudScope;
   
   try {
-    const wordcloud = await import('react-wordcloud');
+    const wordcloud = await import('@isoterik/react-word-cloud');
     WordCloudScope = {
-      WordCloud: wordcloud.default,
+      WordCloud: wordcloud.WordCloud,
     };
     return WordCloudScope;
   } catch (e) {
