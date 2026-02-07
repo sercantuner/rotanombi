@@ -1065,12 +1065,24 @@ export function useDynamicWidgetData(
   const prevConfigRef = useRef(configKey);
   // dataSources yüklenmesini izlemek için ref
   const dataSourcesLoadedRef = useRef(false);
+  // dataSourcesReadyKey'in bir önceki değerini tut
+  const prevDataSourcesReadyKeyRef = useRef<string>('loading');
   
   // dataSources hazır olduğunda key oluştur (isLoading dependency'sinden kaçınmak için)
   const dataSourcesReadyKey = useMemo(() => {
     // dataSources array'i varsa ve uzunluğu > 0 ise hazır
     return dataSources && dataSources.length > 0 ? 'ready' : 'loading';
   }, [dataSources]);
+  
+  // Config değiştiğinde ref'leri sıfırla - sayfa değişikliklerinde veri yeniden çekilsin
+  useEffect(() => {
+    if (prevConfigRef.current !== configKey) {
+      dataSourcesLoadedRef.current = false;
+      hasInitialDataRef.current = false;
+      prevDataSourcesReadyKeyRef.current = 'loading';
+      rawDataCacheRef.current = [];
+    }
+  }, [configKey]);
   
   useEffect(() => {
     // dataSources henüz yüklenmediyse bekle (isLoading yerine array kontrolü)
@@ -1080,18 +1092,28 @@ export function useDynamicWidgetData(
     
     if (dataSourcesReadyKey === 'loading' && needsDataSources) {
       console.log('[Widget] Waiting for dataSources to load... (multiQuery:', !!config?.multiQuery, ')');
+      // dataSources yüklenene kadar bekle - dataSourcesLoadedRef henüz true olmamalı
+      prevDataSourcesReadyKeyRef.current = 'loading';
       return;
     }
     
     // Config değiştiyse veya ilk mount'ta fetch yap
     if (config && sunucuAdi && firmaKodu) {
       // isPageDataReady bekleme - doğrudan DB'den okuyoruz
-      if (prevConfigRef.current !== configKey || !hasInitialDataRef.current || !dataSourcesLoadedRef.current) {
+      // FIX: dataSourcesReadyKey 'loading'dan 'ready'ye geçtiyse mutlaka fetch yap
+      const wasWaitingForDataSources = prevDataSourcesReadyKeyRef.current === 'loading' && dataSourcesReadyKey === 'ready';
+      const shouldFetch = prevConfigRef.current !== configKey || 
+                          !hasInitialDataRef.current || 
+                          !dataSourcesLoadedRef.current ||
+                          wasWaitingForDataSources;
+      
+      if (shouldFetch) {
         dataSourcesLoadedRef.current = true;
         fetchData();
       }
     }
     prevConfigRef.current = configKey;
+    prevDataSourcesReadyKeyRef.current = dataSourcesReadyKey;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configKey, sunucuAdi, firmaKodu, effectiveDonem, dataSourcesReadyKey]);
 
