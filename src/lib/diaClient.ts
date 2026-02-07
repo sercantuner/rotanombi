@@ -272,14 +272,7 @@ export async function diaGetGenelRapor(): Promise<ApiResult<DiaGenelRapor>> {
   return callEdgeFunction<DiaGenelRapor>('dia-genel-rapor');
 }
 
-// Satış Rapor
-export async function diaGetSatisRapor(baslangic?: string, bitis?: string): Promise<ApiResult<DiaSatisRapor>> {
-  const params: Record<string, string> = {};
-  if (baslangic) params.baslangic = baslangic;
-  if (bitis) params.bitis = bitis;
-  
-  return callEdgeFunction<DiaSatisRapor>('dia-satis-rapor', params);
-}
+// NOTE: diaGetSatisRapor removed - not used, sales data comes from data sources
 
 // Finans Rapor
 export async function diaGetFinansRapor(): Promise<ApiResult<DiaFinansRapor>> {
