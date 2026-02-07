@@ -581,6 +581,13 @@ serve(async (req) => {
         body: JSON.stringify(currentPayload),
       });
 
+      // 404 durumunda graceful fallback - bazı DIA sunucularında bazı modüller mevcut değil
+      // (örn: satiselemani_listele, ozelkod_listele vb.)
+      if (response.status === 404) {
+        console.log(`[DIA] Endpoint not found (404), returning empty result for resilience`);
+        return { code: "404", msg: "Endpoint bulunamadı", result: [] };
+      }
+
       if (!response.ok) {
         throw new Error(`DIA API hatası: ${response.status}`);
       }
