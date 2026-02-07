@@ -69,6 +69,11 @@ interface DiaDataCacheContextType {
   
   // Impersonation desteği - Super Admin başka kullanıcı gibi veri çekebilir
   targetUserId: string | null;
+  
+  // Background Revalidation Tracker - Aynı kaynağın birden fazla widget tarafından çekilmesini engeller
+  isSourceRevalidating: (dataSourceSlug: string) => boolean;
+  markSourceRevalidating: (dataSourceSlug: string, status: boolean) => void;
+  getRevalidatingSources: () => string[];
 }
 
 const DiaDataCacheContext = createContext<DiaDataCacheContextType | null>(null);
@@ -108,6 +113,10 @@ export function DiaDataCacheProvider({ children, userId }: DiaDataCacheProviderP
   // GLOBAL: Hangi veri kaynakları bu oturumda zaten sorgulandı?
   // Bu sayede sayfa geçişlerinde aynı sorgu tekrar yapılmaz
   const fetchedDataSourcesRef = useRef<Set<string>>(new Set());
+  
+  // GLOBAL: Arka planda yenilenmekte olan veri kaynakları
+  // Bu sayede aynı kaynak için birden fazla widget revalidate çağırmaz
+  const revalidatingSourcesRef = useRef<Set<string>>(new Set());
   
   // Kullanıcı değişikliği takibi için
   const previousUserIdRef = useRef<string | null>(null);
@@ -330,6 +339,25 @@ export function DiaDataCacheProvider({ children, userId }: DiaDataCacheProviderP
     console.log('[GlobalRegistry] Cleared - next page load will refetch all sources');
   }, []);
 
+  // Background Revalidation Tracker fonksiyonları
+  const isSourceRevalidating = useCallback((dataSourceSlug: string): boolean => {
+    return revalidatingSourcesRef.current.has(dataSourceSlug);
+  }, []);
+
+  const markSourceRevalidating = useCallback((dataSourceSlug: string, status: boolean) => {
+    if (status) {
+      revalidatingSourcesRef.current.add(dataSourceSlug);
+      console.log(`[Revalidation] Started: ${dataSourceSlug} (active: ${revalidatingSourcesRef.current.size})`);
+    } else {
+      revalidatingSourcesRef.current.delete(dataSourceSlug);
+      console.log(`[Revalidation] Completed: ${dataSourceSlug} (active: ${revalidatingSourcesRef.current.size})`);
+    }
+  }, []);
+
+  const getRevalidatingSources = useCallback((): string[] => {
+    return Array.from(revalidatingSourcesRef.current);
+  }, []);
+
   // İstatistik güncellemeleri
   const resetStats = useCallback(() => {
     setStats({
@@ -406,6 +434,9 @@ export function DiaDataCacheProvider({ children, userId }: DiaDataCacheProviderP
     clearAllCache,
     currentUserId: userId || null,
     targetUserId: userId || null, // Impersonation için - normal kullanımda currentUserId ile aynı
+    isSourceRevalidating,
+    markSourceRevalidating,
+    getRevalidatingSources,
   }), [
     getCachedData, getCachedDataWithStale, setCachedData, invalidateCache, 
     getDataSourceData, getDataSourceDataWithStale, setDataSourceData, 
@@ -414,7 +445,8 @@ export function DiaDataCacheProvider({ children, userId }: DiaDataCacheProviderP
     isPageDataReady, setPageDataReady,
     sharedData, setSharedData, isDiaConnected, setDiaConnected,
     stats, resetStats, incrementCacheHit, incrementCacheMiss, recordApiCall,
-    clearAllCache, userId
+    clearAllCache, userId,
+    isSourceRevalidating, markSourceRevalidating, getRevalidatingSources
   ]);
 
   return (
@@ -456,6 +488,9 @@ export function useDiaDataCache(): DiaDataCacheContextType {
       clearAllCache: () => {},
       currentUserId: null,
       targetUserId: null,
+      isSourceRevalidating: () => false,
+      markSourceRevalidating: () => {},
+      getRevalidatingSources: () => [],
     };
   }
   return context;

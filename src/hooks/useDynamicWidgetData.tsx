@@ -743,7 +743,10 @@ export function useDynamicWidgetData(
     isPageDataReady, // Veri kaynakları hazır mı?
     sharedData, 
     incrementCacheHit, 
-    incrementCacheMiss 
+    incrementCacheMiss,
+    // Background revalidation için
+    isSourceRevalidating,
+    markSourceRevalidating, 
   } = useDiaDataCache();
   
   // Veri kaynağı bilgilerini çek (slug almak için)
@@ -763,6 +766,8 @@ export function useDynamicWidgetData(
     incrementCacheHit,
     incrementCacheMiss,
     dataSources,
+    isSourceRevalidating,
+    markSourceRevalidating,
   });
   cacheContextRef.current = {
     getCachedData,
@@ -773,6 +778,8 @@ export function useDynamicWidgetData(
     incrementCacheHit,
     incrementCacheMiss,
     dataSources,
+    isSourceRevalidating,
+    markSourceRevalidating,
   };
   
   // Cache-first loading: Cache'de veri varsa isLoading false döner
@@ -902,6 +909,115 @@ export function useDynamicWidgetData(
     processVisualizationData(processedData, config);
   }, [config, processVisualizationData]);
 
+  // ============= BACKGROUND REVALIDATE =============
+  // Arka planda DIA'dan taze veri çek ve DB'ye yaz
+  // UI'ı bloklamaz - önce cache gösterilir, sonra sessizce güncellenir
+  
+  const backgroundRevalidate = useCallback(async (
+    dataSourceId: string, 
+    slug: string,
+    currentConfig: WidgetBuilderConfig
+  ) => {
+    const { 
+      markSourceRevalidating: markRevalidating, 
+      isSourceRevalidating: isRevalidating,
+      setDataSourceData: setDsData,
+    } = cacheContextRef.current;
+    
+    // Aynı kaynak zaten revalidate ediliyorsa çık (multi-widget koordinasyonu)
+    if (isRevalidating(slug)) {
+      console.log(`[Background Revalidate] Already running for ${slug}, skipping...`);
+      return;
+    }
+    
+    // Revalidation başlıyor
+    markRevalidating(slug, true);
+    setDataStatus(prev => ({ ...prev, isRevalidating: true }));
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Oturum bulunamadı');
+      }
+      
+      console.log(`[Background Revalidate] Starting sync for ${slug}...`);
+      
+      // dia-data-sync edge function'ı çağır
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/dia-data-sync`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${session.access_token}`, 
+          'Content-Type': 'application/json' 
+        },
+        body: JSON.stringify({
+          action: 'syncSingleSource',
+          dataSourceSlug: slug,
+          periodNo: effectiveDonem,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Sync failed: ${response.status} - ${errorText}`);
+      }
+      
+      const result = await response.json();
+      console.log(`[Background Revalidate] Sync completed for ${slug}:`, result);
+      
+      // Sync tamamlandı - DB'den yeni veriyi çek
+      const freshDbResult = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, effectiveDonem);
+      
+      if (freshDbResult.data.length > 0) {
+        console.log(`[Background Revalidate] Got ${freshDbResult.data.length} fresh records for ${slug}`);
+        
+        // Memory cache'i güncelle
+        setDsData(dataSourceId, freshDbResult.data);
+        
+        // Raw cache'i güncelle
+        rawDataCacheRef.current = freshDbResult.data;
+        hasInitialDataRef.current = true;
+        
+        // dataStatus güncelle - artık güncel!
+        setDataStatus({
+          source: 'api',
+          lastSyncedAt: new Date(),
+          isStale: false,
+          isRevalidating: false,
+          error: null,
+        });
+        
+        // Global filtreleri uygula ve UI'ı güncelle
+        let filteredData = [...freshDbResult.data];
+        const currentFilters = globalFiltersRef.current;
+        if (currentFilters) {
+          filteredData = applyGlobalFilters(filteredData, currentFilters);
+        }
+        
+        // Görselleştirme verisini güncelle (UI sessizce yenilenir)
+        processVisualizationData(filteredData, currentConfig);
+        
+        console.log(`[Background Revalidate] UI updated with fresh data for ${slug}`);
+      } else {
+        console.warn(`[Background Revalidate] No data returned from sync for ${slug}`);
+        setDataStatus(prev => ({ 
+          ...prev, 
+          isRevalidating: false,
+          error: 'Sync tamamlandı ancak veri bulunamadı',
+        }));
+      }
+    } catch (err) {
+      console.error(`[Background Revalidate] Error for ${slug}:`, err);
+      // Hata olsa bile eski veriyi göstermeye devam et
+      setDataStatus(prev => ({ 
+        ...prev, 
+        isRevalidating: false, 
+        error: err instanceof Error ? getDiaErrorMessage(err.message) : 'Güncelleme hatası',
+      }));
+    } finally {
+      markRevalidating(slug, false);
+    }
+  }, [sunucuAdi, firmaKodu, effectiveDonem, processVisualizationData]);
+
   const fetchData = useCallback(async () => {
     if (!config) {
       setData(null);
@@ -1009,13 +1125,26 @@ export function useDynamicWidgetData(
               ? (Date.now() - dbResult.lastSyncedAt.getTime()) / (1000 * 60 * 60)
               : 999;
             
+            const isDataStale = hoursSinceSync > 1; // 1 saatten eski = stale
+            
             setDataStatus(prev => ({
               ...prev,
               source: 'cache',
               lastSyncedAt: dbResult.lastSyncedAt,
-              isStale: hoursSinceSync > 1, // 1 saatten eski = stale
+              isStale: isDataStale,
               isRevalidating: false,
             }));
+            
+            // ============= BACKGROUND REVALIDATE TRİGGER =============
+            // Veri 1 saatten eskiyse arka planda DIA'dan güncellenecek
+            // Bu işlem UI'ı bloklamaz - kullanıcı hemen eski veriyi görür
+            if (isDataStale && config) {
+              console.log(`[Widget] Data stale (${hoursSinceSync.toFixed(1)}h old) - triggering background revalidate for ${slug}`);
+              // setTimeout ile main thread bloklanmaz
+              setTimeout(() => {
+                backgroundRevalidate(dataSourceId, slug, config);
+              }, 100);
+            }
             
             return dbResult.data;
           } else {
@@ -1027,10 +1156,29 @@ export function useDynamicWidgetData(
                 source: 'cache',
                 isStale: true,
               }));
+              
+              // Stale cache kullanıyoruz - background revalidate tetikle
+              if (config) {
+                console.log(`[Widget] Stale cache used - triggering background revalidate for ${slug}`);
+                setTimeout(() => {
+                  backgroundRevalidate(dataSourceId, slug, config);
+                }, 100);
+              }
+              
               return cachedSourceData;
             }
-            console.log(`[Widget] DB empty for ${slug} - no data`);
+            
+            // DB boş ve cache yok - ilk kez veri çekilecek
+            console.log(`[Widget] DB empty for ${slug} - triggering initial sync`);
             incMiss();
+            
+            // İlk veri çekimi için de background revalidate tetikle
+            if (config) {
+              setTimeout(() => {
+                backgroundRevalidate(dataSourceId, slug, config);
+              }, 100);
+            }
+            
             return [];
           }
         } catch (dbError) {
@@ -1143,7 +1291,7 @@ export function useDynamicWidgetData(
   // globalFilters ve sharedData ref'lerde tutulduğu için buraya eklenmiyor
   // config, sunucuAdi, firmaKodu değiştiğinde yeniden oluştur
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configKey, processVisualizationData, sunucuAdi, firmaKodu, effectiveDonem]);
+  }, [configKey, processVisualizationData, sunucuAdi, firmaKodu, effectiveDonem, backgroundRevalidate]);
 
   // DIA profil değişikliği veya config değiştiğinde veri çek
   const prevConfigRef = useRef(configKey);
