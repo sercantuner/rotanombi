@@ -168,6 +168,28 @@ const EmptyMapScope = {
    getTheme: () => ({})
  };
 
+// WordCloud lazy loading
+let WordCloudScope: any = null;
+
+const initWordCloudScope = async () => {
+  if (WordCloudScope) return WordCloudScope;
+  
+  try {
+    const wordcloud = await import('react-wordcloud');
+    WordCloudScope = {
+      WordCloud: wordcloud.default,
+    };
+    return WordCloudScope;
+  } catch (e) {
+    console.warn('WordCloud yüklenemedi (builder preview):', e);
+    return null;
+  }
+};
+
+const EmptyWordCloudScope = {
+  WordCloud: () => null,
+};
+
 const initMapScope = async () => {
   if (MapScope) return MapScope;
 
@@ -566,6 +588,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   const [mapScope, setMapScope] = useState<any>(EmptyMapScope);
   const [isMapLoading, setIsMapLoading] = useState(false);
    const [nivoScope, setNivoScope] = useState<any>(EmptyNivoScope);
+  const [wordCloudScope, setWordCloudScope] = useState<any>(EmptyWordCloudScope);
 
   useEffect(() => {
     let cancelled = false;
@@ -603,6 +626,20 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
      });
      return () => { cancelled = true; };
    }, [customCode]);
+
+  // WordCloud lazy loading
+  useEffect(() => {
+    let cancelled = false;
+    if (!customCode || !/(^|[^a-zA-Z0-9_])WordCloud\./.test(customCode)) {
+      setWordCloudScope(EmptyWordCloudScope);
+      return;
+    }
+    initWordCloudScope().then((scope) => {
+      if (cancelled) return;
+      setWordCloudScope(scope || EmptyWordCloudScope);
+    });
+    return () => { cancelled = true; };
+  }, [customCode]);
   
   // AI kod üretimi
   const [aiPrompt, setAiPrompt] = useState('');
@@ -1524,6 +1561,7 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
         'Map',
         'multiData',
         'Nivo',
+        'WordCloud',
         customCode
       );
       
@@ -1542,7 +1580,7 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
         ? multiQuery.queries.map((q) => mergedQueryData[q.id] || [])
         : null;
 
-       const WidgetComponent = fn(React, sampleData, LucideIcons, RechartsScope, previewColors, {}, UIScope, mapScope, previewMultiData, nivoScope);
+       const WidgetComponent = fn(React, sampleData, LucideIcons, RechartsScope, previewColors, {}, UIScope, mapScope, previewMultiData, nivoScope, wordCloudScope);
       
       if (typeof WidgetComponent !== 'function') {
         return { 
@@ -1555,7 +1593,7 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
     } catch (err: any) {
       return { component: null, error: err.message };
     }
-  }, [customCode, sampleData, mapScope, isMultiQueryMode, multiQuery, mergedQueryData, nivoScope]);
+  }, [customCode, sampleData, mapScope, isMultiQueryMode, multiQuery, mergedQueryData, nivoScope, wordCloudScope]);
 
   // Error state'i güncelle
   useEffect(() => {

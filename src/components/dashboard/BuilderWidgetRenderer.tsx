@@ -35,6 +35,28 @@ import {
 } from 'recharts';
 import { cn } from '@/lib/utils';
  
+// WordCloud bileşeni - lazy import ile yüklenir
+let WordCloudScope: any = null;
+
+const initWordCloudScope = async () => {
+  if (WordCloudScope) return WordCloudScope;
+  
+  try {
+    const wordcloud = await import('react-wordcloud');
+    WordCloudScope = {
+      WordCloud: wordcloud.default,
+    };
+    return WordCloudScope;
+  } catch (e) {
+    console.warn('WordCloud yüklenemedi:', e);
+    return null;
+  }
+};
+
+const EmptyWordCloudScope = {
+  WordCloud: () => null,
+};
+ 
  // Nivo bileşenleri - lazy import ile yüklenir (performans optimizasyonu)
  let NivoScope: any = null;
  
@@ -475,11 +497,19 @@ export function BuilderWidgetRenderer({
      if (!customCode) return false;
      return /(^|[^a-zA-Z0-9_])Nivo\./.test(customCode);
    }, [customCode]);
+
+  // WordCloud kullanımı tespiti
+  const needsWordCloud = useMemo(() => {
+    if (!customCode) return false;
+    return /(^|[^a-zA-Z0-9_])WordCloud\./.test(customCode);
+  }, [customCode]);
  
   // Harita scope'u: ihtiyaç varsa lazy yükle, yoksa boş scope kullan
   const [mapScope, setMapScope] = useState<any>(() => MapScope || EmptyMapScope);
    // Nivo scope'u: ihtiyaç varsa lazy yükle
    const [nivoScope, setNivoScope] = useState<any>(() => NivoScope || EmptyNivoScope);
+  // WordCloud scope'u: ihtiyaç varsa lazy yükle
+  const [wordCloudScope, setWordCloudScope] = useState<any>(() => WordCloudScope || EmptyWordCloudScope);
  
 
   useEffect(() => {
@@ -518,7 +548,25 @@ export function BuilderWidgetRenderer({
        cancelled = true;
      };
    }, [needsNivo]);
-  
+
+  // WordCloud lazy loading
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!needsWordCloud) {
+      setWordCloudScope(EmptyWordCloudScope);
+      return;
+    }
+
+    initWordCloudScope().then((scope) => {
+      if (cancelled) return;
+      setWordCloudScope(scope || EmptyWordCloudScope);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [needsWordCloud]);
   // Tarih filtresi state
   const [selectedDatePeriod, setSelectedDatePeriod] = useState<DatePeriod>(
     builderConfig.dateFilter?.defaultPeriod || 'all'
@@ -708,11 +756,12 @@ export function BuilderWidgetRenderer({
         'onCrossFilter', // Çapraz filtre oluşturma callback'i
         'multiData', // Multi-query ham sonuçları (query sırası ile)
         'Nivo',     // Nivo bileşenleri (Sankey, Sunburst, Chord, Radar, Geo, Funnel)
+        'WordCloud', // WordCloud bileşeni
         customCode
       );
       
       // Custom widget'a colors, filters, crossFilter ve onCrossFilter prop'ları geç
-        const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters, UIScope, mapScope, crossFilter, handleCrossFilter, multiQueryData, nivoScope);
+        const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters, UIScope, mapScope, crossFilter, handleCrossFilter, multiQueryData, nivoScope, wordCloudScope);
       
       if (typeof WidgetComponent !== 'function') {
         return (

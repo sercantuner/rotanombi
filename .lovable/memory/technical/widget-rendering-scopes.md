@@ -1,7 +1,7 @@
  # Memory: technical/widget-rendering-scopes
  Updated: now
  
- Widget render motoru (BuilderWidgetRenderer ve CustomCodeWidgetBuilder); Recharts (ComposedChart, Treemap, Scatter, Radar, Funnel, ReferenceArea, ReferenceDot, PolarGrid, PolarAngleAxis, PolarRadiusAxis, LabelList), Leaflet tabanlı 'MapScope' ve 'UIScope' bileşenlerini destekler. UIScope; Dialog, DialogContent, Button, Input, Select ve Checkbox gibi bileşenleri sunar. Nivo kütüphanesi (ResponsiveSankey, ResponsiveSunburst, ResponsiveChord, ResponsiveRadar, ResponsiveFunnel, ResponsiveChoropleth) lazy-load ile yüklenir.
+ Widget render motoru (BuilderWidgetRenderer ve CustomCodeWidgetBuilder); Recharts (ComposedChart, Treemap, Scatter, Radar, Funnel, ReferenceArea, ReferenceDot, PolarGrid, PolarAngleAxis, PolarRadiusAxis, LabelList), Leaflet tabanlı 'MapScope', 'UIScope' bileşenlerini ve react-wordcloud tabanlı 'WordCloud' scope'unu destekler. UIScope; Dialog, DialogContent, Button, Input, Select ve Checkbox gibi bileşenleri sunar. Nivo kütüphanesi (ResponsiveSankey, ResponsiveSunburst, ResponsiveChord, ResponsiveRadar, ResponsiveFunnel, ResponsiveChoropleth) ve WordCloud lazy-load ile yüklenir. WordCloud kullanımı: `WordCloud.WordCloud` şeklinde erişilir.
  
  ## multiData Scope Değişkeni
  
