@@ -146,7 +146,7 @@ export function WidgetMarketplace({
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="max-w-3xl max-h-[85vh]">
+      <DialogContent className="max-w-3xl max-h-[85vh] max-md:w-screen max-md:h-screen max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0">
         <DialogHeader>
           <DialogTitle>Widget Ekle</DialogTitle>
           <DialogDescription>

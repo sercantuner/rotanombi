@@ -398,7 +398,7 @@ export function TeamManagementPage() {
                         Kullanıcı Ekle
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-md">
+                    <DialogContent className="sm:max-w-md max-md:w-screen max-md:h-screen max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0">
                       <DialogHeader>
                         <DialogTitle>Kullanıcı Ekle</DialogTitle>
                         <DialogDescription>
