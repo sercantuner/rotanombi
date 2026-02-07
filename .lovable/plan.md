@@ -1,201 +1,152 @@
-# ✅ Widget Veri Yükleme Stratejisi: Stale-While-Revalidate + Durum Göstergesi
 
-**TAMAMLANDI**: 2025-02-07
+# Arka Plan Veri Güncelleme (Background Revalidate) Implementasyonu
 
-## Yapılan Değişiklikler
+## Mevcut Sorun
 
-1. **DataStatusBadge bileşeni** - `src/components/dashboard/DataStatusBadge.tsx`
-   - Veri durumunu gösteren badge (Güncel, Önbellek, Güncelleniyor, Eski, Hata)
-   - Tooltip ile son güncelleme zamanı
-   - Kompakt mod desteği
+Widget'lar açıldığında:
+1. DB'den (company_data_cache) veri okunuyor ve gösteriliyor
+2. `lastSyncedAt` bilgisi alınıp badge gösteriliyor (örn: "Eski - > 24 saat")
+3. **AMA**: Arka planda DIA'dan taze veri çekme işlemi hiç tetiklenmiyor
+4. Kullanıcı sürekli eski veri görüyor, badge "Güncelleniyor" durumuna geçmiyor
 
-2. **useDynamicWidgetData hook** - `src/hooks/useDynamicWidgetData.tsx`
-   - `DataStatusInfo` interface eklendi (source, lastSyncedAt, isStale, isRevalidating, error)
-   - `dataStatus` state eklendi
-   - `fetchFromDatabase` fonksiyonu `updated_at` alanını da çeker
-   - Cache/DB'den veri geldiğinde dataStatus güncellenir
+## Çözüm Yaklaşımı
 
-3. **BuilderWidgetRenderer** - `src/components/dashboard/BuilderWidgetRenderer.tsx`
-   - DataStatusBadge import edildi
-   - ChartHeader bileşenine DataStatusBadge entegre edildi
-   - dataStatus hook'tan alınıp badge'e aktarılıyor
-
-## Mevcut Durum Analizi
-
-**Problem**: Kullanıcı hangi verinin gösterildiğini bilmiyor (cache mi, taze mi, ne zaman güncellendi).
-
-## Önerilen Çözüm: Stale-While-Revalidate + Durum Badge'i
-
-### Yeni Veri Akışı
+Widget açıldığında:
+1. Önce DB'den veri göster (anında)
+2. Veri 1 saatten eskiyse (isStale) → arka planda DIA API çağrısı başlat
+3. DIA'dan veri gelince → DB'ye yaz → UI güncelle → badge "Güncel" olsun
+4. Aynı veri kaynağı (A widget'ı için çekildiyse) B widget'ı için tekrar çekilmesin
 
 ```text
 Widget Açılır
      │
      ▼
 ┌─────────────────────────┐
-│ 1. Supabase DB'den oku  │ ← Cache'deki veriyi ANINDA göster
-│    (company_data_cache) │   Kullanıcı: "Önbellek verisi"
+│ DB'den veri göster      │ Badge: "Önbellek" veya "Eski"
+└───────────┬─────────────┘
+            │ (lastSyncedAt > 1 saat)
+            ▼
+┌─────────────────────────┐
+│ Arka planda DIA API     │ Badge: "Güncelleniyor..."
+│ (dia-data-sync edge fn) │
 └───────────┬─────────────┘
             │
             ▼
 ┌─────────────────────────┐
-│ 2. Arka planda DIA API  │ ← Sessizce yeni veri çek
-│    sorgusunu başlat     │   Kullanıcı: "Güncelleniyor..."
-└───────────┬─────────────┘
-            │
-            ▼
-┌─────────────────────────┐
-│ 3. Yeni veri gelince    │ ← DB güncelle + UI refresh
-│    DB + Cache güncelle  │   Kullanıcı: "Güncel"
+│ DB güncellendi          │ Badge: "Güncel ✓"
+│ UI sessizce yenilendi   │
 └─────────────────────────┘
 ```
-
-### UI Veri Durumu Göstergesi
-
-Widget header'ına küçük bir badge/indicator eklenecek:
-
-| Durum | Renk | İkon | Açıklama |
-|-------|------|------|----------|
-| Güncel | Yeşil | ✓ | Son 5 dakika içinde senkronize edildi |
-| Önbellek | Sarı | ⏱ | Cache'den gösteriliyor, arka planda güncelleniyor |
-| Güncelleniyor | Mavi (animasyonlu) | ↻ | DIA'dan veri çekiliyor |
-| Eski | Turuncu | ⚠ | Son güncelleme > 24 saat önce |
-| Hata | Kırmızı | ✕ | Senkronizasyon başarısız |
 
 ## Teknik Değişiklikler
 
 ### 1. useDynamicWidgetData Hook Genişletmesi
 
-`DynamicWidgetDataResult` interface'ine yeni alanlar eklenecek:
+Yeni `backgroundRevalidate` fonksiyonu eklenecek:
 
 ```typescript
-interface DynamicWidgetDataResult {
-  data: any;
-  rawData: any[];
-  multiQueryData?: any[][] | null;
-  isLoading: boolean;
-  error: string | null;
-  refetch: () => Promise<void>;
+// Arka planda veri güncelleme - UI'ı bloklamaz
+const backgroundRevalidate = useCallback(async (dataSourceId: string, slug: string) => {
+  // Aynı kaynak için zaten revalidate çalışıyorsa çık
+  if (revalidatingSourcesRef.current.has(dataSourceId)) return;
   
-  // YENİ: Veri durumu bilgisi
-  dataStatus: {
-    source: 'cache' | 'api' | 'pending';
-    lastSyncedAt: Date | null;
-    isStale: boolean;
-    isRevalidating: boolean;  // Arka planda yenileniyor mu
-  };
-}
-```
-
-### 2. Arka Plan Senkronizasyonu
-
-Widget açıldığında:
-1. Önce DB'den veri göster (anında)
-2. `backgroundRevalidate` fonksiyonu başlat
-3. DIA API'den yeni veri çek
-4. Yeni veriyi `company_data_cache`'e yaz
-5. Memory cache'i ve UI'ı güncelle
-
-```typescript
-// Pseudo-kod
-const backgroundRevalidate = async () => {
+  revalidatingSourcesRef.current.add(dataSourceId);
   setDataStatus(prev => ({ ...prev, isRevalidating: true }));
   
   try {
-    const freshData = await fetchFromDiaApi(dataSourceId);
-    await upsertToCompanyDataCache(freshData);
-    setData(freshData);
-    setDataStatus({ source: 'api', lastSyncedAt: new Date(), isStale: false, isRevalidating: false });
+    // dia-data-sync edge function'ı çağır
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/dia-data-sync`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'syncSingleSource',
+        dataSourceSlug: slug,
+        periodNo: effectiveDonem,
+      }),
+    });
+    
+    if (response.ok) {
+      // Sync tamamlandı - DB'den yeni veriyi çek
+      const freshData = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, effectiveDonem);
+      
+      // UI'ı güncelle
+      setDataStatus({ source: 'api', lastSyncedAt: new Date(), isStale: false, isRevalidating: false });
+      rawDataCacheRef.current = freshData.data;
+      processVisualizationData(freshData.data, config);
+    }
   } catch (err) {
-    // Hata olsa bile eski veriyi göstermeye devam et
-    setDataStatus(prev => ({ ...prev, isRevalidating: false }));
+    console.error('[Background Revalidate] Error:', err);
+    setDataStatus(prev => ({ ...prev, isRevalidating: false, error: err.message }));
+  } finally {
+    revalidatingSourcesRef.current.delete(dataSourceId);
+  }
+}, [sunucuAdi, firmaKodu, effectiveDonem, processVisualizationData]);
+```
+
+### 2. Global Revalidation Tracker
+
+Aynı veri kaynağının birden fazla widget tarafından aynı anda çekilmesini engellemek için:
+
+```typescript
+// DiaDataCacheContext'e eklenecek
+const revalidatingSourcesRef = useRef(new Set<string>());
+
+const isSourceRevalidating = (dataSourceId: string) => 
+  revalidatingSourcesRef.current.has(dataSourceId);
+
+const markSourceRevalidating = (dataSourceId: string, status: boolean) => {
+  if (status) {
+    revalidatingSourcesRef.current.add(dataSourceId);
+  } else {
+    revalidatingSourcesRef.current.delete(dataSourceId);
   }
 };
 ```
 
-### 3. BuilderWidgetRenderer Badge Bileşeni
+### 3. Otomatik Revalidation Tetikleme
 
-Widget header'ına eklenecek durum badge'i:
+Widget veri yüklediğinde ve veri stale ise arka plan güncelleme başlatılacak:
 
-```tsx
-const DataStatusBadge = ({ status }: { status: DataStatus }) => {
-  if (status.isRevalidating) {
-    return (
-      <Badge variant="secondary" className="text-xs animate-pulse">
-        <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-        Güncelleniyor
-      </Badge>
-    );
-  }
+```typescript
+// fetchDataForSource içinde, DB'den veri çekildikten sonra:
+if (dbResult.data.length > 0) {
+  const hoursSinceSync = dbResult.lastSyncedAt 
+    ? (Date.now() - dbResult.lastSyncedAt.getTime()) / (1000 * 60 * 60)
+    : 999;
   
-  if (status.source === 'cache' && status.isStale) {
-    return (
-      <Tooltip content={`Son güncelleme: ${formatRelative(status.lastSyncedAt)}`}>
-        <Badge variant="outline" className="text-xs text-muted-foreground">
-          <Clock className="h-3 w-3 mr-1" />
-          Önbellek
-        </Badge>
-      </Tooltip>
-    );
+  // Veri 1 saatten eskiyse arka planda güncelle
+  if (hoursSinceSync > 1 && !isSourceRevalidating(dataSourceId)) {
+    backgroundRevalidate(dataSourceId, slug);
   }
-  
-  // Güncel veri - badge gösterme veya minimal göster
-  return null;
-};
+}
 ```
 
-### 4. Otomatik Revalidation Kuralları
+### 4. Multi-Widget Koordinasyonu
 
-Arka plan senkronizasyonu şu durumlarda tetiklenir:
+A widget'ı için cari_kart çekildiyse B widget'ı tekrar çekmesin:
 
-1. **Widget ilk açıldığında**: DB'de veri varsa göster, arka planda DIA kontrolü yap
-2. **Cache TTL dolduğunda**: 10 dakika sonra stale işaretle, arka planda yenile
-3. **Manuel yenileme**: Kullanıcı refresh butonuna tıkladığında
-
-**Otomatik tetikleme YAPMAYACAĞIMIZ durumlar** (mevcut kısıtlamaya uygun):
-- Periyodik polling (kullanıcı eylemi olmadan DIA çağrısı YOK)
-- Sayfa açık kaldığı sürece sürekli kontrol YOK
-
-### 5. company_data_cache Timestamp Kullanımı
-
-Mevcut `company_data_cache` tablosunda `updated_at` alanı var. Bu alan:
-- Widget açıldığında kontrol edilecek
-- "Son güncelleme" bilgisi olarak kullanıcıya gösterilecek
-- Stale belirleme için (> 1 saat = stale) kullanılacak
+- `DiaDataCacheContext`'te global `revalidatingSourcesRef` tutulacak
+- Widget'lar revalidate başlatmadan önce bu set'i kontrol edecek
+- Revalidate tamamlanınca tüm widget'lar DB'den yeni veriyi otomatik görecek (cache invalidation)
 
 ## Dosya Değişiklikleri
 
-| Dosya | İşlem | Açıklama |
-|-------|-------|----------|
-| `src/hooks/useDynamicWidgetData.tsx` | Güncelle | dataStatus state ve backgroundRevalidate mantığı |
-| `src/components/dashboard/BuilderWidgetRenderer.tsx` | Güncelle | DataStatusBadge bileşeni ve header entegrasyonu |
-| `src/components/dashboard/DataStatusBadge.tsx` | Yeni | Veri durumu gösterge bileşeni |
-| `src/hooks/useDataSourceLoader.tsx` | Güncelle | lastSyncedAt bilgisi döndürme |
-| `supabase/functions/dia-api-test/index.ts` | Güncelle | Sync sonrası timestamp döndürme |
+| Dosya | Değişiklik |
+|-------|-----------|
+| `src/hooks/useDynamicWidgetData.tsx` | `backgroundRevalidate` fonksiyonu, stale kontrolü sonrası tetikleme |
+| `src/contexts/DiaDataCacheContext.tsx` | Global revalidating sources tracker |
+| `src/components/dashboard/DataStatusBadge.tsx` | Zaten mevcut, değişiklik yok |
 
-## Kullanıcı Deneyimi Akışı
+## Kullanıcı Deneyimi
 
-1. **Widget ilk açılış**:
-   - DB'de veri varsa → Anında göster + "Önbellek" badge + arka planda yenile
-   - DB boşsa → "Yükleniyor..." göster + DIA'dan çek
+1. Sayfa açılır → Widget'lar anında DB'den veri gösterir ("Önbellek" veya "Eski" badge)
+2. Eski veriler için arka planda DIA sync başlar ("Güncelleniyor..." badge)
+3. Sync tamamlanınca badge "Güncel ✓" olur
+4. Aynı veri kaynağı kullanan diğer widget'lar da otomatik güncellenir
 
-2. **Arka plan yenileme sırasında**:
-   - Mevcut veri görünür kalır
-   - Badge "Güncelleniyor..." (spinning icon)
+## Güvenlik Kuralları
 
-3. **Yenileme tamamlandığında**:
-   - Veri sessizce güncellenir (flicker yok)
-   - Badge kaybolur veya "Güncel ✓" gösterir
-
-4. **Yenileme başarısız olursa**:
-   - Eski veri görünür kalır
-   - Toast ile hata bildirimi
-   - Badge "Eski veri" uyarısı
-
-## Avantajlar
-
-- Kullanıcı her zaman bilgilendirilir
-- Anında içerik görünür (perceived performance)
-- DIA hatalarında bile çalışmaya devam eder
-- Mevcut "sürekli API çağrısı yapma" kısıtlamasına uygun
-- Kullanıcı manuel refresh isterse güncel veri alabilir
+- Periyodik polling YOK - sadece sayfa açıldığında tetiklenir
+- Manuel refresh butonu da tetikleyebilir
+- Rate limit koruması: Aynı kaynak için eş zamanlı çoklu sync engellenir
+- DIA kontör tasarrufu: Sadece stale (> 1 saat) veriler için sync yapılır
