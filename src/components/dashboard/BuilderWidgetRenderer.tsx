@@ -8,7 +8,7 @@ import { useChartColorPalette } from '@/hooks/useChartColorPalette';
 import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
 import { DrillDownModal } from './DrillDownModal';
 import { WidgetDateFilter, getDateRangeForPeriod } from './WidgetDateFilter';
-import { DataStatusBadge } from './DataStatusBadge';
+import { DataStatusIndicator } from './DataStatusIndicator';
 import { StatCard } from './StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -644,31 +644,19 @@ export function BuilderWidgetRenderer({
   const dateFilterConfig = builderConfig.dateFilter;
   const showDateFilter = dateFilterConfig?.enabled && dateFilterConfig?.showInWidget;
 
-  // Header bileşeni - DataStatusBadge ve tarih seçici
+  // Header bileşeni - sadece tarih seçici (DataStatusIndicator artık overlay olarak gösterilecek)
   const ChartHeader = () => {
-    // dataStatus veya tarih filtresi varsa header göster
-    const showHeader = showDateFilter || (dataStatus && dataStatus.source !== 'pending');
-    if (!showHeader) return null;
+    if (!showDateFilter) return null;
     
     return (
       <CardHeader className="pb-2 pt-3 px-4">
-        <div className="flex items-center justify-between gap-2">
-          {/* Veri durumu badge'i - sol taraf */}
-          <div className="flex items-center gap-2">
-            {dataStatus && dataStatus.source !== 'pending' && (
-              <DataStatusBadge status={dataStatus} compact />
-            )}
-          </div>
-          
-          {/* Tarih filtresi - sağ taraf */}
-          {showDateFilter && (
-            <WidgetDateFilter
-              config={dateFilterConfig!}
-              currentPeriod={selectedDatePeriod}
-              onPeriodChange={handleDatePeriodChange}
-              compact
-            />
-          )}
+        <div className="flex items-center justify-end">
+          <WidgetDateFilter
+            config={dateFilterConfig!}
+            currentPeriod={selectedDatePeriod}
+            onPeriodChange={handleDatePeriodChange}
+            compact
+          />
         </div>
       </CardHeader>
     );
@@ -748,7 +736,7 @@ export function BuilderWidgetRenderer({
       }
       
       return (
-        <Card className={cn(isolatedClassName, 'h-full flex flex-col !border-0')}>
+        <Card className={cn(isolatedClassName, 'h-full flex flex-col !border-0 relative')}>
           <ChartHeader />
           <CardContent className="flex-1 flex flex-col min-h-0 p-4 pt-3">
             <ErrorBoundary fallback={
@@ -770,6 +758,10 @@ export function BuilderWidgetRenderer({
               </div>
             </ErrorBoundary>
           </CardContent>
+          {/* Sağ alt köşe veri durumu göstergesi - overlay */}
+          {dataStatus && dataStatus.source !== 'pending' && (
+            <DataStatusIndicator status={dataStatus} />
+          )}
         </Card>
       );
     } catch (err: any) {
