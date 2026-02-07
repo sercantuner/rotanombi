@@ -6,7 +6,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import { ContainerBasedDashboard } from '@/components/dashboard/ContainerBasedDashboard';
 import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
-import { DashboardLoadingScreen } from '@/components/dashboard/DashboardLoadingScreen';
+
 import { FilterSidePanel } from '@/components/filters/FilterSidePanel';
 import { UserPage } from '@/lib/pageTypes';
 import { Button } from '@/components/ui/button';
@@ -124,25 +124,10 @@ export function DynamicPage() {
     );
   }
 
-  // Cache-first loading screen mantığı:
-  // Cache tamamen boşken VE ilk yüklemeyse loading screen göster
-  // Sayfa geçişlerinde cache dolu olacağından loading screen görünmeyecek
-  const hasCachedData = loadedSources.length > 0 || totalSources === 0;
-  const showLoadingScreen = dataSourcesInitialLoad && !hasCachedData && totalSources > 0;
-
   return (
     <DashboardFilterProvider>
       <TooltipProvider delayDuration={0}>
         <div className="flex-1 flex flex-col pb-16">
-          {/* Loading Screen */}
-          {showLoadingScreen && (
-            <DashboardLoadingScreen
-              progress={loadProgress}
-              loadedSources={loadedSources}
-              totalSources={totalSources}
-              currentSourceName={currentSourceName}
-            />
-          )}
           
           <Header 
             title={page.name}
