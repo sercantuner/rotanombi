@@ -529,6 +529,7 @@ export function BuilderWidgetRenderer({
   const [drillDownData, setDrillDownData] = useState<any[]>([]);
 
   // Tarih filtresine göre veri filtrele
+  // ÖNEMLİ: Bu hook koşullu return'lardan ÖNCE çağrılmalı (React hook kuralı)
   const filteredData = useMemo(() => {
     if (!rawData || rawData.length === 0) return rawData;
     if (selectedDatePeriod === 'all') return rawData;
@@ -552,17 +553,18 @@ export function BuilderWidgetRenderer({
     });
   }, [rawData, selectedDatePeriod, customDateRange, builderConfig.dateFilter?.dateField]);
 
-  // Tarih periyodu değişikliği
-  const handleDatePeriodChange = (period: DatePeriod, dateRange?: { start: Date; end: Date }) => {
+  // Tarih periyodu değişikliği - useCallback ile stabilize et
+  const handleDatePeriodChange = useCallback((period: DatePeriod, dateRange?: { start: Date; end: Date }) => {
     setSelectedDatePeriod(period);
     if (period === 'custom' && dateRange) {
       setCustomDateRange(dateRange);
     } else {
       setCustomDateRange(null);
     }
-  };
+  }, []);
 
   // Cross-filter handler (Power BI tarzı widget tıklaması)
+  // ÖNEMLİ: Bu hook koşullu return'lardan ÖNCE çağrılmalı
   const handleCrossFilter = useCallback((field: string, value: string | string[], label?: string) => {
     // Aynı widget'tan aynı değer tıklanırsa filtreyi temizle
     if (crossFilter?.sourceWidgetId === widgetId && 
@@ -578,13 +580,15 @@ export function BuilderWidgetRenderer({
     }
   }, [widgetId, crossFilter, setCrossFilter, clearCrossFilter]);
 
-  // KPI drill-down (tüm veriyi göster)
-  const handleKpiDrillDown = () => {
+  // KPI drill-down handler - useCallback ile stabilize et
+  const handleKpiDrillDown = useCallback(() => {
     setDrillDownTitle(`${widgetName} - Detaylar`);
-    setDrillDownData(filteredData);
+    setDrillDownData(filteredData || []);
     setDrillDownOpen(true);
-  };
+  }, [widgetName, filteredData]);
 
+  // === KOŞULLU RETURN'LAR - TÜM HOOK'LARDAN SONRA ===
+  
   // Sadece İLK yüklemede VE veri yoksa skeleton göster
   // Cache'den gelen veri varsa (stale bile olsa) skeleton gösterme - flicker önleme
   if (isLoading && (!data || (Array.isArray(data) && data.length === 0))) {
