@@ -746,7 +746,10 @@ export function useDynamicWidgetData(
     incrementCacheMiss,
     // Background revalidation için
     isSourceRevalidating,
-    markSourceRevalidating, 
+    markSourceRevalidating,
+    // API call tracking
+    recordApiCall,
+    setDataSourceSyncTime,
   } = useDiaDataCache();
   
   // Veri kaynağı bilgilerini çek (slug almak için)
@@ -768,6 +771,8 @@ export function useDynamicWidgetData(
     dataSources,
     isSourceRevalidating,
     markSourceRevalidating,
+    recordApiCall,
+    setDataSourceSyncTime,
   });
   cacheContextRef.current = {
     getCachedData,
@@ -780,6 +785,8 @@ export function useDynamicWidgetData(
     dataSources,
     isSourceRevalidating,
     markSourceRevalidating,
+    recordApiCall,
+    setDataSourceSyncTime,
   };
   
   // Cache-first loading: Cache'de veri varsa isLoading false döner
@@ -922,6 +929,8 @@ export function useDynamicWidgetData(
       markSourceRevalidating: markRevalidating, 
       isSourceRevalidating: isRevalidating,
       setDataSourceData: setDsData,
+      recordApiCall: recordApi,
+      setDataSourceSyncTime: setSyncTime,
     } = cacheContextRef.current;
     
     // Aynı kaynak zaten revalidate ediliyorsa çık (multi-widget koordinasyonu)
@@ -977,10 +986,17 @@ export function useDynamicWidgetData(
         rawDataCacheRef.current = freshDbResult.data;
         hasInitialDataRef.current = true;
         
+        // ✅ GERÇEK API ÇAĞRISI SAYACI - DIA kontör takibi
+        recordApi();
+        
+        // ✅ SYNC ZAMANI KAYDET
+        const syncTime = new Date();
+        setSyncTime(dataSourceId, syncTime);
+        
         // dataStatus güncelle - artık güncel!
         setDataStatus({
           source: 'api',
-          lastSyncedAt: new Date(),
+          lastSyncedAt: syncTime,
           isStale: false,
           isRevalidating: false,
           error: null,
