@@ -61,8 +61,6 @@ export function ContainerRenderer({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [widgetDetails, setWidgetDetails] = useState<Record<string, Widget>>({});
   const [localContainer, setLocalContainer] = useState(container);
-  const [widgetRawData, setWidgetRawData] = useState<Record<string, any[]>>({});
-  const [localFilters, setLocalFilters] = useState<Record<string, WidgetLocalFilters>>({});
 
   const template = CONTAINER_TEMPLATES.find(t => t.id === container.container_type);
 
@@ -180,11 +178,8 @@ export function ContainerRenderer({
   const showTitle = localContainer.settings?.showTitle !== false;
   const isCompact = localContainer.settings?.compact === true;
 
-  // Widget filtre değişikliğini handle et - önce lokal state güncelle (anlık etki), sonra DB'ye kaydet
+  // Widget filtre değişikliğini handle et
   const handleWidgetFilterChange = async (containerWidgetId: string, filters: WidgetLocalFilters) => {
-    // Anlık UI güncellemesi
-    setLocalFilters(prev => ({ ...prev, [containerWidgetId]: filters }));
-    
     try {
       const existingWidget = containerWidgets.find(w => w.id === containerWidgetId);
       const existingSettings = (existingWidget?.settings as ContainerWidgetSettings) || {};
@@ -197,7 +192,6 @@ export function ContainerRenderer({
         .eq('id', containerWidgetId);
 
       if (error) throw error;
-      // DB'ye yazıldıktan sonra arka planda senkronize et (UI zaten güncellendi)
       refreshWidgets();
     } catch (error) {
       console.error('Error saving widget filters:', error);
@@ -284,8 +278,7 @@ export function ContainerRenderer({
       if (slotWidget && widgetDetail) {
         // Widget ayarlarını parse et
         const widgetSettings = slotWidget.settings as ContainerWidgetSettings | null;
-        // Lokal filtreler öncelikli (anlık etki), yoksa DB'den gelen
-        const widgetFilters = localFilters[slotWidget.id] ?? widgetSettings?.filters;
+        const widgetFilters = widgetSettings?.filters;
         const heightMultiplier = widgetSettings?.heightMultiplier || 1;
 
         // Yükseklik çarpanına göre min-height hesapla
@@ -306,7 +299,6 @@ export function ContainerRenderer({
               widgetFilters={widgetFilters}
               onFiltersChange={(filters) => handleWidgetFilterChange(slotWidget.id, filters)}
               isWidgetEditMode={isWidgetEditMode}
-              onDataLoaded={(data) => setWidgetRawData(prev => ({ ...prev, [slotWidget.widget_id]: data }))}
             />
             
             {/* Hover kontrolleri - sağ üst */}
@@ -330,7 +322,6 @@ export function ContainerRenderer({
                 }, 0)}
                 widgetFilters={(widgetDetail.builder_config as any)?.widgetFilters}
                 widgetParameters={(widgetDetail.builder_config as any)?.widgetParameters}
-                widgetData={widgetRawData[slotWidget.widget_id]}
               />
               {/* Tarih filtresi - eğer widget'ta tarih filtresi aktifse */}
               {widgetDetail.builder_config?.dateFilter?.enabled && widgetDetail.builder_config?.dateFilter?.showInWidget && (
@@ -538,19 +529,13 @@ export function ContainerRenderer({
             // Harita container'ları - max-h yok, daha büyük min-h (Leaflet için gerekli)
             (container.container_type === 'map_full' || 
              container.container_type === 'map_half') && '[&>*]:min-h-[400px]',
-            // Grafik container'ları için min yükseklik
+            // Grafik container'ları için min yükseklik (max-h kaldırıldı - heightMultiplier ile çakışıyordu)
             (container.container_type === 'chart_full' || 
              container.container_type === 'chart_half' || 
              container.container_type === 'chart_third') && '[&>*]:min-h-[280px]',
             (container.container_type === 'info_cards_2' ||
              container.container_type === 'info_cards_3') && '[&>*]:min-h-[200px]'
-          )}
-          style={{
-            // Grid satırlarına açık yükseklik vererek h-full ve height:100% zincirini garanti et
-            ...((['chart_full', 'chart_half', 'chart_third', 'map_full', 'map_half'].includes(container.container_type))
-              ? { gridAutoRows: 'minmax(320px, auto)' }
-              : {})
-          }}>
+          )}>
             {renderSlots()}
           </div>
         </CardContent>

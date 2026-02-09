@@ -2,7 +2,6 @@ import { useCallback, useMemo } from 'react';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
 
 export type ColorPaletteName = 
-  | 'rotanombi'
   | 'corporate' 
   | 'ocean' 
   | 'forest' 
@@ -25,20 +24,6 @@ export interface ColorPalette {
 }
 
 export const COLOR_PALETTES: ColorPalette[] = [
-  {
-    name: 'rotanombi',
-    label: 'RotanomBI',
-    colors: [
-      '#f4b135',
-      '#308684',
-      '#50bb9f',
-      '#112f41',
-      '#ed553b',
-      '#769eb3',
-      '#aeb730',
-      '#6d0210',
-    ],
-  },
   {
     name: 'corporate',
     label: 'Kurumsal',
@@ -172,7 +157,7 @@ export function useChartColorPalette(options: UseChartColorPaletteOptions = {}) 
   const { settings, updateSettings, getWidgetFilters, saveWidgetFilters } = useUserSettings();
   
   // Global varsayılan palet
-  const globalPaletteName = (settings?.chart_color_palette || 'rotanombi') as ColorPaletteName;
+  const globalPaletteName = (settings?.chart_color_palette || 'corporate') as ColorPaletteName;
   
   // Widget-specific palet (varsa) - her render'da taze değer al
   const widgetFilters = useMemo(() => {

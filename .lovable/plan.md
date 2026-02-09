@@ -1,72 +1,63 @@
 
+## Filtre Seceneklerinin Otomatik Doldurulmasi
 
-## Grafik Render Duzeltme - Geri Alma ve Absolute Position Yontemi
+### Sorun
 
-### Sorunun Kaynagi
+Widget filtreleri (ornegin "Kullanici", "Satis Elemani", "Sube") `multi-select` tipinde tanimlanmis ancak `options` dizisi bos veya tanimlanmamis. `WidgetFiltersButton` bilesenindeki `DynamicField`, `def.options || []` uzerinde dongu kuruyor ve bos dizi oldugu icin sadece filtre etiketi gorunuyor, secim yapilacak oge yok.
 
-Son yapilan degisiklikler height zincirini kirdi. Ozellikle ContainerRenderer'daki `[&>*]:h-full` kuralinin kaldirilmasi, grid item'larin cocuk elemanlarina yukseklik aktarmasini durdurdu. Eklenen `style={{ height: '100%' }}` ve `style={{ minHeight: '200px' }}` ise flex layout icerisinde calismiyor cunku CSS'te `height: 100%` hesaplamasi icin ust elemanin "acik" (explicit) bir height degerine sahip olmasi gerekir - `flex-1` bunu saglamaz.
+Veritabanindaki ornek veriler:
+- "Personel Performans Radari" -> `kullaniciadi` filtresi: options YOK
+- "Aylik Acik Teklif Analizi" -> `satisElemani` filtresi: options `[]` (bos)
+- "Kasa Varlik Ozeti" -> `sube` filtresi: options YOK
 
 ### Cozum
 
-Iki dosyada degisiklik yapilacak:
+Widget'in **gercek verisinden** benzersiz degerleri cikararak bos `options` dizilerini otomatik doldurmak.
 
-**1. `src/components/pages/ContainerRenderer.tsx`**
+### Teknik Detaylar
 
-`[&>*]:h-full` kuralini geri ekle. Bu kural grid item'larin cocuklarinin tam yukseklikte olmasini saglar.
+**1. `ContainerRenderer.tsx` - Veri Prop'u Gecisi**
 
-Mevcut (satir 536):
-```
-'grid gap-1 md:gap-2 items-stretch',
-```
+Su anda `WidgetFiltersButton`'a widget verisi gecilmiyor. Widget'in `useDynamicWidgetData` hook'u tarafindan cekilen ham veriyi filtre butonuna ulastirmak gerekiyor. Ancak veri `BuilderWidgetRenderer` icinde cekildigi icin, `ContainerRenderer` seviyesinde dogrudan erisim yok.
 
-Yeni:
-```
-'grid gap-1 md:gap-2 items-stretch [&>*]:h-full',
-```
+En temiz yaklasim: `WidgetFiltersButton` bilesenine opsiyonel `widgetData` prop'u ekleyerek, bos options'lari bu veriden doldurmak.
 
-`gridAutoRows` stil blogu kaldirilacak (gereksiz karmasiklik, `items-stretch` + `min-h` yeterli).
+**2. `WidgetFiltersButton.tsx` - Dinamik Opsiyon Uretimi**
 
-**2. `src/components/dashboard/BuilderWidgetRenderer.tsx`**
+- Yeni prop: `widgetData?: any[]` (widget'in ham veri dizisi)
+- `DynamicField` bilesenine `resolvedOptions` hesaplamasi eklenecek:
+  - Eger `def.options` dolu ise: mevcut options'lari kullan (degisiklik yok)
+  - Eger `def.options` bos veya undefined ise VE `widgetData` mevcutsa: `widgetData` icerisinden `def.key` alanindaki benzersiz (unique) degerleri cikar ve `{ value, label }` formatina donustur
+  - Degerler alfabetik siralanacak, null/undefined/bos degerler filtrelenecek
 
-`CardContent` ve ic wrapper div icin "absolute positioning" yaklasimi uygulanacak. Bu, CSS yuzde yukseklik hesaplamasi sorununu tamamen ortadan kaldirir:
+**3. `ContainerRenderer.tsx` - WidgetFiltersButton'a Veri Aktarimi**
 
-Mevcut (satir 791):
-```tsx
-<CardContent className="flex-1 flex flex-col p-4 pt-3" style={{ minHeight: '200px' }}>
-```
-Yeni:
-```tsx
-<CardContent className="flex-1 flex flex-col p-4 pt-3 min-h-0">
-```
+`BuilderWidgetRenderer` icinde veri zaten cekiliyor. Iki yaklasim var:
 
-Mevcut (satir 799):
-```tsx
-<div className="flex-1 min-h-[200px] flex flex-col [&_.leaflet-container]:min-h-[350px]" style={{ height: '100%' }}>
-```
-Yeni:
-```tsx
-<div className="flex-1 relative min-h-[200px] [&_.leaflet-container]:min-h-[350px]">
-  <div className="absolute inset-0 flex flex-col">
-```
+- **Yaklasim A (Tercih edilen):** `BuilderWidgetRenderer` icerisine filtre butonunu tasimak yerine, `ContainerRenderer`'da widget verisini ayri bir hook ile cekerek `WidgetFiltersButton`'a gecmek.
 
-Widget icerigi artik absolute-positioned bir div icerisinde render edilecek. Bu div, relative parent'in boyutlarini otomatik olarak alir - `height: 100%` hesaplamasi gerekmez.
+- **Yaklasim B (Basit):** `BuilderWidgetRenderer` icinde zaten `useDynamicWidgetData` ile cekilen `rawData`'yi bir callback veya ref ile ust bilesene bildirmek.
 
-### Neden Bu Yaklasim Calisir
+**Yaklasim B uygulanacak:** `BuilderWidgetRenderer`'a opsiyonel `onDataLoaded?: (data: any[]) => void` callback prop'u eklenecek. Veri yuklendikten sonra bu callback cagirilacak. `ContainerRenderer` bu veriyi state'te tutarak `WidgetFiltersButton`'a iletecek.
 
-```text
-ContainerRenderer grid item    -> min-h-[280px] + h-full (GERi EKLENDI)
-  Card                         -> h-full flex flex-col
-    CardContent                -> flex-1 min-h-0 (flex alanini doldurur)
-      Wrapper div              -> flex-1 relative min-h-[200px]
-        Absolute div           -> absolute inset-0 (parent boyutlarini alir)
-          Widget kodu           -> flex-1
-            ResponsiveContainer -> height="100%" = absolute div yuksekligi
-```
+**4. Degisecek Dosyalar**
+
+1. **`src/components/dashboard/WidgetFiltersButton.tsx`**
+   - `widgetData?: any[]` prop'u eklenmesi
+   - `DynamicField` icerisinde `resolvedOptions` hesaplamasi: bos options + widgetData varsa veriden benzersiz degerler cikarilmasi
+   - Seceneklerin fazla olmasi durumunda arama (search) destegi eklenmesi
+
+2. **`src/components/dashboard/BuilderWidgetRenderer.tsx`**
+   - `onDataLoaded?: (data: any[]) => void` prop'u eklenmesi
+   - Veri yuklendikten sonra callback'in cagirilmasi
+
+3. **`src/components/pages/ContainerRenderer.tsx`**
+   - Her slot icin `widgetRawData` state'i tutulmasi
+   - `BuilderWidgetRenderer`'in `onDataLoaded` callback'i ile bu state'in guncellenmesi
+   - `WidgetFiltersButton`'a `widgetData` prop'unun gecilmesi
 
 ### Beklenen Sonuc
-- Pasta grafikleri (Kaynak Dagilimi, Sektor Dagilimi), bar/line chartlar render edilecek
-- Nivo grafikleri (Radar, Funnel, Sankey) dogru yukseklikte gorunecek
-- Harita widget'lari arka plan haritasini gosterecek
-- Mevcut filtre mantigi korunacak (onceki degisikliklerdeki dinamik filtre destegi devam edecek)
-- heightMultiplier (1x-3x) ayarlari dogru calisacak
 
+- Filtre popover'i acildiginda, widget verisinden cikartilan gercek degerler (ornegin sube adlari, kullanici adlari, satis elemanlari) secim listesi olarak gorunecek
+- Kullanici filtreleri secebilecek ve widget verisi buna gore daraltilacak
+- Statik options tanimlanmis filtreler icin davranis degismeyecek

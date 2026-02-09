@@ -453,7 +453,6 @@ interface BuilderWidgetRendererProps {
   builderConfig: WidgetBuilderConfig;
   className?: string;
   widgetFilters?: WidgetLocalFilters;
-  onDataLoaded?: (data: any[]) => void;
 }
 
 export function BuilderWidgetRenderer({
@@ -463,20 +462,12 @@ export function BuilderWidgetRenderer({
   builderConfig,
   className = '',
   widgetFilters,
-  onDataLoaded,
 }: BuilderWidgetRendererProps) {
   // CSS izolasyonu - konteyner stillerinin widget'ı etkilememesi için
   const isolatedClassName = cn(className, 'isolate overflow-visible');
   
   // Veri çekme - widget-bazlı filtreler ile
   const { data, rawData, multiQueryData, isLoading, error, refetch, dataStatus } = useDynamicWidgetData(builderConfig, widgetFilters);
-  
-  // Veri yüklendiğinde üst bileşene bildir
-  useEffect(() => {
-    if (rawData && rawData.length > 0 && onDataLoaded) {
-      onDataLoaded(rawData);
-    }
-  }, [rawData, onDataLoaded]);
   
   // DEBUG: Widget veri durumu - SADECE development modunda
   if (process.env.NODE_ENV === 'development') {
@@ -515,7 +506,6 @@ export function BuilderWidgetRenderer({
  
   // Harita scope'u: ihtiyaç varsa lazy yükle, yoksa boş scope kullan
   const [mapScope, setMapScope] = useState<any>(() => MapScope || EmptyMapScope);
-  const [mapReady, setMapReady] = useState(!!MapScope);
    // Nivo scope'u: ihtiyaç varsa lazy yükle
    const [nivoScope, setNivoScope] = useState<any>(() => NivoScope || EmptyNivoScope);
   // WordCloud scope'u: ihtiyaç varsa lazy yükle
@@ -533,7 +523,6 @@ export function BuilderWidgetRenderer({
     initMapScope().then((scope) => {
       if (cancelled) return;
       setMapScope(scope || EmptyMapScope);
-      setMapReady(!!scope);
     });
 
     return () => {
@@ -542,20 +531,17 @@ export function BuilderWidgetRenderer({
   }, [needsMap]);
    
    // Nivo lazy loading
-   const [nivoReady, setNivoReady] = useState(!!NivoScope);
    useEffect(() => {
      let cancelled = false;
  
      if (!needsNivo) {
        setNivoScope(EmptyNivoScope);
-       setNivoReady(false);
        return;
      }
  
      initNivoScope().then((scope) => {
        if (cancelled) return;
        setNivoScope(scope || EmptyNivoScope);
-       setNivoReady(!!scope);
      });
  
      return () => {
@@ -743,10 +729,6 @@ export function BuilderWidgetRenderer({
 
   // Custom Code Widget - Tüm grafik/tablo widget'ları artık burada render ediliyor
   if (vizType === 'custom' && customCode) {
-    // Nivo veya Map scope henüz yüklenmediyse loading göster
-    if ((needsNivo && !nivoReady) || (needsMap && !mapReady)) {
-      return <WidgetLoadingSkeleton className={isolatedClassName} />;
-    }
     
     try {
       const fn = new Function(
@@ -788,7 +770,7 @@ export function BuilderWidgetRenderer({
       return (
         <Card className={cn(isolatedClassName, 'h-full flex flex-col !border-0 relative overflow-visible')}>
           <ChartHeader />
-          <CardContent className="flex-1 flex flex-col p-4 pt-3 min-h-0">
+          <CardContent className="flex-1 flex flex-col min-h-0 p-4 pt-3">
             <ErrorBoundary fallback={
               <div className="text-destructive text-sm flex items-center gap-2 py-4">
                 <AlertCircle className="h-4 w-4" />
@@ -796,17 +778,15 @@ export function BuilderWidgetRenderer({
               </div>
             }>
               {/* Custom widget'a data, colors ve filters prop'ları geçirilir - Leaflet için min-h zorunlu */}
-              <div className="flex-1 relative min-h-[200px] [&_.leaflet-container]:min-h-[350px]">
-                <div className="absolute inset-0 flex flex-col">
-                  <WidgetComponent 
-                    data={filteredData} 
-                    colors={userColors} 
-                    filters={widgetFilters || {}} 
-                    crossFilter={null}
-                    onCrossFilter={handleCrossFilter}
-                    multiData={multiQueryData}
-                  />
-                </div>
+              <div className="flex-1 h-full min-h-0 flex flex-col [&_.leaflet-container]:min-h-[350px]">
+                <WidgetComponent 
+                  data={filteredData} 
+                  colors={userColors} 
+                  filters={widgetFilters || {}} 
+                  crossFilter={null}
+                  onCrossFilter={handleCrossFilter}
+                  multiData={multiQueryData}
+                />
               </div>
             </ErrorBoundary>
           </CardContent>
