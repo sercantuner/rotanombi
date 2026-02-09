@@ -806,7 +806,11 @@ export function useDynamicWidgetData(
   
   // Cache-first loading: Cache'de veri varsa isLoading false döner
   // Bu sayede sayfa geçişlerinde skeleton gösterilmez
-  const cachedData = config?.dataSourceId ? getDataSourceData(config.dataSourceId) : null;
+  // SCOPE-AWARE: Cache lookup'ta scope kullanarak dönem karışmasını önle
+  const currentScope: DataScope | undefined = (sunucuAdi && firmaKodu) 
+    ? { sunucuAdi, firmaKodu, donemKodu: effectiveDonem } 
+    : undefined;
+  const cachedData = config?.dataSourceId ? getDataSourceData(config.dataSourceId, currentScope) : null;
   const isLoading = isFetching && !cachedData;
 
   // Veriyi görselleştirme formatına dönüştür (filtreleme sonrası)
@@ -1119,10 +1123,17 @@ export function useDynamicWidgetData(
         
         const isSourcePeriodIndependent = isPeriodIndependent(dataSourceId);
         
-        // 1. Önce memory cache kontrol et
-        const { data: cachedSourceData, isStale } = getDataWithStale(dataSourceId);
+        // SCOPE-AWARE: Memory cache lookup için scope oluştur
+        const cacheScope: DataScope = {
+          sunucuAdi,
+          firmaKodu,
+          donemKodu: effectiveDonem,
+        };
+        
+        // 1. Önce memory cache kontrol et - SCOPE ile!
+        const { data: cachedSourceData, isStale } = getDataWithStale(dataSourceId, cacheScope);
         if (cachedSourceData && !isStale) {
-          console.log(`[Widget] Memory Cache HIT - DataSource ${dataSourceId}: ${cachedSourceData.length} kayıt`);
+          console.log(`[Widget] Memory Cache HIT - DataSource ${dataSourceId} (scope: ${cacheScope.donemKodu}): ${cachedSourceData.length} kayıt`);
           incHit();
           // Cache'den geliyorsa, dataStatus'u güncelle
           setDataStatus(prev => ({
