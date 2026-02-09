@@ -1,7 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Users, User2 } from 'lucide-react';
 import type { SatisElemaniDagilimi } from '@/lib/diaClient';
-import { useDashboardFilters } from '@/contexts/DashboardFilterContext';
 
 interface Props {
   satisElemanlari: SatisElemaniDagilimi[];
@@ -9,7 +8,10 @@ interface Props {
 }
 
 export function SatisElemaniPerformans({ satisElemanlari, isLoading }: Props) {
-  const { filters, toggleArrayFilter } = useDashboardFilters();
+  const [selectedReps, setSelectedReps] = useState<string[]>([]);
+  const toggleRep = (eleman: string) => {
+    setSelectedReps(prev => prev.includes(eleman) ? prev.filter(e => e !== eleman) : [...prev, eleman]);
+  };
 
   const formatCurrency = (value: number) => {
     if (value >= 1000000) return `₺${(value / 1000000).toFixed(1)}M`;
@@ -38,7 +40,7 @@ export function SatisElemaniPerformans({ satisElemanlari, isLoading }: Props) {
   }
 
   const handleClick = (eleman: string) => {
-    toggleArrayFilter('satisTemsilcisi', eleman);
+    toggleRep(eleman);
   };
 
   return (
@@ -63,8 +65,8 @@ export function SatisElemaniPerformans({ satisElemanlari, isLoading }: Props) {
       ) : (
         <div className="space-y-3 max-h-64 overflow-y-auto">
           {satisElemanlari.slice(0, 10).map((item, index) => {
-            const isSelected = filters.satisTemsilcisi.includes(item.eleman);
-            const isFiltered = filters.satisTemsilcisi.length > 0 && !isSelected;
+            const isSelected = selectedReps.includes(item.eleman);
+            const isFiltered = selectedReps.length > 0 && !isSelected;
             
             return (
               <div 
@@ -112,14 +114,14 @@ export function SatisElemaniPerformans({ satisElemanlari, isLoading }: Props) {
       )}
 
       {/* Active filter indicator */}
-      {filters.satisTemsilcisi.length > 0 && (
+      {selectedReps.length > 0 && (
         <div className="mt-4 pt-3 border-t border-border">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">{filters.satisTemsilcisi.length} temsilci seçili</span>
+            <span className="text-muted-foreground">{selectedReps.length} temsilci seçili</span>
             <button 
               onClick={(e) => {
                 e.stopPropagation();
-                filters.satisTemsilcisi.forEach(e => toggleArrayFilter('satisTemsilcisi', e));
+                setSelectedReps([]);
               }}
               className="text-success hover:text-success/80 transition-colors font-medium"
             >
