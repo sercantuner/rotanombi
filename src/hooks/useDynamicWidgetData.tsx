@@ -573,6 +573,53 @@ function applyWidgetFilters(data: any[], widgetFilters: WidgetLocalFilters, diaA
     }
   }
   
+  // Dinamik widget filtreleri - yukarıdaki hardcoded key'lere girmeyen tüm filtreler
+  const handledKeys = new Set([
+    'searchTerm', 'cariKartTipi', 'satisTemsilcisi', 'sube', 'depo',
+    'ozelkod1', 'ozelkod2', 'ozelkod3', 'sehir', 'durum', 'gorunumModu',
+    'tarihAraligi',
+  ]);
+  
+  for (const [key, val] of Object.entries(wf)) {
+    if (handledKeys.has(key)) continue;
+    if (val === undefined || val === null) continue;
+    if (Array.isArray(val) && val.length === 0) continue;
+    if (typeof val === 'string' && !val.trim()) continue;
+    
+    // Multi-select (array) filtre
+    if (Array.isArray(val)) {
+      filtered = filtered.filter(row => {
+        const rowVal = row[key];
+        if (rowVal === null || rowVal === undefined) return false;
+        // Nested obje desteği (_key_sis_sube: { subeadi: "..." })
+        if (typeof rowVal === 'object' && !Array.isArray(rowVal)) {
+          const resolved = rowVal.aciklama || rowVal.adi || rowVal.subeadi || rowVal.depoadi || rowVal.unvan || rowVal.kod || String(rowVal._key || '');
+          return val.includes(String(resolved));
+        }
+        return val.includes(String(rowVal));
+      });
+    }
+    // Tekil string/number filtre
+    else if (typeof val === 'string' || typeof val === 'number') {
+      filtered = filtered.filter(row => {
+        const rowVal = row[key];
+        if (rowVal === null || rowVal === undefined) return false;
+        if (typeof rowVal === 'object' && !Array.isArray(rowVal)) {
+          const resolved = rowVal.aciklama || rowVal.adi || rowVal.subeadi || rowVal.depoadi || rowVal.unvan || rowVal.kod || String(rowVal._key || '');
+          return String(resolved).toLowerCase() === String(val).toLowerCase();
+        }
+        return String(rowVal).toLowerCase() === String(val).toLowerCase();
+      });
+    }
+    // Boolean (toggle) filtre
+    else if (typeof val === 'boolean') {
+      filtered = filtered.filter(row => {
+        const rowVal = row[key];
+        return Boolean(rowVal) === val;
+      });
+    }
+  }
+  
   return filtered;
 }
 

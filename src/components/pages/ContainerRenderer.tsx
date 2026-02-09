@@ -324,7 +324,7 @@ export function ContainerRenderer({
                 }, 0)}
                 widgetFilters={(widgetDetail.builder_config as any)?.widgetFilters}
                 widgetParameters={(widgetDetail.builder_config as any)?.widgetParameters}
-                widgetData={widgetRawDataRef.current[slotWidget.id]}
+                getWidgetData={() => widgetRawDataRef.current[slotWidget.id]}
               />
               {/* Tarih filtresi - eğer widget'ta tarih filtresi aktifse */}
               {widgetDetail.builder_config?.dateFilter?.enabled && widgetDetail.builder_config?.dateFilter?.showInWidget && (
