@@ -28,7 +28,7 @@ import * as LucideIcons from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+
 import { useEffect } from 'react';
 
 interface NavItem {
@@ -71,7 +71,7 @@ export function Sidebar({
   const location = useLocation();
   const navigate = useNavigate();
   const [showCreatePage, setShowCreatePage] = useState(false);
-  const [controlsOpen, setControlsOpen] = useState(false);
+  
 
   // Sidebar genişliğini CSS değişkeni olarak paylaş (fixed positioned elementlar için)
   useEffect(() => {
@@ -237,48 +237,38 @@ export function Sidebar({
           </div>
         </nav>
 
-        {/* Kontroller - Dashboard sayfasındayken göster */}
+        {/* DIA Bağlantı Durumu - Dashboard sayfasındayken göster */}
         {(location.pathname === '/dashboard' || location.pathname.startsWith('/page/')) && (
-          <Collapsible open={controlsOpen} onOpenChange={setControlsOpen}>
-            <div className={cn("border-t border-border", collapsed ? "p-2" : "p-4")}>
-              {/* DIA Bağlantı Durumu - her zaman görünür, tıklanınca detaylar açılır */}
-              {collapsed ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <CollapsibleTrigger className="w-full">
-                      <div className={cn(
-                        "flex items-center justify-center p-2 rounded-lg cursor-pointer hover:bg-muted/50",
-                        isDiaConnected ? "bg-success/10" : "bg-muted"
-                      )}>
-                        <Plug className={cn("w-4 h-4", isDiaConnected ? "text-success" : "text-muted-foreground")} />
-                      </div>
-                    </CollapsibleTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {isDiaConnected ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <CollapsibleTrigger className="w-full">
+          <div className={cn("border-t border-border", collapsed ? "p-2" : "p-4")}>
+            {collapsed ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
                   <div className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer hover:bg-muted/50",
+                    "flex items-center justify-center p-2 rounded-lg",
                     isDiaConnected ? "bg-success/10" : "bg-muted"
                   )}>
                     <Plug className={cn("w-4 h-4", isDiaConnected ? "text-success" : "text-muted-foreground")} />
-                    <span className={cn("text-xs font-medium", isDiaConnected ? "text-success" : "text-muted-foreground")}>
-                      {isDiaConnected ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
-                    </span>
-                    <ChevronDown className={cn("h-3 w-3 text-muted-foreground transition-transform ml-auto", controlsOpen && "rotate-180")} />
                   </div>
-                </CollapsibleTrigger>
-              )}
-              
-              <CollapsibleContent>
-                {/* Sorgu İstatistikleri - sadece açıldığında */}
-                {!collapsed && <div className="mt-2"><DiaQueryStats /></div>}
-              </CollapsibleContent>
-            </div>
-          </Collapsible>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {isDiaConnected ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <>
+                <div className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg mb-2",
+                  isDiaConnected ? "bg-success/10" : "bg-muted"
+                )}>
+                  <Plug className={cn("w-4 h-4", isDiaConnected ? "text-success" : "text-muted-foreground")} />
+                  <span className={cn("text-xs font-medium", isDiaConnected ? "text-success" : "text-muted-foreground")}>
+                    {isDiaConnected ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
+                  </span>
+                </div>
+                <DiaQueryStats />
+              </>
+            )}
+          </div>
         )}
 
         {/* User Info & Logout */}
