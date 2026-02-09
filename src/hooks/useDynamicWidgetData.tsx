@@ -590,15 +590,22 @@ function applyWidgetFilters(data: any[], widgetFilters: WidgetLocalFilters, diaA
     
     // Multi-select (array) filtre
     if (Array.isArray(val)) {
+      const lowerVal = val.map(v => String(v).toLocaleLowerCase('tr'));
       filtered = filtered.filter(row => {
         const rowVal = row[key];
         if (rowVal === null || rowVal === undefined) return false;
         // Nested obje desteği (_key_sis_sube: { subeadi: "..." })
         if (typeof rowVal === 'object' && !Array.isArray(rowVal)) {
           const resolved = rowVal.aciklama || rowVal.adi || rowVal.subeadi || rowVal.depoadi || rowVal.unvan || rowVal.kod || String(rowVal._key || '');
-          return val.includes(String(resolved));
+          return lowerVal.includes(String(resolved).toLocaleLowerCase('tr'));
         }
-        return val.includes(String(rowVal));
+        const strVal = String(rowVal);
+        // Virgülle ayrılmış değerlerde parça eşleşmesi (ör: "CENK TOPRAK,ASİYE GÜNDOĞDU")
+        if (strVal.includes(',') || strVal.includes(';')) {
+          const parts = strVal.split(/[,;]/).map(p => p.trim()).filter(Boolean);
+          return parts.some(part => lowerVal.includes(part.toLocaleLowerCase('tr')));
+        }
+        return lowerVal.includes(strVal.toLocaleLowerCase('tr'));
       });
     }
     // Tekil string/number filtre
