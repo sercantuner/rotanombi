@@ -62,8 +62,6 @@ interface DynamicWidgetRendererProps {
   isWidgetEditMode?: boolean;
   // Renk paleti
   colors?: string[];
-  // Widget verisi callback (filtre opsiyonları için)
-  onDataLoaded?: (data: any[]) => void;
 }
 
 // Format large numbers
@@ -91,13 +89,18 @@ export function DynamicWidgetRenderer({
   onFiltersChange,
   isWidgetEditMode = false,
   colors,
-  onDataLoaded,
 }: DynamicWidgetRendererProps) {
   const widget = getWidgetById(widgetId);
   
   // Eğer dbWidget var ve builder_config içeriyorsa, BuilderWidgetRenderer kullan
   if (dbWidget?.builder_config) {
     // Container widget settings'ten widget filtrelerini al
+    const builderWidgetFilters = widgetFilters ? {
+      cariKartTipi: widgetFilters.cariKartTipi || [],
+      gorunumModu: widgetFilters.gorunumModu || 'hepsi',
+      durum: widgetFilters.durum || 'hepsi',
+    } : undefined;
+    
     return (
       <BuilderWidgetRenderer
         widgetId={dbWidget.id}
@@ -105,8 +108,7 @@ export function DynamicWidgetRenderer({
         widgetIcon={dbWidget.icon || undefined}
         builderConfig={dbWidget.builder_config}
         className={className}
-        widgetFilters={widgetFilters}
-        onDataLoaded={onDataLoaded}
+        widgetFilters={builderWidgetFilters}
       />
     );
   }

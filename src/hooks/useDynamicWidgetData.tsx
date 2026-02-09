@@ -439,7 +439,7 @@ function dataHasField(data: any[], fields: string[]): boolean {
   return fields.some(f => f in sample && sample[f] !== undefined);
 }
 
-function applyWidgetFilters(data: any[], widgetFilters: WidgetLocalFilters, diaAutoFilters?: DiaAutoFilter[], widgetFilterDefs?: any[]): any[] {
+function applyWidgetFilters(data: any[], widgetFilters: WidgetLocalFilters, diaAutoFilters?: DiaAutoFilter[]): any[] {
   if (!data || data.length === 0) return data;
   if (!widgetFilters && (!diaAutoFilters || diaAutoFilters.length === 0)) return data;
   
@@ -551,62 +551,6 @@ function applyWidgetFilters(data: any[], widgetFilters: WidgetLocalFilters, diaA
         return potansiyel === false || potansiyel === 'f' || potansiyelStr === 'H' || potansiyelStr === 'HAYIR' || potansiyelStr === '0' || potansiyelStr === 'FALSE' || !potansiyel;
       }
     });
-  }
-  
-  // ============= DİNAMİK FİLTRE UYGULAMA =============
-  // Widget'ın builder_config.widgetFilters'ında tanımlı ancak yukarıdaki hardcoded bloklarda
-  // ele alınmayan tüm filtre key'lerini genel döngüyle uygula
-  const hardcodedKeys = new Set([
-    'searchTerm', 'cariKartTipi', 'satisTemsilcisi', 'sube', 'depo',
-    'ozelkod1', 'ozelkod2', 'ozelkod3', 'sehir', 'durum', 'gorunumModu'
-  ]);
-  
-  if (widgetFilterDefs && widgetFilterDefs.length > 0) {
-    for (const filterDef of widgetFilterDefs) {
-      const key = filterDef.key;
-      if (hardcodedKeys.has(key)) continue; // Zaten yukarıda işlendi
-      
-      const filterValue = wf[key];
-      if (filterValue === undefined || filterValue === null) continue;
-      
-      // Multi-select: dizi ise
-      if (Array.isArray(filterValue)) {
-        if (filterValue.length === 0) continue;
-        if (dataHasField(data, [key])) {
-          filtered = filtered.filter(row => {
-            const val = row[key];
-            // Nested obje kontrolü (DIA FK)
-            if (val && typeof val === 'object' && !Array.isArray(val)) {
-              const strVal = val.unvan || val.aciklama || val.kod || val.adi || String(val._key || '');
-              return filterValue.includes(strVal);
-            }
-            return val !== null && val !== undefined && filterValue.includes(String(val));
-          });
-        }
-      }
-      // Dropdown: string ise
-      else if (typeof filterValue === 'string' && filterValue !== '' && filterValue !== 'hepsi') {
-        if (dataHasField(data, [key])) {
-          filtered = filtered.filter(row => {
-            const val = row[key];
-            if (val && typeof val === 'object' && !Array.isArray(val)) {
-              const strVal = val.unvan || val.aciklama || val.kod || val.adi || String(val._key || '');
-              return strVal === filterValue;
-            }
-            return String(val) === filterValue;
-          });
-        }
-      }
-      // Toggle: boolean ise
-      else if (typeof filterValue === 'boolean') {
-        if (dataHasField(data, [key])) {
-          filtered = filtered.filter(row => {
-            const val = row[key];
-            return Boolean(val) === filterValue;
-          });
-        }
-      }
-    }
   }
   
   // DIA zorunlu filtreler (kullanıcıya ait kilitli filtreler)
@@ -958,7 +902,7 @@ export function useDynamicWidgetData(
     
     // Widget filtreleri uygula
     const beforeCount = processedData.length;
-    processedData = applyWidgetFilters(processedData, currentFilters || {}, diaAutoFiltersRef.current, config?.widgetFilters);
+    processedData = applyWidgetFilters(processedData, currentFilters || {}, diaAutoFiltersRef.current);
     if (processedData.length !== beforeCount) {
       console.log(`[Filter Change] Applied: ${beforeCount} → ${processedData.length} records`);
     }
@@ -1055,7 +999,7 @@ export function useDynamicWidgetData(
         
         // Widget filtreleri uygula ve UI'ı güncelle
         let filteredData = [...freshDbResult.data];
-        filteredData = applyWidgetFilters(filteredData, widgetFiltersRef.current || {}, diaAutoFiltersRef.current, config?.widgetFilters);
+        filteredData = applyWidgetFilters(filteredData, widgetFiltersRef.current || {}, diaAutoFiltersRef.current);
         
         // Görselleştirme verisini güncelle (UI sessizce yenilenir)
         processVisualizationData(filteredData, currentConfig);
@@ -1366,7 +1310,7 @@ export function useDynamicWidgetData(
       // Widget filtreleri uygula ve görselleştir
       let filteredData = [...fetchedData];
       const beforeCount = filteredData.length;
-      filteredData = applyWidgetFilters(filteredData, widgetFiltersRef.current || {}, diaAutoFiltersRef.current, config?.widgetFilters);
+      filteredData = applyWidgetFilters(filteredData, widgetFiltersRef.current || {}, diaAutoFiltersRef.current);
       if (filteredData.length !== beforeCount) {
         console.log(`[Widget Filters] Applied: ${beforeCount} → ${filteredData.length} records`);
       }
