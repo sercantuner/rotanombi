@@ -247,9 +247,30 @@ const initMapScope = async () => {
       shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
     });
     
+    // TileLayer wrapper: dark modda otomatik olarak dark tile kullanır
+    const OriginalTileLayer = reactLeaflet.TileLayer;
+    const LIGHT_TILES = [
+      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    ];
+    const DARK_TILE_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+    const LIGHT_TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+    
+    const AutoThemeTileLayer = (props: any) => {
+      const isDark = document.documentElement.classList.contains('dark');
+      let url = props.url;
+      // Eğer widget light/default tile kullanıyorsa ve dark moddaysak, otomatik dark tile'a geç
+      if (isDark && (!url || LIGHT_TILES.includes(url))) {
+        url = DARK_TILE_URL;
+      } else if (!isDark && (!url || url === DARK_TILE_URL)) {
+        url = LIGHT_TILE_URL;
+      }
+      return React.createElement(OriginalTileLayer, { ...props, url });
+    };
+
     MapScope = {
       MapContainer: reactLeaflet.MapContainer,
-      TileLayer: reactLeaflet.TileLayer,
+      TileLayer: AutoThemeTileLayer,
       Marker: reactLeaflet.Marker,
       Popup: reactLeaflet.Popup,
       Tooltip: reactLeaflet.Tooltip,
@@ -258,16 +279,13 @@ const initMapScope = async () => {
       Polygon: reactLeaflet.Polygon,
       Rectangle: reactLeaflet.Rectangle,
       Circle: reactLeaflet.Circle,
-      // Hooks
       useMap: reactLeaflet.useMap,
       useMapEvents: reactLeaflet.useMapEvents,
       useMapEvent: reactLeaflet.useMapEvent,
       L: L.default,
-      // Dark mode desteği - widget'lar Map.isDark ile tema kontrolü yapabilir
       isDark: document.documentElement.classList.contains('dark'),
-      // Hazır tile URL'leri
-      TILE_LIGHT: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-      TILE_DARK: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      TILE_LIGHT: LIGHT_TILE_URL,
+      TILE_DARK: DARK_TILE_URL,
       TILE_DEFAULT: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     };
     
