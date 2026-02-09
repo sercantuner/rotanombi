@@ -189,7 +189,7 @@ export function LoginPage() {
               />
             </a>
             <p className="text-center text-xs text-slate-500">
-              © 2024 Rota Yazılım • RotanomBI v3.0
+               © 2026 Rota Yazılım • RotanomBI v3.0
             </p>
           </div>
         </div>
@@ -381,7 +381,7 @@ export function LoginPage() {
               />
             </a>
             <p className="text-center text-xs text-slate-400">
-              © 2024 Rota Yazılım • RotanomBI v3.0
+              © 2026 Rota Yazılım • RotanomBI v3.0
             </p>
           </div>
         </div>
