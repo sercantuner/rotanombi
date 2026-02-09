@@ -515,6 +515,7 @@ export function BuilderWidgetRenderer({
  
   // Harita scope'u: ihtiyaç varsa lazy yükle, yoksa boş scope kullan
   const [mapScope, setMapScope] = useState<any>(() => MapScope || EmptyMapScope);
+  const [mapReady, setMapReady] = useState(!!MapScope);
    // Nivo scope'u: ihtiyaç varsa lazy yükle
    const [nivoScope, setNivoScope] = useState<any>(() => NivoScope || EmptyNivoScope);
   // WordCloud scope'u: ihtiyaç varsa lazy yükle
@@ -532,6 +533,7 @@ export function BuilderWidgetRenderer({
     initMapScope().then((scope) => {
       if (cancelled) return;
       setMapScope(scope || EmptyMapScope);
+      setMapReady(!!scope);
     });
 
     return () => {
@@ -540,17 +542,20 @@ export function BuilderWidgetRenderer({
   }, [needsMap]);
    
    // Nivo lazy loading
+   const [nivoReady, setNivoReady] = useState(!!NivoScope);
    useEffect(() => {
      let cancelled = false;
  
      if (!needsNivo) {
        setNivoScope(EmptyNivoScope);
+       setNivoReady(false);
        return;
      }
  
      initNivoScope().then((scope) => {
        if (cancelled) return;
        setNivoScope(scope || EmptyNivoScope);
+       setNivoReady(!!scope);
      });
  
      return () => {
@@ -738,6 +743,10 @@ export function BuilderWidgetRenderer({
 
   // Custom Code Widget - Tüm grafik/tablo widget'ları artık burada render ediliyor
   if (vizType === 'custom' && customCode) {
+    // Nivo veya Map scope henüz yüklenmediyse loading göster
+    if ((needsNivo && !nivoReady) || (needsMap && !mapReady)) {
+      return <WidgetLoadingSkeleton className={isolatedClassName} />;
+    }
     
     try {
       const fn = new Function(
