@@ -645,7 +645,7 @@ async function fetchFromDatabase(
   dataSourceSlug: string,
   sunucuAdi: string,
   firmaKodu: string,
-  donemKodu?: number | null
+  donemKodu: number
 ): Promise<DbFetchResult> {
   const PAGE_SIZE = 1000; // Supabase max 1000 satır döndürür
   let allData: any[] = [];
@@ -654,50 +654,36 @@ async function fetchFromDatabase(
   let lastUpdatedAt: string | null = null;
   
   while (hasMore) {
-    let query = supabase
+    const { data, error } = await supabase
       .from('company_data_cache')
       .select('data, updated_at')
       .eq('data_source_slug', dataSourceSlug)
       .eq('sunucu_adi', sunucuAdi)
       .eq('firma_kodu', firmaKodu)
-      .eq('is_deleted', false);
-
-    // Dönem bağımsız kaynaklar için donem_kodu filtresi uygulanmaz
-    if (typeof donemKodu === 'number' && Number.isFinite(donemKodu)) {
-      query = query.eq('donem_kodu', donemKodu);
-    }
-
-    const { data, error } = await query
+      .eq('donem_kodu', donemKodu)
+      .eq('is_deleted', false)
       .order('updated_at', { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
 
-
     if (error) {
       console.error('[DB] Error fetching from company_data_cache:', error);
-      throw error;
-    }
-
-    const rows = data || [];
-    allData = allData.concat(rows.map(row => row.data));
-    
-    // İlk sayfadan en son güncelleme tarihini al
-    if (from === 0 && rows.length > 0 && rows[0].updated_at) {
-      lastUpdatedAt = rows[0].updated_at;
+      break;
     }
     
-    // Eğer sayfa dolu değilse, daha fazla veri yok demektir
-    if (rows.length < PAGE_SIZE) {
-      hasMore = false;
-    } else {
+    if (data && data.length > 0) {
+      allData = allData.concat(data.map(row => row.data));
+      // İlk sayfadan updated_at al (en güncel)
+      if (!lastUpdatedAt && data[0]?.updated_at) {
+        lastUpdatedAt = data[0].updated_at;
+      }
       from += PAGE_SIZE;
+      hasMore = data.length === PAGE_SIZE;
+    } else {
+      hasMore = false;
     }
   }
   
-  console.log(
-    `[DB] Fetched ${allData.length} records from ${dataSourceSlug}` +
-      `${typeof donemKodu === 'number' ? ` (period: ${donemKodu})` : ' (period: ALL)'}` +
-      `${lastUpdatedAt ? ` (last sync: ${lastUpdatedAt})` : ''}`
-  );
+  console.log(`[DB] Fetched ${allData.length} records from ${dataSourceSlug}${lastUpdatedAt ? ` (last sync: ${lastUpdatedAt})` : ''}`);
   
   // JSONB data alanlarını düz obje olarak döndür
   return {
@@ -985,10 +971,7 @@ export function useDynamicWidgetData(
       console.log(`[Background Revalidate] Sync completed for ${slug}:`, result);
       
       // Sync tamamlandı - DB'den yeni veriyi çek
-      const ds = cacheContextRef.current.dataSources;
-      const source = ds?.find(d => d.id === dataSourceId);
-      const donemArg = source?.is_period_independent ? null : effectiveDonem;
-      const freshDbResult = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, donemArg);
+      const freshDbResult = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, effectiveDonem);
       
       if (freshDbResult.data.length > 0) {
         console.log(`[Background Revalidate] Got ${freshDbResult.data.length} fresh records for ${slug}`);
@@ -1125,11 +1108,7 @@ export function useDynamicWidgetData(
         }
         
         // 2. Memory cache boş veya stale - DB'den oku
-        const source = ds.find(d => d.id === dataSourceId);
-        const donemArg = source?.is_period_independent ? null : effectiveDonem;
-        console.log(
-          `[Widget] Fetching from DB - DataSource: ${slug} (sunucu: ${sunucuAdi}, firma: ${firmaKodu}${donemArg === null ? ', dönem: ALL' : `, dönem: ${donemArg}`})`
-        );
+        console.log(`[Widget] Fetching from DB - DataSource: ${slug} (sunucu: ${sunucuAdi}, firma: ${firmaKodu}, dönem: ${effectiveDonem})`);
         
         // Cache'den gösteriyorsak önce cache'i kullan
         if (cachedSourceData && isStale) {
@@ -1141,7 +1120,7 @@ export function useDynamicWidgetData(
         }
         
         try {
-          const dbResult = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, donemArg);
+          const dbResult = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, effectiveDonem);
           
           if (dbResult.data.length > 0) {
             console.log(`[Widget] DB HIT - DataSource ${slug}: ${dbResult.data.length} kayıt`);
