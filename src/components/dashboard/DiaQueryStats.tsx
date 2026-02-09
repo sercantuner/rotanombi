@@ -38,7 +38,7 @@ interface PreviewSource {
   syncTime: Date | null;
 }
 
-export function DiaQueryStats() {
+export function DiaQueryStats({ customTrigger }: { customTrigger?: React.ReactNode } = {}) {
   const { 
     stats, 
     getFetchedDataSources, 
@@ -56,8 +56,8 @@ export function DiaQueryStats() {
   const fetchedIds = getFetchedDataSources();
   const syncTimes = getAllDataSourceSyncTimes();
   
-  // Hiç sorgu yapılmadıysa gösterme
-  if (stats.totalQueries === 0 && fetchedIds.length === 0) return null;
+  // Hiç sorgu yapılmadıysa ve customTrigger yoksa gösterme
+  if (!customTrigger && stats.totalQueries === 0 && fetchedIds.length === 0) return null;
   
   const savingsPercent = stats.totalQueries > 0 
     ? Math.round((stats.cacheHits / stats.totalQueries) * 100) 
@@ -134,30 +134,32 @@ export function DiaQueryStats() {
     <>
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
-          <button className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-md cursor-pointer hover:bg-muted transition-colors">
-            <Database className="h-3 w-3" />
-            <span>{stats.totalQueries}</span>
-            
-            {stats.cacheHits > 0 && (
-              <>
-                <Zap className="h-3 w-3 text-amber-500" />
-                <span className="text-amber-600 dark:text-amber-400">{stats.cacheHits}</span>
-              </>
-            )}
-            
-            {savingsPercent > 0 && (
-              <Badge variant="secondary" className="h-4 text-[10px] px-1 bg-green-500/20 text-green-700 dark:text-green-400">
-                <TrendingUp className="h-2.5 w-2.5 mr-0.5" />
-                {savingsPercent}%
-              </Badge>
-            )}
-            
-            {isOpen ? (
-              <ChevronUp className="h-3 w-3" />
-            ) : (
-              <ChevronDown className="h-3 w-3" />
-            )}
-          </button>
+          {customTrigger || (
+            <button className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-md cursor-pointer hover:bg-muted transition-colors">
+              <Database className="h-3 w-3" />
+              <span>{stats.totalQueries}</span>
+              
+              {stats.cacheHits > 0 && (
+                <>
+                  <Zap className="h-3 w-3 text-amber-500" />
+                  <span className="text-amber-600 dark:text-amber-400">{stats.cacheHits}</span>
+                </>
+              )}
+              
+              {savingsPercent > 0 && (
+                <Badge variant="secondary" className="h-4 text-[10px] px-1 bg-green-500/20 text-green-700 dark:text-green-400">
+                  <TrendingUp className="h-2.5 w-2.5 mr-0.5" />
+                  {savingsPercent}%
+                </Badge>
+              )}
+              
+              {isOpen ? (
+                <ChevronUp className="h-3 w-3" />
+              ) : (
+                <ChevronDown className="h-3 w-3" />
+              )}
+            </button>
+          )}
         </PopoverTrigger>
         
         <PopoverContent className="w-80 p-0" align="end">
