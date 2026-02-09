@@ -1,67 +1,73 @@
 
 
-## Widget Filtre Seceneklerinin Otomatik Doldurulmasi
+# Personel Mesai Analizi - Parametre ve Filtreleri Dış Filtre Butonuna Taşıma
 
-### Sorun
+## Mevcut Durum
 
-Widget filtreleri (ornegin "Kullanici", "Satis Elemani", "Sube") `multi-select` tipinde tanimlanmis ancak `options` dizisi bos veya tanimlanmamis. Bu nedenle filtre popover'i acildiginda sadece etiket gorunuyor, secim yapilacak hicbir oge yok.
+Widget kodu icinde sol panelde ("Ayarlar") su kontroller var:
+- **Personel Secimi** (dropdown/select - `selectedUser` state)
+- **Calisma Gunleri** (Pt-Pz toggle butonlari - `workingDays` state)
+- **Mesai Baslangic/Bitis saati** (time input - `workHours` state)
+- **Gec Tolerans / Erken Tolerans** (number input - `tolerance` state)
+- **Resmi Tatiller** (checkbox + date input - `useNationalHolidays`, `holidays` state)
 
-### Cozum
+Bunlarin hepsi widget icindeki `React.useState` ile yonetiliyor ve sol panelde render ediliyor.
 
-Widget'in gercek verisinden (rawData) benzersiz degerleri cikararak bos `options` dizilerini otomatik doldurmak. Ayrica `DynamicWidgetRenderer`'daki hardcoded filtre kilitlemesini kaldirmak.
+## Hedef
 
-### Degisecek Dosyalar
+Bu kontrolleri widget kodundan cikarip `Widget.filters` ve `Widget.parameters` metadata tanimlarina tasimak. Boylece kullanici bunlari widget'in sag ust kosesindeki filtre/ayar butonundan (WidgetFiltersButton) yonetebilecek.
 
-**1. `src/components/dashboard/BuilderWidgetRenderer.tsx`**
-- Props arayuzune `onDataLoaded?: (data: any[]) => void` callback eklenmesi
-- `rawData` degistikce (ve bos degilse) bu callback'in cagirilmasi (`useEffect` ile)
+## Plan
 
-**2. `src/components/dashboard/DynamicWidgetRenderer.tsx`**
-- Satir 96-113 arasindaki hardcoded `builderWidgetFilters` mantigi kaldirilacak
-- `widgetFilters` oldugu gibi (as-is) `BuilderWidgetRenderer`'a iletilecek
-- Yeni `onDataLoaded` prop'u `BuilderWidgetRenderer`'a gecilecek
+### 1. Widget koduna `Widget.filters` ve `Widget.parameters` tanimlarini ekle
 
-**3. `src/components/pages/ContainerRenderer.tsx`**
-- Her slot icin `widgetRawData` state'i (Record<string, any[]>) tutulmasi
-- `DynamicWidgetRenderer`'a `onDataLoaded` callback'i eklenmesi - veri yuklendikce state guncellenir
-- `WidgetFiltersButton`'a `widgetData` prop'u olarak ilgili slot'un verisini gecmek
+```javascript
+Widget.filters = [
+  { key: "personel", label: "Personel", type: "multi-select" }
+];
 
-**4. `src/components/dashboard/WidgetFiltersButton.tsx`**
-- Props arayuzune `widgetData?: any[]` eklenmesi
-- `DynamicField` bileseninde `resolvedOptions` hesaplamasi:
-  - `def.options` doluysa: mevcut options kullanilir (degisiklik yok)
-  - `def.options` bos/undefined VE `widgetData` mevcutsa: `widgetData` icerisinden `def.key` alanindaki benzersiz (unique) degerler cikarilir, `{ value, label }` formatina donusturulur
-  - null/undefined/bos degerler filtrelenir, alfabetik siralanir
-- 5'ten fazla secenek varsa arama kutusu (search input) gosterilmesi
-- `multi-select` ve `dropdown` tipleri icin resolvedOptions kullanilmasi
-
-### Teknik Akis
-
-```text
-BuilderWidgetRenderer
-  |-- useDynamicWidgetData() -> rawData
-  |-- useEffect: rawData degisince onDataLoaded(rawData) cagir
-  |
-  v
-ContainerRenderer
-  |-- widgetRawData state (Record<slotId, any[]>)
-  |-- onDataLoaded callback ile state guncelle
-  |
-  v
-WidgetFiltersButton (widgetData prop)
-  |
-  v
-DynamicField
-  |-- def.options bos mu?
-  |     Evet -> widgetData'dan unique degerler cikar
-  |     Hayir -> mevcut options kullan
-  |-- 5+ secenek -> arama kutusu goster
+Widget.parameters = [
+  { key: "mesaiBaslangic", label: "Mesai Baslangic", type: "text", defaultValue: "08:00" },
+  { key: "mesaiBitis", label: "Mesai Bitis", type: "text", defaultValue: "18:00" },
+  { key: "gecTolerans", label: "Gec Tolerans (dk)", type: "number", defaultValue: 15, min: 0, max: 60 },
+  { key: "erkenTolerans", label: "Erken Tolerans (dk)", type: "number", defaultValue: 15, min: 0, max: 60 },
+  { key: "resmiTatiller", label: "Resmi Tatiller", type: "toggle", defaultValue: true }
+];
 ```
 
-### Beklenen Sonuc
+### 2. Widget kodunu guncelle
 
-- Filtre popover'i acildiginda, widget verisinden cikarilan gercek degerler (sube adlari, kullanici adlari, satis elemanlari vb.) secim listesi olarak gorunecek
-- Kullanici secim yapabilecek ve widget verisi buna gore filtrelenecek
-- Statik options tanimlanmis filtreler icin davranis degismeyecek
-- Filtre butonu her zaman gorunur kalacak (mevcut davranis korunacak)
+- **Kaldirilacaklar:**
+  - `selectedUser` state ve sol paneldeki personel dropdown
+  - `workHours` state ve saat inputlari
+  - `tolerance` state ve tolerans inputlari
+  - `useNationalHolidays` state ve checkbox
+  - `showSettings` state ve sol panel toggle butonu
+  - Sol panel UI blogu tamamen (250px panel)
+
+- **Korunacaklar:**
+  - `holidays` state (ozel tatil ekleme islemi karmasik bir UI gerektirdigi icin widget icinde kalabilir veya basitlestirilir)
+  - Tum veri isleme mantigi
+  - Grafik ve KPI render kodu
+  - Detayli liste popup'i
+
+- **Degistirilecekler:**
+  - `selectedUser` yerine `filters.personel` kullanilacak (multi-select array)
+  - `workHours.start` yerine `filters.mesaiBaslangic || '08:00'`
+  - `workHours.end` yerine `filters.mesaiBitis || '18:00'`
+  - `tolerance.late` yerine `filters.gecTolerans || 15`
+  - `tolerance.early` yerine `filters.erkenTolerans || 15`
+  - `useNationalHolidays` yerine `filters.resmiTatiller !== false`
+  - Personel filtreleme multi-select'e donusecek (birden fazla personel secimi)
+
+### 3. Veritabani guncelleme
+
+`widgets` tablosundaki `builder_config` alaninin `widgetFilters` ve `widgetParameters` JSON alanlari guncellenecek. Ayrica `customCode` alani yeni kod ile degistirilecek.
+
+### Teknik Detaylar
+
+- Widget ID: `947b4596-5271-4d21-8aa1-7cf084fa650a`
+- Tek bir SQL UPDATE ile `builder_config` guncellenecek
+- Sol panel tamamen kaldirilinca widget alani tamamen grafige ayrilacak, daha genis bir gorunum elde edilecek
+- `holidays` (ozel tatil ekleme) kompleks bir UI gerektirdigi icin simdilik widget icinde minimal bir sekilde tutulabilir veya tamamen kaldirilabilir
 
