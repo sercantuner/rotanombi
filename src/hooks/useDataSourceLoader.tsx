@@ -112,6 +112,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     }
 
     const effectiveDonem = parseInt(donemKodu || '1');
+    const isPeriodIndependent = dataSource.is_period_independent === true;
 
     try {
       // Sayfalama ile tüm veriyi çek - Supabase varsayılan 1000 limit'i aşmak için
@@ -121,15 +122,21 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       let hasMore = true;
       
       while (hasMore) {
-        const { data, error } = await supabase
+        // Dönem bağımsız kaynaklar için donem_kodu filtresi uygulanmaz
+        let query = supabase
           .from('company_data_cache')
           .select('data')
           .eq('data_source_slug', dataSource.slug)
           .eq('sunucu_adi', sunucuAdi)
           .eq('firma_kodu', firmaKodu)
-          .eq('donem_kodu', effectiveDonem)
-          .eq('is_deleted', false)
-          .range(from, from + PAGE_SIZE - 1);
+          .eq('is_deleted', false);
+        
+        // Sadece dönem bağımlı kaynaklar için dönem filtresi uygula
+        if (!isPeriodIndependent) {
+          query = query.eq('donem_kodu', effectiveDonem);
+        }
+        
+        const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
 
         if (error) {
           console.error(`[DataSourceLoader] DB-FIRST error for ${dataSource.name}:`, error);
@@ -147,7 +154,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       }
 
       if (allData.length > 0) {
-        console.log(`[DataSourceLoader] DB-FIRST HIT: ${dataSource.name} (${allData.length} kayıt from DB)`);
+        console.log(`[DataSourceLoader] DB-FIRST HIT: ${dataSource.name} (${allData.length} kayıt from DB${isPeriodIndependent ? ', period-independent' : ''})`);
         return allData;
       }
 
