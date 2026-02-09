@@ -833,7 +833,8 @@ export function BuilderWidgetRenderer({
               </div>
             }>
               {/* Custom widget'a data, colors ve filters prop'ları geçirilir - Leaflet için min-h zorunlu */}
-              <div className="flex-1 h-full min-h-0 flex flex-col [&_.leaflet-container]:min-h-[350px]">
+              {/* key: filtrelenmiş veri uzunluğu + filtre hash ile Recharts gibi kütüphanelerin güncellenmesi sağlanır */}
+              <div key={`${filteredData?.length || 0}-${JSON.stringify(widgetFilters || {})}`} className="flex-1 h-full min-h-0 flex flex-col [&_.leaflet-container]:min-h-[350px]">
                 <WidgetComponent 
                   data={filteredData} 
                   colors={userColors} 
