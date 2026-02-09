@@ -954,6 +954,9 @@ export function useDynamicWidgetData(
       console.log(`[Filter Change] Applied: ${beforeCount} → ${processedData.length} records`);
     }
     
+    // rawData'yı da güncelle (custom code widget'lar bunu kullanır)
+    setRawData(processedData);
+    
     // Görselleştirme verisini güncelle
     processVisualizationData(processedData, config);
   }, [config, processVisualizationData]);
