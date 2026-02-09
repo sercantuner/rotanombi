@@ -30,7 +30,7 @@ import { KpiFilter } from '@/components/dashboard/KpiFilterModal';
 
 interface ContainerWidgetSettings {
   filters?: KpiFilter;
-  heightMultiplier?: 1 | 2 | 3;
+  heightMultiplier?: 1 | 1.5 | 2 | 2.5 | 3;
 }
 
 interface ContainerRendererProps {
@@ -198,7 +198,7 @@ export function ContainerRenderer({
   };
 
   // Widget yükseklik çarpanını değiştir
-  const handleHeightMultiplierChange = async (containerWidgetId: string, multiplier: 1 | 2 | 3) => {
+  const handleHeightMultiplierChange = async (containerWidgetId: string, multiplier: 1 | 1.5 | 2 | 2.5 | 3) => {
     try {
       const existingWidget = containerWidgets.find(w => w.id === containerWidgetId);
       const existingSettings = (existingWidget?.settings as ContainerWidgetSettings) || {};
@@ -347,7 +347,7 @@ export function ContainerRenderer({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-36">
-                    {([1, 2, 3] as const).map(m => (
+                    {([1, 1.5, 2, 2.5, 3] as const).map(m => (
                       <DropdownMenuItem
                         key={m}
                         onClick={() => handleHeightMultiplierChange(slotWidget.id, m)}
@@ -355,11 +355,11 @@ export function ContainerRenderer({
                       >
                         <div className="flex items-center gap-1.5 flex-1">
                           <div className="flex gap-0.5 items-end">
-                            {Array.from({ length: m }).map((_, i) => (
+                            {Array.from({ length: Math.ceil(m) }).map((_, i) => (
                               <div
                                 key={i}
                                 className="w-2.5 rounded-sm bg-primary"
-                                style={{ height: `${8 + i * 4}px` }}
+                                style={{ height: `${6 + i * 3 + (m % 1 ? 1 : 0)}px` }}
                               />
                             ))}
                           </div>
