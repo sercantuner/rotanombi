@@ -645,7 +645,7 @@ async function fetchFromDatabase(
   dataSourceSlug: string,
   sunucuAdi: string,
   firmaKodu: string,
-  donemKodu: number
+  donemKodu?: number | null
 ): Promise<DbFetchResult> {
   const PAGE_SIZE = 1000; // Supabase max 1000 satır döndürür
   let allData: any[] = [];
@@ -654,16 +654,23 @@ async function fetchFromDatabase(
   let lastUpdatedAt: string | null = null;
   
   while (hasMore) {
-    const { data, error } = await supabase
+    let query = supabase
       .from('company_data_cache')
       .select('data, updated_at')
       .eq('data_source_slug', dataSourceSlug)
       .eq('sunucu_adi', sunucuAdi)
       .eq('firma_kodu', firmaKodu)
-      .eq('donem_kodu', donemKodu)
-      .eq('is_deleted', false)
+      .eq('is_deleted', false);
+
+    // Dönem bağımsız kaynaklar için donem_kodu filtresi uygulanmaz
+    if (typeof donemKodu === 'number' && Number.isFinite(donemKodu)) {
+      query = query.eq('donem_kodu', donemKodu);
+    }
+
+    const { data, error } = await query
       .order('updated_at', { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
+
 
     if (error) {
       console.error('[DB] Error fetching from company_data_cache:', error);
@@ -686,7 +693,11 @@ async function fetchFromDatabase(
     }
   }
   
-  console.log(`[DB] Fetched ${allData.length} records from ${dataSourceSlug}${lastUpdatedAt ? ` (last sync: ${lastUpdatedAt})` : ''}`);
+  console.log(
+    `[DB] Fetched ${allData.length} records from ${dataSourceSlug}` +
+      `${typeof donemKodu === 'number' ? ` (period: ${donemKodu})` : ' (period: ALL)'}` +
+      `${lastUpdatedAt ? ` (last sync: ${lastUpdatedAt})` : ''}`
+  );
   
   // JSONB data alanlarını düz obje olarak döndür
   return {
@@ -974,7 +985,10 @@ export function useDynamicWidgetData(
       console.log(`[Background Revalidate] Sync completed for ${slug}:`, result);
       
       // Sync tamamlandı - DB'den yeni veriyi çek
-      const freshDbResult = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, effectiveDonem);
+      const ds = cacheContextRef.current.dataSources;
+      const source = ds?.find(d => d.id === dataSourceId);
+      const donemArg = source?.is_period_independent ? null : effectiveDonem;
+      const freshDbResult = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, donemArg);
       
       if (freshDbResult.data.length > 0) {
         console.log(`[Background Revalidate] Got ${freshDbResult.data.length} fresh records for ${slug}`);
@@ -1111,7 +1125,11 @@ export function useDynamicWidgetData(
         }
         
         // 2. Memory cache boş veya stale - DB'den oku
-        console.log(`[Widget] Fetching from DB - DataSource: ${slug} (sunucu: ${sunucuAdi}, firma: ${firmaKodu}, dönem: ${effectiveDonem})`);
+        const source = ds.find(d => d.id === dataSourceId);
+        const donemArg = source?.is_period_independent ? null : effectiveDonem;
+        console.log(
+          `[Widget] Fetching from DB - DataSource: ${slug} (sunucu: ${sunucuAdi}, firma: ${firmaKodu}${donemArg === null ? ', dönem: ALL' : `, dönem: ${donemArg}`})`
+        );
         
         // Cache'den gösteriyorsak önce cache'i kullan
         if (cachedSourceData && isStale) {
@@ -1123,7 +1141,7 @@ export function useDynamicWidgetData(
         }
         
         try {
-          const dbResult = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, effectiveDonem);
+          const dbResult = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, donemArg);
           
           if (dbResult.data.length > 0) {
             console.log(`[Widget] DB HIT - DataSource ${slug}: ${dbResult.data.length} kayıt`);
