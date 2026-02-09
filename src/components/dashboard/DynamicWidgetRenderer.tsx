@@ -100,7 +100,7 @@ export function DynamicWidgetRenderer({
         builderConfig={dbWidget.builder_config}
         className={className}
         widgetFilters={widgetFilters}
-        
+        onDataLoaded={onDataLoaded}
       />
     );
   }
