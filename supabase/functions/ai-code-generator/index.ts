@@ -2072,6 +2072,17 @@ ${sampleData ? '═════════════════════�
       .replace(/```js\n?/gi, "")
       .replace(/```\n?/g, "")
       .trim();
+    
+    // REFINE modunda: kod bloğundan önceki açıklama metinlerini kaldır
+    // "tebrikler", "güzel", "yapıldı" gibi AI yorumlarını temizle
+    if (mode === 'refine') {
+      // "function Widget" veya "const Widget" ile başlayan ilk satırı bul
+      const codeStartMatch = generatedCode.match(/(function Widget|const Widget|var Widget)/);
+      if (codeStartMatch && codeStartMatch.index && codeStartMatch.index > 0) {
+        // Fonksiyon tanımından başlayarak kodu al
+        generatedCode = generatedCode.substring(codeStartMatch.index);
+      }
+    }
 
     console.log("[AI Code Generator v2.3] İlk yanıt - uzunluk:", generatedCode.length, "finish_reason:", finishReason, "metadata:", !!aiMetadata, "mode:", mode);
 
