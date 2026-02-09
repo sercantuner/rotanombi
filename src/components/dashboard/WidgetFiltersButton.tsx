@@ -24,7 +24,7 @@ interface WidgetFiltersButtonProps {
   activeFilterCount: number;
   widgetFilters?: WidgetFilterDef[];
   widgetParameters?: WidgetParamDef[];
-  widgetData?: any[];
+  getWidgetData?: () => any[] | undefined;
   className?: string;
 }
 
@@ -197,14 +197,22 @@ export function WidgetFiltersButton({
   activeFilterCount,
   widgetFilters,
   widgetParameters,
-  widgetData,
+  getWidgetData,
   className,
 }: WidgetFiltersButtonProps) {
   const [open, setOpen] = useState(false);
+  const [localWidgetData, setLocalWidgetData] = useState<any[]>([]);
 
-  const hasFilters = widgetFilters && widgetFilters.length > 0;
-  const hasParams = widgetParameters && widgetParameters.length > 0;
-  const hasContent = hasFilters || hasParams;
+  // Popover açıldığında ref'ten veriyi oku
+  const handleOpenChange = (isOpen: boolean) => {
+    if (isOpen && getWidgetData) {
+      const data = getWidgetData();
+      if (data && data.length > 0) {
+        setLocalWidgetData(data);
+      }
+    }
+    setOpen(isOpen);
+  };
 
   // Filtre/parametre tanımlı olmasa bile buton gösterilir
 
@@ -213,7 +221,7 @@ export function WidgetFiltersButton({
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
@@ -259,15 +267,15 @@ export function WidgetFiltersButton({
               <Filter className="w-3 h-3" />
               Filtreler
             </span>
-            {hasFilters ? (
-              widgetFilters!.map(def => (
+            {widgetFilters && widgetFilters.length > 0 ? (
+              widgetFilters.map(def => (
                 <div key={def.key} className="space-y-1.5">
                   <Label className="text-xs font-medium text-muted-foreground">{def.label}</Label>
                   <DynamicField
                     def={def}
                     value={filters[def.key]}
                     onChange={(val) => handleFieldChange(def.key, val)}
-                    widgetData={widgetData}
+                    widgetData={localWidgetData}
                   />
                 </div>
               ))
@@ -283,15 +291,15 @@ export function WidgetFiltersButton({
               <SlidersHorizontal className="w-3 h-3" />
               Parametreler
             </span>
-            {hasParams ? (
-              widgetParameters!.map(def => (
+            {widgetParameters && widgetParameters.length > 0 ? (
+              widgetParameters.map(def => (
                 <div key={def.key} className="space-y-1.5">
                   <Label className="text-xs font-medium text-muted-foreground">{def.label}</Label>
                   <DynamicField
                     def={def}
                     value={filters[def.key]}
                     onChange={(val) => handleFieldChange(def.key, val)}
-                    widgetData={widgetData}
+                    widgetData={localWidgetData}
                   />
                 </div>
               ))
