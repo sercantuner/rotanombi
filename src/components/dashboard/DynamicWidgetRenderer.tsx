@@ -94,6 +94,13 @@ export function DynamicWidgetRenderer({
   
   // Eğer dbWidget var ve builder_config içeriyorsa, BuilderWidgetRenderer kullan
   if (dbWidget?.builder_config) {
+    // Container widget settings'ten widget filtrelerini al
+    const builderWidgetFilters = widgetFilters ? {
+      cariKartTipi: widgetFilters.cariKartTipi || [],
+      gorunumModu: widgetFilters.gorunumModu || 'hepsi',
+      durum: widgetFilters.durum || 'hepsi',
+    } : undefined;
+    
     return (
       <BuilderWidgetRenderer
         widgetId={dbWidget.id}
@@ -101,6 +108,7 @@ export function DynamicWidgetRenderer({
         widgetIcon={dbWidget.icon || undefined}
         builderConfig={dbWidget.builder_config}
         className={className}
+        widgetFilters={builderWidgetFilters}
       />
     );
   }

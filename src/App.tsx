@@ -29,9 +29,7 @@ function AppWithCache({ children }: { children: React.ReactNode }) {
   return (
     <DiaDataCacheProvider userId={user?.id}>
       <ImpersonationProvider>
-        <GlobalFilterProvider>
-          {children}
-        </GlobalFilterProvider>
+        {children}
       </ImpersonationProvider>
     </DiaDataCacheProvider>
   );

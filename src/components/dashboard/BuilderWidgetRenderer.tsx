@@ -5,7 +5,7 @@ import React, { useState, useMemo, useEffect, useCallback, Component, ErrorInfo,
 import { WidgetBuilderConfig, AggregationType, DatePeriod } from '@/lib/widgetBuilderTypes';
 import { useDynamicWidgetData, DataStatusInfo } from '@/hooks/useDynamicWidgetData';
 import { useChartColorPalette } from '@/hooks/useChartColorPalette';
-import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
+import { WidgetLocalFilters } from '@/hooks/useWidgetLocalFilters';
 import { DrillDownModal } from './DrillDownModal';
 import { WidgetDateFilter, getDateRangeForPeriod } from './WidgetDateFilter';
 import { DataStatusIndicator } from './DataStatusIndicator';
@@ -452,6 +452,7 @@ interface BuilderWidgetRendererProps {
   widgetIcon?: string;
   builderConfig: WidgetBuilderConfig;
   className?: string;
+  widgetFilters?: WidgetLocalFilters;
 }
 
 export function BuilderWidgetRenderer({
@@ -460,14 +461,13 @@ export function BuilderWidgetRenderer({
   widgetIcon,
   builderConfig,
   className = '',
+  widgetFilters,
 }: BuilderWidgetRendererProps) {
   // CSS izolasyonu - konteyner stillerinin widget'ı etkilememesi için
   const isolatedClassName = cn(className, 'isolate overflow-visible');
-  // Global filtreler - widget verilerini filtrelemek için
-  const { filters, crossFilter, setCrossFilter, clearCrossFilter } = useGlobalFilters();
   
-  // Veri çekme - global filtreler ile
-  const { data, rawData, multiQueryData, isLoading, error, refetch, dataStatus } = useDynamicWidgetData(builderConfig, filters);
+  // Veri çekme - widget-bazlı filtreler ile
+  const { data, rawData, multiQueryData, isLoading, error, refetch, dataStatus } = useDynamicWidgetData(builderConfig, widgetFilters);
   
   // DEBUG: Widget veri durumu - SADECE development modunda
   if (process.env.NODE_ENV === 'development') {
@@ -613,22 +613,10 @@ export function BuilderWidgetRenderer({
     }
   }, []);
 
-  // Cross-filter handler (Power BI tarzı widget tıklaması)
-  // ÖNEMLİ: Bu hook koşullu return'lardan ÖNCE çağrılmalı
-  const handleCrossFilter = useCallback((field: string, value: string | string[], label?: string) => {
-    // Aynı widget'tan aynı değer tıklanırsa filtreyi temizle
-    if (crossFilter?.sourceWidgetId === widgetId && 
-        JSON.stringify(crossFilter.value) === JSON.stringify(value)) {
-      clearCrossFilter();
-    } else {
-      setCrossFilter({
-        sourceWidgetId: widgetId,
-        field,
-        value,
-        label,
-      });
-    }
-  }, [widgetId, crossFilter, setCrossFilter, clearCrossFilter]);
+  // Cross-filter handler - artık kullanılmıyor (widget-bazlı filtrelere geçildi)
+  const handleCrossFilter = useCallback((_field: string, _value: string | string[], _label?: string) => {
+    // Cross-filtering kaldırıldı - no-op
+  }, []);
 
   // KPI drill-down handler - useCallback ile stabilize et
   const handleKpiDrillDown = useCallback(() => {
@@ -761,7 +749,7 @@ export function BuilderWidgetRenderer({
       );
       
       // Custom widget'a colors, filters, crossFilter ve onCrossFilter prop'ları geç
-        const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, filters, UIScope, mapScope, crossFilter, handleCrossFilter, multiQueryData, nivoScope, wordCloudScope);
+        const WidgetComponent = fn(React, filteredData, LucideIcons, RechartsScope, userColors, widgetFilters || {}, UIScope, mapScope, null, handleCrossFilter, multiQueryData, nivoScope, wordCloudScope);
       
       if (typeof WidgetComponent !== 'function') {
         return (
@@ -794,8 +782,8 @@ export function BuilderWidgetRenderer({
                 <WidgetComponent 
                   data={filteredData} 
                   colors={userColors} 
-                  filters={filters} 
-                  crossFilter={crossFilter}
+                  filters={widgetFilters || {}} 
+                  crossFilter={null}
                   onCrossFilter={handleCrossFilter}
                   multiData={multiQueryData}
                 />

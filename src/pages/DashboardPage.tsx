@@ -3,8 +3,7 @@ import { Header } from '@/components/layout/Header';
 import { VadeDetayListesi } from '@/components/dashboard/VadeDetayListesi';
 import { ContainerBasedDashboard } from '@/components/dashboard/ContainerBasedDashboard';
 
-import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
-import { FilterSidePanel } from '@/components/filters/FilterSidePanel';
+// Global filtre kaldırıldı - widget-bazlı filtrelere geçildi
 import { useDiaDataCache } from '@/contexts/DiaDataCacheContext';
 import { useUserSettings } from '@/contexts/UserSettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,7 +27,7 @@ function DashboardContent() {
   const { user } = useAuth();
   const { setSharedData, invalidateCache, setDiaConnected } = useDiaDataCache();
   const { refreshSettings } = useUserSettings();
-  const globalFilters = useGlobalFilters();
+  // Global filtre kaldırıldı
   const { filterOptions: diaFilterOptions, isLoading: filterOptionsLoading } = useDiaFilterOptions();
   
   // State hooks
@@ -55,7 +54,7 @@ function DashboardContent() {
   const dataSourceLoader = useDataSourceLoader(dashboardPageId);
   
   // Destructure after hook call to maintain consistent hook order
-  const { filters, setFilterOptions } = globalFilters;
+  // const { filters, setFilterOptions } = globalFilters; // Kaldırıldı
   const { 
     isLoading: dataSourcesLoading,
     isInitialLoad: dataSourcesInitialLoad,
@@ -72,11 +71,7 @@ function DashboardContent() {
   // ===============================
   
   // Filtre seçeneklerini context'e aktar
-  useEffect(() => {
-    if (diaFilterOptions && Object.keys(diaFilterOptions).length > 0) {
-      setFilterOptions(diaFilterOptions);
-    }
-  }, [diaFilterOptions, setFilterOptions]);
+  // Filtre seçeneklerini context'e aktarma kaldırıldı (global filtre yok)
   // Dashboard sayfası ID'sini al veya oluştur + DIA bağlantı durumunu kontrol et
   useEffect(() => {
     const initializeDashboard = async () => {
@@ -253,8 +248,7 @@ function DashboardContent() {
         />
 
         <main className="flex-1 p-2 md:p-4 overflow-auto">
-            {/* Filter Side Panel - Sağda gizlenebilir */}
-            <FilterSidePanel />
+            {/* Filter Side Panel kaldırıldı - widget-bazlı filtrelere geçildi */}
 
           {/* DIA Connection Status */}
           {!diaConnectionInfo?.connected && !dataSourcesLoading && loadedSources.length === 0 && (
