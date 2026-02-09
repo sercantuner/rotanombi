@@ -4,7 +4,7 @@ import { ArrowRight, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useTheme } from '@/hooks/useTheme';
-import dashboardMockup from '@/assets/dashboard-mockup.png';
+import diaDevices from '@/assets/dia-devices.png';
 import diaLogoDark from '@/assets/dia-logo-dark.svg';
 import diaLogoLight from '@/assets/dia-logo-light.svg';
 
@@ -65,10 +65,10 @@ export default function HeroSection() {
           transition={{ duration: 0.8, delay: 0.4, ease: 'easeOut' }}
           className="mt-16 relative"
         >
-          <div className="rounded-xl overflow-hidden border border-border shadow-2xl bg-card">
+          <div className="rounded-xl overflow-hidden shadow-2xl">
             <img
-              src={dashboardMockup}
-              alt="RotanomBI Dashboard"
+              src={diaDevices}
+              alt="DIA ERP - Telefon, Tablet ve Bilgisayarda"
               className="w-full h-auto"
               loading="lazy"
             />
