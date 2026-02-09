@@ -70,9 +70,8 @@ export default function HeroSection() {
               <img
                 src={diaDevices}
                 alt="DIA ERP - Telefon, Tablet ve Bilgisayarda"
-                className="w-full h-auto drop-shadow-lg"
+                className="w-full h-auto drop-shadow-lg dark:mix-blend-lighten mix-blend-multiply"
                 loading="lazy"
-                style={{ background: 'transparent' }}
               />
             </div>
 
