@@ -544,7 +544,13 @@ export function ContainerRenderer({
              container.container_type === 'chart_third') && '[&>*]:min-h-[280px]',
             (container.container_type === 'info_cards_2' ||
              container.container_type === 'info_cards_3') && '[&>*]:min-h-[200px]'
-          )}>
+          )}
+          style={{
+            // Grid satırlarına açık yükseklik vererek h-full ve height:100% zincirini garanti et
+            ...((['chart_full', 'chart_half', 'chart_third', 'map_full', 'map_half'].includes(container.container_type))
+              ? { gridAutoRows: 'minmax(320px, auto)' }
+              : {})
+          }}>
             {renderSlots()}
           </div>
         </CardContent>
