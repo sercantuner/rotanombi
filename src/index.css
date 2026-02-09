@@ -147,9 +147,9 @@
     min-height: 100vh;
   }
 
-  /* Dark modda harita tile'larını temaya uygun yumuşat */
+  /* Dark modda harita tile'larını temaya uygun yumuşat - gri tonlu, hafif yeşil */
   .dark .leaflet-tile-pane img {
-    filter: brightness(0.82) contrast(1.05) saturate(0.7) sepia(0.15) hue-rotate(180deg);
+    filter: brightness(1.15) saturate(0.35) sepia(0.12) hue-rotate(95deg);
   }
 }
 
