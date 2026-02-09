@@ -47,20 +47,35 @@ function DynamicField({
     if (def.options && def.options.length > 0) return def.options;
     if (!widgetData || widgetData.length === 0) return [];
     
-    const uniqueValues = [...new Set(
-      widgetData
-        .map(item => {
-          const val = item[def.key];
-          // Handle nested objects (e.g. _key_sis_sube: { subeadi: "..." })
-          if (val && typeof val === 'object' && !Array.isArray(val)) {
-            // Try common label fields
-            return val.aciklama || val.adi || val.subeadi || val.depoadi || val.unvan || val.kod || String(val._key || '');
-          }
-          return val;
-        })
-        .filter(v => v !== null && v !== undefined && v !== '')
-        .map(v => String(v))
-    )].sort((a, b) => a.localeCompare(b, 'tr'));
+    const allValues: string[] = [];
+    widgetData.forEach(item => {
+      const val = item[def.key];
+      if (val === null || val === undefined || val === '') return;
+      // Handle nested objects (e.g. _key_sis_sube: { subeadi: "..." })
+      if (val && typeof val === 'object' && !Array.isArray(val)) {
+        const resolved = val.aciklama || val.adi || val.subeadi || val.depoadi || val.unvan || val.kod || String(val._key || '');
+        if (resolved) allValues.push(String(resolved));
+        return;
+      }
+      const strVal = String(val);
+      // Split comma/semicolon separated values into individual options
+      if (strVal.includes(',') || strVal.includes(';')) {
+        strVal.split(/[,;]/).forEach(part => {
+          const trimmed = part.trim();
+          if (trimmed) allValues.push(trimmed);
+        });
+      } else {
+        allValues.push(strVal);
+      }
+    });
+    
+    // Case-insensitive deduplication (keep first occurrence as display name)
+    const seenLower = new Map<string, string>();
+    allValues.forEach(v => {
+      const lower = v.toLocaleLowerCase('tr');
+      if (!seenLower.has(lower)) seenLower.set(lower, v);
+    });
+    const uniqueValues = [...seenLower.values()].sort((a, b) => a.localeCompare(b, 'tr'));
 
     return uniqueValues.map(v => ({ value: v, label: v }));
   }, [def.options, def.key, widgetData]);
