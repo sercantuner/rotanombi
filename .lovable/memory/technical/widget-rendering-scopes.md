@@ -1,7 +1,7 @@
  # Memory: technical/widget-rendering-scopes
  Updated: now
  
- Widget render motoru (BuilderWidgetRenderer ve CustomCodeWidgetBuilder); Recharts (ComposedChart, Treemap, Scatter, Radar, Funnel, ReferenceArea, ReferenceDot, PolarGrid, PolarAngleAxis, PolarRadiusAxis, LabelList), Leaflet tabanlı 'MapScope', 'UIScope' bileşenlerini ve react-wordcloud tabanlı 'WordCloud' scope'unu destekler. UIScope; Dialog, DialogContent, Button, Input, Select ve Checkbox gibi bileşenleri sunar. Nivo kütüphanesi (ResponsiveSankey, ResponsiveSunburst, ResponsiveChord, ResponsiveRadar, ResponsiveFunnel, ResponsiveChoropleth) ve WordCloud lazy-load ile yüklenir. WordCloud kullanımı: `WordCloud.WordCloud` şeklinde erişilir.
+ Widget render motoru (BuilderWidgetRenderer ve LiveWidgetPreview); Recharts, Leaflet, UIScope, WordCloud ve Nivo bileşenlerini destekler. **ÖNEMLİ**: Her iki bileşen de artık `useGlobalFilters` hook'unu kullanarak aynı global filtreleri (tarih, temsilci, cari kart tipi vb.) uygular. `LiveWidgetPreview` içindeki `applyGlobalFiltersToPreviewData` fonksiyonu, dashboard ile tutarlı görünüm sağlamak için tüm filtreleri önizleme verisine uygular. Bu sayede widget builder önizlemesi ile dashboard'daki gerçek görünüm arasında tutarsızlık olmaz.
  
  ## multiData Scope Değişkeni
  
