@@ -1,7 +1,6 @@
 import React from 'react';
 import { Building2, AlertTriangle, Users } from 'lucide-react';
 import type { DiaCari } from '@/lib/diaClient';
-import { useDashboardFilters } from '@/contexts/DashboardFilterContext';
 
 export interface TopCustomersProps {
   cariler: DiaCari[];
@@ -21,40 +20,10 @@ function getRiskLabel(skor: number): string {
 }
 
 export function TopCustomers({ cariler, isLoading }: TopCustomersProps) {
-  const { filters } = useDashboardFilters();
-
   const formatCurrency = (value: number) => {
     return `₺${Math.abs(value).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   };
-
-  // Apply cross-filters
-  const filteredCariler = cariler.filter(cari => {
-    // Özel kod filtresi
-    if (filters.ozelkod2.length > 0 && !filters.ozelkod2.includes(cari.ozelkod2kod)) {
-      return false;
-    }
-    
-    // Satış temsilcisi filtresi
-    if (filters.satisTemsilcisi.length > 0 && !filters.satisTemsilcisi.includes(cari.satiselemani)) {
-      return false;
-    }
-
-    // Şehir filtresi
-    if (filters.sehir.length > 0 && !filters.sehir.includes(cari.sehir)) {
-      return false;
-    }
-
-    // Arama filtresi
-    if (filters.searchTerm) {
-      const search = filters.searchTerm.toLowerCase();
-      const matchesSearch = 
-        cari.cariAdi?.toLowerCase().includes(search) ||
-        cari.cariKodu?.toLowerCase().includes(search);
-      if (!matchesSearch) return false;
-    }
-
-    return true;
-  });
+  const filteredCariler = cariler;
 
   // En yüksek bakiyeli 5 cari
   const topCariler = [...filteredCariler]
@@ -62,7 +31,7 @@ export function TopCustomers({ cariler, isLoading }: TopCustomersProps) {
     .slice(0, 5);
 
   const maxBakiye = Math.max(...topCariler.map(c => c.toplambakiye), 1);
-  const hasActiveFilters = filters.ozelkod2.length > 0 || filters.satisTemsilcisi.length > 0 || filters.sehir.length > 0 || filters.searchTerm;
+  const hasActiveFilters = false;
 
   if (isLoading) {
     return (
@@ -122,7 +91,7 @@ export function TopCustomers({ cariler, isLoading }: TopCustomersProps) {
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span>{cari.cariKodu}</span>
                         {cari.ozelkod2kod && (
-                          <span className={`px-1.5 py-0.5 rounded text-xs ${filters.ozelkod2.includes(cari.ozelkod2kod) ? 'bg-primary/20 text-primary' : 'bg-secondary'}`}>
+                          <span className="px-1.5 py-0.5 rounded text-xs bg-secondary">
                             {cari.ozelkod2kod}
                           </span>
                         )}

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { ContainerBasedDashboard } from '@/components/dashboard/ContainerBasedDashboard';
-import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
+// DashboardFilterProvider removed - using widget-level filters now
 import { DiaDataCacheProvider, useDiaDataCache } from '@/contexts/DiaDataCacheContext';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
@@ -514,8 +514,7 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
   }
 
   return (
-    <DashboardFilterProvider>
-        <div className="flex h-full min-h-0 bg-background pb-12">
+      <div className="flex h-full min-h-0 bg-background pb-12">
         {renderSidebar()}
          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-background">
            {isPageLoading && (
@@ -536,7 +535,6 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
         </div>
          {renderBottomBar()}
       </div>
-    </DashboardFilterProvider>
   );
 }
 
