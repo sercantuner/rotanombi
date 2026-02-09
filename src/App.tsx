@@ -18,6 +18,7 @@ import SuperAdminUsersPage from "@/pages/SuperAdminUsersPage";
 import WidgetMarketplacePage from "@/pages/WidgetMarketplacePage";
 import WidgetBuilderPage from "@/pages/WidgetBuilderPage";
 import { DynamicPage } from "@/components/pages/DynamicPage";
+import LandingPage from "@/pages/LandingPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -44,8 +45,8 @@ const App = () => (
             <UserSettingsProvider>
               <AppWithCache>
                 <Routes>
-                  {/* Default redirect to dashboard */}
-                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                  {/* Landing page for unauthenticated, redirects to dashboard if logged in */}
+                  <Route path="/" element={<LandingPage />} />
                   
                   {/* Main app routes with layout */}
                   <Route path="/dashboard" element={<AppLayout><DashboardPage /></AppLayout>} />
