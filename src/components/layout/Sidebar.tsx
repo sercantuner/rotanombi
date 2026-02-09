@@ -71,7 +71,7 @@ export function Sidebar({
   const location = useLocation();
   const navigate = useNavigate();
   const [showCreatePage, setShowCreatePage] = useState(false);
-  const [controlsOpen, setControlsOpen] = useState(true);
+  const [controlsOpen, setControlsOpen] = useState(false);
 
   // Sidebar genişliğini CSS değişkeni olarak paylaş (fixed positioned elementlar için)
   useEffect(() => {
@@ -241,59 +241,41 @@ export function Sidebar({
         {(location.pathname === '/dashboard' || location.pathname.startsWith('/page/')) && (
           <Collapsible open={controlsOpen} onOpenChange={setControlsOpen}>
             <div className={cn("border-t border-border", collapsed ? "p-2" : "p-4")}>
-              {!collapsed ? (
-                <CollapsibleTrigger className="w-full flex items-center justify-between px-4 mb-2 cursor-pointer hover:bg-muted/50 rounded-lg py-1">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                    Kontroller
-                  </p>
-                  <ChevronDown className={cn("h-3 w-3 text-muted-foreground transition-transform", controlsOpen && "rotate-180")} />
-                </CollapsibleTrigger>
-              ) : (
+              {/* DIA Bağlantı Durumu - her zaman görünür, tıklanınca detaylar açılır */}
+              {collapsed ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button
-                      onClick={() => setControlsOpen(!controlsOpen)}
-                      className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-muted/50 mb-2"
-                    >
-                      <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", controlsOpen && "rotate-180")} />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {controlsOpen ? 'Kontrolleri Gizle' : 'Kontrolleri Göster'}
-                  </TooltipContent>
-                </Tooltip>
-              )}
-              
-              <CollapsibleContent>
-                {/* DIA Bağlantı Durumu */}
-                {collapsed ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
+                    <CollapsibleTrigger className="w-full">
                       <div className={cn(
-                        "flex items-center justify-center p-2 rounded-lg mb-2",
+                        "flex items-center justify-center p-2 rounded-lg cursor-pointer hover:bg-muted/50",
                         isDiaConnected ? "bg-success/10" : "bg-muted"
                       )}>
                         <Plug className={cn("w-4 h-4", isDiaConnected ? "text-success" : "text-muted-foreground")} />
                       </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      {isDiaConnected ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
+                    </CollapsibleTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    {isDiaConnected ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <CollapsibleTrigger className="w-full">
                   <div className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-lg mb-2",
+                    "flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer hover:bg-muted/50",
                     isDiaConnected ? "bg-success/10" : "bg-muted"
                   )}>
                     <Plug className={cn("w-4 h-4", isDiaConnected ? "text-success" : "text-muted-foreground")} />
                     <span className={cn("text-xs font-medium", isDiaConnected ? "text-success" : "text-muted-foreground")}>
                       {isDiaConnected ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
                     </span>
+                    <ChevronDown className={cn("h-3 w-3 text-muted-foreground transition-transform ml-auto", controlsOpen && "rotate-180")} />
                   </div>
-                )}
-                
-                {/* Sorgu İstatistikleri */}
-                {!collapsed && <DiaQueryStats />}
+                </CollapsibleTrigger>
+              )}
+              
+              <CollapsibleContent>
+                {/* Sorgu İstatistikleri - sadece açıldığında */}
+                {!collapsed && <div className="mt-2"><DiaQueryStats /></div>}
               </CollapsibleContent>
             </div>
           </Collapsible>
