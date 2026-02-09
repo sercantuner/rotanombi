@@ -34,10 +34,10 @@ function FormInput({ icon: Icon, ...props }: { icon: React.ElementType } & React
 function AdminFormInput({ icon: Icon, ...props }: { icon: React.ElementType } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <div className="relative">
-      <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+      <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
       <input
         {...props}
-        className="w-full h-12 pl-11 pr-4 rounded-xl border border-slate-600 bg-slate-700/50 text-white placeholder:text-slate-500 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all"
+        className="w-full h-12 pl-11 pr-4 rounded-xl border border-border bg-secondary/50 text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
       />
     </div>
   );
@@ -79,24 +79,24 @@ function SuperAdminLogin() {
   };
 
   return (
-    <div className="min-h-screen flex bg-slate-900">
+    <div className="min-h-screen flex bg-background">
       {/* Left panel – corporate branding */}
-      <div className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-12 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-12 overflow-hidden" style={{ background: 'linear-gradient(135deg, hsl(203 60% 12%) 0%, hsl(203 60% 16%) 50%, hsl(203 60% 12%) 100%)' }}>
         {/* Subtle grid pattern */}
         <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
 
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-16">
-            <div className="w-10 h-10 rounded-lg bg-sky-500/20 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-sky-400" />
+            <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-primary" />
             </div>
-            <span className="text-white/80 text-sm font-medium tracking-wide uppercase">Yönetim Konsolu</span>
+            <span className="text-foreground/80 text-sm font-medium tracking-wide uppercase">Yönetim Konsolu</span>
           </div>
 
-          <h1 className="text-4xl font-bold text-white leading-tight mb-4">
+          <h1 className="text-4xl font-bold text-foreground leading-tight mb-4">
             Sistem Yönetim<br />Merkezi
           </h1>
-          <p className="text-slate-400 text-lg max-w-md">
+          <p className="text-muted-foreground text-lg max-w-md">
             RotanomBI platformunun merkezi yönetim paneline güvenli erişim sağlayın.
           </p>
         </div>
@@ -107,9 +107,9 @@ function SuperAdminLogin() {
             { icon: ShieldCheck, label: 'Şifrelenmiş Bağlantı' },
             { icon: Server, label: 'Güvenli Erişim' },
           ].map(({ icon: I, label }) => (
-            <div key={label} className="flex items-center gap-3 text-slate-500">
-              <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center border border-slate-700">
-                <I className="w-4 h-4 text-slate-400" />
+            <div key={label} className="flex items-center gap-3 text-muted-foreground">
+              <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center border border-border">
+                <I className="w-4 h-4 text-muted-foreground" />
               </div>
               <span className="text-sm">{label}</span>
             </div>
@@ -118,29 +118,29 @@ function SuperAdminLogin() {
       </div>
 
       {/* Right panel – form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 bg-slate-900 lg:bg-slate-850">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 bg-background">
         <div className="w-full max-w-md">
           {/* Mobile header */}
           <div className="lg:hidden flex items-center gap-3 mb-10">
-            <div className="w-10 h-10 rounded-lg bg-sky-500/20 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-sky-400" />
+            <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-primary" />
             </div>
-            <span className="text-white/80 text-sm font-medium tracking-wide uppercase">Yönetim Konsolu</span>
+            <span className="text-foreground/80 text-sm font-medium tracking-wide uppercase">Yönetim Konsolu</span>
           </div>
 
           <button
             onClick={() => navigate('/login')}
-            className="flex items-center gap-2 text-slate-500 hover:text-slate-300 transition-colors text-sm mb-8"
+            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors text-sm mb-8"
           >
             <ArrowLeft className="w-4 h-4" />
             Normal Giriş
           </button>
 
           <div className="mb-8">
-            <h2 className="text-2xl font-bold text-white mb-2">
+            <h2 className="text-2xl font-bold text-foreground mb-2">
               {forgotMode ? 'Şifre Sıfırlama' : 'Yönetici Girişi'}
             </h2>
-            <p className="text-slate-400 text-sm">
+            <p className="text-muted-foreground text-sm">
               {forgotMode
                 ? 'E-posta adresinizi girin, size sıfırlama bağlantısı gönderelim.'
                 : 'Yetkili sistem yöneticileri için güvenli giriş noktası'}
@@ -150,50 +150,50 @@ function SuperAdminLogin() {
           {forgotMode ? (
             <form onSubmit={handleReset} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">E-posta</label>
+                <label className="block text-sm font-medium text-foreground mb-2">E-posta</label>
                 <AdminFormInput icon={Mail} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="admin@example.com" required />
               </div>
-              {error && <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">{error}</div>}
-              {success && <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm">{success}</div>}
-              <button type="submit" disabled={isLoading} className="w-full h-12 rounded-xl bg-sky-600 text-white font-medium hover:bg-sky-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+              {error && <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-sm">{error}</div>}
+              {success && <div className="p-3 rounded-xl bg-success/10 border border-success/30 text-success text-sm">{success}</div>}
+              <button type="submit" disabled={isLoading} className="w-full h-12 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
                 {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <KeyRound className="w-5 h-5" />}
                 {isLoading ? 'Gönderiliyor...' : 'Sıfırlama Bağlantısı Gönder'}
               </button>
-              <button type="button" onClick={() => { setForgotMode(false); setError(''); setSuccess(''); }} className="w-full text-sm text-slate-400 hover:text-white transition-colors">
+              <button type="button" onClick={() => { setForgotMode(false); setError(''); setSuccess(''); }} className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors">
                 ← Girişe Dön
               </button>
             </form>
           ) : (
             <form onSubmit={handleLogin} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">E-posta</label>
+                <label className="block text-sm font-medium text-foreground mb-2">E-posta</label>
                 <AdminFormInput icon={Mail} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="admin@example.com" required />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Şifre</label>
+                <label className="block text-sm font-medium text-foreground mb-2">Şifre</label>
                 <AdminFormInput icon={Lock} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
               </div>
 
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox checked={rememberMe} onCheckedChange={(v) => setRememberMe(!!v)} className="border-slate-600 data-[state=checked]:bg-sky-600 data-[state=checked]:border-sky-600" />
-                  <span className="text-sm text-slate-400">Beni hatırla</span>
+                  <Checkbox checked={rememberMe} onCheckedChange={(v) => setRememberMe(!!v)} className="border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary" />
+                  <span className="text-sm text-muted-foreground">Beni hatırla</span>
                 </label>
-                <button type="button" onClick={() => { setForgotMode(true); setError(''); }} className="text-sm text-sky-400 hover:text-sky-300 transition-colors">
+                <button type="button" onClick={() => { setForgotMode(true); setError(''); }} className="text-sm text-primary hover:text-primary/80 transition-colors">
                   Şifremi unuttum
                 </button>
               </div>
 
-              {error && <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">{error}</div>}
+              {error && <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-sm">{error}</div>}
 
-              <button type="submit" disabled={isLoading} className="w-full h-12 rounded-xl bg-sky-600 text-white font-medium hover:bg-sky-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+              <button type="submit" disabled={isLoading} className="w-full h-12 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
                 {isLoading ? <><Loader2 className="w-5 h-5 animate-spin" />Doğrulanıyor...</> : <><Shield className="w-5 h-5" />Yönetici Olarak Giriş Yap</>}
               </button>
             </form>
           )}
 
-          <div className="mt-8 p-3 rounded-xl bg-slate-800/50 border border-slate-700">
-            <p className="text-xs text-slate-500 text-center">
+          <div className="mt-8 p-3 rounded-xl bg-secondary/50 border border-border">
+            <p className="text-xs text-muted-foreground text-center">
               Bu giriş noktası izlenmektedir. Yetkisiz erişim girişimleri kayıt altına alınır.
             </p>
           </div>
@@ -202,7 +202,7 @@ function SuperAdminLogin() {
             <a href="https://www.rotayazilim.net" target="_blank" rel="noopener noreferrer" className="opacity-40 hover:opacity-70 transition-opacity">
               <img src={rotaLogoLight} alt="Rota Yazılım" className="h-5 w-auto" />
             </a>
-            <p className="text-center text-xs text-slate-500">© 2026 Rota Yazılım • RotanomBI v3.0</p>
+            <p className="text-center text-xs text-muted-foreground">© 2026 Rota Yazılım • RotanomBI v3.0</p>
           </div>
         </div>
       </div>
