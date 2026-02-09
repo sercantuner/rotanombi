@@ -3,6 +3,7 @@
 // GLOBAL CACHE: Bir veri kaynağı bir kez sorgulandıktan sonra tüm sayfalarda kullanılır
 // LAZY LOADING: Sayfa geçişlerinde sadece eksik sorgular tamamlanır
 // _system modülü: Takvim gibi lokal üretilen veri kaynakları desteklenir
+// SCOPE-AWARE: Cache key'ler sunucu:firma:dönem bazlı ayrılarak dönem karışması önlenir
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,6 +13,7 @@ import { useDataSources, DataSource } from './useDataSources';
 import { queuedDiaFetch } from '@/lib/diaRequestQueue';
 import { toast } from 'sonner';
 import { getCachedCalendarData } from '@/lib/calendarDataGenerator';
+import { DataScope, findBestPeriodForSource } from '@/lib/dataScopingUtils';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -101,18 +103,31 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
   }, [setDataSourceData, markDataSourceFetched]);
 
   // DB-FIRST: Veritabanından veri çekme fonksiyonu
+  // KRİTİK: Her zaman donem_kodu ile filtreleme yapılır - dönem karışması önlenir
+  // Period-independent kaynaklar için findBestPeriodForSource ile en güncel dönem bulunur
   const loadDataSourceFromDatabase = useCallback(async (
     dataSource: DataSource
-  ): Promise<any[] | null> => {
+  ): Promise<{ data: any[] | null; resolvedDonem: number }> => {
     const { sunucuAdi, firmaKodu, donemKodu } = diaProfile;
     
     if (!sunucuAdi || !firmaKodu) {
       console.log(`[DataSourceLoader] DB-FIRST: No profile config, skipping DB check for ${dataSource.name}`);
-      return null;
+      return { data: null, resolvedDonem: 1 };
     }
 
     const effectiveDonem = parseInt(donemKodu || '1');
     const isPeriodIndependent = dataSource.is_period_independent === true;
+    
+    // Period-independent kaynaklar için en güncel dönemi bul
+    let resolvedDonem = effectiveDonem;
+    if (isPeriodIndependent) {
+      resolvedDonem = await findBestPeriodForSource(
+        dataSource.slug,
+        sunucuAdi,
+        firmaKodu,
+        effectiveDonem
+      );
+    }
 
     try {
       // Sayfalama ile tüm veriyi çek - Supabase varsayılan 1000 limit'i aşmak için
@@ -122,25 +137,20 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       let hasMore = true;
       
       while (hasMore) {
-        // Dönem bağımsız kaynaklar için donem_kodu filtresi uygulanmaz
-        let query = supabase
+        // KRİTİK: Her zaman donem_kodu filtresi uygula - dönem karışmasını önle
+        const { data, error } = await supabase
           .from('company_data_cache')
           .select('data')
           .eq('data_source_slug', dataSource.slug)
           .eq('sunucu_adi', sunucuAdi)
           .eq('firma_kodu', firmaKodu)
-          .eq('is_deleted', false);
-        
-        // Sadece dönem bağımlı kaynaklar için dönem filtresi uygula
-        if (!isPeriodIndependent) {
-          query = query.eq('donem_kodu', effectiveDonem);
-        }
-        
-        const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
+          .eq('donem_kodu', resolvedDonem) // Her zaman donem filtresi uygula
+          .eq('is_deleted', false)
+          .range(from, from + PAGE_SIZE - 1);
 
         if (error) {
           console.error(`[DataSourceLoader] DB-FIRST error for ${dataSource.name}:`, error);
-          return null;
+          return { data: null, resolvedDonem };
         }
 
         const rows = data || [];
@@ -154,15 +164,15 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       }
 
       if (allData.length > 0) {
-        console.log(`[DataSourceLoader] DB-FIRST HIT: ${dataSource.name} (${allData.length} kayıt from DB${isPeriodIndependent ? ', period-independent' : ''})`);
-        return allData;
+        console.log(`[DataSourceLoader] DB-FIRST HIT: ${dataSource.name} (${allData.length} kayıt, dönem: ${resolvedDonem}${isPeriodIndependent ? ' [period-independent]' : ''})`);
+        return { data: allData, resolvedDonem };
       }
 
-      console.log(`[DataSourceLoader] DB-FIRST MISS: ${dataSource.name} - no data in DB`);
-      return null;
+      console.log(`[DataSourceLoader] DB-FIRST MISS: ${dataSource.name} - no data in DB for dönem ${resolvedDonem}`);
+      return { data: null, resolvedDonem };
     } catch (err) {
       console.error(`[DataSourceLoader] DB-FIRST exception for ${dataSource.name}:`, err);
-      return null;
+      return { data: null, resolvedDonem };
     }
   }, [diaProfile]);
   const findUsedDataSources = useCallback(async (): Promise<string[]> => {
@@ -298,13 +308,19 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
 
     // 3. DB-FIRST: Veritabanından veri çek
     if (!forceRefresh) {
-      const dbData = await loadDataSourceFromDatabase(dataSource);
-      if (dbData && dbData.length > 0) {
+      const dbResult = await loadDataSourceFromDatabase(dataSource);
+      if (dbResult.data && dbResult.data.length > 0) {
+        // Scope ile cache'e kaydet (dönem karışmasını önle)
+        const scope: DataScope = {
+          sunucuAdi: diaProfile.sunucuAdi || '',
+          firmaKodu: diaProfile.firmaKodu || '',
+          donemKodu: dbResult.resolvedDonem,
+        };
         // Veritabanından gelen veriyi memory cache'e de kaydet
-        setDataSourceData(dataSource.id, dbData, DEFAULT_TTL);
-        markDataSourceFetched(dataSource.id);
+        setDataSourceData(dataSource.id, dbResult.data, DEFAULT_TTL, scope);
+        markDataSourceFetched(dataSource.id, scope);
         incrementCacheHit();
-        return dbData;
+        return dbResult.data;
       }
     }
 

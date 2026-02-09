@@ -5,6 +5,9 @@
 
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode, useRef, useEffect } from 'react';
 
+// DataScope import
+import { DataScope, buildDataSourceCacheKey, buildScopeKey } from '@/lib/dataScopingUtils';
+
 interface CacheEntry {
   data: any;
   timestamp: number;
@@ -27,17 +30,17 @@ interface DiaDataCacheContextType {
   setCachedData: (cacheKey: string, data: any, ttl?: number) => void;
   invalidateCache: (pattern?: string) => void;
   
-  // Veri kaynağı bazlı cache
-  getDataSourceData: (dataSourceId: string) => any[] | null;
-  getDataSourceDataWithStale: (dataSourceId: string) => { data: any[] | null; isStale: boolean };
-  setDataSourceData: (dataSourceId: string, data: any[], ttl?: number) => void;
+  // Veri kaynağı bazlı cache - SCOPE destekli
+  getDataSourceData: (dataSourceId: string, scope?: DataScope) => any[] | null;
+  getDataSourceDataWithStale: (dataSourceId: string, scope?: DataScope) => { data: any[] | null; isStale: boolean };
+  setDataSourceData: (dataSourceId: string, data: any[], ttl?: number, scope?: DataScope) => void;
   isDataSourceLoading: (dataSourceId: string) => boolean;
   setDataSourceLoading: (dataSourceId: string, loading: boolean) => void;
   
   // GLOBAL - Hangi veri kaynaklarının ZATEN sorgulandığını takip eder
   // Sayfa geçişlerinde aynı sorgu tekrar yapılmaz
-  isDataSourceFetched: (dataSourceId: string) => boolean;
-  markDataSourceFetched: (dataSourceId: string) => void;
+  isDataSourceFetched: (dataSourceId: string, scope?: DataScope) => boolean;
+  markDataSourceFetched: (dataSourceId: string, scope?: DataScope) => void;
   getFetchedDataSources: () => string[];
   clearFetchedRegistry: () => void; // Manuel yenileme için
   
@@ -278,10 +281,14 @@ export function DiaDataCacheProvider({ children, userId }: DiaDataCacheProviderP
     }, DEFAULT_TTL);
   }, [setCachedData]);
 
-  // Veri kaynağı bazlı cache metodları
+  // Veri kaynağı bazlı cache metodları - SCOPE destekli
   // FIX: TTL kontrolü güçlendirildi - tamamen expired veriyi döndürme
-  const getDataSourceData = useCallback((dataSourceId: string): any[] | null => {
-    const cacheKey = `datasource_${dataSourceId}`;
+  // scope parametresi ile cache key'ler sunucu:firma:dönem bazlı ayrılır
+  const getDataSourceData = useCallback((dataSourceId: string, scope?: DataScope): any[] | null => {
+    // Scope varsa scoped key kullan, yoksa eski uyumluluk için basit key
+    const cacheKey = scope 
+      ? buildDataSourceCacheKey(dataSourceId, scope)
+      : `datasource_${dataSourceId}`;
     const entry = cache.get(cacheKey);
     
     if (!entry) return null;
@@ -297,8 +304,10 @@ export function DiaDataCacheProvider({ children, userId }: DiaDataCacheProviderP
     return data && Array.isArray(data) ? data : null;
   }, [cache]);
 
-  const getDataSourceDataWithStale = useCallback((dataSourceId: string): { data: any[] | null; isStale: boolean } => {
-    const cacheKey = `datasource_${dataSourceId}`;
+  const getDataSourceDataWithStale = useCallback((dataSourceId: string, scope?: DataScope): { data: any[] | null; isStale: boolean } => {
+    const cacheKey = scope 
+      ? buildDataSourceCacheKey(dataSourceId, scope)
+      : `datasource_${dataSourceId}`;
     const { data, isStale } = getCachedDataWithStale(cacheKey);
     return { 
       data: data && Array.isArray(data) ? data : null, 
@@ -306,8 +315,10 @@ export function DiaDataCacheProvider({ children, userId }: DiaDataCacheProviderP
     };
   }, [getCachedDataWithStale]);
 
-  const setDataSourceData = useCallback((dataSourceId: string, data: any[], ttl: number = DEFAULT_TTL) => {
-    const cacheKey = `datasource_${dataSourceId}`;
+  const setDataSourceData = useCallback((dataSourceId: string, data: any[], ttl: number = DEFAULT_TTL, scope?: DataScope) => {
+    const cacheKey = scope 
+      ? buildDataSourceCacheKey(dataSourceId, scope)
+      : `datasource_${dataSourceId}`;
     setCachedData(cacheKey, data, ttl);
   }, [setCachedData]);
 
@@ -329,13 +340,16 @@ export function DiaDataCacheProvider({ children, userId }: DiaDataCacheProviderP
   }, []);
 
   // GLOBAL Fetched Registry - Hangi veri kaynakları bu oturumda sorgulandı?
-  const isDataSourceFetched = useCallback((dataSourceId: string): boolean => {
-    return fetchedDataSourcesRef.current.has(dataSourceId);
+  // Scope destekli: aynı kaynak farklı dönemlerde ayrı ayrı takip edilir
+  const isDataSourceFetched = useCallback((dataSourceId: string, scope?: DataScope): boolean => {
+    const key = scope ? `${dataSourceId}:${buildScopeKey(scope)}` : dataSourceId;
+    return fetchedDataSourcesRef.current.has(key);
   }, []);
 
-  const markDataSourceFetched = useCallback((dataSourceId: string) => {
-    fetchedDataSourcesRef.current.add(dataSourceId);
-    console.log(`[GlobalRegistry] Marked as fetched: ${dataSourceId} (total: ${fetchedDataSourcesRef.current.size})`);
+  const markDataSourceFetched = useCallback((dataSourceId: string, scope?: DataScope) => {
+    const key = scope ? `${dataSourceId}:${buildScopeKey(scope)}` : dataSourceId;
+    fetchedDataSourcesRef.current.add(key);
+    console.log(`[GlobalRegistry] Marked as fetched: ${key} (total: ${fetchedDataSourcesRef.current.size})`);
   }, []);
 
   const getFetchedDataSources = useCallback((): string[] => {
