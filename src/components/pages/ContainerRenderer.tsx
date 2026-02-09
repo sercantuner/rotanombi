@@ -1,6 +1,6 @@
 // Dinamik Konteyner Render Bileşeni
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useContainerWidgets } from '@/hooks/useUserPages';
 // NOT: useDataSourceLoader KALDIRILDI - her container için ayrı instance oluşturuyordu!
@@ -61,7 +61,7 @@ export function ContainerRenderer({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [widgetDetails, setWidgetDetails] = useState<Record<string, Widget>>({});
   const [localContainer, setLocalContainer] = useState(container);
-  const [widgetRawData, setWidgetRawData] = useState<Record<string, any[]>>({});
+  const widgetRawDataRef = useRef<Record<string, any[]>>({});
 
   const template = CONTAINER_TEMPLATES.find(t => t.id === container.container_type);
 
@@ -300,7 +300,7 @@ export function ContainerRenderer({
               widgetFilters={widgetFilters}
               onFiltersChange={(filters) => handleWidgetFilterChange(slotWidget.id, filters)}
               isWidgetEditMode={isWidgetEditMode}
-              onDataLoaded={(data) => setWidgetRawData(prev => ({ ...prev, [slotWidget.id]: data }))}
+              onDataLoaded={(data) => { widgetRawDataRef.current[slotWidget.id] = data; }}
             />
             
             {/* Hover kontrolleri - sağ üst */}
@@ -324,7 +324,7 @@ export function ContainerRenderer({
                 }, 0)}
                 widgetFilters={(widgetDetail.builder_config as any)?.widgetFilters}
                 widgetParameters={(widgetDetail.builder_config as any)?.widgetParameters}
-                widgetData={widgetRawData[slotWidget.id]}
+                widgetData={widgetRawDataRef.current[slotWidget.id]}
               />
               {/* Tarih filtresi - eğer widget'ta tarih filtresi aktifse */}
               {widgetDetail.builder_config?.dateFilter?.enabled && widgetDetail.builder_config?.dateFilter?.showInWidget && (

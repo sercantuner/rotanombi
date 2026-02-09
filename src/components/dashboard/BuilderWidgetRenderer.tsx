@@ -1,7 +1,7 @@
  // BuilderWidgetRenderer - Widget Builder ile oluşturulan widget'ları render eder
  // v4.0 - KPI, Custom Code, Recharts, Leaflet + Nivo (Sankey, Sunburst, Chord, Radar, Choropleth) desteği
 
-import React, { useState, useMemo, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import { WidgetBuilderConfig, AggregationType, DatePeriod } from '@/lib/widgetBuilderTypes';
 import { useDynamicWidgetData, DataStatusInfo } from '@/hooks/useDynamicWidgetData';
 import { useChartColorPalette } from '@/hooks/useChartColorPalette';
@@ -457,6 +457,7 @@ interface BuilderWidgetRendererProps {
   builderConfig: WidgetBuilderConfig;
   className?: string;
   widgetFilters?: WidgetLocalFilters;
+  onDataLoaded?: (data: any[]) => void;
 }
 
 export function BuilderWidgetRenderer({
@@ -466,6 +467,7 @@ export function BuilderWidgetRenderer({
   builderConfig,
   className = '',
   widgetFilters,
+  onDataLoaded,
 }: BuilderWidgetRendererProps) {
   // CSS izolasyonu - konteyner stillerinin widget'ı etkilememesi için
   const isolatedClassName = cn(className, 'isolate overflow-visible');
@@ -486,6 +488,18 @@ export function BuilderWidgetRenderer({
     });
   }
   
+  // rawData yüklendiğinde üst bileşene bildir (ref ile gereksiz çağrıları önle)
+  const lastDataLengthRef = useRef<number>(0);
+  const onDataLoadedRef = useRef(onDataLoaded);
+  onDataLoadedRef.current = onDataLoaded;
+  
+  useEffect(() => {
+    if (rawData && rawData.length > 0 && rawData.length !== lastDataLengthRef.current) {
+      lastDataLengthRef.current = rawData.length;
+      onDataLoadedRef.current?.(rawData);
+    }
+  }, [rawData]);
+
   // Widget bazında kullanıcı renk paleti
   const { colors: userColors } = useChartColorPalette({ widgetId });
 
