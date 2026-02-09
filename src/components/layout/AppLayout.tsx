@@ -28,9 +28,9 @@ export function AppLayout({ children }: AppLayoutProps) {
     );
   }
 
-  // Not authenticated - redirect to login
+  // Not authenticated - redirect to landing page
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to="/" state={{ from: location }} replace />;
   }
 
   // Mobil görünüm - Sheet sidebar
