@@ -19,7 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Plus, Trash2, GripVertical, Settings, X, Palette, Check, MessageSquarePlus, Calendar } from 'lucide-react';
+import { Plus, Trash2, GripVertical, Settings, X, Palette, Check, MessageSquarePlus, Calendar, Maximize2 } from 'lucide-react';
 import { WidgetFeedbackButton } from '@/components/dashboard/WidgetFeedbackButton';
 import { WidgetDateFilter, getDateRangeForPeriod } from '@/components/dashboard/WidgetDateFilter';
 import { DatePeriod } from '@/lib/widgetBuilderTypes';
@@ -30,6 +30,7 @@ import { KpiFilter } from '@/components/dashboard/KpiFilterModal';
 
 interface ContainerWidgetSettings {
   filters?: KpiFilter;
+  heightMultiplier?: 1 | 2 | 3;
 }
 
 interface ContainerRendererProps {
@@ -179,10 +180,12 @@ export function ContainerRenderer({
   // Widget filtre değişikliğini handle et
   const handleWidgetFilterChange = async (containerWidgetId: string, filters: KpiFilter) => {
     try {
+      const existingWidget = containerWidgets.find(w => w.id === containerWidgetId);
+      const existingSettings = (existingWidget?.settings as ContainerWidgetSettings) || {};
       const { error } = await supabase
         .from('container_widgets')
         .update({
-          settings: { filters } as any,
+          settings: { ...existingSettings, filters } as any,
           updated_at: new Date().toISOString()
         })
         .eq('id', containerWidgetId);
@@ -191,6 +194,28 @@ export function ContainerRenderer({
       refreshWidgets();
     } catch (error) {
       console.error('Error saving widget filters:', error);
+    }
+  };
+
+  // Widget yükseklik çarpanını değiştir
+  const handleHeightMultiplierChange = async (containerWidgetId: string, multiplier: 1 | 2 | 3) => {
+    try {
+      const existingWidget = containerWidgets.find(w => w.id === containerWidgetId);
+      const existingSettings = (existingWidget?.settings as ContainerWidgetSettings) || {};
+      const { error } = await supabase
+        .from('container_widgets')
+        .update({
+          settings: { ...existingSettings, heightMultiplier: multiplier } as any,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', containerWidgetId);
+
+      if (error) throw error;
+      refreshWidgets();
+      toast.success(`Yükseklik ${multiplier}x olarak ayarlandı`);
+    } catch (error) {
+      console.error('Error saving height multiplier:', error);
+      toast.error('Yükseklik ayarlanamadı');
     }
   };
 
@@ -253,10 +278,16 @@ export function ContainerRenderer({
         // Widget ayarlarını parse et
         const widgetSettings = slotWidget.settings as ContainerWidgetSettings | null;
         const widgetFilters = widgetSettings?.filters;
+        const heightMultiplier = widgetSettings?.heightMultiplier || 1;
+
+        // Yükseklik çarpanına göre min-height hesapla
+        const heightStyle: React.CSSProperties = heightMultiplier > 1 
+          ? { minHeight: `${heightMultiplier * 280}px` } 
+          : {};
 
         // Widget var, render et - CSS izolasyonu için isolate class, h-full eklendi
         return (
-          <div key={slotIndex} className="relative group h-full min-h-[80px] isolate">
+          <div key={slotIndex} className="relative group h-full min-h-[80px] isolate" style={heightStyle}>
             <DynamicWidgetRenderer
               widgetId={widgetDetail.widget_key}
               data={widgetData}
@@ -303,6 +334,45 @@ export function ContainerRenderer({
                 >
                   <X className="h-3 w-3" />
                 </Button>
+                {/* Yükseklik seçici */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="h-5 w-5 shadow-md"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Maximize2 className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-36">
+                    {([1, 2, 3] as const).map(m => (
+                      <DropdownMenuItem
+                        key={m}
+                        onClick={() => handleHeightMultiplierChange(slotWidget.id, m)}
+                        className="gap-2"
+                      >
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <div className="flex gap-0.5 items-end">
+                            {Array.from({ length: m }).map((_, i) => (
+                              <div
+                                key={i}
+                                className="w-2.5 rounded-sm bg-primary"
+                                style={{ height: `${8 + i * 4}px` }}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-xs">{m}x Yükseklik</span>
+                        </div>
+                        {heightMultiplier === m && (
+                          <Check className="w-3 h-3 text-primary" />
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                {/* Renk paleti seçici */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -438,10 +508,10 @@ export function ContainerRenderer({
             // Harita container'ları - max-h yok, daha büyük min-h (Leaflet için gerekli)
             (container.container_type === 'map_full' || 
              container.container_type === 'map_half') && '[&>*]:min-h-[400px]',
-            // Grafik container'ları için min ve max yükseklik (legend overflow önleme)
+            // Grafik container'ları için min yükseklik (max-h kaldırıldı - heightMultiplier ile çakışıyordu)
             (container.container_type === 'chart_full' || 
              container.container_type === 'chart_half' || 
-             container.container_type === 'chart_third') && '[&>*]:min-h-[280px] [&>*]:max-h-[400px]',
+             container.container_type === 'chart_third') && '[&>*]:min-h-[280px]',
             (container.container_type === 'info_cards_2' ||
              container.container_type === 'info_cards_3') && '[&>*]:min-h-[200px]'
           )}>
