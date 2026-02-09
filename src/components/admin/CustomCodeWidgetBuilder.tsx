@@ -438,7 +438,7 @@ const DynamicIcon = ({ iconName, className }: { iconName: string; className?: st
 // Varsayılan kod şablonu
 const getDefaultCodeTemplate = () => `// Widget bileşeni - data ve colors prop'u ile veri alır
 
-function Widget({ data, colors }) {
+function Widget({ data, colors, filters }) {
   if (!data || data.length === 0) {
     return React.createElement('div', 
       { className: 'flex items-center justify-center h-48 text-muted-foreground' },
@@ -473,8 +473,34 @@ function Widget({ data, colors }) {
   );
 }
 
+Widget.filters = [];
+Widget.parameters = [];
+
 return Widget;
 `;
+
+// Widget kodundan Widget.filters veya Widget.parameters parse et
+function parseWidgetMetaFromCode(code: string, metaKey: 'filters' | 'parameters'): any[] {
+  try {
+    // Widget.filters = [...]; veya Widget.parameters = [...]; pattern'ini bul
+    const regex = new RegExp(`Widget\\.${metaKey}\\s*=\\s*(\\[[\\s\\S]*?\\]);`, 'm');
+    const match = code.match(regex);
+    if (!match || !match[1]) return [];
+    
+    // Güvenli eval - sadece basit JSON-benzeri yapı
+    const jsonStr = match[1]
+      .replace(/'/g, '"')  // tek tırnak → çift tırnak
+      .replace(/(\w+)\s*:/g, '"$1":')  // key'leri quote'la
+      .replace(/,\s*}/g, '}')  // trailing comma temizle
+      .replace(/,\s*]/g, ']'); // trailing comma temizle
+    
+    const parsed = JSON.parse(jsonStr);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    console.warn(`[parseWidgetMeta] ${metaKey} parse edilemedi:`, e);
+    return [];
+  }
+}
 
 // Mock preview data - tutarlı görselleştirme için
 const getMockPreviewData = (type: string = 'generic') => {
@@ -1472,12 +1498,19 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
 
     const moduleValue = (selectedDataSource?.module || 'scf') as 'bcs' | 'fat' | 'gts' | 'scf' | 'sis' | 'stk';
     
+    // Widget kodundan Widget.filters ve Widget.parameters parse et
+    const parsedFilters = parseWidgetMetaFromCode(customCode, 'filters');
+    const parsedParams = parseWidgetMetaFromCode(customCode, 'parameters');
+
     const builderConfig: Record<string, any> = {
       customCode: customCode,
       visualization: {
         type: 'custom' as const,
         isCustomCode: true,
       },
+      // Widget tanımlı filtre/parametre yapısı (v2)
+      widgetFilters: parsedFilters,
+      widgetParameters: parsedParams,
       // Yeni alanlar
       diaModelLinks: diaModelLinks.length > 0 ? diaModelLinks : undefined,
       aiRequirements: aiRequirements.filter(r => r.isActive && !r.isDefault).map(r => r.id),

@@ -1205,10 +1205,87 @@ url: 'https://stamen-tiles.a.ssl.fastly.net/terrain/{z}/{x}/{y}.png'
 
 ═══════════════════════════════════════════════════════════════════════════════
 
+🎛️ WIDGET FİLTRE VE PARAMETRE TANIMLARI (ZORUNLU!)
+───────────────────────────────────────────────────────────────────────────────
+Her widget kodu, "return Widget;" satırından HEMEN ÖNCE iki özel alan tanımlamalıdır:
+
+1. Widget.filters: Veriyi DARALTIR (hangi kayıtlar gösterilsin)
+2. Widget.parameters: GÖRSELİ AYARLAR (kaç kayıt, sıralama, gösterim modu)
+
+ZORUNLU YAPI (return Widget; ÖNCESINDE):
+Widget.filters = [
+  { key: 'cariTipi', label: 'Kart Tipi', type: 'multi-select', options: [{value:'AL',label:'Alıcı'},{value:'ST',label:'Satıcı'},{value:'AS',label:'Al-Sat'}] },
+  { key: 'minBakiye', label: 'Min Bakiye', type: 'number', defaultValue: 0 }
+];
+
+Widget.parameters = [
+  { key: 'gosterimSayisi', label: 'Gösterim Sayısı', type: 'number', defaultValue: 10 },
+  { key: 'siralamaTuru', label: 'Sıralama', type: 'dropdown', options: [{value:'desc',label:'Azalan'},{value:'asc',label:'Artan'}], defaultValue: 'desc' }
+];
+
+return Widget;
+
+KULLANILABILIR TİPLER:
+  type: 'multi-select'  → Çoklu seçim (checkbox grubu) - options ZORUNLU
+  type: 'dropdown'      → Tek seçim (select) - options ZORUNLU
+  type: 'toggle'        → Açık/Kapalı (switch) - defaultValue: true/false
+  type: 'number'        → Sayı girişi (input) - min, max opsiyonel
+  type: 'text'          → Metin girişi (input)
+  type: 'range'         → Min-Max slider - min, max ZORUNLU
+
+WIDGET KODU İÇİNDE FİLTRE/PARAMETRE KULLANIMI:
+Widget "filters" prop'u üzerinden aktif değerleri alır:
+
+function Widget({ data, colors, filters }) {
+  // filters.cariTipi → ['AL', 'ST'] (multi-select değerleri)
+  // filters.minBakiye → 1000 (number değeri)
+  // filters.gosterimSayisi → 10 (parametre değeri)
+  // filters.siralamaTuru → 'desc' (dropdown değeri)
+  
+  // Veriyi filtrele (filters prop'undaki değerlere göre)
+  var filteredData = React.useMemo(function() {
+    var result = data || [];
+    
+    // Multi-select filtre örneği
+    if (filters.cariTipi && filters.cariTipi.length > 0) {
+      result = result.filter(function(item) {
+        return filters.cariTipi.indexOf(item.carikarttipi) !== -1;
+      });
+    }
+    
+    // Number filtre örneği
+    if (filters.minBakiye !== undefined && filters.minBakiye !== null) {
+      result = result.filter(function(item) {
+        return (parseFloat(item.toplambakiye) || 0) >= filters.minBakiye;
+      });
+    }
+    
+    return result;
+  }, [data, filters]);
+  
+  // Parametreleri uygula
+  var limit = filters.gosterimSayisi || 10;
+  var sortDir = filters.siralamaTuru || 'desc';
+  
+  var sortedData = filteredData.slice().sort(function(a, b) {
+    return sortDir === 'desc' ? b.value - a.value : a.value - b.value;
+  }).slice(0, limit);
+}
+
+KRİTİK KURALLAR:
+- Widget.filters ve Widget.parameters HER widget'ta tanımlanmalı (boş dizi olabilir)
+- Eğer widget'ın filtresi/parametresi yoksa boş dizi kullan: Widget.filters = []; Widget.parameters = [];
+- Filtre key'leri widget kodu içinde filters.KEY şeklinde erişilebilir
+- Widget kodu bu değerlere göre veriyi filtrelemeli ve görselleştirmeli
+- Varsayılan değerler (defaultValue) widget ilk açıldığında kullanılır
+
+═══════════════════════════════════════════════════════════════════════════════
+
 ⚠️ KRİTİK UYARI - KODU TAMAMLA!
 ───────────────────────────────────────────────────────────────────────────────
 - Kodu MUTLAKA tamamla, ASLA yarıda bırakma!
 - Son satır HER ZAMAN "return Widget;" olmalıdır
+- Widget.filters ve Widget.parameters "return Widget;" ÖNCESINDE tanımlanmalı
 - Eksik parantez, süslü parantez bırakma
 - Tüm fonksiyonları kapat
 

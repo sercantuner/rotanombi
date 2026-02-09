@@ -316,13 +316,37 @@ export interface TableConfig {
   compactMode?: boolean;
 }
 
-// Widget için kullanılabilir filtreler
+// Widget için kullanılabilir filtreler (eski yapı - legacy)
 export interface WidgetFilterConfig {
   field: string;         // DIA alan adı
   label: string;         // UI etiketi
   type: 'toggle' | 'multi-select' | 'dropdown' | 'range' | 'date-range';
   options?: { value: any; label: string }[];
   defaultValue?: any;
+}
+
+// ============= DİNAMİK FİLTRE/PARAMETRE TANIMLARI (v2) =============
+
+// Widget kodunda tanımlanan filtre tanımı
+export interface WidgetFilterDef {
+  key: string;
+  label: string;
+  type: 'multi-select' | 'dropdown' | 'toggle' | 'number' | 'text' | 'date-range' | 'range';
+  options?: { value: any; label: string }[];
+  defaultValue?: any;
+  min?: number;  // range/number için
+  max?: number;
+}
+
+// Widget kodunda tanımlanan parametre tanımı
+export interface WidgetParamDef {
+  key: string;
+  label: string;
+  type: 'dropdown' | 'toggle' | 'number' | 'text' | 'range';
+  options?: { value: any; label: string }[];
+  defaultValue?: any;
+  min?: number;
+  max?: number;
 }
 
 // Özel grafik yapılandırması
@@ -413,7 +437,9 @@ export interface WidgetBuilderConfig {
     specialChart?: SpecialChartConfig; // Özel grafik yapılandırması
   };
   
-  availableFilters?: WidgetFilterConfig[]; // Widget için tanımlı filtreler
+  availableFilters?: WidgetFilterConfig[]; // Widget için tanımlı filtreler (legacy)
+  widgetFilters?: WidgetFilterDef[];      // Widget kodunda tanımlı filtreler (v2)
+  widgetParameters?: WidgetParamDef[];    // Widget kodunda tanımlı parametreler (v2)
   refreshInterval?: number; // dakika
   // Raw mode için
   rawMode?: boolean;
