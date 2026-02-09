@@ -61,6 +61,8 @@ export function ContainerRenderer({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [widgetDetails, setWidgetDetails] = useState<Record<string, Widget>>({});
   const [localContainer, setLocalContainer] = useState(container);
+  // Widget ham verisi - filtre opsiyonlarını doldurmak için
+  const [widgetRawDataMap, setWidgetRawDataMap] = useState<Record<number, any[]>>({});
 
   const template = CONTAINER_TEMPLATES.find(t => t.id === container.container_type);
 
@@ -299,6 +301,7 @@ export function ContainerRenderer({
               widgetFilters={widgetFilters}
               onFiltersChange={(filters) => handleWidgetFilterChange(slotWidget.id, filters)}
               isWidgetEditMode={isWidgetEditMode}
+              onDataLoaded={(data) => setWidgetRawDataMap(prev => ({ ...prev, [slotIndex]: data }))}
             />
             
             {/* Hover kontrolleri - sağ üst */}
@@ -322,6 +325,7 @@ export function ContainerRenderer({
                 }, 0)}
                 widgetFilters={(widgetDetail.builder_config as any)?.widgetFilters}
                 widgetParameters={(widgetDetail.builder_config as any)?.widgetParameters}
+                widgetData={widgetRawDataMap[slotIndex]}
               />
               {/* Tarih filtresi - eğer widget'ta tarih filtresi aktifse */}
               {widgetDetail.builder_config?.dateFilter?.enabled && widgetDetail.builder_config?.dateFilter?.showInWidget && (
