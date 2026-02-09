@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useTheme } from '@/hooks/useTheme';
 import diaDevices from '@/assets/dia-devices.svg';
-import biConcept from '@/assets/bi-concept.png';
+import biConcept from '@/assets/bi-concept.svg';
 import diaLogoDark from '@/assets/dia-logo-dark.svg';
 import diaLogoLight from '@/assets/dia-logo-light.svg';
 
@@ -111,38 +111,82 @@ export default function HeroSection() {
           </Button>
         </motion.div>
 
-        {/* Device mockup + BI concept side by side */}
+        {/* Device mockup + BI concept with background lines */}
         <motion.div
           initial={{ opacity: 0, y: 60, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.8, delay: 0.4, ease: 'easeOut' }}
-          className="mt-16 flex flex-col lg:flex-row items-center justify-center gap-8"
+          className="mt-16 relative"
         >
-          {/* Device mockup - smaller */}
-          <div className="w-full lg:w-1/2 max-w-lg">
-            <img
-              src={diaDevices}
-              alt="DIA ERP - Telefon, Tablet ve Bilgisayarda"
-              className="w-full h-auto drop-shadow-lg"
-              loading="lazy"
-              style={{ background: 'transparent' }}
+          {/* Diagonal + curved lines behind images */}
+          <div className="absolute inset-0 -z-10 overflow-hidden">
+            {/* Diagonal lines */}
+            <motion.div
+              initial={{ opacity: 0, x: 150 }}
+              animate={{ opacity: 0.2, x: 0 }}
+              transition={{ duration: 1, delay: 0.5, ease: 'easeOut' }}
+              className="absolute top-[5%] -right-10 w-[120%] h-[2px] bg-gradient-to-l from-primary/50 via-primary/20 to-transparent rotate-[-6deg]"
             />
+            <motion.div
+              initial={{ opacity: 0, x: 200 }}
+              animate={{ opacity: 0.15, x: 0 }}
+              transition={{ duration: 1.2, delay: 0.6, ease: 'easeOut' }}
+              className="absolute top-[30%] -right-16 w-[125%] h-[1px] bg-gradient-to-l from-accent/40 via-accent/15 to-transparent rotate-[-10deg]"
+            />
+            <motion.div
+              initial={{ opacity: 0, x: 180 }}
+              animate={{ opacity: 0.18, x: 0 }}
+              transition={{ duration: 1.4, delay: 0.7, ease: 'easeOut' }}
+              className="absolute top-[55%] -right-8 w-[115%] h-[2px] bg-gradient-to-l from-primary/30 via-primary/10 to-transparent rotate-[-4deg]"
+            />
+            <motion.div
+              initial={{ opacity: 0, x: 250 }}
+              animate={{ opacity: 0.12, x: 0 }}
+              transition={{ duration: 1.6, delay: 0.8, ease: 'easeOut' }}
+              className="absolute top-[75%] -right-20 w-[130%] h-[1px] bg-gradient-to-l from-accent/30 via-primary/15 to-transparent rotate-[-8deg]"
+            />
+            {/* Curved SVG paths */}
+            <motion.svg
+              initial={{ opacity: 0, x: 80 }}
+              animate={{ opacity: 0.12, x: 0 }}
+              transition={{ duration: 1.3, delay: 0.6 }}
+              className="absolute inset-0 w-full h-full"
+              viewBox="0 0 1000 400"
+              preserveAspectRatio="none"
+            >
+              <path d="M1000,60 Q700,120 500,50 T0,150" fill="none" stroke="hsl(var(--primary))" strokeWidth="1.5" opacity="0.35" />
+              <path d="M1000,180 Q650,140 400,220 T0,280" fill="none" stroke="hsl(var(--accent))" strokeWidth="1" opacity="0.25" />
+              <path d="M1000,320 Q750,280 450,350 T0,380" fill="none" stroke="hsl(var(--primary))" strokeWidth="0.8" opacity="0.2" />
+            </motion.svg>
           </div>
 
-          {/* BI concept image */}
-          <motion.div
-            initial={{ opacity: 0, x: 40 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.7, delay: 0.6, ease: 'easeOut' }}
-            className="w-full lg:w-1/2 max-w-md"
-          >
-            <img
-              src={biConcept}
-              alt="İş Zekası Dashboard - Her yerden erişilebilir raporlama"
-              className="w-full h-auto rounded-xl shadow-xl"
-              loading="lazy"
-            />
-          </motion.div>
+          <div className="flex flex-col lg:flex-row items-center justify-center gap-8">
+            {/* Device mockup */}
+            <div className="w-full lg:w-1/2 max-w-lg">
+              <img
+                src={diaDevices}
+                alt="DIA ERP - Telefon, Tablet ve Bilgisayarda"
+                className="w-full h-auto drop-shadow-lg"
+                loading="lazy"
+                style={{ background: 'transparent' }}
+              />
+            </div>
+
+            {/* BI concept image */}
+            <motion.div
+              initial={{ opacity: 0, x: 40 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.7, delay: 0.6, ease: 'easeOut' }}
+              className="w-full lg:w-1/2 max-w-md"
+            >
+              <img
+                src={biConcept}
+                alt="İş Zekası Dashboard - Her yerden erişilebilir raporlama"
+                className="w-full h-auto rounded-xl shadow-xl"
+                loading="lazy"
+              />
+            </motion.div>
+          </div>
         </motion.div>
       </div>
     </section>
