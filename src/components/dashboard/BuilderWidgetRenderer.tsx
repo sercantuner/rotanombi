@@ -458,6 +458,7 @@ interface BuilderWidgetRendererProps {
   className?: string;
   widgetFilters?: WidgetLocalFilters;
   onDataLoaded?: (data: any[]) => void;
+  onUnfilteredDataLoaded?: (data: any[]) => void;
 }
 
 export function BuilderWidgetRenderer({
@@ -468,12 +469,13 @@ export function BuilderWidgetRenderer({
   className = '',
   widgetFilters,
   onDataLoaded,
+  onUnfilteredDataLoaded,
 }: BuilderWidgetRendererProps) {
   // CSS izolasyonu - konteyner stillerinin widget'ı etkilememesi için
   const isolatedClassName = cn(className, 'isolate overflow-visible');
   
   // Veri çekme - widget-bazlı filtreler ile
-  const { data, rawData, multiQueryData, isLoading, error, refetch, dataStatus } = useDynamicWidgetData(builderConfig, widgetFilters);
+  const { data, rawData, unfilteredData, multiQueryData, isLoading, error, refetch, dataStatus } = useDynamicWidgetData(builderConfig, widgetFilters);
   
   // DEBUG: Widget veri durumu - SADECE development modunda
   if (process.env.NODE_ENV === 'development') {
@@ -492,6 +494,8 @@ export function BuilderWidgetRenderer({
   const lastDataLengthRef = useRef<number>(0);
   const onDataLoadedRef = useRef(onDataLoaded);
   onDataLoadedRef.current = onDataLoaded;
+  const onUnfilteredDataLoadedRef = useRef(onUnfilteredDataLoaded);
+  onUnfilteredDataLoadedRef.current = onUnfilteredDataLoaded;
   
   useEffect(() => {
     if (rawData && rawData.length > 0 && rawData.length !== lastDataLengthRef.current) {
@@ -499,6 +503,15 @@ export function BuilderWidgetRenderer({
       onDataLoadedRef.current?.(rawData);
     }
   }, [rawData]);
+
+  // Filtrelenmemiş veriyi üst bileşene bildir (filtre seçenekleri için)
+  const lastUnfilteredLengthRef = useRef<number>(0);
+  useEffect(() => {
+    if (unfilteredData && unfilteredData.length > 0 && unfilteredData.length !== lastUnfilteredLengthRef.current) {
+      lastUnfilteredLengthRef.current = unfilteredData.length;
+      onUnfilteredDataLoadedRef.current?.(unfilteredData);
+    }
+  }, [unfilteredData]);
 
   // Widget bazında kullanıcı renk paleti
   const { colors: userColors } = useChartColorPalette({ widgetId });
