@@ -255,9 +255,9 @@ export function Sidebar({
                 </TooltipContent>
               </Tooltip>
             ) : (
-              <>
+              <DiaQueryStats customTrigger={
                 <div className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-lg mb-2",
+                  "flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors",
                   isDiaConnected ? "bg-success/10" : "bg-muted"
                 )}>
                   <Plug className={cn("w-4 h-4", isDiaConnected ? "text-success" : "text-muted-foreground")} />
@@ -265,8 +265,7 @@ export function Sidebar({
                     {isDiaConnected ? 'DIA Bağlı' : 'DIA Bağlı Değil'}
                   </span>
                 </div>
-                <DiaQueryStats />
-              </>
+              } />
             )}
           </div>
         )}
