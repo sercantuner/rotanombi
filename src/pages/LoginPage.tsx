@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useTheme } from '@/hooks/useTheme';
 import { Mail, Lock, Loader2, UserPlus, Crown, ArrowLeft, Shield } from 'lucide-react';
 import rotanombiLogo from '@/assets/rotanombi-logo.png';
+import rotanombiLogoDark from '@/assets/rotanombi-logo-dark.svg';
 import rotaLogoDark from '@/assets/rota-logo-dark.svg';
+import rotaLogoLight from '@/assets/rota-logo-light.svg';
 import loginBg from '@/assets/login-bg.jpg';
 
 export function LoginPage() {
@@ -11,7 +14,12 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const { theme } = useTheme();
   
+  const isDark = theme === 'dark';
+  const appLogo = isDark ? rotanombiLogoDark : rotanombiLogo;
+  const rotaLogo = isDark ? rotaLogoLight : rotaLogoDark;
+
   // Super Admin modu kontrolü
   const isSuperAdminMode = searchParams.get('mode') === 'super-admin';
   
@@ -51,7 +59,6 @@ export function LoginPage() {
       if (!result.success) {
         setError(result.error || 'Giriş başarısız');
       } else {
-        // Successful login - navigate to intended page
         const from = isSuperAdminMode ? '/super-admin-panel' : (location.state?.from?.pathname || '/dashboard');
         navigate(from, { replace: true });
       }
@@ -80,7 +87,6 @@ export function LoginPage() {
 
           {/* Super Admin Card */}
           <div className="bg-slate-800/50 backdrop-blur-xl border border-amber-500/20 rounded-2xl p-8 shadow-2xl">
-            {/* Header with badge */}
             <div className="text-center mb-8">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-amber-500 to-amber-600 mb-4 shadow-lg shadow-amber-500/25">
                 <Shield className="w-8 h-8 text-white" />
@@ -92,21 +98,13 @@ export function LoginPage() {
                 </span>
                 <Crown className="w-5 h-5 text-amber-500" />
               </div>
-              <h1 className="text-2xl font-bold text-white mb-2">
-                Yönetici Girişi
-              </h1>
-              <p className="text-slate-400 text-sm">
-                Bu alan yetkili sistem yöneticileri içindir
-              </p>
+              <h1 className="text-2xl font-bold text-white mb-2">Yönetici Girişi</h1>
+              <p className="text-slate-400 text-sm">Bu alan yetkili sistem yöneticileri içindir</p>
             </div>
 
-            {/* Login Form */}
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Email */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  E-posta
-                </label>
+                <label className="block text-sm font-medium text-slate-300 mb-2">E-posta</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
                   <input
@@ -120,11 +118,8 @@ export function LoginPage() {
                 </div>
               </div>
 
-              {/* Password */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Şifre
-                </label>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Şifre</label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
                   <input
@@ -139,14 +134,12 @@ export function LoginPage() {
                 </div>
               </div>
 
-              {/* Error Message */}
               {error && (
                 <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
                   {error}
                 </div>
               )}
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={isLoading}
@@ -166,7 +159,6 @@ export function LoginPage() {
               </button>
             </form>
 
-            {/* Security Notice */}
             <div className="mt-6 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
               <p className="text-xs text-amber-400/80 text-center">
                 🔒 Bu giriş noktası izlenmektedir. Yetkisiz erişim girişimleri kayıt altına alınır.
@@ -174,30 +166,18 @@ export function LoginPage() {
             </div>
           </div>
 
-          {/* Footer */}
           <div className="flex flex-col items-center gap-3 mt-8">
-            <a 
-              href="https://www.rotayazilim.net" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="opacity-40 hover:opacity-70 transition-opacity"
-            >
-              <img 
-                src={rotaLogoDark} 
-                alt="Rota Yazılım" 
-                className="h-5 w-auto invert"
-              />
+            <a href="https://www.rotayazilim.net" target="_blank" rel="noopener noreferrer" className="opacity-40 hover:opacity-70 transition-opacity">
+              <img src={rotaLogoLight} alt="Rota Yazılım" className="h-5 w-auto" />
             </a>
-            <p className="text-center text-xs text-slate-500">
-               © 2026 Rota Yazılım • RotanomBI v3.0
-            </p>
+            <p className="text-center text-xs text-slate-500">© 2026 Rota Yazılım • RotanomBI v3.0</p>
           </div>
         </div>
       </div>
     );
   }
 
-  // Normal login sayfası
+  // Normal login sayfası - tema duyarlı
   return (
     <div className="min-h-screen flex">
       {/* Sol taraf - BI Görseli */}
@@ -207,41 +187,31 @@ export function LoginPage() {
           alt="Business Intelligence" 
           className="absolute inset-0 w-full h-full object-cover"
         />
-        {/* Overlay gradient */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent" />
         
-        {/* Sol alt köşede marka */}
         <div className="absolute bottom-8 left-8 z-10">
-          <img 
-            src={rotanombiLogo} 
-            alt="RotanomBI" 
-            className="h-10 w-auto mb-3"
-          />
-          <p className="text-slate-600 text-sm font-medium">
+          <img src={appLogo} alt="RotanomBI" className="h-10 w-auto mb-3" />
+          <p className="text-slate-600 dark:text-slate-300 text-sm font-medium">
             İş Zekası & Rapor Portalı
           </p>
         </div>
       </div>
 
       {/* Sağ taraf - Login Form */}
-      <div className="w-full lg:w-2/5 flex items-center justify-center p-6 bg-slate-50">
+      <div className="w-full lg:w-2/5 flex items-center justify-center p-6 bg-background">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="text-center mb-8 lg:hidden">
-            <img 
-              src={rotanombiLogo} 
-              alt="RotanomBI" 
-              className="h-10 w-auto mx-auto mb-2"
-            />
-            <p className="text-slate-500 text-sm">İş Zekası Rapor Portalı</p>
+            <img src={appLogo} alt="RotanomBI" className="h-10 w-auto mx-auto mb-2" />
+            <p className="text-muted-foreground text-sm">İş Zekası Rapor Portalı</p>
           </div>
 
           {/* Form başlığı */}
           <div className="mb-8">
-            <h1 className="text-2xl font-bold text-slate-800 mb-2">
+            <h1 className="text-2xl font-bold text-foreground mb-2">
               {isRegisterMode ? 'Hesap Oluşturun' : 'Hoş Geldiniz'}
             </h1>
-            <p className="text-slate-500">
+            <p className="text-muted-foreground">
               {isRegisterMode 
                 ? 'Yeni hesabınızı oluşturmak için bilgilerinizi girin' 
                 : 'Devam etmek için hesabınıza giriş yapın'}
@@ -253,16 +223,14 @@ export function LoginPage() {
             {/* Display Name (only for register) */}
             {isRegisterMode && (
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Ad Soyad
-                </label>
+                <label className="block text-sm font-medium text-foreground mb-2">Ad Soyad</label>
                 <div className="relative">
-                  <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <input
                     type="text"
                     value={formData.displayName}
                     onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-                    className="w-full h-12 pl-11 pr-4 rounded-xl border border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                    className="w-full h-12 pl-11 pr-4 rounded-xl border border-border bg-card text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                     placeholder="Ad Soyad"
                   />
                 </div>
@@ -271,16 +239,14 @@ export function LoginPage() {
 
             {/* Email */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                E-posta
-              </label>
+              <label className="block text-sm font-medium text-foreground mb-2">E-posta</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full h-12 pl-11 pr-4 rounded-xl border border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  className="w-full h-12 pl-11 pr-4 rounded-xl border border-border bg-card text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                   placeholder="email@example.com"
                   required
                 />
@@ -289,16 +255,14 @@ export function LoginPage() {
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Şifre
-              </label>
+              <label className="block text-sm font-medium text-foreground mb-2">Şifre</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <input
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full h-12 pl-11 pr-4 rounded-xl border border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  className="w-full h-12 pl-11 pr-4 rounded-xl border border-border bg-card text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                   placeholder="••••••••"
                   required
                   minLength={6}
@@ -308,14 +272,14 @@ export function LoginPage() {
 
             {/* Error Message */}
             {error && (
-              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm">
+              <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-sm">
                 {error}
               </div>
             )}
 
             {/* Success Message */}
             {success && (
-              <div className="p-3 rounded-xl bg-green-50 border border-green-200 text-green-600 text-sm">
+              <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400 text-sm">
                 {success}
               </div>
             )}
@@ -324,7 +288,7 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full h-12 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 focus:ring-2 focus:ring-primary/20 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+              className="w-full h-12 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 focus:ring-2 focus:ring-primary/20 focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
             >
               {isLoading ? (
                 <>
@@ -354,11 +318,11 @@ export function LoginPage() {
             </button>
             
             {/* Super Admin Login Hint */}
-            <div className="pt-2 border-t border-slate-200">
+            <div className="pt-2 border-t border-border">
               <button
                 type="button"
                 onClick={() => navigate('/login?mode=super-admin')}
-                className="text-xs text-slate-400 hover:text-amber-600 transition-colors flex items-center justify-center gap-1 mx-auto"
+                className="text-xs text-muted-foreground hover:text-amber-600 transition-colors flex items-center justify-center gap-1 mx-auto"
               >
                 <Crown className="w-3 h-3" />
                 Sistem Yöneticisi Girişi
@@ -367,20 +331,16 @@ export function LoginPage() {
           </div>
 
           {/* Footer */}
-          <div className="flex flex-col items-center gap-3 mt-12 pt-8 border-t border-slate-200">
+          <div className="flex flex-col items-center gap-3 mt-12 pt-8 border-t border-border">
             <a 
               href="https://www.rotayazilim.net" 
               target="_blank" 
               rel="noopener noreferrer"
               className="opacity-60 hover:opacity-100 transition-opacity"
             >
-              <img 
-                src={rotaLogoDark} 
-                alt="Rota Yazılım" 
-                className="h-5 w-auto"
-              />
+              <img src={rotaLogo} alt="Rota Yazılım" className="h-5 w-auto" />
             </a>
-            <p className="text-center text-xs text-slate-400">
+            <p className="text-center text-xs text-muted-foreground">
               © 2026 Rota Yazılım • RotanomBI v3.0
             </p>
           </div>
