@@ -1913,6 +1913,84 @@ serve(async (req) => {
 
     console.log("[AI Code Generator v2.4] Mod:", mode || 'generate', "- Metadata:", useMetadata ? 'aktif' : 'pasif', "- ExistingCode:", existingCode ? 'var' : 'yok', "- DataSourceInfo:", dataSourceInfo ? 'var' : 'yok');
 
+    // ═══ SUGGEST-PARAMS MODU ═══
+    if (mode === 'suggest-params' && existingCode) {
+      console.log("[AI Code Generator] suggest-params modu başlatıldı");
+      
+      const truncCode = existingCode.length > 6000 
+        ? existingCode.substring(0, 6000) + '\n// ... (kod devam ediyor)'
+        : existingCode;
+
+      const spMessages = [
+        {
+          role: "system",
+          content: `Sen bir React widget kod analiz uzmanısın. Widget kodunu analiz edip kullanıcının ekleyebileceği parametreleri önereceksin.
+
+ZORUNLU: Sadece suggest_parameters tool'unu çağır.
+
+Kurallar:
+1. formatCurrency varsa → gösterim birimi parametresi (bin/milyon/tam)
+2. KDV hesaplaması varsa → KDV dahil/hariç toggle
+3. Tarih gruplama varsa → periyot parametresi (günlük/haftalık/aylık)
+4. Sıralama varsa → sıralama yönü (artan/azalan)
+5. Limit/top N varsa → gösterilecek kayıt sayısı
+6. Birden fazla grafik tipi destekleniyorsa → grafik tipi parametresi
+
+Her öneri: key (camelCase, ASCII), label (Türkçe), type, options, defaultValue, reason`
+        },
+        { role: "user", content: "Bu widget kodunu analiz et ve parametreleri öner:\n\n" + truncCode }
+      ];
+
+      const spResult = await fetch("https://ai.lovable.dev/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + LOVABLE_API_KEY },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: spMessages,
+          max_tokens: 4000,
+          temperature: 0.3,
+          tools: [{ type: "function", function: {
+            name: "suggest_parameters",
+            description: "Widget kodu için parametre önerileri üret",
+            parameters: {
+              type: "object",
+              properties: {
+                suggestions: { type: "array", items: { type: "object", properties: {
+                  key: { type: "string" }, label: { type: "string" }, type: { type: "string", enum: ["dropdown","toggle","number","text","range"] },
+                  options: { type: "array", items: { type: "object", properties: { value: { type: "string" }, label: { type: "string" } }, required: ["value","label"] } },
+                  defaultValue: {}, reason: { type: "string" }
+                }, required: ["key","label","type","reason"] } }
+              },
+              required: ["suggestions"]
+            }
+          }}],
+          tool_choice: { type: "function", function: { name: "suggest_parameters" } }
+        }),
+      });
+
+      if (!spResult.ok) {
+        const errText = await spResult.text();
+        console.error("[AI Code Generator] suggest-params API hatası:", errText);
+        throw new Error("AI API hatası: " + spResult.status);
+      }
+
+      const spData = await spResult.json();
+      const spToolCalls = spData.choices?.[0]?.message?.tool_calls;
+      let suggestions: any[] = [];
+      if (spToolCalls && spToolCalls.length > 0) {
+        try {
+          const args = JSON.parse(spToolCalls[0].function.arguments);
+          suggestions = args.suggestions || [];
+          console.log("[AI Code Generator] suggest-params başarılı:", suggestions.length, "öneri");
+        } catch (e) { console.error("[AI Code Generator] suggest-params parse hatası:", e); }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, suggestions }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Mesajları oluştur
     let messages: Array<{ role: string; content: string }>;
     

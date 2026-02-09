@@ -2667,6 +2667,8 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
               parameters={parseWidgetMetaFromCode(customCode, 'parameters')}
               onFiltersChange={(newFilters) => setCustomCode(updateCodeMeta(customCode, 'filters', newFilters))}
               onParametersChange={(newParams) => setCustomCode(updateCodeMeta(customCode, 'parameters', newParams))}
+              customCode={customCode}
+              availableFields={getAllAvailableFields().map(f => f.key)}
             />
           )}
         </CardContent>
