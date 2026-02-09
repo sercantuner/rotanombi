@@ -1,74 +1,72 @@
 
 
-## Grafik Render Sorunlari Duzeltme Plani
+## Grafik Render Duzeltme - Geri Alma ve Absolute Position Yontemi
 
-### Temel Sorun
-Recharts `ResponsiveContainer` bileseni `height="100%"` ile calistiginda, ust konteynerlarin yalnizca `min-height` degil, acik bir `height` degerine sahip olmasi gerekir. Mevcut durumda flex layout zinciri kirilmakta ve grafik alani 0px yukseklikte render edilmektedir. Bu sorun Nivo, Map ve Recharts tabanli tum widget'lari etkiler.
+### Sorunun Kaynagi
 
-### Degisecek Dosyalar
+Son yapilan degisiklikler height zincirini kirdi. Ozellikle ContainerRenderer'daki `[&>*]:h-full` kuralinin kaldirilmasi, grid item'larin cocuk elemanlarina yukseklik aktarmasini durdurdu. Eklenen `style={{ height: '100%' }}` ve `style={{ minHeight: '200px' }}` ise flex layout icerisinde calismiyor cunku CSS'te `height: 100%` hesaplamasi icin ust elemanin "acik" (explicit) bir height degerine sahip olmasi gerekir - `flex-1` bunu saglamaz.
 
-**1. `src/components/dashboard/BuilderWidgetRenderer.tsx`**
+### Cozum
 
-Satir 799 civarindaki widget sarmalayici div'e acik yukseklik garantisi eklenmesi:
+Iki dosyada degisiklik yapilacak:
 
-Mevcut:
+**1. `src/components/pages/ContainerRenderer.tsx`**
+
+`[&>*]:h-full` kuralini geri ekle. Bu kural grid item'larin cocuklarinin tam yukseklikte olmasini saglar.
+
+Mevcut (satir 536):
 ```
-<div className="flex-1 h-full min-h-0 flex flex-col [&_.leaflet-container]:min-h-[350px]">
-```
-
-Yeni:
-```
-<div className="flex-1 min-h-[200px] flex flex-col [&_.leaflet-container]:min-h-[350px]" style={{ height: '100%' }}>
-```
-
-Ayrica `CardContent` (satir 791) de guncellenmeli:
-
-Mevcut:
-```
-<CardContent className="flex-1 flex flex-col min-h-0 p-4 pt-3">
+'grid gap-1 md:gap-2 items-stretch',
 ```
 
 Yeni:
 ```
+'grid gap-1 md:gap-2 items-stretch [&>*]:h-full',
+```
+
+`gridAutoRows` stil blogu kaldirilacak (gereksiz karmasiklik, `items-stretch` + `min-h` yeterli).
+
+**2. `src/components/dashboard/BuilderWidgetRenderer.tsx`**
+
+`CardContent` ve ic wrapper div icin "absolute positioning" yaklasimi uygulanacak. Bu, CSS yuzde yukseklik hesaplamasi sorununu tamamen ortadan kaldirir:
+
+Mevcut (satir 791):
+```tsx
 <CardContent className="flex-1 flex flex-col p-4 pt-3" style={{ minHeight: '200px' }}>
 ```
-
-**2. `src/components/pages/ContainerRenderer.tsx`**
-
-Satir 535-548 civarindaki grid container'da grafik widget'lari icin daha guvenilir yukseklik zorunlulugu:
-
-Mevcut `[&>*]:min-h-[280px]` kuralina ek olarak, grafik konteynerlarinin cocuk elemanlarinin `h-full` yerine sabit minimum yukseklik almasini garanti eden bir stil eklenmesi. Ayrica `items-stretch` kuralinin dogru calistiginin dogrulanmasi.
-
-**3. Filtre Kaynakli "Veri Bulunamadi" Sorunu**
-
-`Cari Finansal Risk Analizi` widget'i `cariKartTipi: ["AL"]` filtresiyle "Veri bulunamadi" gosteriyor (1227 kayit varken). `useDynamicWidgetData.tsx` icerisindeki `cariKartTipi` filtre mantiginda, veri alaninin (`carikarttip`) dogru eslesmesi kontrol edilecek. Eger veri alaninda farkli bir isimlendirme kullaniliyorsa (orn: `_key_sis_carikarttip` veya nested obje), esleme mantigi guncellenecek.
-
-### Teknik Detaylar
-
-ResponsiveContainer yukseklik zinciri:
-```text
-ContainerRenderer grid item    -> min-h-[280px] + h-full
-  DynamicWidgetRenderer        -> (passthrough)
-    BuilderWidgetRenderer Card -> h-full flex flex-col
-      CardContent              -> flex-1 (SORUN: min-h-0 yuksekligi sifirliyor)
-        Widget wrapper div     -> flex-1 h-full min-h-0
-          Widget custom code   -> flex-1 + minHeight inline
-            ResponsiveContainer-> height="100%" (SONUC: 0px)
+Yeni:
+```tsx
+<CardContent className="flex-1 flex flex-col p-4 pt-3 min-h-0">
 ```
 
-Duzeltme sonrasi:
+Mevcut (satir 799):
+```tsx
+<div className="flex-1 min-h-[200px] flex flex-col [&_.leaflet-container]:min-h-[350px]" style={{ height: '100%' }}>
+```
+Yeni:
+```tsx
+<div className="flex-1 relative min-h-[200px] [&_.leaflet-container]:min-h-[350px]">
+  <div className="absolute inset-0 flex flex-col">
+```
+
+Widget icerigi artik absolute-positioned bir div icerisinde render edilecek. Bu div, relative parent'in boyutlarini otomatik olarak alir - `height: 100%` hesaplamasi gerekmez.
+
+### Neden Bu Yaklasim Calisir
+
 ```text
-ContainerRenderer grid item    -> min-h-[280px] + h-full
-  DynamicWidgetRenderer        -> (passthrough)
-    BuilderWidgetRenderer Card -> h-full flex flex-col
-      CardContent              -> flex-1 minHeight:200px
-        Widget wrapper div     -> flex-1 min-h-[200px] height:100%
-          Widget custom code   -> flex-1 + minHeight inline
-            ResponsiveContainer-> height="100%" (SONUC: 200px+)
+ContainerRenderer grid item    -> min-h-[280px] + h-full (GERi EKLENDI)
+  Card                         -> h-full flex flex-col
+    CardContent                -> flex-1 min-h-0 (flex alanini doldurur)
+      Wrapper div              -> flex-1 relative min-h-[200px]
+        Absolute div           -> absolute inset-0 (parent boyutlarini alir)
+          Widget kodu           -> flex-1
+            ResponsiveContainer -> height="100%" = absolute div yuksekligi
 ```
 
 ### Beklenen Sonuc
-- Tum Recharts grafikleri (PieChart, RadarChart, BarChart vb.) gorsel olarak render edilecek
-- Nivo grafikleri (Funnel, Radar vb.) dogru yukseklikte gorunecek
+- Pasta grafikleri (Kaynak Dagilimi, Sektor Dagilimi), bar/line chartlar render edilecek
+- Nivo grafikleri (Radar, Funnel, Sankey) dogru yukseklikte gorunecek
 - Harita widget'lari arka plan haritasini gosterecek
-- Filtre uygulanmis widget'lar dogru veri gosterecek
+- Mevcut filtre mantigi korunacak (onceki degisikliklerdeki dinamik filtre destegi devam edecek)
+- heightMultiplier (1x-3x) ayarlari dogru calisacak
+
