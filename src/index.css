@@ -146,6 +146,11 @@
     background: var(--gradient-hero);
     min-height: 100vh;
   }
+
+  /* Dark modda harita tile'larını temaya uygun yumuşat */
+  .dark .leaflet-tile-pane img {
+    filter: brightness(0.82) contrast(1.05) saturate(0.7) sepia(0.15) hue-rotate(180deg);
+  }
 }
 
 @layer components {

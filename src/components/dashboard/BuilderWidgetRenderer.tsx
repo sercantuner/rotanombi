@@ -247,30 +247,10 @@ const initMapScope = async () => {
       shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
     });
     
-    // TileLayer wrapper: dark modda otomatik olarak dark tile kullanır
-    const OriginalTileLayer = reactLeaflet.TileLayer;
-    const LIGHT_TILES = [
-      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    ];
-    const DARK_TILE_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-    const LIGHT_TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-    
-    const AutoThemeTileLayer = (props: any) => {
-      const isDark = document.documentElement.classList.contains('dark');
-      let url = props.url;
-      // Eğer widget light/default tile kullanıyorsa ve dark moddaysak, otomatik dark tile'a geç
-      if (isDark && (!url || LIGHT_TILES.includes(url))) {
-        url = DARK_TILE_URL;
-      } else if (!isDark && (!url || url === DARK_TILE_URL)) {
-        url = LIGHT_TILE_URL;
-      }
-      return React.createElement(OriginalTileLayer, { ...props, url });
-    };
-
     MapScope = {
       MapContainer: reactLeaflet.MapContainer,
-      TileLayer: AutoThemeTileLayer,
+      _OriginalTileLayer: reactLeaflet.TileLayer,
+      TileLayer: reactLeaflet.TileLayer, // useMemo'da override edilecek
       Marker: reactLeaflet.Marker,
       Popup: reactLeaflet.Popup,
       Tooltip: reactLeaflet.Tooltip,
@@ -284,8 +264,8 @@ const initMapScope = async () => {
       useMapEvent: reactLeaflet.useMapEvent,
       L: L.default,
       isDark: document.documentElement.classList.contains('dark'),
-      TILE_LIGHT: LIGHT_TILE_URL,
-      TILE_DARK: DARK_TILE_URL,
+      TILE_LIGHT: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+      TILE_DARK: 'https://{s}.basemaps.cartocdn.com/voyager_nolabels/{z}/{x}/{y}{r}.png',
       TILE_DEFAULT: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     };
     
@@ -532,10 +512,41 @@ export function BuilderWidgetRenderer({
   const [mapScopeBase, setMapScopeBase] = useState<any>(() => MapScope || EmptyMapScope);
   // isDark reaktif olarak güncellenir
   const isDarkMode = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+  
+  const LIGHT_TILES = useMemo(() => [
+    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+  ], []);
+  const DARK_TILE = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  const LIGHT_TILE = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+
   const mapScope = useMemo(() => {
     if (mapScopeBase === EmptyMapScope) return EmptyMapScope;
-    return { ...mapScopeBase, isDark: isDarkMode, TILE_LIGHT: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', TILE_DARK: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', TILE_DEFAULT: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png' };
-  }, [mapScopeBase, isDarkMode]);
+    
+    const OrigTileLayer = mapScopeBase._OriginalTileLayer || mapScopeBase.TileLayer;
+    const currentIsDark = isDarkMode;
+    
+    // Reaktif TileLayer wrapper - tema değişimlerinde yeniden oluşturulur
+    const AutoThemeTileLayer = (props: any) => {
+      let url = props.url;
+      if (currentIsDark && (!url || LIGHT_TILES.includes(url))) {
+        url = DARK_TILE;
+      } else if (!currentIsDark && (!url || url === DARK_TILE)) {
+        url = LIGHT_TILE;
+      }
+      return React.createElement(OrigTileLayer, { ...props, url });
+    };
+    
+    return {
+      ...mapScopeBase,
+      isDark: currentIsDark,
+      TileLayer: AutoThemeTileLayer,
+      TILE_LIGHT: LIGHT_TILE,
+      TILE_DARK: DARK_TILE,
+      TILE_DEFAULT: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    };
+  }, [mapScopeBase, isDarkMode, LIGHT_TILES]);
    // Nivo scope'u: ihtiyaç varsa lazy yükle
    const [nivoScope, setNivoScope] = useState<any>(() => NivoScope || EmptyNivoScope);
   // WordCloud scope'u: ihtiyaç varsa lazy yükle
