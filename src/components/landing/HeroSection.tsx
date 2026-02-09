@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useTheme } from '@/hooks/useTheme';
 import diaDevices from '@/assets/dia-devices.svg';
+import biConcept from '@/assets/bi-concept.png';
 import diaLogoDark from '@/assets/dia-logo-dark.svg';
 import diaLogoLight from '@/assets/dia-logo-light.svg';
 
@@ -16,7 +17,6 @@ export default function HeroSection() {
     <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
       {/* Creative lines from right to left */}
       <div className="absolute inset-0 -z-10 overflow-hidden">
-        {/* Diagonal flowing lines */}
         <motion.div
           initial={{ opacity: 0, x: 200 }}
           animate={{ opacity: 0.15, x: 0 }}
@@ -59,8 +59,6 @@ export default function HeroSection() {
           transition={{ duration: 1.5, delay: 0.25, ease: 'easeOut' }}
           className="absolute top-[80%] -right-10 w-[110%] h-[1px] bg-gradient-to-l from-transparent via-primary/40 to-transparent rotate-[-4deg]"
         />
-
-        {/* Curved SVG paths */}
         <motion.svg
           initial={{ opacity: 0, x: 100 }}
           animate={{ opacity: 0.08, x: 0 }}
@@ -69,27 +67,9 @@ export default function HeroSection() {
           viewBox="0 0 1200 600"
           preserveAspectRatio="none"
         >
-          <path
-            d="M1200,100 Q800,150 600,80 T0,200"
-            fill="none"
-            stroke="hsl(var(--primary))"
-            strokeWidth="1.5"
-            opacity="0.3"
-          />
-          <path
-            d="M1200,250 Q900,200 650,300 T0,350"
-            fill="none"
-            stroke="hsl(var(--accent))"
-            strokeWidth="1"
-            opacity="0.2"
-          />
-          <path
-            d="M1200,400 Q850,350 500,450 T0,500"
-            fill="none"
-            stroke="hsl(var(--primary))"
-            strokeWidth="0.8"
-            opacity="0.15"
-          />
+          <path d="M1200,100 Q800,150 600,80 T0,200" fill="none" stroke="hsl(var(--primary))" strokeWidth="1.5" opacity="0.3" />
+          <path d="M1200,250 Q900,200 650,300 T0,350" fill="none" stroke="hsl(var(--accent))" strokeWidth="1" opacity="0.2" />
+          <path d="M1200,400 Q850,350 500,450 T0,500" fill="none" stroke="hsl(var(--primary))" strokeWidth="0.8" opacity="0.15" />
         </motion.svg>
       </div>
 
@@ -131,21 +111,38 @@ export default function HeroSection() {
           </Button>
         </motion.div>
 
-        {/* Dashboard Mockup */}
+        {/* Device mockup + BI concept side by side */}
         <motion.div
           initial={{ opacity: 0, y: 60, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.8, delay: 0.4, ease: 'easeOut' }}
-          className="mt-16 relative"
+          className="mt-16 flex flex-col lg:flex-row items-center justify-center gap-8"
         >
-          <div className="rounded-xl overflow-hidden">
+          {/* Device mockup - smaller */}
+          <div className="w-full lg:w-1/2 max-w-lg">
             <img
               src={diaDevices}
               alt="DIA ERP - Telefon, Tablet ve Bilgisayarda"
-              className="w-full h-auto"
+              className="w-full h-auto drop-shadow-lg"
               loading="lazy"
+              style={{ background: 'transparent' }}
             />
           </div>
+
+          {/* BI concept image */}
+          <motion.div
+            initial={{ opacity: 0, x: 40 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.7, delay: 0.6, ease: 'easeOut' }}
+            className="w-full lg:w-1/2 max-w-md"
+          >
+            <img
+              src={biConcept}
+              alt="İş Zekası Dashboard - Her yerden erişilebilir raporlama"
+              className="w-full h-auto rounded-xl shadow-xl"
+              loading="lazy"
+            />
+          </motion.div>
         </motion.div>
       </div>
     </section>
