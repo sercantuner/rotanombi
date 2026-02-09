@@ -457,6 +457,7 @@ interface BuilderWidgetRendererProps {
   builderConfig: WidgetBuilderConfig;
   className?: string;
   widgetFilters?: WidgetLocalFilters;
+  onDataLoaded?: (data: any[]) => void;
 }
 
 export function BuilderWidgetRenderer({
@@ -466,6 +467,7 @@ export function BuilderWidgetRenderer({
   builderConfig,
   className = '',
   widgetFilters,
+  onDataLoaded,
 }: BuilderWidgetRendererProps) {
   // CSS izolasyonu - konteyner stillerinin widget'ı etkilememesi için
   const isolatedClassName = cn(className, 'isolate overflow-visible');
@@ -486,6 +488,13 @@ export function BuilderWidgetRenderer({
     });
   }
   
+  // rawData yüklendiğinde üst bileşene bildir
+  useEffect(() => {
+    if (onDataLoaded && rawData && rawData.length > 0) {
+      onDataLoaded(rawData);
+    }
+  }, [rawData, onDataLoaded]);
+
   // Widget bazında kullanıcı renk paleti
   const { colors: userColors } = useChartColorPalette({ widgetId });
 

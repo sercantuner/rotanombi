@@ -52,16 +52,13 @@ interface DynamicWidgetRendererProps {
   filters?: WidgetFilter;
   className?: string;
   isLoading?: boolean;
-  // Veritabanından gelen widget bilgisi (builder_config için)
   dbWidget?: Widget;
-  // KPI filtreleme için
   containerWidgetId?: string;
   widgetFilters?: WidgetLocalFilters;
   onFiltersChange?: (filters: WidgetLocalFilters) => void;
-  // Widget düzenleme modu
   isWidgetEditMode?: boolean;
-  // Renk paleti
   colors?: string[];
+  onDataLoaded?: (data: any[]) => void;
 }
 
 // Format large numbers
@@ -89,18 +86,12 @@ export function DynamicWidgetRenderer({
   onFiltersChange,
   isWidgetEditMode = false,
   colors,
+  onDataLoaded,
 }: DynamicWidgetRendererProps) {
   const widget = getWidgetById(widgetId);
   
   // Eğer dbWidget var ve builder_config içeriyorsa, BuilderWidgetRenderer kullan
   if (dbWidget?.builder_config) {
-    // Container widget settings'ten widget filtrelerini al
-    const builderWidgetFilters = widgetFilters ? {
-      cariKartTipi: widgetFilters.cariKartTipi || [],
-      gorunumModu: widgetFilters.gorunumModu || 'hepsi',
-      durum: widgetFilters.durum || 'hepsi',
-    } : undefined;
-    
     return (
       <BuilderWidgetRenderer
         widgetId={dbWidget.id}
@@ -108,7 +99,8 @@ export function DynamicWidgetRenderer({
         widgetIcon={dbWidget.icon || undefined}
         builderConfig={dbWidget.builder_config}
         className={className}
-        widgetFilters={builderWidgetFilters}
+        widgetFilters={widgetFilters}
+        onDataLoaded={onDataLoaded}
       />
     );
   }
