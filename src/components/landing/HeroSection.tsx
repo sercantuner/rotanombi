@@ -14,10 +14,83 @@ export default function HeroSection() {
 
   return (
     <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
-      {/* Background decoration */}
-      <div className="absolute inset-0 -z-10">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[800px] rounded-full bg-primary/5 blur-3xl" />
-        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full bg-accent/5 blur-3xl" />
+      {/* Creative lines from right to left */}
+      <div className="absolute inset-0 -z-10 overflow-hidden">
+        {/* Diagonal flowing lines */}
+        <motion.div
+          initial={{ opacity: 0, x: 200 }}
+          animate={{ opacity: 0.15, x: 0 }}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
+          className="absolute top-[10%] -right-20 w-[120%] h-[1px] bg-gradient-to-l from-transparent via-primary to-transparent rotate-[-8deg]"
+        />
+        <motion.div
+          initial={{ opacity: 0, x: 300 }}
+          animate={{ opacity: 0.1, x: 0 }}
+          transition={{ duration: 1.4, delay: 0.1, ease: 'easeOut' }}
+          className="absolute top-[18%] -right-10 w-[110%] h-[2px] bg-gradient-to-l from-transparent via-primary/60 to-transparent rotate-[-5deg]"
+        />
+        <motion.div
+          initial={{ opacity: 0, x: 250 }}
+          animate={{ opacity: 0.12, x: 0 }}
+          transition={{ duration: 1.6, delay: 0.2, ease: 'easeOut' }}
+          className="absolute top-[30%] -right-32 w-[130%] h-[1px] bg-gradient-to-l from-transparent via-accent to-transparent rotate-[-12deg]"
+        />
+        <motion.div
+          initial={{ opacity: 0, x: 350 }}
+          animate={{ opacity: 0.08, x: 0 }}
+          transition={{ duration: 1.8, delay: 0.3, ease: 'easeOut' }}
+          className="absolute top-[45%] -right-20 w-[125%] h-[3px] bg-gradient-to-l from-primary/30 via-primary/10 to-transparent rotate-[-3deg]"
+        />
+        <motion.div
+          initial={{ opacity: 0, x: 200 }}
+          animate={{ opacity: 0.14, x: 0 }}
+          transition={{ duration: 1.3, delay: 0.15, ease: 'easeOut' }}
+          className="absolute top-[55%] -right-16 w-[115%] h-[1px] bg-gradient-to-l from-transparent via-accent/50 to-transparent rotate-[-7deg]"
+        />
+        <motion.div
+          initial={{ opacity: 0, x: 280 }}
+          animate={{ opacity: 0.06, x: 0 }}
+          transition={{ duration: 2, delay: 0.4, ease: 'easeOut' }}
+          className="absolute top-[68%] -right-24 w-[120%] h-[2px] bg-gradient-to-l from-primary/20 via-accent/15 to-transparent rotate-[-10deg]"
+        />
+        <motion.div
+          initial={{ opacity: 0, x: 220 }}
+          animate={{ opacity: 0.1, x: 0 }}
+          transition={{ duration: 1.5, delay: 0.25, ease: 'easeOut' }}
+          className="absolute top-[80%] -right-10 w-[110%] h-[1px] bg-gradient-to-l from-transparent via-primary/40 to-transparent rotate-[-4deg]"
+        />
+
+        {/* Curved SVG paths */}
+        <motion.svg
+          initial={{ opacity: 0, x: 100 }}
+          animate={{ opacity: 0.08, x: 0 }}
+          transition={{ duration: 1.5, delay: 0.5 }}
+          className="absolute inset-0 w-full h-full"
+          viewBox="0 0 1200 600"
+          preserveAspectRatio="none"
+        >
+          <path
+            d="M1200,100 Q800,150 600,80 T0,200"
+            fill="none"
+            stroke="hsl(var(--primary))"
+            strokeWidth="1.5"
+            opacity="0.3"
+          />
+          <path
+            d="M1200,250 Q900,200 650,300 T0,350"
+            fill="none"
+            stroke="hsl(var(--accent))"
+            strokeWidth="1"
+            opacity="0.2"
+          />
+          <path
+            d="M1200,400 Q850,350 500,450 T0,500"
+            fill="none"
+            stroke="hsl(var(--primary))"
+            strokeWidth="0.8"
+            opacity="0.15"
+          />
+        </motion.svg>
       </div>
 
       <div className="max-w-5xl mx-auto text-center">
@@ -65,7 +138,7 @@ export default function HeroSection() {
           transition={{ duration: 0.8, delay: 0.4, ease: 'easeOut' }}
           className="mt-16 relative"
         >
-          <div className="rounded-xl overflow-hidden shadow-2xl">
+          <div className="rounded-xl overflow-hidden">
             <img
               src={diaDevices}
               alt="DIA ERP - Telefon, Tablet ve Bilgisayarda"
@@ -73,8 +146,6 @@ export default function HeroSection() {
               loading="lazy"
             />
           </div>
-          {/* Glow effect behind mockup */}
-          <div className="absolute -inset-4 -z-10 rounded-2xl bg-primary/10 blur-2xl opacity-50" />
         </motion.div>
       </div>
     </section>
