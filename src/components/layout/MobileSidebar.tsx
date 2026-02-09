@@ -21,6 +21,8 @@ import {
   X
 } from 'lucide-react';
 import rotanombiLogo from '@/assets/rotanombi-logo.png';
+import rotanombiLogoDark from '@/assets/rotanombi-logo-dark.svg';
+import { useTheme } from '@/hooks/useTheme';
 import * as LucideIcons from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -46,6 +48,8 @@ export function MobileSidebar() {
   const { isAdmin, isSuperAdmin } = usePermissions();
   const { pages, createPage } = useUserPages();
   const { isDiaConnected } = useDiaDataCache();
+  const { theme } = useTheme();
+  const sidebarLogo = theme === 'dark' ? rotanombiLogoDark : rotanombiLogo;
   const location = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -100,7 +104,7 @@ export function MobileSidebar() {
             <SheetHeader className="p-4 border-b border-border">
               <div className="flex items-center gap-3">
                 <img 
-                  src={rotanombiLogo} 
+                   src={sidebarLogo} 
                   alt="RotanomBI" 
                   className="h-8 w-auto"
                 />
@@ -220,7 +224,7 @@ export function MobileSidebar() {
 
         {/* Logo */}
         <img 
-          src={rotanombiLogo} 
+          src={sidebarLogo} 
           alt="RotanomBI" 
           className="h-7 w-auto"
         />
