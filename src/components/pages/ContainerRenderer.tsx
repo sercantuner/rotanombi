@@ -314,7 +314,8 @@ export function ContainerRenderer({
                   if (value === 'hepsi') return count;
                   return count + 1;
                 }, 0)}
-                availableFilters={widgetDetail.available_filters as string[] || undefined}
+                widgetFilters={(widgetDetail.builder_config as any)?.widgetFilters}
+                widgetParameters={(widgetDetail.builder_config as any)?.widgetParameters}
               />
               {/* Tarih filtresi - eğer widget'ta tarih filtresi aktifse */}
               {widgetDetail.builder_config?.dateFilter?.enabled && widgetDetail.builder_config?.dateFilter?.showInWidget && (

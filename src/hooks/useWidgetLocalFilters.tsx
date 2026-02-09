@@ -1,39 +1,13 @@
 // useWidgetLocalFilters - Widget bazlı filtre yükleme ve kaydetme hook'u
 // user_widget_filters tablosundan widget+kullanıcı bazında filtre saklar
+// v2 - Jenerik Record<string, any> yapısı (widget tanımlı filtreler/parametreler)
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-export interface WidgetLocalFilters {
-  // Tarih
-  tarihAraligi?: {
-    period: string;
-    field?: string;
-    customStart?: string;
-    customEnd?: string;
-  };
-  // Cari
-  cariKartTipi?: string[];
-  gorunumModu?: 'hepsi' | 'cari' | 'potansiyel';
-  durum?: 'hepsi' | 'aktif' | 'pasif';
-  // Organizasyon
-  satisTemsilcisi?: string[];
-  sube?: string[];
-  depo?: string[];
-  // Özel kodlar
-  ozelkod1?: string[];
-  ozelkod2?: string[];
-  ozelkod3?: string[];
-  // Arama
-  searchTerm?: string;
-  // Şehir
-  sehir?: string[];
-  // Ürün
-  urunGrubu?: string[];
-  marka?: string[];
-  kategori?: string[];
-}
+// Jenerik filtre/parametre değerleri - widget kodu tarafından tanımlanan key'ler
+export type WidgetLocalFilters = Record<string, any>;
 
 export const DEFAULT_WIDGET_FILTERS: WidgetLocalFilters = {};
 
@@ -121,7 +95,7 @@ export function useWidgetLocalFilters({ widgetId, enabled = true }: UseWidgetLoc
   }, [saveFilters]);
 
   // Tek filtre alanını değiştir
-  const setFilter = useCallback(<K extends keyof WidgetLocalFilters>(key: K, value: WidgetLocalFilters[K]) => {
+  const setFilter = useCallback(<K extends string>(key: K, value: any) => {
     setFilters(prev => ({ ...prev, [key]: value }));
   }, [setFilters]);
 
