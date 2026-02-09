@@ -2,7 +2,7 @@
 // Widget'ın builder_config'indeki widgetFilters ve widgetParameters tanımlarına göre UI üretir
 
 import { useState, useMemo } from 'react';
-import { Filter, FilterX, RotateCcw, SlidersHorizontal } from 'lucide-react';
+import { Filter, FilterX, RotateCcw, SlidersHorizontal, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { WidgetLocalFilters } from '@/hooks/useWidgetLocalFilters';
 import { WidgetFilterDef, WidgetParamDef } from '@/lib/widgetBuilderTypes';
@@ -24,38 +25,101 @@ interface WidgetFiltersButtonProps {
   activeFilterCount: number;
   widgetFilters?: WidgetFilterDef[];
   widgetParameters?: WidgetParamDef[];
+  widgetData?: any[];
   className?: string;
+}
+
+// Widget verisinden benzersiz seçenekler çıkar
+function resolveOptionsFromData(
+  def: WidgetFilterDef | WidgetParamDef,
+  widgetData?: any[]
+): { value: string; label: string }[] {
+  // Statik options tanımlıysa onu kullan
+  if (def.options && def.options.length > 0) return def.options;
+  
+  // Veri yoksa veya multi-select/dropdown değilse boş dön
+  if (!widgetData || widgetData.length === 0) return [];
+  if (def.type !== 'multi-select' && def.type !== 'dropdown') return [];
+  
+  // Veriden benzersiz değerleri çıkar
+  const uniqueValues = new Set<string>();
+  for (const item of widgetData) {
+    const val = item[def.key];
+    if (val === null || val === undefined || val === '') continue;
+    // Nested objelerde unvan/aciklama gibi alanları dene
+    if (typeof val === 'object' && val !== null) {
+      const display = val.unvan || val.aciklama || val.adi || val.label || val.name;
+      if (display) uniqueValues.add(String(display));
+    } else {
+      uniqueValues.add(String(val));
+    }
+  }
+  
+  return Array.from(uniqueValues)
+    .sort((a, b) => a.localeCompare(b, 'tr'))
+    .map(v => ({ value: v, label: v }));
 }
 
 // Tek bir filtre/parametre alanını render eden bileşen
 function DynamicField({ 
   def, 
   value, 
-  onChange 
+  onChange,
+  resolvedOptions,
 }: { 
   def: WidgetFilterDef | WidgetParamDef; 
   value: any; 
   onChange: (val: any) => void;
+  resolvedOptions: { value: string; label: string }[];
 }) {
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  const filteredOptions = useMemo(() => {
+    if (!searchQuery) return resolvedOptions;
+    const q = searchQuery.toLowerCase();
+    return resolvedOptions.filter(opt => opt.label.toLowerCase().includes(q));
+  }, [resolvedOptions, searchQuery]);
+
   switch (def.type) {
     case 'multi-select':
+      if (resolvedOptions.length === 0) {
+        return <p className="text-xs text-muted-foreground italic">Veri yükleniyor...</p>;
+      }
       return (
-        <div className="flex flex-wrap gap-2">
-          {(def.options || []).map(opt => (
-            <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer">
-              <Checkbox
-                checked={(value || []).includes(opt.value)}
-                onCheckedChange={(checked) => {
-                  const current = value || [];
-                  onChange(checked 
-                    ? [...current, opt.value] 
-                    : current.filter((v: any) => v !== opt.value)
-                  );
-                }}
+        <div className="space-y-1.5">
+          {resolvedOptions.length > 6 && (
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+              <Input
+                placeholder="Ara..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-6 text-xs pl-7"
               />
-              <span className="text-xs">{opt.label}</span>
-            </label>
-          ))}
+            </div>
+          )}
+          <ScrollArea className={resolvedOptions.length > 6 ? "max-h-40" : ""}>
+            <div className="flex flex-wrap gap-2">
+              {filteredOptions.map(opt => (
+                <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer">
+                  <Checkbox
+                    checked={(value || []).includes(opt.value)}
+                    onCheckedChange={(checked) => {
+                      const current = value || [];
+                      onChange(checked 
+                        ? [...current, opt.value] 
+                        : current.filter((v: any) => v !== opt.value)
+                      );
+                    }}
+                  />
+                  <span className="text-xs">{opt.label}</span>
+                </label>
+              ))}
+              {filteredOptions.length === 0 && searchQuery && (
+                <p className="text-xs text-muted-foreground italic">Sonuç bulunamadı</p>
+              )}
+            </div>
+          </ScrollArea>
         </div>
       );
 
@@ -66,7 +130,7 @@ function DynamicField({
             <SelectValue placeholder="Seçin..." />
           </SelectTrigger>
           <SelectContent>
-            {(def.options || []).map(opt => (
+            {resolvedOptions.map(opt => (
               <SelectItem key={opt.value} value={String(opt.value)} className="text-xs">
                 {opt.label}
               </SelectItem>
@@ -142,15 +206,13 @@ export function WidgetFiltersButton({
   activeFilterCount,
   widgetFilters,
   widgetParameters,
+  widgetData,
   className,
 }: WidgetFiltersButtonProps) {
   const [open, setOpen] = useState(false);
 
   const hasFilters = widgetFilters && widgetFilters.length > 0;
   const hasParams = widgetParameters && widgetParameters.length > 0;
-  const hasContent = hasFilters || hasParams;
-
-  // Filtre/parametre tanımlı olmasa bile buton gösterilir
 
   const handleFieldChange = (key: string, value: any) => {
     onFiltersChange({ ...filters, [key]: value });
@@ -204,16 +266,20 @@ export function WidgetFiltersButton({
               Filtreler
             </span>
             {hasFilters ? (
-              widgetFilters!.map(def => (
-                <div key={def.key} className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">{def.label}</Label>
-                  <DynamicField
-                    def={def}
-                    value={filters[def.key]}
-                    onChange={(val) => handleFieldChange(def.key, val)}
-                  />
-                </div>
-              ))
+              widgetFilters!.map(def => {
+                const resolved = resolveOptionsFromData(def, widgetData);
+                return (
+                  <div key={def.key} className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground">{def.label}</Label>
+                    <DynamicField
+                      def={def}
+                      value={filters[def.key]}
+                      onChange={(val) => handleFieldChange(def.key, val)}
+                      resolvedOptions={resolved}
+                    />
+                  </div>
+                );
+              })
             ) : (
               <p className="text-xs text-muted-foreground italic">Filtre tanımlanmamış</p>
             )}
@@ -227,16 +293,20 @@ export function WidgetFiltersButton({
               Parametreler
             </span>
             {hasParams ? (
-              widgetParameters!.map(def => (
-                <div key={def.key} className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">{def.label}</Label>
-                  <DynamicField
-                    def={def}
-                    value={filters[def.key]}
-                    onChange={(val) => handleFieldChange(def.key, val)}
-                  />
-                </div>
-              ))
+              widgetParameters!.map(def => {
+                const resolved = resolveOptionsFromData(def, widgetData);
+                return (
+                  <div key={def.key} className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground">{def.label}</Label>
+                    <DynamicField
+                      def={def}
+                      value={filters[def.key]}
+                      onChange={(val) => handleFieldChange(def.key, val)}
+                      resolvedOptions={resolved}
+                    />
+                  </div>
+                );
+              })
             ) : (
               <p className="text-xs text-muted-foreground italic">Parametre tanımlanmamış</p>
             )}
