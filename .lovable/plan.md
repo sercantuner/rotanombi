@@ -1,58 +1,88 @@
 
 
-## Widget Filtre ve Parametre Yonetim Sistemi
+## Filtre ve Parametre Yonetim Sistemi - Yeni Tasarim
 
-### Mevcut Durum
+### Ozet
 
-Sistem halihazirda Widget.filters ve Widget.parameters yapisini destekliyor: AI koddan bu tanimlari parse ediyor ve builder_config icine kaydediyor. Ancak su eksiklikler var:
+Widget Builder'daki "Filtreler" sekmesini tamamen yeniden tasarliyoruz. Mevcut tek panel yerine uc bolumluk bir yapi olusturulacak:
 
-- Widget Builder'da filtreleri/parametreleri gorsel olarak yonetmek icin bagimsiz bir sekme yok
-- Filtreler sadece kod icinde tanimlanabiliyor (Widget.filters = [...])
-- Dashboard'da WidgetFiltersButton hover'da gorunuyor ama filtre/parametre tanimlanmamis widget'larda gorunmuyor (bu dogru davranis)
+1. **Parametreler (Koddan Okunan + Manuel)** - Kodda tanimli parametreleri otomatik gosterir, yeni ekleme imkani + kucuk AI yardimcisi
+2. **Filtreler (Alan Secimli)** - Veri kaynaginin alanlarindan secilerek tanimlanan filtreler
+3. **AI Parametre Asistani** - Widget kodunu bilen kucuk bir AI alani, parametre onerisi yapar
 
-### Yapilacak Degisiklikler
-
-**1. Widget Builder'a "Filtreler ve Parametreler" Sekmesi Eklenmesi**
-
-Wizard adimlarindan bagimsiz olarak, Kod Duzenle (Step 2) adiminda bir alt sekme (Tab) olarak "Filtreler & Parametreler" paneli eklenecek.
-
-Bu panel iki bolumden olusacak:
-
-**Filtreler Bolumu:**
-- Mevcut filtre tanimlarini (Widget.filters) gorsel olarak listeler
-- Yeni filtre ekleme formu: key, label, type (multi-select, dropdown, toggle, number, text, range), options, defaultValue, min, max
-- Filtre silme ve siralama
-- Degisiklikler kod icindeki Widget.filters dizisine otomatik yazilir
+### Detayli Tasarim
 
 **Parametreler Bolumu:**
-- Ayni yapiyla Widget.parameters icin gorsel yonetim
-- Parametre ekleme/duzenleme/silme
+- Koddan parse edilen parametreler (Widget.parameters) otomatik listelenir (ornegin: `gorunumModu: bin/milyon`, `periyot: aylik/haftalik`, `kdvDahil: toggle`)
+- Her parametre duzenlenebilir (key, label, type, options, defaultValue)
+- "Parametre Ekle" butonu ile yeni parametre eklenebilir
+- Degisiklikler koda otomatik yansir (updateCodeMeta)
+- Altinda kucuk bir AI alaninda "Kodda su parametreler olabilir..." seklinde AI onerisi gelir
 
-**2. Kod-UI Senkronizasyonu**
+**AI Parametre Asistani:**
+- Kucuk bir input + buton ile "Widget kodumu analiz et, parametre oner" islevi
+- Widget kodunu ve mevcut parametreleri AI'a gonderir
+- AI, kodda kullanilabilecek ama henuz tanimlanmamis parametreleri oner (ornegin: formatCurrency fonksiyonundaki bin/milyon secimi, KDV dahil/haric hesaplama, periyot secimi)
+- Onerilen parametreler tek tikla eklenebilir
+- Mevcut `ai-code-generator` edge function'a yeni bir `suggest-params` modu eklenir
 
-- Panel acildiginda mevcut kod icindeki Widget.filters ve Widget.parameters parse edilerek form'a yuklenir (mevcut parseWidgetMetaFromCode fonksiyonu)
-- Panelde degisiklik yapildiginda, kodun ilgili kismi (Widget.filters = [...]) otomatik guncellenir
-- Bu iki yonlu senkronizasyon sayesinde hem gorsel hem kod duzenlemesi mumkun olur
-
-**3. Dashboard Tarafinda Filtre Butonunun Her Zaman Gorunur Olmasi**
-
-Mevcut durumda WidgetFiltersButton hover'da gorunuyor. widgetFilters veya widgetParameters tanimlanmis widget'larda bu butonun daha gorunur olmasi icin:
-- ContainerRenderer'daki hover kontrolunun filtre tanimi olan widget'lar icin her zaman gorunur olacak sekilde guncellenmesi
+**Filtreler Bolumu:**
+- Mevcut `WidgetFilterFieldsBuilder` mantigi kullanilir
+- Sol panelde veri kaynagindan gelen tum alanlar listelenir
+- Sag panelde secili filtre alanlari gosterilir
+- Alan tiklaninca otomatik filtre tanimina donusur (key, label, type otomatik tespit)
+- Bu filtreler `Widget.filters` dizisine otomatik yazilir
 
 ### Teknik Detaylar
 
-**Yeni Dosya:**
-- `src/components/admin/WidgetFiltersParamsEditor.tsx` - Filtre ve parametre gorsel editoru
-
 **Degistirilecek Dosyalar:**
-- `src/components/admin/CustomCodeWidgetBuilder.tsx`
-  - Kod Duzenle adimina (Step 2) alt sekme olarak filtre/parametre editoru eklenmesi
-  - Kod ve UI arasinda senkronizasyon fonksiyonlari (serializeFiltersToCode, serializeParamsToCode)
-- `src/components/pages/ContainerRenderer.tsx`
-  - widgetFilters/widgetParameters tanimli widget'larda filtre butonunun her zaman gorunur olmasi
 
-**Filtre/Parametre Senkronizasyon Mantigi:**
-- `serializeToCode(filters, params)`: Verilen filtre ve parametre dizilerini `Widget.filters = [...];\nWidget.parameters = [...];` formatinda koda cevirir
-- `updateCodeMeta(code, metaKey, newArray)`: Kodun icindeki `Widget.filters = [...]` veya `Widget.parameters = [...]` satirini bulup yeni dizi ile degistirir
-- Eger kodda ilgili satir yoksa `return Widget;` satirindan hemen once ekler
+1. `src/components/admin/WidgetFiltersParamsEditor.tsx` - Tamamen yeniden yazilacak
+   - Props'a `customCode` ve `availableFields` eklenecek
+   - Uc bolumluk layout: Parametreler (ust) + AI Asistani (orta) + Filtreler (alt)
+   - Parametreler: Mevcut koddan parse + manuel ekleme
+   - Filtreler: Alan secim bazli (WidgetFilterFieldsBuilder mantigi entegre)
+   - AI alani: Kucuk input, edge function cagrisi
+
+2. `src/components/admin/CustomCodeWidgetBuilder.tsx`
+   - `WidgetFiltersParamsEditor`'a `customCode` ve veri kaynaklarindan gelen `availableFields` prop'lari iletilecek
+   - Filtre sekmesine gecildiginde mevcut alanlar hazir olacak
+
+3. `supabase/functions/ai-code-generator/index.ts`
+   - Yeni `suggest-params` modu eklenecek
+   - Widget kodunu analiz ederek parametre onerisi uretecek (tool calling ile yapilandirilmis cikti)
+   - Kodu ve mevcut parametreleri alip, eksik olabilecek parametreleri JSON olarak dondurecek
+
+**Veri Akisi:**
+```text
+Widget Kodu (customCode)
+    |
+    +--> parseWidgetMetaFromCode('parameters') --> Mevcut Parametreler Listesi
+    |                                                    |
+    +--> AI Asistani --> suggest-params --> Onerilen Parametreler
+    |                                           |
+    |                                     [Tek Tikla Ekle]
+    |                                           |
+    +--> updateCodeMeta('parameters', [...]) --> Kod Guncellenir
+    
+Veri Kaynagi Alanlari (availableFields)
+    |
+    +--> Alan Secim Paneli --> Secilen Alanlar
+    |                              |
+    +--> Widget.filters dizisine donusturulur
+    |
+    +--> updateCodeMeta('filters', [...]) --> Kod Guncellenir
+```
+
+**AI Parametre Onerisi Cikti Formati (Tool Calling):**
+```text
+suggest_parameters fonksiyonu:
+  - suggestions: array
+    - key: string (ornek: "gorunumModu")
+    - label: string (ornek: "Gosterim Birimi")
+    - type: dropdown | toggle | number | text | range
+    - options: array (ornek: [{value: 'bin', label: 'Bin'}, {value: 'milyon', label: 'Milyon'}])
+    - defaultValue: any
+    - reason: string (ornek: "Kodda formatCurrency fonksiyonunda birim donusumu var")
+```
 
