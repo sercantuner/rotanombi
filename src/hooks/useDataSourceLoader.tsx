@@ -65,6 +65,12 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
   const diaProfile = useDiaProfile();
   const isDiaProfileLoading = diaProfile.isLoading;
   
+  // SCOPE-AWARE: Cache lookup için gerekli scope
+  const effectiveDonem = parseInt(diaProfile.donemKodu || '1');
+  const currentScope: DataScope | undefined = (diaProfile.sunucuAdi && diaProfile.firmaKodu)
+    ? { sunucuAdi: diaProfile.sunucuAdi, firmaKodu: diaProfile.firmaKodu, donemKodu: effectiveDonem }
+    : undefined;
+  
   const { dataSources, getDataSourceById, updateLastFetch, isLoading: isDataSourcesLoading } = useDataSources();
   const { 
     getCachedData,
@@ -287,21 +293,23 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       return loadSystemDataSource(dataSource);
     }
     
-    // 1. Zaten global registry'de VE cache'de veri varsa - cache'den al
-    if (!forceRefresh && isDataSourceFetched(dataSource.id)) {
-      const cachedData = getDataSourceData(dataSource.id);
+    // 1. Zaten global registry'de VE cache'de veri varsa - cache'den al (SCOPE-AWARE)
+    const lookupScope = currentScope || { sunucuAdi: diaProfile.sunucuAdi || '', firmaKodu: diaProfile.firmaKodu || '', donemKodu: effectiveDonem };
+    
+    if (!forceRefresh && isDataSourceFetched(dataSource.id, lookupScope)) {
+      const cachedData = getDataSourceData(dataSource.id, lookupScope);
       if (cachedData && cachedData.length > 0) {
-        console.log(`[DataSourceLoader] GLOBAL HIT: ${dataSource.name} (${cachedData.length} kayıt) - başka sayfada zaten yüklendi`);
+        console.log(`[DataSourceLoader] GLOBAL HIT: ${dataSource.name} (${cachedData.length} kayıt) - scope: dönem ${lookupScope.donemKodu}`);
         incrementCacheHit();
         return cachedData;
       }
     }
     
-    // 2. Memory cache kontrolü (stale-while-revalidate)
-    const { data: cachedData, isStale } = getDataSourceDataWithStale(dataSource.id);
+    // 2. Memory cache kontrolü (stale-while-revalidate) - SCOPE-AWARE
+    const { data: cachedData, isStale } = getDataSourceDataWithStale(dataSource.id, lookupScope);
     
     if (cachedData && cachedData.length > 0 && !forceRefresh) {
-      console.log(`[DataSourceLoader] Memory Cache HIT: ${dataSource.name} (${cachedData.length} kayıt)${isStale ? ' [STALE]' : ''}`);
+      console.log(`[DataSourceLoader] Memory Cache HIT: ${dataSource.name} (${cachedData.length} kayıt) - scope: dönem ${lookupScope.donemKodu}${isStale ? ' [STALE]' : ''}`);
       incrementCacheHit();
       return cachedData;
     }
@@ -498,10 +506,12 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
         return;
       }
 
-      // FIX: Zaten sorgulanmış VE cache'de gerçekten veri olanları ayır
+      // FIX: Zaten sorgulanmış VE cache'de gerçekten veri olanları ayır (SCOPE-AWARE)
+      const lookupScope = currentScope || { sunucuAdi: diaProfile.sunucuAdi || '', firmaKodu: diaProfile.firmaKodu || '', donemKodu: effectiveDonem };
+      
       const alreadyFetched = usedSourceIds.filter(id => {
-        const inRegistry = isDataSourceFetchedRef.current(id);
-        const cachedData = getDataSourceData(id);
+        const inRegistry = isDataSourceFetchedRef.current(id, lookupScope);
+        const cachedData = getDataSourceData(id, lookupScope);
         // Registry'de var VE cache'de gerçekten veri var mı?
         return inRegistry && cachedData && cachedData.length > 0;
       });
@@ -510,13 +520,13 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       const needToFetch = forceRefresh 
         ? usedSourceIds 
         : usedSourceIds.filter(id => {
-            const inRegistry = isDataSourceFetchedRef.current(id);
-            const cachedData = getDataSourceData(id);
+            const inRegistry = isDataSourceFetchedRef.current(id, lookupScope);
+            const cachedData = getDataSourceData(id, lookupScope);
             // Registry'de yok VEYA cache boş/geçersiz
             return !inRegistry || !cachedData || cachedData.length === 0;
           });
 
-      console.log(`[DataSourceLoader] Page needs ${usedSourceIds.length} sources:`);
+      console.log(`[DataSourceLoader] Page needs ${usedSourceIds.length} sources (scope: dönem ${lookupScope.donemKodu}):`);
       console.log(`  - Already fetched (with valid cache): ${alreadyFetched.length}`);
       console.log(`  - Need to fetch (missing or empty cache): ${needToFetch.length}`);
 
@@ -527,7 +537,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       const successfulSources: LoadedSourceInfo[] = [];
       
       for (const sourceId of alreadyFetched) {
-        const data = getDataSourceData(sourceId);
+        const data = getDataSourceData(sourceId, lookupScope);
         const ds = getDataSourceById(sourceId);
         if (data) {
           newDataMap.set(sourceId, data);
@@ -594,18 +604,19 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     }
   }, [pageId, findUsedDataSources, getDataSourceById, loadDataSource, setPageDataReady, getDataSourceData]);
 
-  // Veri kaynağı verisini al (önce local, sonra global cache)
+  // Veri kaynağı verisini al (önce local, sonra global cache) - SCOPE-AWARE
   const getSourceData = useCallback((dataSourceId: string): any[] | null => {
     // Önce local map'e bak
     const localData = sourceDataMap.get(dataSourceId);
     if (localData) return localData;
     
-    // Global cache'e bak
-    const globalData = getDataSourceData(dataSourceId);
+    // Global cache'e bak - scope ile
+    const lookupScope = currentScope || { sunucuAdi: diaProfile.sunucuAdi || '', firmaKodu: diaProfile.firmaKodu || '', donemKodu: effectiveDonem };
+    const globalData = getDataSourceData(dataSourceId, lookupScope);
     if (globalData) return globalData;
     
     return null;
-  }, [sourceDataMap, getDataSourceData]);
+  }, [sourceDataMap, getDataSourceData, currentScope, diaProfile.sunucuAdi, diaProfile.firmaKodu, effectiveDonem]);
 
   // Referansları ref'lerde tut - dependency döngüsü kırılsın
   const findUsedDataSourcesRef = useRef(findUsedDataSources);
@@ -707,12 +718,13 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     await loadAllDataSources(true);
   }, [loadAllDataSources]);
 
-  // TEK VERİ KAYNAĞINI YÜKLE - Widget ekleme sonrası kullanım için
+  // TEK VERİ KAYNAĞINI YÜKLE - Widget ekleme sonrası kullanım için (SCOPE-AWARE)
   const loadSingleDataSource = useCallback(async (dataSourceId: string): Promise<any[] | null> => {
-    // Önce cache'de var mı bak
-    const cachedData = getDataSourceData(dataSourceId);
+    // Önce cache'de var mı bak - scope ile
+    const lookupScope = currentScope || { sunucuAdi: diaProfile.sunucuAdi || '', firmaKodu: diaProfile.firmaKodu || '', donemKodu: effectiveDonem };
+    const cachedData = getDataSourceData(dataSourceId, lookupScope);
     if (cachedData && cachedData.length > 0) {
-      console.log(`[DataSourceLoader] Single source HIT: ${dataSourceId} (${cachedData.length} kayıt)`);
+      console.log(`[DataSourceLoader] Single source HIT: ${dataSourceId} (${cachedData.length} kayıt) - scope: dönem ${lookupScope.donemKodu}`);
       return cachedData;
     }
     
@@ -747,7 +759,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       console.error(`[DataSourceLoader] Single source load error:`, err);
       return null;
     }
-  }, [getDataSourceData, getDataSourceById, loadDataSourceFromApi]);
+  }, [getDataSourceData, getDataSourceById, loadDataSourceFromApi, currentScope, diaProfile.sunucuAdi, diaProfile.firmaKodu, effectiveDonem]);
 
   return {
     isLoading,
