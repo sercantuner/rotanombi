@@ -533,24 +533,18 @@ export function ContainerRenderer({
             - KPI satırları: min-h yok (auto)
           */}
           <div className={cn(
-            'grid gap-1 md:gap-2 items-stretch',
+            'grid gap-1 md:gap-2 items-stretch [&>*]:h-full',
             template.gridClass,
             // Harita container'ları - max-h yok, daha büyük min-h (Leaflet için gerekli)
             (container.container_type === 'map_full' || 
              container.container_type === 'map_half') && '[&>*]:min-h-[400px]',
-            // Grafik container'ları için min yükseklik - height:100% ile birlikte çalışır
+            // Grafik container'ları için min yükseklik
             (container.container_type === 'chart_full' || 
              container.container_type === 'chart_half' || 
              container.container_type === 'chart_third') && '[&>*]:min-h-[280px]',
             (container.container_type === 'info_cards_2' ||
              container.container_type === 'info_cards_3') && '[&>*]:min-h-[200px]'
-          )}
-          style={{ 
-            // Grid item'lara açık yükseklik vererek ResponsiveContainer'ın %100 hesaplamasını garanti et
-            ...((['chart_full', 'chart_half', 'chart_third', 'map_full', 'map_half'].includes(container.container_type)) 
-              ? { gridAutoRows: 'minmax(280px, 1fr)' } 
-              : {})
-          }}>
+          )}>
             {renderSlots()}
           </div>
         </CardContent>

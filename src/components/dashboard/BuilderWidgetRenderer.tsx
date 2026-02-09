@@ -788,7 +788,7 @@ export function BuilderWidgetRenderer({
       return (
         <Card className={cn(isolatedClassName, 'h-full flex flex-col !border-0 relative overflow-visible')}>
           <ChartHeader />
-          <CardContent className="flex-1 flex flex-col p-4 pt-3" style={{ minHeight: '200px' }}>
+          <CardContent className="flex-1 flex flex-col p-4 pt-3 min-h-0">
             <ErrorBoundary fallback={
               <div className="text-destructive text-sm flex items-center gap-2 py-4">
                 <AlertCircle className="h-4 w-4" />
@@ -796,15 +796,17 @@ export function BuilderWidgetRenderer({
               </div>
             }>
               {/* Custom widget'a data, colors ve filters prop'ları geçirilir - Leaflet için min-h zorunlu */}
-              <div className="flex-1 min-h-[200px] flex flex-col [&_.leaflet-container]:min-h-[350px]" style={{ height: '100%' }}>
-                <WidgetComponent 
-                  data={filteredData} 
-                  colors={userColors} 
-                  filters={widgetFilters || {}} 
-                  crossFilter={null}
-                  onCrossFilter={handleCrossFilter}
-                  multiData={multiQueryData}
-                />
+              <div className="flex-1 relative min-h-[200px] [&_.leaflet-container]:min-h-[350px]">
+                <div className="absolute inset-0 flex flex-col">
+                  <WidgetComponent 
+                    data={filteredData} 
+                    colors={userColors} 
+                    filters={widgetFilters || {}} 
+                    crossFilter={null}
+                    onCrossFilter={handleCrossFilter}
+                    multiData={multiQueryData}
+                  />
+                </div>
               </div>
             </ErrorBoundary>
           </CardContent>
