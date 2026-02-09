@@ -453,6 +453,7 @@ interface BuilderWidgetRendererProps {
   builderConfig: WidgetBuilderConfig;
   className?: string;
   widgetFilters?: WidgetLocalFilters;
+  onDataLoaded?: (data: any[]) => void;
 }
 
 export function BuilderWidgetRenderer({
@@ -462,12 +463,20 @@ export function BuilderWidgetRenderer({
   builderConfig,
   className = '',
   widgetFilters,
+  onDataLoaded,
 }: BuilderWidgetRendererProps) {
   // CSS izolasyonu - konteyner stillerinin widget'ı etkilememesi için
   const isolatedClassName = cn(className, 'isolate overflow-visible');
   
   // Veri çekme - widget-bazlı filtreler ile
   const { data, rawData, multiQueryData, isLoading, error, refetch, dataStatus } = useDynamicWidgetData(builderConfig, widgetFilters);
+  
+  // Widget verisi yüklendiğinde üst bileşene bildir (filtre opsiyonları için)
+  useEffect(() => {
+    if (onDataLoaded && rawData && rawData.length > 0) {
+      onDataLoaded(rawData);
+    }
+  }, [rawData, onDataLoaded]);
   
   // DEBUG: Widget veri durumu - SADECE development modunda
   if (process.env.NODE_ENV === 'development') {
