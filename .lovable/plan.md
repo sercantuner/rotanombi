@@ -1,104 +1,153 @@
 
-# Widget Bazli Parametre ve Filtre Sistemi
+
+# Widget Bazli Dinamik Filtre ve Parametre Sistemi v2
 
 ## Ozet
-Mevcut global filtre sistemi (GlobalFilterContext, FilterSidePanel, GlobalFilterBar, cross-filtering) tamamen kaldirilacak. Yerine her widget'in kendi icinde standart bir "Parametreler & Filtreler" butonu olacak. Kullanicinin sectigi filtreler widget + kullanici bazinda veritabaninda saklanacak ve bir sonraki giriste otomatik yuklenecek.
+Mevcut sabit/standart filtre bloklari (cariKartTipi, gorunumModu, durum) kaldirilacak. Yerine her widget'in kendi kodunda tanimladigi filtre ve parametreler kullanilacak. AI widget ureticisi, widget kodunun yaninda filtre/parametre tanimlari da uretecek. Ayni widget farkli filtre/parametre kombinasyonlariyla birden fazla kullanilabilecek (widget instance kavrami).
 
-## Kaldirilacak Sistemler
-- **GlobalFilterContext** (tum cross-filter, global filtre state'i)
-- **GlobalFilterBar** bilesenini
-- **FilterSidePanel** (sag yan panel)
-- **FilterSidebar** bilesenini
-- **FilterManagerModal** (filtre yonetim modali)
-- `useDynamicWidgetData` icindeki `applyGlobalFilters()` fonksiyonu
-- `BuilderWidgetRenderer` icindeki `useGlobalFilters()` kullanimi
-- `LiveWidgetPreview` icindeki `applyGlobalFiltersToPreviewData()` mantigi
-- `page_filter_presets` ve `user_filter_preferences` tablolarina yapilan yazma/okuma islemleri (tablolar kalabilir ama artik kullanilmayacak)
-- Cross-filter ile ilgili tum kodlar (CrossFilter tipi, setCrossFilter, clearCrossFilter)
+## Mevcut Durum ve Sorunlar
+- `WidgetFiltersButton` sabit 3 filtre blogu gosteriyor (cariKartTipi, gorunumModu, durum)
+- `widgets.available_filters` alani var ama sadece string listesi olarak kullaniliyor (`['cariKartTipi', 'gorunumModu']`)
+- AI uretici `filters` prop'unu widget'a geciyor ama hangi filtrelerin gosterilecegini widget kodu belirleyemiyor
+- Kullanici ayni grafigi farkli parametrelerle goremez (tek instance)
 
 ## Yeni Sistem Tasarimi
 
-### 1. Veritabani: `user_widget_filters` tablosu (Mevcut)
-Zaten mevcut olan `user_widget_filters` tablosu kullanilacak:
-- `user_id` (uuid) - Kullanici
-- `widget_id` (varchar) - Widget'in container_widget ID'si veya widget_key'i  
-- `filters` (jsonb) - Secilen filtre/parametre degerleri
-- Bu tabloda her kullanici + widget cifti icin tek satir olacak (upsert)
+### 1. Widget Kodu Icinde Filtre/Parametre Tanimlari
+AI tarafindan uretilen her widget kodu, `return Widget;` satirindan once iki ozel alan tanimlayacak:
 
-### 2. Filtre Tipleri (Widget Bazli)
-Her widget'in `builder_config` icinde veya `available_filters` alaninda tanimli olan filtreler kullanilacak. Standart filtre turleri:
-- **Tarih Araligi** (DatePeriod secimi)
-- **Cari Kart Tipi** (AL/AS/ST checkbox)
-- **Gorunum Modu** (Hepsi/Cari/Potansiyel)
-- **Durum** (Hepsi/Aktif/Pasif)
-- **Satis Temsilcisi** (coklu secim)
-- **Sube** (coklu secim)
-- **Depo** (coklu secim)
-- **Ozel Kodlar** (1-3)
+```text
+Widget.filters = [
+  { key: 'cariTipi', label: 'Kart Tipi', type: 'multi-select', options: [{value:'AL',label:'Alici'},{value:'ST',label:'Satici'}] },
+  { key: 'minBakiye', label: 'Min Bakiye', type: 'number', defaultValue: 0 }
+];
 
-### 3. UI: Widget Filtre Butonu
-Her widget'in sag ust kosesinde (hover'da gorunen kontrol alaninda) standart bir **Filter** ikonu eklenecek. Tiklandiginda bir **popover veya modal** acilacak ve o widget icin gecerli filtre secenekleri gosterilecek.
+Widget.parameters = [
+  { key: 'gosterimSayisi', label: 'Gosterim Sayisi', type: 'number', defaultValue: 10 },
+  { key: 'siralamaTuru', label: 'Siralama', type: 'dropdown', options: [{value:'desc',label:'Azalan'},{value:'asc',label:'Artan'}], defaultValue: 'desc' }
+];
 
-### 4. Filtre Uygulama Mantigi
-- `useDynamicWidgetData` hook'u artik global filtre almayacak
-- Bunun yerine widget'in kendi `widgetFilters` prop'u (veritabanindan yuklenen) kullanilacak
-- Ham veri cekilecek, sonra widget-spesifik filtreler post-fetch olarak uygulanacak
-- AI tarafindan uretilen custom code widget'larina `filters` prop'u widget-bazli filtrelerle gonderilecek
+return Widget;
+```
+
+- **Filtreler**: Veriyi daraltir (hangi kayitlar gosterilsin)
+- **Parametreler**: Gorseli ayarlar (kac kayit gosterilsin, siralama, gosterim modu vb.)
+
+### 2. Filtre/Parametre Tipleri
+
+```text
+type: 'multi-select'  -> Coklu secim (checkbox grubu)
+type: 'dropdown'      -> Tek secim (select)
+type: 'toggle'        -> Acik/Kapali (switch)
+type: 'number'        -> Sayi girisi (input)
+type: 'text'          -> Metin girisi (input)
+type: 'date-range'    -> Tarih araligi
+type: 'range'         -> Min-Max slider
+```
+
+### 3. builder_config Guncelleme
+`WidgetBuilderConfig` icindeki `availableFilters` alani yerine iki yeni alan:
+
+```text
+widgetFilters?: WidgetFilterDef[]    -> Widget'in tanimladigi filtreler
+widgetParameters?: WidgetParamDef[] -> Widget'in tanimladigi parametreler
+```
+
+Bu alanlar AI kodu uretildikten sonra `Widget.filters` ve `Widget.parameters` degerlerinden otomatik parse edilip `builder_config`'e yazilacak.
+
+### 4. WidgetFiltersButton Yeniden Tasarimi
+- Sabit filtre bloklari (cariKartTipi, gorunumModu vb.) kaldirilacak
+- Widget'in `builder_config.widgetFilters` ve `builder_config.widgetParameters` dizilerine gore dinamik UI uretilecek
+- Iki sekme: "Filtreler" ve "Parametreler"
+- Deger degistikce aninda widget'a yansiyacak (debounce olmadan)
+- Kaydetme ise debounced olarak `user_widget_filters` tablosuna yazilacak
+
+### 5. Ayni Widget Farkli Parametrelerle
+Zaten mevcut mimari bunu destekliyor: `container_widgets` tablosundaki her satir bir widget instance'i. Ayni `widget_id` farkli `container_widgets` satirlarinda farkli `settings.filters` degerlerine sahip olabiliyor. Ekstra olarak:
+- Kullanici dashboard'da ayni widget'i baska bir slot'a eklediginde farkli filtre/parametre secebilecek
+- `user_widget_filters` tablosu `widget_id` olarak `container_widget.id` kullanacak (zaten boyle)
+
+### 6. Filtrelerin Aninda Etkisi
+`WidgetFiltersButton` icinde filtre degistiginde:
+1. `onFiltersChange` callback'i aninda cagirilir
+2. `ContainerRenderer` state'i guncellenir
+3. `DynamicWidgetRenderer` -> `BuilderWidgetRenderer` prop degisikligi ile yeniden render olur
+4. Custom code widget `filters` prop'unu guncel degerlerle alir
+5. Debounced olarak `user_widget_filters`'a kaydedilir (800ms)
 
 ## Teknik Uygulama Adimlari
 
-### Adim 1: Yeni `WidgetFiltersButton` Bileseni Olustur
-- Standart bir buton + popover/dialog yapisi
-- Widget'in `available_filters` veya `builder_config`'deki filtre tanimlarina gore dinamik filtre alanlari gosterir
-- Kaydet butonuna basildiginda `user_widget_filters` tablosuna upsert yapar
-- Container widget ID'si (`containerWidgetId`) kullanarak widget bazinda filtre saklar
+### Adim 1: Tip Tanimlari
+`widgetBuilderTypes.ts` dosyasina yeni tipler ekle:
 
-### Adim 2: Filtre Yukleme Hook'u (`useWidgetLocalFilters`)
-- Widget mount oldugunda `user_widget_filters` tablosundan o widget + kullanici icin kayitli filtreleri yukler
-- Filtre degistiginde otomatik kayit yapar (debounced)
-- Mevcut `KpiFilterModal` mantigi bu hook ile birlestirilebilir
+```text
+interface WidgetFilterDef {
+  key: string;
+  label: string;
+  type: 'multi-select' | 'dropdown' | 'toggle' | 'number' | 'text' | 'date-range' | 'range';
+  options?: { value: any; label: string }[];
+  defaultValue?: any;
+  min?: number;  // range/number icin
+  max?: number;
+}
 
-### Adim 3: `useDynamicWidgetData` Refactor
-- `globalFilters` parametresini kaldir
-- Yerine opsiyonel `widgetFilters` parametresi ekle (widget'in kendi filtreleri)
-- `applyGlobalFilters()` fonksiyonunu `applyWidgetFilters()` olarak yeniden adlandir
-- Sadece o widget'a ait filtre degerlerini uygula
+interface WidgetParamDef {
+  key: string;
+  label: string;
+  type: 'dropdown' | 'toggle' | 'number' | 'text' | 'range';
+  options?: { value: any; label: string }[];
+  defaultValue?: any;
+  min?: number;
+  max?: number;
+}
+```
 
-### Adim 4: `BuilderWidgetRenderer` Guncelle
-- `useGlobalFilters()` hook'unu kaldir
-- `widgetFilters` prop'unu al ve `useDynamicWidgetData`'ya ilet
-- Custom code widget'lara giden `filters` prop'unu widget-bazli filtrelerle doldur
+`WidgetBuilderConfig` icine ekle:
+```text
+widgetFilters?: WidgetFilterDef[];
+widgetParameters?: WidgetParamDef[];
+```
 
-### Adim 5: `ContainerRenderer` Guncelle
-- Mevcut `KpiFilterModal` entegrasyonunu yeni sisteme gecir
-- Her widget icin `WidgetFiltersButton` render et
-- `container_widgets.settings.filters` ile `user_widget_filters` tablosunu birlestir
+### Adim 2: WidgetFiltersButton Yeniden Yaz
+- Sabit filtre bloklarini kaldir
+- `widgetFilters` ve `widgetParameters` prop'lari al (builder_config'den)
+- Dinamik olarak her filtre/parametre icin uygun UI bilesenini render et
+- Iki bolum: "Filtreler" ve "Parametreler" (separator ile ayrilmis)
+- Deger degisince aninda `onFiltersChange` cagir
 
-### Adim 6: Global Filtre Altyapisini Temizle
-- `GlobalFilterProvider`'i App.tsx'ten kaldir (veya bosalt)
-- `FilterSidePanel`'i DashboardPage ve DynamicPage'den kaldir
-- `GlobalFilterBar` bilesenini kullanilmaz hale getir (veya sil)
-- Ancak **DIA zorunlu filtreler** (_diaAutoFilters) korunacak - bunlar profil bazli ve degistirilemez, widget filtreleriyle birlikte uygulanacak
+### Adim 3: ContainerRenderer Guncelle
+- `WidgetFiltersButton`'a widget'in `builder_config.widgetFilters` ve `builder_config.widgetParameters` degerlerini gecir
+- `availableFilters` string listesi yerine yeni yapilari kullan
 
-### Adim 7: AI Kod Ureticisini Guncelle
-- `ai-code-generator` edge function'indaki system prompt'ta `filters` prop'unun artik "global" degil "widget-bazli" oldugunu belirt
-- `Widget({ data, colors, filters })` imzasi ayni kalacak, sadece `filters` icerigi degisecek
+### Adim 4: useWidgetLocalFilters Guncelle
+- `WidgetLocalFilters` interface'ini daha jenerik yap (sabit alanlar yerine `Record<string, any>`)
+- Ya da mevcut sabit alanlari koruyup ek `customFilters` ve `customParams` alanlari ekle
 
-### Adim 8: LiveWidgetPreview Guncelle
-- Global filtre senkronizasyonunu kaldir
-- Preview'da widget'in kendi filtrelerini kullan
+### Adim 5: AI Kod Ureticisi (ai-code-generator) Guncelle
+- System prompt'a `Widget.filters` ve `Widget.parameters` tanimlama kurallarini ekle
+- AI'nin her widget icin uygun filtre/parametre tanimlari uretmesini zorunlu kil
+- Widget kodunu kaydederken `Widget.filters` ve `Widget.parameters` degerlerini parse edip `builder_config.widgetFilters` ve `builder_config.widgetParameters` olarak kaydet
 
-## Korunan Yapilar
-- **DIA Zorunlu Filtreler** (_diaAutoFilters): Kullanicinin DIA yetkisine bagli kilitli filtreler korunacak. Bunlar widget filtreleriyle birlikte uygulanir
-- **Widget tarih filtresi** (WidgetDateFilter): Builder'da tanimlanan tarih filtresi zaten widget bazli, korunacak
-- **PostFetchFilter**: Builder'da tanimlanan sabit filtreler korunacak
+### Adim 6: CustomCodeWidgetBuilder Guncelle
+- AI kodu uretildikten sonra `Widget.filters` ve `Widget.parameters` satirlarini parse et
+- Parse edilen degerleri `builder_config`'e otomatik yaz
 
-## Goc Stratejisi
-- `container_widgets.settings.filters` icinde zaten widget-bazli filtre vardi (KpiFilter). Bu yapi genisletilecek
-- `user_widget_filters` tablosu zaten mevcut, dogrudan kullanilacak
-- Eski `page_filter_presets` ve `user_filter_preferences` tablolarina dokunulmayacak (eski veri kalabilir)
+### Adim 7: BuilderWidgetRenderer Guncelle
+- `filters` prop'unu widget'a gecerken hem standart filtre degerlerini hem de custom filtre/parametre degerlerini birlestir
+- Widget kodu `filters.cariTipi`, `filters.gosterimSayisi` gibi key'lerle erismeli
 
-## Risk Notu
-- `useGlobalFilters()` 10 dosyada kullaniliyor; hepsinin guncellenmesi gerekecek
-- Gecis sirasinda bazi widget'lar gecici olarak filtresiz gorunebilir (eski preset'ler gecersiz olacak)
-- DIA zorunlu filtreler profil bazli kalacagi icin bu mantik ayri bir hook'a tasinabilir (ornegin `useDiaAutoFilters`)
+### Adim 8: Mevcut Sabit Filtre Yapisini Temizle
+- `WidgetLocalFilters` interface'indeki sabit alanlar (cariKartTipi, gorunumModu, durum vb.) kaldirilabilir veya legacy olarak korunabilir
+- `DynamicWidgetRenderer` icindeki hardcoded filtre uygulama mantigi (`getFilteredCariler`, `getFilteredKpis`) korunacak (legacy KPI widget'lari icin)
+
+## Ozet Degisiklik Listesi
+| Dosya | Islem |
+|---|---|
+| `src/lib/widgetBuilderTypes.ts` | `WidgetFilterDef`, `WidgetParamDef` tipleri + `WidgetBuilderConfig`'e ekleme |
+| `src/components/dashboard/WidgetFiltersButton.tsx` | Tamamen yeniden yazilacak (dinamik filtre/parametre UI) |
+| `src/hooks/useWidgetLocalFilters.tsx` | Jenerik filtre/parametre deger saklama |
+| `src/components/pages/ContainerRenderer.tsx` | Yeni prop'lari `WidgetFiltersButton`'a gecir |
+| `src/components/dashboard/BuilderWidgetRenderer.tsx` | `filters` prop icerigi guncelle |
+| `src/components/admin/CustomCodeWidgetBuilder.tsx` | AI ciktisinden filtre/parametre parse etme |
+| `supabase/functions/ai-code-generator/index.ts` | System prompt'a `Widget.filters` ve `Widget.parameters` kurallari ekle |
+
