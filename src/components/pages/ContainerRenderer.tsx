@@ -31,7 +31,7 @@ import { toast } from 'sonner';
 
 interface ContainerWidgetSettings {
   filters?: WidgetLocalFilters;
-  heightMultiplier?: 1 | 1.5 | 2 | 2.5 | 3;
+  heightMultiplier?: 0.5 | 1 | 1.5 | 2 | 2.5 | 3;
 }
 
 interface ContainerRendererProps {
@@ -201,7 +201,7 @@ export function ContainerRenderer({
   };
 
   // Widget yükseklik çarpanını değiştir
-  const handleHeightMultiplierChange = async (containerWidgetId: string, multiplier: 1 | 1.5 | 2 | 2.5 | 3) => {
+  const handleHeightMultiplierChange = async (containerWidgetId: string, multiplier: 0.5 | 1 | 1.5 | 2 | 2.5 | 3) => {
     try {
       const existingWidget = containerWidgets.find(w => w.id === containerWidgetId);
       const existingSettings = (existingWidget?.settings as ContainerWidgetSettings) || {};
@@ -284,7 +284,7 @@ export function ContainerRenderer({
         const heightMultiplier = widgetSettings?.heightMultiplier || 1;
 
         // Yükseklik çarpanına göre min-height hesapla
-        const heightStyle: React.CSSProperties = heightMultiplier > 1 
+        const heightStyle: React.CSSProperties = heightMultiplier !== 1 
           ? { minHeight: `${heightMultiplier * 280}px` } 
           : {};
 
@@ -391,7 +391,7 @@ export function ContainerRenderer({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-36">
-                    {([1, 1.5, 2, 2.5, 3] as const).map(m => (
+                    {([0.5, 1, 1.5, 2, 2.5, 3] as const).map(m => (
                       <DropdownMenuItem
                         key={m}
                         onClick={() => handleHeightMultiplierChange(slotWidget.id, m)}
