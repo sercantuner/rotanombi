@@ -588,6 +588,10 @@ function applyWidgetFilters(data: any[], widgetFilters: WidgetLocalFilters, diaA
     if (Array.isArray(val) && val.length === 0) continue;
     if (typeof val === 'string' && !val.trim()) continue;
     
+    // Eğer bu key ham veride hiçbir kayıtta yoksa, bu bir widget parametresidir (ör: mesaiBaslangic, gecTolerans)
+    // Veri filtreleme yerine widget koduna prop olarak geçer, burada atla
+    if (!dataHasField(data, [key])) continue;
+    
     // Multi-select (array) filtre
     if (Array.isArray(val)) {
       const lowerVal = val.map(v => String(v).toLocaleLowerCase('tr'));
