@@ -26,16 +26,16 @@ export interface ColorPalette {
 export const COLOR_PALETTES: ColorPalette[] = [
   {
     name: 'corporate',
-    label: 'Kurumsal',
+    label: 'RotanomBI',
     colors: [
-      'hsl(220, 70%, 50%)',
-      'hsl(220, 60%, 60%)',
-      'hsl(220, 50%, 70%)',
-      'hsl(220, 40%, 45%)',
-      'hsl(200, 65%, 55%)',
-      'hsl(240, 50%, 55%)',
-      'hsl(210, 55%, 50%)',
-      'hsl(230, 45%, 60%)',
+      'hsl(179, 47%, 35%)',   // Teal #308684
+      'hsl(39, 90%, 58%)',    // Amber #f4b135
+      'hsl(161, 42%, 52%)',   // Mint #50bb9f
+      'hsl(8, 83%, 58%)',     // Red #ed553b
+      'hsl(205, 30%, 58%)',   // Steel Blue #769eb3
+      'hsl(64, 58%, 45%)',    // Olive #aeb730
+      'hsl(203, 60%, 16%)',   // Navy #112f41
+      'hsl(351, 96%, 22%)',   // Burgundy #6d0210
     ],
   },
   {
