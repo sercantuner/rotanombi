@@ -66,11 +66,11 @@ export default function HeroSection() {
 
           <div className="flex flex-col lg:flex-row items-center justify-center gap-8">
             {/* Device mockup */}
-            <div className="w-full lg:w-1/2 max-w-lg">
+            <div className="w-full lg:w-1/2 max-w-md">
               <img
                 src={diaDevices}
                 alt="DIA ERP - Telefon, Tablet ve Bilgisayarda"
-                className="w-full h-auto drop-shadow-lg dark:mix-blend-lighten mix-blend-multiply"
+                className="w-full h-auto dark:mix-blend-lighten mix-blend-multiply"
                 loading="lazy"
               />
             </div>
