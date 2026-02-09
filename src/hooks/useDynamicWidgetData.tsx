@@ -33,6 +33,8 @@ export interface DataStatusInfo {
 interface DynamicWidgetDataResult {
   data: any;
   rawData: any[];
+  // Filtrelenmemiş ham veri - filtre seçenekleri oluşturmak için kullanılır
+  unfilteredData: any[];
   // Multi-query widget'larda her sorgunun ham sonucunu (config.multiQuery.queries sırası ile)
   // custom widget'lara aktarabilmek için kullanılır.
   multiQueryData?: any[][] | null;
@@ -1453,5 +1455,8 @@ export function useDynamicWidgetData(
     prevFiltersKeyRef.current = widgetFiltersKey;
   }, [widgetFiltersKey, processDataWithFilters]);
 
-  return { data, rawData, multiQueryData, isLoading, error, refetch: fetchData, dataStatus };
+  // unfilteredData: rawDataCacheRef her zaman filtrelenmemiş veriyi tutar
+  const unfilteredData = rawDataCacheRef.current;
+
+  return { data, rawData, unfilteredData, multiQueryData, isLoading, error, refetch: fetchData, dataStatus };
 }

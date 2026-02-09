@@ -59,6 +59,7 @@ interface DynamicWidgetRendererProps {
   isWidgetEditMode?: boolean;
   colors?: string[];
   onDataLoaded?: (data: any[]) => void;
+  onUnfilteredDataLoaded?: (data: any[]) => void;
 }
 
 // Format large numbers
@@ -87,6 +88,7 @@ export function DynamicWidgetRenderer({
   isWidgetEditMode = false,
   colors,
   onDataLoaded,
+  onUnfilteredDataLoaded,
 }: DynamicWidgetRendererProps) {
   const widget = getWidgetById(widgetId);
   
@@ -101,6 +103,7 @@ export function DynamicWidgetRenderer({
         className={className}
         widgetFilters={widgetFilters}
         onDataLoaded={onDataLoaded}
+        onUnfilteredDataLoaded={onUnfilteredDataLoaded}
       />
     );
   }
