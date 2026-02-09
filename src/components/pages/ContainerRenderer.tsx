@@ -288,13 +288,13 @@ export function ContainerRenderer({
         const isSmall = heightMultiplier < 1;
         const heightStyle: React.CSSProperties = heightMultiplier !== 1 
           ? isSmall
-            ? { maxHeight: `${heightPx}px`, height: `${heightPx}px`, overflow: 'hidden' }
+            ? { maxHeight: `${heightPx}px`, height: `${heightPx}px`, minHeight: '0px', overflow: 'hidden', alignSelf: 'start' }
             : { minHeight: `${heightPx}px` }
           : {};
 
         // Widget var, render et - CSS izolasyonu için isolate class, h-full eklendi
         return (
-          <div key={slotIndex} className={cn('relative group isolate', isSmall ? 'self-start' : 'min-h-[80px] h-full')} style={heightStyle}>
+          <div key={slotIndex} className={cn('relative group isolate', !isSmall && 'min-h-[80px] h-full')} style={heightStyle}>
             <DynamicWidgetRenderer
               widgetId={widgetDetail.widget_key}
               data={widgetData}
