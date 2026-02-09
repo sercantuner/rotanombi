@@ -292,7 +292,7 @@ function LandingFooter() {
         </a>
       </div>
       <div className="max-w-6xl mx-auto mt-6 pt-6 border-t border-border text-center">
-        <p className="text-xs text-muted-foreground">© 2024 Rota Yazılım – RotanomBI v3.0</p>
+        <p className="text-xs text-muted-foreground">© 2026 Rota Yazılım – RotanomBI v3.0</p>
       </div>
     </footer>;
 }
