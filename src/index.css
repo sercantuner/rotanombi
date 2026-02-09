@@ -175,10 +175,6 @@
     @apply glass-card rounded transition-all duration-150;
   }
 
-  .stat-card:hover {
-    box-shadow: var(--shadow-md);
-  }
-
   .nav-item {
     @apply flex items-center gap-2 px-2 py-1.5 rounded transition-all duration-150 cursor-pointer;
     @apply text-muted-foreground hover:text-foreground hover:bg-secondary;
