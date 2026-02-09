@@ -1085,6 +1085,25 @@ Widget'a otomatik olarak "Map" scope'u geçilir. Bu scope Leaflet harita bileşe
    - Map.useMap: Harita instance'ına erişim hook'u
    - Map.useMapEvents: Harita olaylarını dinleme hook'u (zoom, click vb.)
    - Map.useMapEvent: Tek olay dinleme hook'u
+   - Map.isDark: boolean - Mevcut tema dark mı? (true/false)
+   - Map.TILE_LIGHT: CartoDB Light tile URL
+   - Map.TILE_DARK: CartoDB Dark tile URL
+   - Map.TILE_DEFAULT: OpenStreetMap varsayılan tile URL
+
+🌙 DARK MODE ZORUNLU KURALI:
+Harita widget'ları MUTLAKA Map.isDark kullanarak TileLayer URL'ini seçmeli!
+Dark modda koyu harita, light modda açık harita kullanılmalıdır.
+
+// ZORUNLU TileLayer kullanımı:
+var tileUrl = Map.isDark ? Map.TILE_DARK : Map.TILE_LIGHT;
+React.createElement(Map.TileLayer, {
+  attribution: '© OpenStreetMap contributors © CARTO',
+  url: tileUrl
+})
+
+❌ YASAK: Sabit OpenStreetMap URL kullanmak (dark modda beyaz harita çirkin görünür!)
+❌ url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'  // KULLANMA!
+✅ url: Map.isDark ? Map.TILE_DARK : Map.TILE_LIGHT  // HER ZAMAN BUNU KULLAN!
 
 🔧 HARİTA HOOKS KULLANIMI:
 // Zoom seviyesini takip etmek için:
@@ -1112,6 +1131,9 @@ function Widget({ data, colors, filters }) {
     return [avgLat, avgLng];
   }, [data]);
 
+  // Dark mode destekli tile URL
+  var tileUrl = Map.isDark ? Map.TILE_DARK : Map.TILE_LIGHT;
+
   return React.createElement('div', { className: 'h-full w-full min-h-[300px]' },
     React.createElement(Map.MapContainer, {
       center: center,
@@ -1119,10 +1141,10 @@ function Widget({ data, colors, filters }) {
       style: { height: '100%', width: '100%', borderRadius: '0.375rem' },
       scrollWheelZoom: true
     },
-      // TileLayer - OpenStreetMap (ücretsiz, API key gerektirmez)
+      // TileLayer - Dark/Light mode otomatik (ZORUNLU!)
       React.createElement(Map.TileLayer, {
-        attribution: '© OpenStreetMap contributors',
-        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+        attribution: '© OpenStreetMap contributors © CARTO',
+        url: tileUrl
       }),
       // Marker'lar
       data.filter(function(item) { return item.lat && item.lng; }).map(function(item, idx) {
@@ -1178,18 +1200,15 @@ React.createElement(Map.Marker, {
   icon: customIcon
 })
 
-🌐 FARKLI TİLE LAYER'LAR:
-// OpenStreetMap (varsayılan - ücretsiz)
-url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+🌐 FARKLI TİLE LAYER'LAR (Referans - ama her zaman Map.isDark kullan!):
+// CartoDB Light (light mode varsayılan)
+Map.TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
 
-// CartoDB Light (minimal tasarım)
-url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+// CartoDB Dark (dark mode varsayılan)
+Map.TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
 
-// CartoDB Dark (koyu tema)
-url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-
-// Stamen Terrain (arazi)
-url: 'https://stamen-tiles.a.ssl.fastly.net/terrain/{z}/{x}/{y}.png'
+// OpenStreetMap (alternatif - dark mode uyumsuz!)
+Map.TILE_DEFAULT = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 
 ⚠️ ÖNEMLİ KURALLAR:
 1. Harita container'ına min-h-[300px] veya sabit yükseklik ver (aksi halde görünmez!)
@@ -1197,6 +1216,7 @@ url: 'https://stamen-tiles.a.ssl.fastly.net/terrain/{z}/{x}/{y}.png'
 3. Map.Popup ile Recharts.Tooltip'i KARIŞTIRMA - farklı bileşenler!
 4. Koordinat formatı: [lat, lng] (enlem, boylam) - DİZİ olarak!
 5. Veri içinde lat/lng alanları yoksa harita kullanma
+6. TileLayer URL MUTLAKA Map.isDark ile seçilmeli! Sabit URL YASAK!
 
 ❌ YANLIŞ:
    - position: { lat: 41, lng: 29 } (obje yerine dizi kullan)
@@ -1693,7 +1713,7 @@ Widget'a "Map" scope'u da geçilir. Leaflet harita bileşenleri:
 - Map.MapContainer, Map.TileLayer, Map.Marker, Map.Popup, Map.CircleMarker
 - Container'a min-h-[300px] ve style: { height: '100%', width: '100%' } ZORUNLU
 - Koordinat formatı: [lat, lng] (dizi olarak)
-- TileLayer için OpenStreetMap: url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+- Map.isDark: boolean - dark mode kontrolü. TileLayer URL: Map.isDark ? Map.TILE_DARK : Map.TILE_LIGHT (ZORUNLU!)
 
  📊 GELİŞMİŞ GRAFİKLER (Nivo SCOPE):
  Widget'a "Nivo" scope'u da geçilir. D3.js tabanlı gelişmiş grafik bileşenleri:

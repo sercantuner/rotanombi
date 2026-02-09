@@ -252,7 +252,7 @@ const initMapScope = async () => {
       TileLayer: reactLeaflet.TileLayer,
       Marker: reactLeaflet.Marker,
       Popup: reactLeaflet.Popup,
-      Tooltip: reactLeaflet.Tooltip,  // Harita tooltip'i eklendi
+      Tooltip: reactLeaflet.Tooltip,
       CircleMarker: reactLeaflet.CircleMarker,
       Polyline: reactLeaflet.Polyline,
       Polygon: reactLeaflet.Polygon,
@@ -262,7 +262,13 @@ const initMapScope = async () => {
       useMap: reactLeaflet.useMap,
       useMapEvents: reactLeaflet.useMapEvents,
       useMapEvent: reactLeaflet.useMapEvent,
-      L: L.default
+      L: L.default,
+      // Dark mode desteği - widget'lar Map.isDark ile tema kontrolü yapabilir
+      isDark: document.documentElement.classList.contains('dark'),
+      // Hazır tile URL'leri
+      TILE_LIGHT: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+      TILE_DARK: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      TILE_DEFAULT: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     };
     
     return MapScope;
@@ -505,7 +511,13 @@ export function BuilderWidgetRenderer({
   }, [customCode]);
  
   // Harita scope'u: ihtiyaç varsa lazy yükle, yoksa boş scope kullan
-  const [mapScope, setMapScope] = useState<any>(() => MapScope || EmptyMapScope);
+  const [mapScopeBase, setMapScopeBase] = useState<any>(() => MapScope || EmptyMapScope);
+  // isDark reaktif olarak güncellenir
+  const isDarkMode = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+  const mapScope = useMemo(() => {
+    if (mapScopeBase === EmptyMapScope) return EmptyMapScope;
+    return { ...mapScopeBase, isDark: isDarkMode, TILE_LIGHT: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', TILE_DARK: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', TILE_DEFAULT: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png' };
+  }, [mapScopeBase, isDarkMode]);
    // Nivo scope'u: ihtiyaç varsa lazy yükle
    const [nivoScope, setNivoScope] = useState<any>(() => NivoScope || EmptyNivoScope);
   // WordCloud scope'u: ihtiyaç varsa lazy yükle
@@ -516,13 +528,13 @@ export function BuilderWidgetRenderer({
     let cancelled = false;
 
     if (!needsMap) {
-      setMapScope(EmptyMapScope);
+      setMapScopeBase(EmptyMapScope);
       return;
     }
 
     initMapScope().then((scope) => {
       if (cancelled) return;
-      setMapScope(scope || EmptyMapScope);
+      setMapScopeBase(scope || EmptyMapScope);
     });
 
     return () => {
