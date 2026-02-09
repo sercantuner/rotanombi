@@ -74,9 +74,9 @@ export function BankaHesaplari({ bankaHesaplari, toplamBakiye, isLoading, colors
   }
 
   return (
-    <div className="flex flex-col gap-2 p-2 overflow-hidden" style={{ height: '100%', maxHeight: 'inherit' }}>
+    <div className="flex flex-col gap-2 p-2 h-full overflow-hidden">
       {/* KPI Kartları */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 shrink-0">
         {kpiCards.map((kpi) => (
           <div
             key={kpi.label}
@@ -97,7 +97,7 @@ export function BankaHesaplari({ bankaHesaplari, toplamBakiye, isLoading, colors
       </div>
 
       {/* Tablo Listesi */}
-      <div className="flex flex-col flex-1 min-h-0 bg-card rounded-none border border-border">
+      <div className="flex flex-col min-h-0 overflow-hidden bg-card rounded-none border border-border">
         {/* Header Bar */}
         <div className="flex items-center justify-between p-2 border-b border-border bg-muted/20">
           <div className="flex items-center gap-2">
