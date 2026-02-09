@@ -302,7 +302,13 @@ export function ContainerRenderer({
             />
             
             {/* Hover kontrolleri - sağ üst */}
-            <div className="absolute top-1 right-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+            {/* Filtre/parametre tanımlı widget'larda her zaman görünür, diğerlerinde hover */}
+            <div className={cn(
+              "absolute top-1 right-1 flex items-center gap-0.5 transition-opacity z-20",
+              ((widgetDetail.builder_config as any)?.widgetFilters?.length > 0 || (widgetDetail.builder_config as any)?.widgetParameters?.length > 0)
+                ? 'opacity-100'
+                : 'opacity-0 group-hover:opacity-100'
+            )}>
               {/* Widget Filtre Butonu */}
               <WidgetFiltersButton
                 filters={widgetFilters || {}}

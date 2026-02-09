@@ -28,12 +28,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Slider } from '@/components/ui/slider';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { WidgetFiltersParamsEditor } from './WidgetFiltersParamsEditor';
 import { 
   Code, Database, Eye, Save, Play, Copy, Check, 
   LayoutGrid, AlertCircle, FileJson, Wand2, X,
   RefreshCw, Loader2, Download, Sparkles, Send, MessageSquare, 
   Link2, Layers, ChevronLeft, ChevronRight, CheckCircle2, Circle,
-  Search, Folder
+  Search, Folder, Filter
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -502,6 +504,22 @@ function parseWidgetMetaFromCode(code: string, metaKey: 'filters' | 'parameters'
   }
 }
 
+// Kod içindeki Widget.filters veya Widget.parameters'ı güncelle
+function updateCodeMeta(code: string, metaKey: 'filters' | 'parameters', newArray: any[]): string {
+  const serialized = JSON.stringify(newArray, null, 2)
+    .replace(/"(\w+)":/g, '$1:')  // JSON key'lerden tırnakları kaldır
+    .replace(/"/g, "'");           // çift tırnak → tek tırnak
+
+  const pattern = new RegExp(`Widget\\.${metaKey}\\s*=\\s*\\[[\\s\\S]*?\\];`, 'm');
+  const replacement = `Widget.${metaKey} = ${serialized};`;
+
+  if (pattern.test(code)) {
+    return code.replace(pattern, replacement);
+  }
+  // Kodda yoksa return Widget; öncesine ekle
+  return code.replace(/return\s+Widget\s*;/, `${replacement}\n\nreturn Widget;`);
+}
+
 // Mock preview data - tutarlı görselleştirme için
 const getMockPreviewData = (type: string = 'generic') => {
   // Widget tipine göre uygun mock veri dönüş
@@ -583,6 +601,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   
   // Wizard state
   const [currentStep, setCurrentStep] = useState(0);
+  const [step3Tab, setStep3Tab] = useState<'code' | 'filters'>('code');
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   
   // Widget temel bilgileri
@@ -2585,45 +2604,70 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
   // Step 3: Kod Düzenle - Mobil responsive
   const renderStep3 = () => (
     <div className="flex flex-col lg:grid lg:grid-cols-3 gap-3 md:gap-4 h-full overflow-auto">
-      {/* Sol: Kod Editörü (2/3) */}
+      {/* Sol: Kod Editörü + Filtre/Parametre Sekmesi (2/3) */}
       <Card className="lg:col-span-2 flex flex-col">
         <CardHeader className="pb-2 md:pb-3">
-          <CardTitle className="text-xs md:text-sm flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <Code className="h-3.5 w-3.5 md:h-4 md:w-4" />
-              Kod Editörü
-            </span>
-            <div className="flex items-center gap-1 md:gap-2">
-              {codeError ? (
-                <Badge variant="destructive" className="text-[10px] md:text-xs gap-1">
-                  <AlertCircle className="h-2.5 w-2.5 md:h-3 md:w-3" />
-                  <span className="hidden sm:inline">Hata</span>
-                </Badge>
-              ) : customCode.trim() && (
-                <Badge variant="outline" className="text-[10px] md:text-xs gap-1 bg-success/10 text-success">
-                  <Check className="h-2.5 w-2.5 md:h-3 md:w-3" />
-                  <span className="hidden sm:inline">Geçerli</span>
-                </Badge>
+          <Tabs value={step3Tab} onValueChange={(v) => setStep3Tab(v as any)} className="w-full">
+            <div className="flex items-center justify-between gap-2">
+              <TabsList className="h-7 md:h-8">
+                <TabsTrigger value="code" className="text-[10px] md:text-xs gap-1 h-5 md:h-6 px-2 md:px-3">
+                  <Code className="h-3 w-3" />
+                  Kod
+                </TabsTrigger>
+                <TabsTrigger value="filters" className="text-[10px] md:text-xs gap-1 h-5 md:h-6 px-2 md:px-3">
+                  <Filter className="h-3 w-3" />
+                  Filtreler
+                  {(parseWidgetMetaFromCode(customCode, 'filters').length + parseWidgetMetaFromCode(customCode, 'parameters').length) > 0 && (
+                    <Badge variant="secondary" className="text-[9px] h-4 px-1 ml-0.5">
+                      {parseWidgetMetaFromCode(customCode, 'filters').length + parseWidgetMetaFromCode(customCode, 'parameters').length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+              {step3Tab === 'code' && (
+                <div className="flex items-center gap-1 md:gap-2">
+                  {codeError ? (
+                    <Badge variant="destructive" className="text-[10px] md:text-xs gap-1">
+                      <AlertCircle className="h-2.5 w-2.5 md:h-3 md:w-3" />
+                      <span className="hidden sm:inline">Hata</span>
+                    </Badge>
+                  ) : customCode.trim() && (
+                    <Badge variant="outline" className="text-[10px] md:text-xs gap-1 bg-success/10 text-success">
+                      <Check className="h-2.5 w-2.5 md:h-3 md:w-3" />
+                      <span className="hidden sm:inline">Geçerli</span>
+                    </Badge>
+                  )}
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={copyCode}>
+                    {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  </Button>
+                </div>
               )}
-              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={copyCode}>
-                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              </Button>
             </div>
-          </CardTitle>
+          </Tabs>
         </CardHeader>
         <CardContent className="flex-1 flex flex-col gap-2 md:gap-3 p-3 md:p-6 pt-0">
-          <Textarea
-            value={customCode}
-            onChange={(e) => setCustomCode(e.target.value)}
-            className="flex-1 font-mono text-[10px] md:text-xs resize-none min-h-[200px] md:min-h-[300px]"
-            placeholder="Widget kodunuzu buraya yazın..."
-          />
-          
-          {codeError && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-3.5 w-3.5 md:h-4 md:w-4" />
-              <AlertDescription className="text-[10px] md:text-xs">{codeError}</AlertDescription>
-            </Alert>
+          {step3Tab === 'code' ? (
+            <>
+              <Textarea
+                value={customCode}
+                onChange={(e) => setCustomCode(e.target.value)}
+                className="flex-1 font-mono text-[10px] md:text-xs resize-none min-h-[200px] md:min-h-[300px]"
+                placeholder="Widget kodunuzu buraya yazın..."
+              />
+              {codeError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                  <AlertDescription className="text-[10px] md:text-xs">{codeError}</AlertDescription>
+                </Alert>
+              )}
+            </>
+          ) : (
+            <WidgetFiltersParamsEditor
+              filters={parseWidgetMetaFromCode(customCode, 'filters')}
+              parameters={parseWidgetMetaFromCode(customCode, 'parameters')}
+              onFiltersChange={(newFilters) => setCustomCode(updateCodeMeta(customCode, 'filters', newFilters))}
+              onParametersChange={(newParams) => setCustomCode(updateCodeMeta(customCode, 'parameters', newParams))}
+            />
           )}
         </CardContent>
       </Card>
