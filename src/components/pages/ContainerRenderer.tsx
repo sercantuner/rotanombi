@@ -326,7 +326,25 @@ export function ContainerRenderer({
                 }, 0)}
                 widgetFilters={(widgetDetail.builder_config as any)?.widgetFilters}
                 widgetParameters={(widgetDetail.builder_config as any)?.widgetParameters}
-                getWidgetData={() => widgetUnfilteredDataRef.current[slotWidget.id] || widgetRawDataRef.current[slotWidget.id]}
+                getWidgetData={() => {
+                  const raw = widgetUnfilteredDataRef.current[slotWidget.id] || widgetRawDataRef.current[slotWidget.id];
+                  if (!raw) return undefined;
+                  // Widget filtre tanımlarındaki key'lerin ham veride karşılığı yoksa,
+                  // bilinen dönüşümleri uygula (örn: mesaj alanından personel çıkarma)
+                  const wFilters = (widgetDetail.builder_config as any)?.widgetFilters as any[] | undefined;
+                  if (wFilters?.some((f: any) => f.key === 'personel') && raw.length > 0 && raw[0].personel === undefined) {
+                    const blacklist = ['WS', 'SISTEM', 'SYSTEM', 'DIADESTEK', 'DIA DESTEK', 'MIGRATE', 'DOVIZ', 'FLW', 'ADMIN'];
+                    return raw.map((item: any) => {
+                      const match = item.mesaj && item.mesaj.match(/\[(.*?)\]/);
+                      const name = match ? match[1]?.trim() : (item.aciklama || '');
+                      if (!name) return item;
+                      const upper = name.toLocaleUpperCase('tr-TR');
+                      if (blacklist.some(b => upper.includes(b))) return item;
+                      return { ...item, personel: name };
+                    });
+                  }
+                  return raw;
+                }}
               />
               {/* Tarih filtresi - eğer widget'ta tarih filtresi aktifse */}
               {widgetDetail.builder_config?.dateFilter?.enabled && widgetDetail.builder_config?.dateFilter?.showInWidget && (
