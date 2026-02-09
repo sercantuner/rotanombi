@@ -10,6 +10,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (email: string, password: string, displayName?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
+  resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,14 +21,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
     });
 
-    // THEN check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -40,32 +39,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error) {
         let errorMessage = 'Giriş başarısız';
-        
-        // Türkçe hata mesajları
         if (error.message.includes('Invalid login credentials')) {
           errorMessage = 'Geçersiz e-posta veya şifre';
         } else if (error.message.includes('Email not confirmed')) {
-          errorMessage = 'E-posta adresi doğrulanmamış';
+          errorMessage = 'E-posta adresi doğrulanmamış. Lütfen e-postanızı kontrol edin.';
         } else if (error.message.includes('Too many requests')) {
           errorMessage = 'Çok fazla deneme. Lütfen bekleyin.';
         }
-
         return { success: false, error: errorMessage };
       }
-
       return { success: true };
     } catch (error) {
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Bir hata oluştu' 
-      };
+      return { success: false, error: error instanceof Error ? error.message : 'Bir hata oluştu' };
     } finally {
       setIsLoading(false);
     }
@@ -79,16 +68,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
         options: {
           emailRedirectTo: window.location.origin,
-          data: {
-            full_name: displayName,
-          },
+          data: { full_name: displayName },
         },
       });
 
       if (error) {
         let errorMessage = 'Kayıt başarısız';
-        
-        // Türkçe hata mesajları
         if (error.message.includes('already registered')) {
           errorMessage = 'Bu e-posta adresi zaten kayıtlı';
         } else if (error.message.includes('Password should be')) {
@@ -96,16 +81,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else if (error.message.includes('Invalid email')) {
           errorMessage = 'Geçersiz e-posta adresi';
         }
-
         return { success: false, error: errorMessage };
       }
-
       return { success: true };
     } catch (error) {
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Bir hata oluştu' 
-      };
+      return { success: false, error: error instanceof Error ? error.message : 'Bir hata oluştu' };
     } finally {
       setIsLoading(false);
     }
@@ -117,14 +97,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
   }, []);
 
+  const resetPassword = useCallback(async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login`,
+      });
+
+      if (error) {
+        let errorMessage = 'Şifre sıfırlama başarısız';
+        if (error.message.includes('Too many requests')) {
+          errorMessage = 'Çok fazla deneme. Lütfen bekleyin.';
+        } else if (error.message.includes('Invalid email')) {
+          errorMessage = 'Geçersiz e-posta adresi';
+        }
+        return { success: false, error: errorMessage };
+      }
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Bir hata oluştu' };
+    }
+  }, []);
+
   const value: AuthContextType = {
-    user,
-    session,
-    isLoading,
+    user, session, isLoading,
     isAuthenticated: !!session,
-    login,
-    register,
-    logout,
+    login, register, logout, resetPassword,
   };
 
   return (
