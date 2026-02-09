@@ -283,14 +283,17 @@ export function ContainerRenderer({
         const widgetFilters = widgetSettings?.filters;
         const heightMultiplier = widgetSettings?.heightMultiplier || 1;
 
-        // Yükseklik çarpanına göre min-height hesapla
+        // Yükseklik çarpanına göre height hesapla
+        const heightPx = heightMultiplier * 280;
         const heightStyle: React.CSSProperties = heightMultiplier !== 1 
-          ? { minHeight: `${heightMultiplier * 280}px` } 
+          ? heightMultiplier < 1
+            ? { maxHeight: `${heightPx}px`, minHeight: `${heightPx}px`, height: `${heightPx}px`, overflow: 'hidden' }
+            : { minHeight: `${heightPx}px` }
           : {};
 
         // Widget var, render et - CSS izolasyonu için isolate class, h-full eklendi
         return (
-          <div key={slotIndex} className="relative group h-full min-h-[80px] isolate" style={heightStyle}>
+          <div key={slotIndex} className={`relative group h-full isolate ${heightMultiplier < 1 ? 'min-h-0' : 'min-h-[80px]'}`} style={heightStyle}>
             <DynamicWidgetRenderer
               widgetId={widgetDetail.widget_key}
               data={widgetData}
