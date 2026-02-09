@@ -61,7 +61,7 @@ export function MobileSidebar() {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate('/');
   };
 
   const handleCreatePage = async (name: string, icon: string) => {
