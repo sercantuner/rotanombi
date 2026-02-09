@@ -19,17 +19,18 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Plus, Trash2, GripVertical, Settings, X, Palette, Check, MessageSquarePlus, Calendar, Maximize2 } from 'lucide-react';
+import { Plus, Trash2, GripVertical, Settings, X, Palette, Check, MessageSquarePlus, Calendar, Maximize2, Filter } from 'lucide-react';
+import { WidgetFiltersButton } from '@/components/dashboard/WidgetFiltersButton';
+import { useWidgetLocalFilters, WidgetLocalFilters } from '@/hooks/useWidgetLocalFilters';
 import { WidgetFeedbackButton } from '@/components/dashboard/WidgetFeedbackButton';
 import { WidgetDateFilter, getDateRangeForPeriod } from '@/components/dashboard/WidgetDateFilter';
 import { DatePeriod } from '@/lib/widgetBuilderTypes';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { KpiFilter } from '@/components/dashboard/KpiFilterModal';
 
 interface ContainerWidgetSettings {
-  filters?: KpiFilter;
+  filters?: WidgetLocalFilters;
   heightMultiplier?: 1 | 1.5 | 2 | 2.5 | 3;
 }
 
@@ -178,7 +179,7 @@ export function ContainerRenderer({
   const isCompact = localContainer.settings?.compact === true;
 
   // Widget filtre değişikliğini handle et
-  const handleWidgetFilterChange = async (containerWidgetId: string, filters: KpiFilter) => {
+  const handleWidgetFilterChange = async (containerWidgetId: string, filters: WidgetLocalFilters) => {
     try {
       const existingWidget = containerWidgets.find(w => w.id === containerWidgetId);
       const existingSettings = (existingWidget?.settings as ContainerWidgetSettings) || {};
@@ -302,6 +303,19 @@ export function ContainerRenderer({
             
             {/* Hover kontrolleri - sağ üst */}
             <div className="absolute top-1 right-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+              {/* Widget Filtre Butonu */}
+              <WidgetFiltersButton
+                filters={widgetFilters || {}}
+                onFiltersChange={(filters) => handleWidgetFilterChange(slotWidget.id, filters)}
+                onReset={() => handleWidgetFilterChange(slotWidget.id, {} as any)}
+                activeFilterCount={Object.entries(widgetFilters || {}).reduce((count, [key, value]) => {
+                  if (value === undefined || value === null) return count;
+                  if (Array.isArray(value) && value.length === 0) return count;
+                  if (value === 'hepsi') return count;
+                  return count + 1;
+                }, 0)}
+                availableFilters={widgetDetail.available_filters as string[] || undefined}
+              />
               {/* Tarih filtresi - eğer widget'ta tarih filtresi aktifse */}
               {widgetDetail.builder_config?.dateFilter?.enabled && widgetDetail.builder_config?.dateFilter?.showInWidget && (
                 <div className="bg-background/90 backdrop-blur-sm rounded shadow-sm">

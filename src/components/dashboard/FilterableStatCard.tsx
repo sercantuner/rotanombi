@@ -4,7 +4,8 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Minus, Filter, FilterX, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { KpiFilterModal, KpiFilter } from './KpiFilterModal';
+import { KpiFilterModal } from './KpiFilterModal';
+import { WidgetLocalFilters } from '@/hooks/useWidgetLocalFilters';
 import { KpiSettingsModal, KpiSettings, DEFAULT_KPI_SETTINGS } from './KpiSettingsModal';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -21,8 +22,8 @@ interface FilterableStatCardProps {
   widgetId: string;
   widgetKey: string;
   containerWidgetId?: string;
-  currentFilters?: KpiFilter;
-  onFiltersChange?: (filters: KpiFilter) => void;
+  currentFilters?: WidgetLocalFilters;
+  onFiltersChange?: (filters: WidgetLocalFilters) => void;
   showFilterButton?: boolean;
   // Widget düzenleme modu
   isWidgetEditMode?: boolean;
@@ -95,12 +96,12 @@ export function FilterableStatCard({
 
   const TrendIcon = trendIcons[trend];
   const hasActiveFilters = currentFilters && (
-    currentFilters.gorunumModu !== 'hepsi' ||
-    currentFilters.durum !== 'hepsi' ||
-    currentFilters.cariKartTipi.length !== 3 ||
-    currentFilters.ozelKod1 ||
-    currentFilters.ozelKod2 ||
-    currentFilters.ozelKod3
+    (currentFilters.gorunumModu && currentFilters.gorunumModu !== 'hepsi') ||
+    (currentFilters.durum && currentFilters.durum !== 'hepsi') ||
+    ((currentFilters.cariKartTipi || []).length > 0 && (currentFilters.cariKartTipi || []).length < 3) ||
+    (currentFilters.ozelkod1 && currentFilters.ozelkod1.length > 0) ||
+    (currentFilters.ozelkod2 && currentFilters.ozelkod2.length > 0) ||
+    (currentFilters.ozelkod3 && currentFilters.ozelkod3.length > 0)
   );
 
   // Filtre ve ayar butonlarını göster koşulu
@@ -201,7 +202,7 @@ export function FilterableStatCard({
         widgetId={widgetId}
         widgetName={title}
         containerWidgetId={containerWidgetId}
-        currentFilters={currentFilters}
+        currentFilters={currentFilters as any}
         onFiltersChange={onFiltersChange}
       />
 

@@ -5,7 +5,7 @@ import { BuilderWidgetRenderer } from './BuilderWidgetRenderer';
 import { FilterableStatCard } from './FilterableStatCard';
 import { getWidgetById, WidgetCategory, WidgetFilter } from '@/lib/widgetRegistry';
 import { Widget } from '@/lib/widgetTypes';
-import { KpiFilter } from './KpiFilterModal';
+import { WidgetLocalFilters } from '@/hooks/useWidgetLocalFilters';
 
 // Widget Components
 import { StatCard } from './StatCard';
@@ -56,8 +56,8 @@ interface DynamicWidgetRendererProps {
   dbWidget?: Widget;
   // KPI filtreleme için
   containerWidgetId?: string;
-  widgetFilters?: KpiFilter;
-  onFiltersChange?: (filters: KpiFilter) => void;
+  widgetFilters?: WidgetLocalFilters;
+  onFiltersChange?: (filters: WidgetLocalFilters) => void;
   // Widget düzenleme modu
   isWidgetEditMode?: boolean;
   // Renk paleti
@@ -134,14 +134,14 @@ export function DynamicWidgetRenderer({
       if (widgetFilters.durum === 'pasif' && cari.aktif === 'E') return false;
       
       // Cari kart tipi: AL, AS, ST
-      if (widgetFilters.cariKartTipi.length > 0 && widgetFilters.cariKartTipi.length < 3) {
-        if (!widgetFilters.cariKartTipi.includes(cari.carikarttip || 'AL')) return false;
+      if ((widgetFilters.cariKartTipi || []).length > 0 && (widgetFilters.cariKartTipi || []).length < 3) {
+        if (!(widgetFilters.cariKartTipi || []).includes(cari.carikarttip || 'AL')) return false;
       }
       
       // Özel kodlar
-      if (widgetFilters.ozelKod1 && cari.ozelkod1kod !== widgetFilters.ozelKod1) return false;
-      if (widgetFilters.ozelKod2 && cari.ozelkod2kod !== widgetFilters.ozelKod2) return false;
-      if (widgetFilters.ozelKod3 && cari.ozelkod3kod !== widgetFilters.ozelKod3) return false;
+      if (widgetFilters.ozelkod1 && widgetFilters.ozelkod1.length > 0 && !widgetFilters.ozelkod1.includes(cari.ozelkod1kod)) return false;
+      if (widgetFilters.ozelkod2 && widgetFilters.ozelkod2.length > 0 && !widgetFilters.ozelkod2.includes(cari.ozelkod2kod)) return false;
+      if (widgetFilters.ozelkod3 && widgetFilters.ozelkod3.length > 0 && !widgetFilters.ozelkod3.includes(cari.ozelkod3kod)) return false;
       
       return true;
     });

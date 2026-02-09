@@ -7,7 +7,6 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { UserSettingsProvider } from "@/contexts/UserSettingsContext";
 import { DiaDataCacheProvider } from "@/contexts/DiaDataCacheContext";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
-import { GlobalFilterProvider } from "@/contexts/GlobalFilterContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
