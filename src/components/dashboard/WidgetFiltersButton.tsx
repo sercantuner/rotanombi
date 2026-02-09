@@ -150,8 +150,7 @@ export function WidgetFiltersButton({
   const hasParams = widgetParameters && widgetParameters.length > 0;
   const hasContent = hasFilters || hasParams;
 
-  // Eğer widget tanımlı filtre/parametre yoksa buton gösterme
-  if (!hasContent) return null;
+  // Filtre/parametre tanımlı olmasa bile buton gösterilir
 
   const handleFieldChange = (key: string, value: any) => {
     onFiltersChange({ ...filters, [key]: value });
@@ -198,50 +197,50 @@ export function WidgetFiltersButton({
           </div>
 
           {/* Filtreler Bölümü */}
-          {hasFilters && (
-            <>
-              <Separator />
-              <div className="space-y-3">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                  <Filter className="w-3 h-3" />
-                  Filtreler
-                </span>
-                {widgetFilters!.map(def => (
-                  <div key={def.key} className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">{def.label}</Label>
-                    <DynamicField
-                      def={def}
-                      value={filters[def.key]}
-                      onChange={(val) => handleFieldChange(def.key, val)}
-                    />
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+          <Separator />
+          <div className="space-y-3">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <Filter className="w-3 h-3" />
+              Filtreler
+            </span>
+            {hasFilters ? (
+              widgetFilters!.map(def => (
+                <div key={def.key} className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground">{def.label}</Label>
+                  <DynamicField
+                    def={def}
+                    value={filters[def.key]}
+                    onChange={(val) => handleFieldChange(def.key, val)}
+                  />
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-muted-foreground italic">Filtre tanımlanmamış</p>
+            )}
+          </div>
 
           {/* Parametreler Bölümü */}
-          {hasParams && (
-            <>
-              <Separator />
-              <div className="space-y-3">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                  <SlidersHorizontal className="w-3 h-3" />
-                  Parametreler
-                </span>
-                {widgetParameters!.map(def => (
-                  <div key={def.key} className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">{def.label}</Label>
-                    <DynamicField
-                      def={def}
-                      value={filters[def.key]}
-                      onChange={(val) => handleFieldChange(def.key, val)}
-                    />
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+          <Separator />
+          <div className="space-y-3">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <SlidersHorizontal className="w-3 h-3" />
+              Parametreler
+            </span>
+            {hasParams ? (
+              widgetParameters!.map(def => (
+                <div key={def.key} className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground">{def.label}</Label>
+                  <DynamicField
+                    def={def}
+                    value={filters[def.key]}
+                    onChange={(val) => handleFieldChange(def.key, val)}
+                  />
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-muted-foreground italic">Parametre tanımlanmamış</p>
+            )}
+          </div>
         </div>
       </PopoverContent>
     </Popover>
