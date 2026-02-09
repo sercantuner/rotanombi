@@ -1,88 +1,44 @@
 
 
-# Landing Page - RotanomBI Ana Sayfa
+# Landing Page Guncellemeleri
 
-## Ozet
-"/" rotasini dogrudan dashboard'a yonlendirmek yerine, giris yapmamis kullanicilar icin modern bir Landing Page olusturulacak. Giris yapmis kullanicilar otomatik olarak dashboard'a yonlendirilecek.
+## 1. Dark Mode RotanomBI Logosu
+Yuklenen `RotanomBI_dark.svg` dosyasi `src/assets/rotanombi-logo-dark.svg` olarak kaydedilecek. Header'da tema kontrolu eklenerek dark modda bu logo, light modda mevcut PNG logo kullanilacak.
 
-## Sayfa Yapisi
+## 2. Aktif Kullanici Sayisi Sorunu
+Profiles tablosunda anonim kullanicilar icin SELECT izni yok (RLS). Bu nedenle count sorgusu 0/null donuyor ve fallback deger (7) kullaniliyor. Gercek veri icin iki secenek var:
+- **Secilen Cozum**: Bir veritabani fonksiyonu (`get_landing_stats`) olusturulacak. Bu fonksiyon `SECURITY DEFINER` olarak calisip profiles ve widgets tablolarindan gercek sayilari dondurecek. Boylece anonim kullanicilar bile gercek istatistikleri gorebilecek.
 
-### Header (Sticky, transparent -> solid on scroll)
-- Sol: RotanomBI logosu (`rotanombi-logo.png`)
-- Sag: "Giris Yap" butonu (`/login`'e yonlendirir)
-
-### Hero Section
-- Baslik: "DIA ERP Verilerinizi Anlamli Gorsellere Donusturun"
-- Alt baslik: "Yapay zeka destekli is zekasi platformu ile verilerinizi gercek zamanli izleyin, ozel dashboard'lar olusturun."
-- CTA butonu: "Ucretsiz Deneyin" -> `/login`
-- Arka plan: Gradient + subtle pattern
-
-### Canli Istatistikler Section
-Veritabanindan gercek verilerle doldurulan 4 metrik karti:
-- Aktif Kullanici Sayisi: **7** (profiles tablosundan)
-- Toplam Widget: **29** (widgets tablosundan)
-- AI ile Uretilen: **29** (custom code widget'lar)
-- Desteklenen Veri Modeli: **20+** (DIA model sayisi, sabit)
-
-### Ozellikler Section
-6 ozellik karti (ikon + baslik + aciklama):
-- AI Widget Uretici
-- Gercek Zamanli Veri
-- Surukle-Birak Dashboard
-- DIA ERP Entegrasyonu
-- Widget Marketplace
-- Takim Yonetimi
-
-### Fiyatlandirma Section
-3 plan karti yan yana:
-
-| | Demo | Aylik | Yillik |
-|---|---|---|---|
-| Sure | 1 Ay | Aylik | Yillik |
-| Fiyat | Ucretsiz | ~2.315 TL/ay + KDV | 25.000 TL/yil + KDV |
-| Aylik karsiligi | - | 2.315 TL | ~2.083 TL (%10 indirimli) |
-| Hesaplama | - | 25.000 / 12 = 2.083 * 1.10 = ~2.292 (yuvarlanir 2.315) | 25.000 TL |
-| Ozellikler | Tum ozellikler, 1 ay sinirli | Tum ozellikler | Tum ozellikler, %10 tasarruf |
-
-Hesap detayi:
-- Yillik fiyat: 25.000 TL + KDV
-- Yillik aylik karsiligi: 25.000 / 12 = ~2.083 TL
-- Aylik fiyat (yilliga gore %10 pahali): 2.083 * 1.10 = ~2.292 -> yuvarlanarak **2.315 TL/ay + KDV**
-- Yillik plan %10 indirimli badge'i alacak
-
-### Footer
-- Sol: Rota Yazilim logosu (`rota-logo-dark.svg`) + "Rota Yazilim tarafindan gelistirilmistir"
-- Sag: rotayazilim.net linki
-- Alt: "(C) 2024 Rota Yazilim - RotanomBI v3.0"
+## 3. AI Widget Uretici Ozelliginin Kaldirilmasi
+Bu ozellik sadece super admin'lere acik oldugu icin landing page'deki "Ozellikler" bolumunden cikarilacak. Yerine kullanicilarin erisebilecegi bir ozellik eklenecek (ornegin "Ozel Raporlama").
 
 ## Teknik Detaylar
+
+### Veritabani Degisikligi
+Yeni bir `get_landing_stats()` fonksiyonu olusturulacak:
+```sql
+CREATE OR REPLACE FUNCTION public.get_landing_stats()
+RETURNS TABLE(user_count bigint, widget_count bigint, ai_widget_count bigint)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+  SELECT
+    (SELECT count(*) FROM profiles) as user_count,
+    (SELECT count(*) FROM widgets WHERE is_active = true) as widget_count,
+    (SELECT count(*) FROM widgets WHERE builder_config IS NOT NULL) as ai_widget_count;
+$$;
+```
 
 ### Dosya Degisiklikleri
 
 | Dosya | Islem |
 |---|---|
-| `src/pages/LandingPage.tsx` | Yeni dosya - Landing page bileseni |
-| `src/App.tsx` | "/" rotasini LandingPage'e yonlendir (giris yapmamis ise) |
+| `src/assets/rotanombi-logo-dark.svg` | Yeni - dark mode logosu |
+| `src/pages/LandingPage.tsx` | Header'da tema bazli logo, `useLiveStats` RPC cagrisina gecis, AI Widget feature kaldirilip yerine "Ozel Raporlama" eklenmesi |
 
-### Routing Mantigi
-- `App.tsx`'deki `<Route path="/" element={<Navigate to="/dashboard" replace />} />` satiri degistirilecek
-- "/" rotasi `LandingPage` bilesenini gosterecek
-- `LandingPage` icinde `useAuth()` ile kullanici kontrol edilecek: eger giris yapmissa otomatik `/dashboard`'a yonlendirilecek
-
-### Canli Istatistikler
-- `LandingPage` icinde Supabase'den `profiles` ve `widgets` tablolarindan count sorgulari yapilacak
-- Bu sorgular anonim kullanicilarin erisebilmesi icin RLS politikasi gerektirmez (count fonksiyonu kullanilacak)
-- Alternatif olarak sabit degerler kullanilabilir (RLS sorununu onlemek icin)
-
-### Tasarim
-- Tailwind CSS ile tamamen responsive
-- Dark/Light mode destegi (ThemeProvider zaten mevcut)
-- Animasyonlar: fade-in, slide-up (mevcut CSS animasyonlari kullanilacak)
-- Mevcut renk paleti kullanilacak (primary, accent, muted vb.)
-- Mobil oncelikli tasarim
-
-### Logolar
-- RotanomBI: `src/assets/rotanombi-logo.png`
-- Rota Yazilim (light bg): `src/assets/rota-logo-dark.svg`
-- Rota Yazilim (dark bg): `src/assets/rota-logo-light.svg`
+### LandingPage.tsx Detayli Degisiklikler
+- **Import**: `rotanombiLogoDark` import'u eklenir
+- **LandingHeader**: `useTheme()` ile dark/light logo secimi yapilir
+- **useLiveStats**: `supabase.rpc('get_landing_stats')` kullanilarak gercek veriler cekilir
+- **features dizisi**: "AI Widget Uretici" maddesi cikarilir, yerine "Ozel Raporlama" eklenir (5 ozellik kalir veya alternatif eklenir)
 
