@@ -1113,15 +1113,22 @@ export function useDynamicWidgetData(
       // Sonuç: lastSyncedAt bilgisini de takip ediyoruz
       let lastSyncedAt: Date | null = null;
       
+      // MULTI-QUERY İÇİN: Tüm sorgularda aynı dönem kullanılacak
+      // Bu sayede left_join gibi birleştirmelerde dönem uyumsuzluğu önlenir
+      const isMultiQuery = config.multiQuery && config.multiQuery.queries.length > 0;
+      
       // Helper: DB'den veya memory cache'den veri çek
-      const fetchDataForSource = async (dataSourceId: string): Promise<any[]> => {
+      // forceEffectiveDonem: multi-query'de tüm sorgular için aynı dönem kullanılır
+      const fetchDataForSource = async (dataSourceId: string, forceNoFallback: boolean = false): Promise<any[]> => {
         const slug = getDataSourceSlug(dataSourceId);
         if (!slug) {
           console.warn(`[Widget] DataSource ${dataSourceId} slug not found`);
           return [];
         }
         
-        const isSourcePeriodIndependent = isPeriodIndependent(dataSourceId);
+        // Multi-query'de period-independent fallback KAPALI - tüm sorgular aynı dönemi kullanmalı
+        // Aksi halde left_join gibi merge işlemlerinde dönem uyumsuzluğu oluşur
+        const isSourcePeriodIndependent = forceNoFallback ? false : isPeriodIndependent(dataSourceId);
         
         // SCOPE-AWARE: Memory cache lookup için scope oluştur
         const cacheScope: DataScope = {
@@ -1260,9 +1267,12 @@ export function useDynamicWidgetData(
         const queryResults: Record<string, any[]> = {};
         
         // Her sorguyu paralel çalıştır
+        // KRİTİK: Multi-query'de TÜM sorgular için period-independent fallback KAPALI
+        // Bu sayede tüm sorgular aynı effectiveDonem'den veri çeker ve merge tutarlı olur
         const queryPromises = config.multiQuery.queries.map(async (query) => {
           if (query.dataSourceId) {
-            const result = await fetchDataForSource(query.dataSourceId);
+            // forceNoFallback: true - multi-query'de fallback yok, hep aynı dönem
+            const result = await fetchDataForSource(query.dataSourceId, true);
             return { id: query.id, data: result };
           }
           console.warn(`[MultiQuery] Query '${query.id}' has no dataSourceId - returning empty`);
