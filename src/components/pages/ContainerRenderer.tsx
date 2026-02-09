@@ -293,7 +293,7 @@ export function ContainerRenderer({
 
         // Widget var, render et - CSS izolasyonu için isolate class, h-full eklendi
         return (
-          <div key={slotIndex} className={`relative group h-full isolate ${heightMultiplier < 1 ? 'min-h-0' : 'min-h-[80px]'}`} style={heightStyle}>
+          <div key={slotIndex} className={`relative group h-full isolate ${heightMultiplier < 1 ? '!min-h-0 !h-auto' : 'min-h-[80px]'}`} style={heightStyle}>
             <DynamicWidgetRenderer
               widgetId={widgetDetail.widget_key}
               data={widgetData}
