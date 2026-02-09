@@ -1366,6 +1366,14 @@ export type Database = {
           record_count: number
         }[]
       }
+      get_landing_stats: {
+        Args: never
+        Returns: {
+          ai_widget_count: number
+          user_count: number
+          widget_count: number
+        }[]
+      }
       get_safe_profile: {
         Args: { _target_user_id: string }
         Returns: {
