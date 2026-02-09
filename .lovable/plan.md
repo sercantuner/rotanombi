@@ -1,97 +1,63 @@
 
-## Giris Ekrani Yenileme, Yeni Ozellikler ve Markali E-posta Sablonu
+## Filtre Seceneklerinin Otomatik Doldurulmasi
 
-Bu plan, onceki onaylanan plani ve markali e-posta sablonunu birlikte kapsar.
+### Sorun
 
----
+Widget filtreleri (ornegin "Kullanici", "Satis Elemani", "Sube") `multi-select` tipinde tanimlanmis ancak `options` dizisi bos veya tanimlanmamis. `WidgetFiltersButton` bilesenindeki `DynamicField`, `def.options || []` uzerinde dongu kuruyor ve bos dizi oldugu icin sadece filtre etiketi gorunuyor, secim yapilacak oge yok.
 
-### 1. AuthContext Guncellemesi
+Veritabanindaki ornek veriler:
+- "Personel Performans Radari" -> `kullaniciadi` filtresi: options YOK
+- "Aylik Acik Teklif Analizi" -> `satisElemani` filtresi: options `[]` (bos)
+- "Kasa Varlik Ozeti" -> `sube` filtresi: options YOK
 
-**Dosya:** `src/contexts/AuthContext.tsx`
+### Cozum
 
-- `resetPassword(email: string)` fonksiyonu eklenecek
-- `supabase.auth.resetPasswordForEmail()` kullanilacak, redirect URL olarak `window.location.origin` ayarlanacak
-- AuthContextType interface'ine `resetPassword` eklenecek
-
-### 2. Super Admin Giris Ekrani - Kurumsal Tasarim
-
-**Dosya:** `src/pages/LoginPage.tsx`
-
-Mevcut tek kart tasarimi yerine split-panel kurumsal gorunume gecilecek:
-
-- **Sol panel (lg ve ustu):** Koyu slate gradient arka plan, Shield ikonu ile buyuk kurumsal baslik, "Sistem Yonetim Konsolu" aciklamasi, guvenlik badge'leri (7/24 Izleme, Sifrelenmis Baglanti, Guvenli Erisim)
-- **Sag panel:** Temiz beyaz/koyu form alani
-- Crown ve emoji gibi oyunsu ogeler kaldirilacak, daha profesyonel bir dil kullanilacak
-- Animasyonlu blur efektleri yerine statik, kurumsal dot pattern veya temiz gradient
-
-### 3. "Beni Hatirla" Ozelligi (Her Iki Form)
-
-- Sifre alani altina `rememberMe` checkbox'i eklenecek
-- Tiklandiginda `localStorage` key'i: `rotanombi_remembered_email`
-- Sayfa yuklendiginde localStorage'dan email okunup otomatik doldurulacak
-- Checkbox varsayilan olarak `false`
-
-### 4. "Sifremi Unuttum" Ozelligi (Her Iki Form)
-
-- `forgotPasswordMode` state'i ile ayri gorunum
-- Sadece email alani ve "Sifirla" butonu gosterilecek
-- AuthContext'teki `resetPassword` fonksiyonu cagirilacak
-- Basariliysa "Sifre sifirlama baglantisi e-posta adresinize gonderildi" mesaji
-- "Girise don" linki ile normal moda donus
-
-### 5. Kayit Basari Mesaji Guncelleme
-
-- Mevcut "Kayit basarili! Giris yapabilirsiniz." mesaji "Kayit basarili! E-posta adresinize dogrulama baglantisi gonderildi. Lutfen e-postanizi kontrol edin." olarak guncellenecek
-
-### 6. Markali E-posta Sablonu (Auth E-postalari)
-
-Lovable Cloud auth sistemi uzerinden gonderilen e-postalar (dogrulama, sifre sifirlama) icin ozel HTML sablonlari yapilandirilacak. RotanomBI marka renkleri ve logosu kullanilacak.
-
-**Marka Renkleri:**
-- Primary (Ana Mavi): `#2B5EA7` (hsl 220 70% 45%)
-- Accent (Yesil): `#29997A` (hsl 170 60% 40%)
-- Arka Plan: `#F3F5F7`
-- Metin: `#1E2A3B`
-
-**Logo:** Publicerisimli logo URL'si olarak `https://rotanombi.lovable.app/favicon.png` kullanilacak (zaten yayinda olan favicon).
-
-**Sablon icerigi:**
-- Ust kisim: RotanomBI logosu (ortalanmis)
-- Gri arka plan uzerinde beyaz kart yapisi
-- Ana mavi renkli CTA butonu
-- Alt kisimda "Rota Yazilim" footer'i ve telif hakki bilgisi
-- Turkce metin
-
-**Yapilandirilacak sablonlar:**
-1. **Confirm Signup** (E-posta dogrulama): "Hosgeldiniz! E-posta adresinizi dogrulamak icin asagidaki butona tiklayin."
-2. **Reset Password** (Sifre sifirlama): "Sifrenizi sifirlamak icin asagidaki butona tiklayin."
-3. **Magic Link** (Sihirli baglanti): "Giris yapmak icin asagidaki butona tiklayin."
-
-Bu sablonlar `supabase/config.toml` dosyasina auth e-posta yapilandirmasi olarak eklenecek.
-
----
+Widget'in **gercek verisinden** benzersiz degerleri cikararak bos `options` dizilerini otomatik doldurmak.
 
 ### Teknik Detaylar
 
-**Degisecek dosyalar:**
+**1. `ContainerRenderer.tsx` - Veri Prop'u Gecisi**
 
-1. **`src/contexts/AuthContext.tsx`**
-   - `resetPassword` fonksiyonu ve tip taniminin eklenmesi
+Su anda `WidgetFiltersButton`'a widget verisi gecilmiyor. Widget'in `useDynamicWidgetData` hook'u tarafindan cekilen ham veriyi filtre butonuna ulastirmak gerekiyor. Ancak veri `BuilderWidgetRenderer` icinde cekildigi icin, `ContainerRenderer` seviyesinde dogrudan erisim yok.
 
-2. **`src/pages/LoginPage.tsx`**
-   - Super Admin bolumu: Split-panel kurumsal tasarim
-   - Yeni state'ler: `rememberMe`, `forgotPasswordMode`
-   - localStorage entegrasyonu
-   - Her iki forma "Beni hatirla" checkbox'i
-   - Her iki forma "Sifremi Unuttum" modu
-   - Kayit basari mesaji guncellenmesi
+En temiz yaklasim: `WidgetFiltersButton` bilesenine opsiyonel `widgetData` prop'u ekleyerek, bos options'lari bu veriden doldurmak.
 
-3. **`supabase/config.toml`**
-   - `[auth]` bolumune `site_url` eklenmesi
-   - `[auth.email]` bolumune ozel HTML sablonlari (confirm, recovery, magic_link) ve Turkce konu satirlari eklenmesi
+**2. `WidgetFiltersButton.tsx` - Dinamik Opsiyon Uretimi**
 
-**Yeni state'ler (LoginPage):**
-- `rememberMe: boolean`
-- `forgotPasswordMode: boolean`
+- Yeni prop: `widgetData?: any[]` (widget'in ham veri dizisi)
+- `DynamicField` bilesenine `resolvedOptions` hesaplamasi eklenecek:
+  - Eger `def.options` dolu ise: mevcut options'lari kullan (degisiklik yok)
+  - Eger `def.options` bos veya undefined ise VE `widgetData` mevcutsa: `widgetData` icerisinden `def.key` alanindaki benzersiz (unique) degerleri cikar ve `{ value, label }` formatina donustur
+  - Degerler alfabetik siralanacak, null/undefined/bos degerler filtrelenecek
 
-**localStorage key:** `rotanombi_remembered_email`
+**3. `ContainerRenderer.tsx` - WidgetFiltersButton'a Veri Aktarimi**
+
+`BuilderWidgetRenderer` icinde veri zaten cekiliyor. Iki yaklasim var:
+
+- **Yaklasim A (Tercih edilen):** `BuilderWidgetRenderer` icerisine filtre butonunu tasimak yerine, `ContainerRenderer`'da widget verisini ayri bir hook ile cekerek `WidgetFiltersButton`'a gecmek.
+
+- **Yaklasim B (Basit):** `BuilderWidgetRenderer` icinde zaten `useDynamicWidgetData` ile cekilen `rawData`'yi bir callback veya ref ile ust bilesene bildirmek.
+
+**Yaklasim B uygulanacak:** `BuilderWidgetRenderer`'a opsiyonel `onDataLoaded?: (data: any[]) => void` callback prop'u eklenecek. Veri yuklendikten sonra bu callback cagirilacak. `ContainerRenderer` bu veriyi state'te tutarak `WidgetFiltersButton`'a iletecek.
+
+**4. Degisecek Dosyalar**
+
+1. **`src/components/dashboard/WidgetFiltersButton.tsx`**
+   - `widgetData?: any[]` prop'u eklenmesi
+   - `DynamicField` icerisinde `resolvedOptions` hesaplamasi: bos options + widgetData varsa veriden benzersiz degerler cikarilmasi
+   - Seceneklerin fazla olmasi durumunda arama (search) destegi eklenmesi
+
+2. **`src/components/dashboard/BuilderWidgetRenderer.tsx`**
+   - `onDataLoaded?: (data: any[]) => void` prop'u eklenmesi
+   - Veri yuklendikten sonra callback'in cagirilmasi
+
+3. **`src/components/pages/ContainerRenderer.tsx`**
+   - Her slot icin `widgetRawData` state'i tutulmasi
+   - `BuilderWidgetRenderer`'in `onDataLoaded` callback'i ile bu state'in guncellenmesi
+   - `WidgetFiltersButton`'a `widgetData` prop'unun gecilmesi
+
+### Beklenen Sonuc
+
+- Filtre popover'i acildiginda, widget verisinden cikartilan gercek degerler (ornegin sube adlari, kullanici adlari, satis elemanlari) secim listesi olarak gorunecek
+- Kullanici filtreleri secebilecek ve widget verisi buna gore daraltilacak
+- Statik options tanimlanmis filtreler icin davranis degismeyecek
