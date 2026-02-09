@@ -294,7 +294,7 @@ export function ContainerRenderer({
 
         // Widget var, render et - CSS izolasyonu için isolate class, h-full eklendi
         return (
-          <div key={slotIndex} className={cn('relative group isolate', !isSmall && 'min-h-[80px] h-full')} style={heightStyle}>
+          <div key={slotIndex} className={cn('relative group isolate', isSmall ? '!h-auto' : 'min-h-[80px] h-full')} style={heightStyle}>
             <DynamicWidgetRenderer
               widgetId={widgetDetail.widget_key}
               data={widgetData}
@@ -551,7 +551,7 @@ export function ContainerRenderer({
             - KPI satırları: min-h yok (auto)
           */}
           <div className={cn(
-            'grid gap-1 md:gap-2 items-stretch [&>*]:h-full',
+            'grid gap-1 md:gap-2 items-stretch',
             template.gridClass,
             // Harita container'ları - max-h yok, daha büyük min-h (Leaflet için gerekli)
             (container.container_type === 'map_full' || 
