@@ -62,6 +62,7 @@ export function ContainerRenderer({
   const [widgetDetails, setWidgetDetails] = useState<Record<string, Widget>>({});
   const [localContainer, setLocalContainer] = useState(container);
   const [widgetRawData, setWidgetRawData] = useState<Record<string, any[]>>({});
+  const [localFilters, setLocalFilters] = useState<Record<string, WidgetLocalFilters>>({});
 
   const template = CONTAINER_TEMPLATES.find(t => t.id === container.container_type);
 
@@ -179,8 +180,11 @@ export function ContainerRenderer({
   const showTitle = localContainer.settings?.showTitle !== false;
   const isCompact = localContainer.settings?.compact === true;
 
-  // Widget filtre değişikliğini handle et
+  // Widget filtre değişikliğini handle et - önce lokal state güncelle (anlık etki), sonra DB'ye kaydet
   const handleWidgetFilterChange = async (containerWidgetId: string, filters: WidgetLocalFilters) => {
+    // Anlık UI güncellemesi
+    setLocalFilters(prev => ({ ...prev, [containerWidgetId]: filters }));
+    
     try {
       const existingWidget = containerWidgets.find(w => w.id === containerWidgetId);
       const existingSettings = (existingWidget?.settings as ContainerWidgetSettings) || {};
@@ -193,6 +197,7 @@ export function ContainerRenderer({
         .eq('id', containerWidgetId);
 
       if (error) throw error;
+      // DB'ye yazıldıktan sonra arka planda senkronize et (UI zaten güncellendi)
       refreshWidgets();
     } catch (error) {
       console.error('Error saving widget filters:', error);
@@ -279,7 +284,8 @@ export function ContainerRenderer({
       if (slotWidget && widgetDetail) {
         // Widget ayarlarını parse et
         const widgetSettings = slotWidget.settings as ContainerWidgetSettings | null;
-        const widgetFilters = widgetSettings?.filters;
+        // Lokal filtreler öncelikli (anlık etki), yoksa DB'den gelen
+        const widgetFilters = localFilters[slotWidget.id] ?? widgetSettings?.filters;
         const heightMultiplier = widgetSettings?.heightMultiplier || 1;
 
         // Yükseklik çarpanına göre min-height hesapla
