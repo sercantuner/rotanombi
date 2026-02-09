@@ -62,6 +62,8 @@ interface DynamicWidgetRendererProps {
   isWidgetEditMode?: boolean;
   // Renk paleti
   colors?: string[];
+  // Veri yüklendiğinde callback
+  onDataLoaded?: (data: any[]) => void;
 }
 
 // Format large numbers
@@ -89,6 +91,7 @@ export function DynamicWidgetRenderer({
   onFiltersChange,
   isWidgetEditMode = false,
   colors,
+  onDataLoaded,
 }: DynamicWidgetRendererProps) {
   const widget = getWidgetById(widgetId);
   
@@ -109,6 +112,7 @@ export function DynamicWidgetRenderer({
         builderConfig={dbWidget.builder_config}
         className={className}
         widgetFilters={builderWidgetFilters}
+        onDataLoaded={onDataLoaded}
       />
     );
   }

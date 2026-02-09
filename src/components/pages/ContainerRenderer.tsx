@@ -61,6 +61,7 @@ export function ContainerRenderer({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [widgetDetails, setWidgetDetails] = useState<Record<string, Widget>>({});
   const [localContainer, setLocalContainer] = useState(container);
+  const [widgetRawData, setWidgetRawData] = useState<Record<string, any[]>>({});
 
   const template = CONTAINER_TEMPLATES.find(t => t.id === container.container_type);
 
@@ -299,6 +300,7 @@ export function ContainerRenderer({
               widgetFilters={widgetFilters}
               onFiltersChange={(filters) => handleWidgetFilterChange(slotWidget.id, filters)}
               isWidgetEditMode={isWidgetEditMode}
+              onDataLoaded={(data) => setWidgetRawData(prev => ({ ...prev, [slotWidget.widget_id]: data }))}
             />
             
             {/* Hover kontrolleri - sağ üst */}
@@ -322,6 +324,7 @@ export function ContainerRenderer({
                 }, 0)}
                 widgetFilters={(widgetDetail.builder_config as any)?.widgetFilters}
                 widgetParameters={(widgetDetail.builder_config as any)?.widgetParameters}
+                widgetData={widgetRawData[slotWidget.widget_id]}
               />
               {/* Tarih filtresi - eğer widget'ta tarih filtresi aktifse */}
               {widgetDetail.builder_config?.dateFilter?.enabled && widgetDetail.builder_config?.dateFilter?.showInWidget && (
