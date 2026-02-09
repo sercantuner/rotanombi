@@ -221,12 +221,17 @@ const initMapScope = async () => {
       CircleMarker: reactLeaflet.CircleMarker,
       Polyline: reactLeaflet.Polyline,
       Polygon: reactLeaflet.Polygon,
-      Tooltip: reactLeaflet.Tooltip, // Widget'larda Map.Tooltip kullanılıyor
+      Tooltip: reactLeaflet.Tooltip,
       // Hooks
       useMap: reactLeaflet.useMap,
       useMapEvents: reactLeaflet.useMapEvents,
       useMapEvent: reactLeaflet.useMapEvent,
       L: L.default,
+      // Dark mode desteği
+      isDark: document.documentElement.classList.contains('dark'),
+      TILE_LIGHT: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+      TILE_DARK: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      TILE_DEFAULT: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     };
 
     return MapScope;
