@@ -6,30 +6,34 @@ import { useTheme } from '@/hooks/useTheme';
 import rotanombiLogo from '@/assets/rotanombi-logo.png';
 import rotaLogoDark from '@/assets/rota-logo-dark.svg';
 import rotaLogoLight from '@/assets/rota-logo-light.svg';
-import {
-  Brain, Zap, GripVertical, Database, Store, Users,
-  Check, ArrowRight, BarChart3, Sparkles, ExternalLink
-} from 'lucide-react';
+import { Brain, Zap, GripVertical, Database, Store, Users, Check, ArrowRight, BarChart3, Sparkles, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-
 function useLiveStats() {
-  const [stats, setStats] = useState({ users: 7, widgets: 29, aiWidgets: 29 });
-
+  const [stats, setStats] = useState({
+    users: 7,
+    widgets: 29,
+    aiWidgets: 29
+  });
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [profilesRes, widgetsRes, aiRes] = await Promise.all([
-          supabase.from('profiles').select('id', { count: 'exact', head: true }),
-          supabase.from('widgets').select('id', { count: 'exact', head: true }).eq('is_active', true),
-          supabase.from('widgets').select('id', { count: 'exact', head: true }).not('builder_config', 'is', null),
-        ]);
+        const [profilesRes, widgetsRes, aiRes] = await Promise.all([supabase.from('profiles').select('id', {
+          count: 'exact',
+          head: true
+        }), supabase.from('widgets').select('id', {
+          count: 'exact',
+          head: true
+        }).eq('is_active', true), supabase.from('widgets').select('id', {
+          count: 'exact',
+          head: true
+        }).not('builder_config', 'is', null)]);
         if (profilesRes.count !== null || widgetsRes.count !== null) {
           setStats({
             users: profilesRes.count ?? 7,
             widgets: widgetsRes.count ?? 29,
-            aiWidgets: aiRes.count ?? 29,
+            aiWidgets: aiRes.count ?? 29
           });
         }
       } catch {
@@ -38,15 +42,15 @@ function useLiveStats() {
     }
     fetchStats();
   }, []);
-
   return stats;
 }
-
 function useScrolled() {
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handler, { passive: true });
+    window.addEventListener('scroll', handler, {
+      passive: true
+    });
     return () => window.removeEventListener('scroll', handler);
   }, []);
   return scrolled;
@@ -55,18 +59,12 @@ function useScrolled() {
 /* ─── Header ─── */
 function LandingHeader() {
   const scrolled = useScrolled();
-  return (
-    <header
-      className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? 'bg-background/95 backdrop-blur-md border-b border-border shadow-sm'
-          : 'bg-transparent'
-      }`}
-    >
+  return <header className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${scrolled ? 'bg-background/95 backdrop-blur-md border-b border-border shadow-sm' : 'bg-transparent'}`}>
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16">
         <Link to="/" className="flex items-center gap-2">
           <img src={rotanombiLogo} alt="RotanomBI" className="h-8" />
-          <span className="text-lg font-bold text-foreground hidden sm:inline">RotanomBI</span>
+          <span className="text-lg font-bold text-foreground hidden sm:inline">
+        </span>
         </Link>
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" asChild>
@@ -80,14 +78,12 @@ function LandingHeader() {
           </Button>
         </div>
       </div>
-    </header>
-  );
+    </header>;
 }
 
 /* ─── Hero ─── */
 function HeroSection() {
-  return (
-    <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
+  return <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
       {/* Background decoration */}
       <div className="absolute inset-0 -z-10">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[800px] rounded-full bg-primary/5 blur-3xl" />
@@ -119,51 +115,74 @@ function HeroSection() {
           </Button>
         </div>
       </div>
-    </section>
-  );
+    </section>;
 }
 
 /* ─── Stats ─── */
 function StatsSection() {
-  const { users, widgets, aiWidgets } = useLiveStats();
-
-  const items = [
-    { label: 'Aktif Kullanıcı', value: users, icon: Users },
-    { label: 'Toplam Widget', value: widgets, icon: BarChart3 },
-    { label: 'AI ile Üretilen', value: aiWidgets, icon: Brain },
-    { label: 'Veri Modeli', value: '20+', icon: Database },
-  ];
-
-  return (
-    <section className="py-16 px-4 sm:px-6 lg:px-8">
+  const {
+    users,
+    widgets,
+    aiWidgets
+  } = useLiveStats();
+  const items = [{
+    label: 'Aktif Kullanıcı',
+    value: users,
+    icon: Users
+  }, {
+    label: 'Toplam Widget',
+    value: widgets,
+    icon: BarChart3
+  }, {
+    label: 'AI ile Üretilen',
+    value: aiWidgets,
+    icon: Brain
+  }, {
+    label: 'Veri Modeli',
+    value: '20+',
+    icon: Database
+  }];
+  return <section className="py-16 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-        {items.map((item) => (
-          <Card key={item.label} className="text-center animate-slide-up">
+        {items.map(item => <Card key={item.label} className="text-center animate-slide-up">
             <CardContent className="pt-6 pb-4">
               <item.icon className="w-8 h-8 mx-auto mb-3 text-primary" />
               <div className="text-3xl font-bold text-foreground">{item.value}</div>
               <div className="text-sm text-muted-foreground mt-1">{item.label}</div>
             </CardContent>
-          </Card>
-        ))}
+          </Card>)}
       </div>
-    </section>
-  );
+    </section>;
 }
 
 /* ─── Features ─── */
-const features = [
-  { icon: Brain, title: 'AI Widget Üretici', desc: 'Yapay zeka ile saniyeler içinde özel widget\'lar oluşturun.' },
-  { icon: Zap, title: 'Gerçek Zamanlı Veri', desc: 'DIA ERP verilerinizi anlık olarak izleyin ve analiz edin.' },
-  { icon: GripVertical, title: 'Sürükle-Bırak Dashboard', desc: 'Widget\'ları sürükleyip bırakarak kendi dashboard\'unuzu tasarlayın.' },
-  { icon: Database, title: 'DIA ERP Entegrasyonu', desc: 'Cari, stok, fatura ve daha fazla modüle doğrudan erişim.' },
-  { icon: Store, title: 'Widget Marketplace', desc: 'Hazır widget\'ları keşfedin ve tek tıkla ekleyin.' },
-  { icon: Users, title: 'Takım Yönetimi', desc: 'Ekip üyelerinize özel izinler ve dashboard\'lar atayın.' },
-];
-
+const features = [{
+  icon: Brain,
+  title: 'AI Widget Üretici',
+  desc: 'Yapay zeka ile saniyeler içinde özel widget\'lar oluşturun.'
+}, {
+  icon: Zap,
+  title: 'Gerçek Zamanlı Veri',
+  desc: 'DIA ERP verilerinizi anlık olarak izleyin ve analiz edin.'
+}, {
+  icon: GripVertical,
+  title: 'Sürükle-Bırak Dashboard',
+  desc: 'Widget\'ları sürükleyip bırakarak kendi dashboard\'unuzu tasarlayın.'
+}, {
+  icon: Database,
+  title: 'DIA ERP Entegrasyonu',
+  desc: 'Cari, stok, fatura ve daha fazla modüle doğrudan erişim.'
+}, {
+  icon: Store,
+  title: 'Widget Marketplace',
+  desc: 'Hazır widget\'ları keşfedin ve tek tıkla ekleyin.'
+}, {
+  icon: Users,
+  title: 'Takım Yönetimi',
+  desc: 'Ekip üyelerinize özel izinler ve dashboard\'lar atayın.'
+}];
 function FeaturesSection() {
-  return (
-    <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-muted/30">
+  return <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-muted/30">
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-14">
           <h2 className="text-3xl sm:text-4xl font-bold text-foreground">Güçlü Özellikler</h2>
@@ -172,8 +191,7 @@ function FeaturesSection() {
           </p>
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {features.map((f) => (
-            <Card key={f.title} className="group hover:shadow-md transition-shadow duration-200">
+          {features.map(f => <Card key={f.title} className="group hover:shadow-md transition-shadow duration-200">
               <CardHeader>
                 <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-2 group-hover:bg-primary/20 transition-colors">
                   <f.icon className="w-5 h-5 text-primary" />
@@ -183,48 +201,40 @@ function FeaturesSection() {
               <CardContent>
                 <p className="text-sm text-muted-foreground">{f.desc}</p>
               </CardContent>
-            </Card>
-          ))}
+            </Card>)}
         </div>
       </div>
-    </section>
-  );
+    </section>;
 }
 
 /* ─── Pricing ─── */
-const plans = [
-  {
-    name: 'Demo',
-    price: 'Ücretsiz',
-    period: '1 Ay',
-    desc: 'Tüm özellikleri 1 ay boyunca deneyin.',
-    badge: null,
-    features: ['Tüm özellikler', '1 ay süre', 'Sınırsız widget', 'DIA ERP bağlantısı'],
-    highlight: false,
-  },
-  {
-    name: 'Aylık',
-    price: '2.315',
-    period: '/ ay + KDV',
-    desc: 'Aylık esneklik ile tüm özellikler.',
-    badge: null,
-    features: ['Tüm özellikler', 'Aylık faturalandırma', 'Öncelikli destek', 'Sınırsız widget'],
-    highlight: false,
-  },
-  {
-    name: 'Yıllık',
-    price: '25.000',
-    period: '/ yıl + KDV',
-    desc: 'Aylık ~2.083 ₺ ile %10 tasarruf.',
-    badge: '%10 İndirim',
-    features: ['Tüm özellikler', 'Yıllık faturalandırma', 'Öncelikli destek', '%10 tasarruf', 'Sınırsız widget'],
-    highlight: true,
-  },
-];
-
+const plans = [{
+  name: 'Demo',
+  price: 'Ücretsiz',
+  period: '1 Ay',
+  desc: 'Tüm özellikleri 1 ay boyunca deneyin.',
+  badge: null,
+  features: ['Tüm özellikler', '1 ay süre', 'Sınırsız widget', 'DIA ERP bağlantısı'],
+  highlight: false
+}, {
+  name: 'Aylık',
+  price: '2.315',
+  period: '/ ay + KDV',
+  desc: 'Aylık esneklik ile tüm özellikler.',
+  badge: null,
+  features: ['Tüm özellikler', 'Aylık faturalandırma', 'Öncelikli destek', 'Sınırsız widget'],
+  highlight: false
+}, {
+  name: 'Yıllık',
+  price: '25.000',
+  period: '/ yıl + KDV',
+  desc: 'Aylık ~2.083 ₺ ile %10 tasarruf.',
+  badge: '%10 İndirim',
+  features: ['Tüm özellikler', 'Yıllık faturalandırma', 'Öncelikli destek', '%10 tasarruf', 'Sınırsız widget'],
+  highlight: true
+}];
 function PricingSection() {
-  return (
-    <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8">
+  return <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto">
         <div className="text-center mb-14">
           <h2 className="text-3xl sm:text-4xl font-bold text-foreground">Fiyatlandırma</h2>
@@ -233,18 +243,10 @@ function PricingSection() {
           </p>
         </div>
         <div className="grid md:grid-cols-3 gap-6">
-          {plans.map((plan) => (
-            <Card
-              key={plan.name}
-              className={`relative flex flex-col ${
-                plan.highlight ? 'border-primary shadow-lg ring-1 ring-primary/20' : ''
-              }`}
-            >
-              {plan.badge && (
-                <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-accent text-accent-foreground px-3">
+          {plans.map(plan => <Card key={plan.name} className={`relative flex flex-col ${plan.highlight ? 'border-primary shadow-lg ring-1 ring-primary/20' : ''}`}>
+              {plan.badge && <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-accent text-accent-foreground px-3">
                   {plan.badge}
-                </Badge>
-              )}
+                </Badge>}
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg">{plan.name}</CardTitle>
                 <p className="text-sm text-muted-foreground">{plan.desc}</p>
@@ -252,56 +254,39 @@ function PricingSection() {
               <CardContent className="flex-1 flex flex-col">
                 <div className="mb-6">
                   <span className="text-4xl font-extrabold text-foreground">{plan.price}</span>
-                  {plan.period !== '1 Ay' && (
-                    <span className="text-sm text-muted-foreground ml-1">{plan.period}</span>
-                  )}
-                  {plan.period === '1 Ay' && (
-                    <span className="block text-sm text-muted-foreground mt-1">{plan.period}</span>
-                  )}
+                  {plan.period !== '1 Ay' && <span className="text-sm text-muted-foreground ml-1">{plan.period}</span>}
+                  {plan.period === '1 Ay' && <span className="block text-sm text-muted-foreground mt-1">{plan.period}</span>}
                 </div>
                 <ul className="space-y-2.5 flex-1">
-                  {plan.features.map((f) => (
-                    <li key={f} className="flex items-center gap-2 text-sm text-foreground">
+                  {plan.features.map(f => <li key={f} className="flex items-center gap-2 text-sm text-foreground">
                       <Check className="w-4 h-4 text-accent shrink-0" />
                       {f}
-                    </li>
-                  ))}
+                    </li>)}
                 </ul>
-                <Button
-                  className="mt-8 w-full"
-                  variant={plan.highlight ? 'default' : 'outline'}
-                  asChild
-                >
+                <Button className="mt-8 w-full" variant={plan.highlight ? 'default' : 'outline'} asChild>
                   <Link to="/login">Başla</Link>
                 </Button>
               </CardContent>
-            </Card>
-          ))}
+            </Card>)}
         </div>
       </div>
-    </section>
-  );
+    </section>;
 }
 
 /* ─── Footer ─── */
 function LandingFooter() {
-  const { theme } = useTheme();
+  const {
+    theme
+  } = useTheme();
   const isDark = theme === 'dark';
   const rotaLogo = isDark ? rotaLogoLight : rotaLogoDark;
-
-  return (
-    <footer className="border-t border-border bg-muted/20 py-10 px-4 sm:px-6 lg:px-8">
+  return <footer className="border-t border-border bg-muted/20 py-10 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-3">
           <img src={rotaLogo} alt="Rota Yazılım" className="h-7" />
           <span className="text-sm text-muted-foreground">Rota Yazılım tarafından geliştirilmiştir</span>
         </div>
-        <a
-          href="https://rotayazilim.net"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-        >
+        <a href="https://rotayazilim.net" target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
           rotayazilim.net
           <ExternalLink className="w-3.5 h-3.5" />
         </a>
@@ -309,26 +294,26 @@ function LandingFooter() {
       <div className="max-w-6xl mx-auto mt-6 pt-6 border-t border-border text-center">
         <p className="text-xs text-muted-foreground">© 2024 Rota Yazılım – RotanomBI v3.0</p>
       </div>
-    </footer>
-  );
+    </footer>;
 }
 
 /* ─── Landing Page ─── */
 export default function LandingPage() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const {
+    isAuthenticated,
+    isLoading
+  } = useAuth();
   const navigate = useNavigate();
-
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      navigate('/dashboard', { replace: true });
+      navigate('/dashboard', {
+        replace: true
+      });
     }
   }, [isAuthenticated, isLoading, navigate]);
-
   if (isLoading) return null;
   if (isAuthenticated) return null;
-
-  return (
-    <div className="min-h-screen bg-background">
+  return <div className="min-h-screen bg-background">
       <LandingHeader />
       <main>
         <HeroSection />
@@ -337,6 +322,5 @@ export default function LandingPage() {
         <PricingSection />
       </main>
       <LandingFooter />
-    </div>
-  );
+    </div>;
 }
