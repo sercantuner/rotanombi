@@ -2,7 +2,7 @@
 // Widget'ın builder_config'indeki widgetFilters ve widgetParameters tanımlarına göre UI üretir
 
 import { useState, useMemo } from 'react';
-import { Filter, FilterX, RotateCcw, SlidersHorizontal } from 'lucide-react';
+import { Filter, FilterX, RotateCcw, SlidersHorizontal, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
@@ -24,6 +24,7 @@ interface WidgetFiltersButtonProps {
   activeFilterCount: number;
   widgetFilters?: WidgetFilterDef[];
   widgetParameters?: WidgetParamDef[];
+  widgetData?: any[];
   className?: string;
 }
 
@@ -31,31 +32,85 @@ interface WidgetFiltersButtonProps {
 function DynamicField({ 
   def, 
   value, 
-  onChange 
+  onChange,
+  widgetData,
 }: { 
   def: WidgetFilterDef | WidgetParamDef; 
   value: any; 
   onChange: (val: any) => void;
+  widgetData?: any[];
 }) {
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Resolve options: use def.options if available, otherwise extract from widgetData
+  const resolvedOptions = useMemo(() => {
+    if (def.options && def.options.length > 0) return def.options;
+    if (!widgetData || widgetData.length === 0) return [];
+    
+    const uniqueValues = [...new Set(
+      widgetData
+        .map(item => {
+          const val = item[def.key];
+          // Handle nested objects (e.g. _key_sis_sube: { subeadi: "..." })
+          if (val && typeof val === 'object' && !Array.isArray(val)) {
+            // Try common label fields
+            return val.aciklama || val.adi || val.subeadi || val.depoadi || val.unvan || val.kod || String(val._key || '');
+          }
+          return val;
+        })
+        .filter(v => v !== null && v !== undefined && v !== '')
+        .map(v => String(v))
+    )].sort((a, b) => a.localeCompare(b, 'tr'));
+
+    return uniqueValues.map(v => ({ value: v, label: v }));
+  }, [def.options, def.key, widgetData]);
+
+  const filteredOptions = useMemo(() => {
+    if (!searchQuery) return resolvedOptions;
+    const q = searchQuery.toLowerCase();
+    return resolvedOptions.filter(opt => 
+      opt.label.toLowerCase().includes(q) || opt.value.toString().toLowerCase().includes(q)
+    );
+  }, [resolvedOptions, searchQuery]);
+
+  const showSearch = resolvedOptions.length > 5;
   switch (def.type) {
     case 'multi-select':
       return (
-        <div className="flex flex-wrap gap-2">
-          {(def.options || []).map(opt => (
-            <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer">
-              <Checkbox
-                checked={(value || []).includes(opt.value)}
-                onCheckedChange={(checked) => {
-                  const current = value || [];
-                  onChange(checked 
-                    ? [...current, opt.value] 
-                    : current.filter((v: any) => v !== opt.value)
-                  );
-                }}
+        <div className="space-y-1.5">
+          {showSearch && (
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+              <Input
+                placeholder="Ara..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-6 text-xs pl-7"
               />
-              <span className="text-xs">{opt.label}</span>
-            </label>
-          ))}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+            {filteredOptions.length === 0 ? (
+              <span className="text-[10px] text-muted-foreground italic">Seçenek bulunamadı</span>
+            ) : (
+              filteredOptions.map(opt => (
+                <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer">
+                  <Checkbox
+                    checked={(value || []).includes(String(opt.value))}
+                    onCheckedChange={(checked) => {
+                      const current = value || [];
+                      const optVal = String(opt.value);
+                      onChange(checked 
+                        ? [...current, optVal] 
+                        : current.filter((v: any) => v !== optVal)
+                      );
+                    }}
+                  />
+                  <span className="text-xs">{opt.label}</span>
+                </label>
+              ))
+            )}
+          </div>
         </div>
       );
 
@@ -66,7 +121,7 @@ function DynamicField({
             <SelectValue placeholder="Seçin..." />
           </SelectTrigger>
           <SelectContent>
-            {(def.options || []).map(opt => (
+            {resolvedOptions.map(opt => (
               <SelectItem key={opt.value} value={String(opt.value)} className="text-xs">
                 {opt.label}
               </SelectItem>
@@ -142,6 +197,7 @@ export function WidgetFiltersButton({
   activeFilterCount,
   widgetFilters,
   widgetParameters,
+  widgetData,
   className,
 }: WidgetFiltersButtonProps) {
   const [open, setOpen] = useState(false);
@@ -211,6 +267,7 @@ export function WidgetFiltersButton({
                     def={def}
                     value={filters[def.key]}
                     onChange={(val) => handleFieldChange(def.key, val)}
+                    widgetData={widgetData}
                   />
                 </div>
               ))
@@ -234,6 +291,7 @@ export function WidgetFiltersButton({
                     def={def}
                     value={filters[def.key]}
                     onChange={(val) => handleFieldChange(def.key, val)}
+                    widgetData={widgetData}
                   />
                 </div>
               ))
