@@ -1,7 +1,7 @@
 // WidgetFiltersButton - Dinamik filtre/parametre UI
 // Widget'ın builder_config'indeki widgetFilters ve widgetParameters tanımlarına göre UI üretir
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Filter, FilterX, RotateCcw, SlidersHorizontal, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -213,6 +213,31 @@ export function WidgetFiltersButton({
 
   const hasFilters = widgetFilters && widgetFilters.length > 0;
   const hasParams = widgetParameters && widgetParameters.length > 0;
+
+  // Multi-select filtreleri: veri geldiğinde tüm seçenekleri otomatik seç
+  const autoInitRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!widgetData || widgetData.length === 0) return;
+    const allDefs = [...(widgetFilters || []), ...(widgetParameters || [])];
+    const updates: Record<string, any> = {};
+    
+    for (const def of allDefs) {
+      if (def.type !== 'multi-select') continue;
+      // Zaten kullanıcı tarafından ayarlanmış veya daha önce oto-init edilmişse atla
+      if (autoInitRef.current.has(def.key)) continue;
+      if (filters[def.key] !== undefined && filters[def.key] !== null) continue;
+      
+      const resolved = resolveOptionsFromData(def, widgetData);
+      if (resolved.length > 0) {
+        updates[def.key] = resolved.map(o => o.value);
+        autoInitRef.current.add(def.key);
+      }
+    }
+    
+    if (Object.keys(updates).length > 0) {
+      onFiltersChange({ ...filters, ...updates });
+    }
+  }, [widgetData, widgetFilters, widgetParameters]);
 
   const handleFieldChange = (key: string, value: any) => {
     onFiltersChange({ ...filters, [key]: value });
