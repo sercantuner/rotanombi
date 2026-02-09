@@ -1,84 +1,65 @@
 
-# Widget Filtre ve Parametre Sisteminin Tamamlanmasi
 
-## Sorun
+# Widget Filtre Sisteminin Duzeltilmesi
 
-Widget filtreleri iki noktada calismaz durumda:
+## Sorun Analizi
 
-1. **Bos secenekler**: `multi-select` ve `dropdown` tipindeki filtrelerin `options` dizisi bos veya tanimlanmamis. Popover acildiginda sadece filtre etiketi gorunuyor, secim yapilacak oge yok.
+Grafiklerin calismamaya baslamasinin tek ve net sebebi `DynamicWidgetRenderer.tsx` dosyasindaki **filtre prop'u donusumudur** (satir 101-105):
 
-2. **Filtreleme uygulanmiyor**: `useDynamicWidgetData` icindeki `applyWidgetFilters` fonksiyonu sadece hardcoded alan adlarini (cariKartTipi, sube, satisTemsilcisi vb.) taniyor. Widget kodunda tanimlanan ozel filtreler (kullaniciadi, satisElemani, sube gibi) icin genel bir eslestirme mekanizmasi yok. Yani kullanici bir filtre secse bile veriye uygulanmiyor.
+```text
+const builderWidgetFilters = widgetFilters ? {
+  cariKartTipi: widgetFilters.cariKartTipi || [],
+  gorunumModu: widgetFilters.gorunumModu || 'hepsi',
+  durum: widgetFilters.durum || 'hepsi',
+} : undefined;
+```
 
-## Cozum Ozeti
+Bu kod iki kritik sorun yaratiyor:
 
-- Widget'in gercek verisinden benzersiz degerleri cikararak bos `options` dizilerini otomatik doldurmak
-- `applyWidgetFilters` fonksiyonuna, widget'in `builder_config.widgetFilters` tanimlarindan gelen tum `multi-select` ve `dropdown` filtrelerini dinamik olarak uygulayan genel bir mekanizma eklemek
+1. **Tum ozel filtreler siliniyor**: Kullanicinin sectigi `kullaniciadi`, `satisElemani`, `sube` gibi dinamik filtreler bu noktada kayboluyor. Sadece 3 hardcoded alan geciriliyor.
 
-## Teknik Detaylar
+2. **Her widget'a gereksiz filtreler zorla veriliyor**: `gorunumModu: 'hepsi'` ve `durum: 'hepsi'` her widget'a gonderiliyor. `applyWidgetFilters` icindeki kontroller bunlari "hepsi" oldugundan pas geciyor ancak bazi edge case'lerde (`dataHasField` kontrolu ile birlikte) beklenmeyen filtreleme olusabiliyor. Ozellikle `cariKartTipi: []` bos dizi olarak gonderildiginde, bazi widget'larda veri donus yapisina gore sorun cikarabiliyor.
 
-### 1. WidgetFiltersButton - Dinamik Opsiyon Uretimi
+## Cozum
 
-**Dosya:** `src/components/dashboard/WidgetFiltersButton.tsx`
+### 1. DynamicWidgetRenderer.tsx - Filtre Donusumunu Kaldir (Satir 101-117)
 
-- Yeni prop: `widgetData?: any[]`
-- `DynamicField` bilesenine `resolvedOptions` hesaplamasi:
-  - `def.options` doluysa: mevcut options kullanilir (degisiklik yok)
-  - `def.options` bos/undefined ve `widgetData` mevcutsa: veriden `def.key` alanindaki benzersiz degerler cikarilir, `{ value, label }` formatina donusturulur, alfabetik siralanir
-  - null/undefined/bos string degerler filtrelenir
-- Secenek sayisi fazla oldugunda (5+) arama kutusu gosterilir
+Mevcut 3-alan donusumu yerine `widgetFilters` objesi oldugu gibi (as-is) `BuilderWidgetRenderer`'a iletilecek. Boylece kullanicinin sectigi tum filtreler korunacak.
 
-### 2. BuilderWidgetRenderer - Veri Callback
+Degisiklik:
+```text
+// ONCE (hatali):
+const builderWidgetFilters = widgetFilters ? {
+  cariKartTipi: widgetFilters.cariKartTipi || [],
+  gorunumModu: widgetFilters.gorunumModu || 'hepsi',
+  durum: widgetFilters.durum || 'hepsi',
+} : undefined;
 
-**Dosya:** `src/components/dashboard/BuilderWidgetRenderer.tsx`
+// SONRA (dogru):
+// widgetFilters'i oldugu gibi gecir, donusum yapma
+```
 
-- Yeni prop: `onDataLoaded?: (data: any[]) => void`
-- `rawData` yuklendikten sonra bu callback cagirilir (useEffect ile)
-- Bu sayede ust bilesen (ContainerRenderer) widget verisine erisebilir
+`BuilderWidgetRenderer`'a `widgetFilters={widgetFilters}` seklinde dogrudan iletilecek. Eger `widgetFilters` undefined ise zaten `useDynamicWidgetData` icinde bos obje olarak ele aliniyor.
 
-### 3. ContainerRenderer - Veri Aktarimi
+### 2. Baska Degisiklik Gerekmiyor
 
-**Dosya:** `src/components/pages/ContainerRenderer.tsx`
+- `WidgetFiltersButton.tsx`: Onceki degisiklikler dogru, widgetData'dan opsiyon cikarma mantigi calisiyor.
+- `BuilderWidgetRenderer.tsx`: `onDataLoaded` callback'i dogru calisiyor.
+- `ContainerRenderer.tsx`: `widgetRawDataMap` state'i ve `WidgetFiltersButton`'a veri aktarimi dogru.
+- `useDynamicWidgetData.tsx`: `applyWidgetFilters` icindeki dinamik filtre dongusu dogru; `widgetFilterDefs` parametresi `config?.widgetFilters` olarak geciliyor.
 
-- Her slot icin `widgetRawData` state'i tutulur
-- `BuilderWidgetRenderer` yerine `DynamicWidgetRenderer` zaten kullaniliyor; `DynamicWidgetRenderer` icerisinden `BuilderWidgetRenderer`'a `onDataLoaded` prop'u iletilir
-- Bu veri `WidgetFiltersButton`'a `widgetData` prop'u olarak gecilir
-
-### 4. DynamicWidgetRenderer - Prop Gecisi
-
-**Dosya:** `src/components/dashboard/DynamicWidgetRenderer.tsx`
-
-- `onDataLoaded` prop'u eklenir ve `BuilderWidgetRenderer`'a iletilir
-
-### 5. applyWidgetFilters - Dinamik Filtre Uygulama
-
-**Dosya:** `src/hooks/useDynamicWidgetData.tsx`
-
-`applyWidgetFilters` fonksiyonuna, mevcut hardcoded filtrelerden sonra calisan genel bir dongu eklenir:
-
-- `widgetFilters` objesindeki her key icin:
-  - Eger deger bir dizi ise (multi-select) ve verinin ilk satirinda o alan varsa, veriyi filtreler
-  - Eger deger bir string ise (dropdown) ve verinin ilk satirinda o alan varsa, esleseni filtreler
-  - Zaten hardcoded olarak islenen key'ler (cariKartTipi, sube vb.) atlanir
-
-Bu yaklasim, widget kodunda tanimlanan herhangi bir filtre key'inin (kullaniciadi, satisElemani, personel vb.) otomatik olarak veriye uygulanmasini saglar.
-
-### 6. useDynamicWidgetData - builderConfig Erisimi
-
-`applyWidgetFilters` fonksiyonuna ek parametre olarak `widgetFilterDefs` (builder_config.widgetFilters) gecilir. Bu sayede fonksiyon hangi key'lerin multi-select, hangisinin dropdown oldugunu bilir ve uygun filtreleme yapar.
+Sorunun tamami tek bir dosyadaki 5 satirlik donusum kodundan kaynaklaniyor.
 
 ## Degisecek Dosyalar
 
 | Dosya | Degisiklik |
 |-------|-----------|
-| `src/components/dashboard/WidgetFiltersButton.tsx` | `widgetData` prop, resolvedOptions hesaplama, arama destegi |
-| `src/components/dashboard/BuilderWidgetRenderer.tsx` | `onDataLoaded` callback prop |
-| `src/components/dashboard/DynamicWidgetRenderer.tsx` | `onDataLoaded` prop gecisi |
-| `src/components/pages/ContainerRenderer.tsx` | widgetRawData state, WidgetFiltersButton'a veri aktarimi |
-| `src/hooks/useDynamicWidgetData.tsx` | applyWidgetFilters'a dinamik filtre mekanizmasi |
+| `src/components/dashboard/DynamicWidgetRenderer.tsx` | Satir 101-117: `builderWidgetFilters` donusumu kaldirilacak, `widgetFilters` dogrudan gecilecek |
 
 ## Beklenen Sonuc
 
-- Filtre popover'i acildiginda widget verisinden cikartilan gercek degerler (sube adlari, kullanici adlari vb.) secim listesi olarak gorunecek
-- Kullanici secim yaptiginda widget verisi filtrelenecek ve grafik/tablo aninda guncellenecek
-- Statik options tanimli filtreler icin davranis degismeyecek
-- Hardcoded filtreler (cariKartTipi vb.) aynen calismaya devam edecek
+- Widget'lar filtre uygulanmadan onceki gibi dogru sekilde render edilecek
+- Kullanici filtre sectiginde tum filtre key'leri korunarak `applyWidgetFilters`'a ulasacak
+- Dinamik filtre mekanizmasi (widgetFilterDefs dongusu) dogru calisacak
+- Gereksiz `cariKartTipi: []`, `gorunumModu: 'hepsi'`, `durum: 'hepsi'` zorlamasi kaldirilacak
+
