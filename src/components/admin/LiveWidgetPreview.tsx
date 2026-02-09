@@ -31,6 +31,8 @@ import { toast } from 'sonner';
 import { LegendPosition } from '@/lib/widgetBuilderTypes';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useChartColorPalette, COLOR_PALETTES as USER_COLOR_PALETTES } from '@/hooks/useChartColorPalette';
+import { useGlobalFilters } from '@/contexts/GlobalFilterContext';
+import { GlobalFilters } from '@/lib/filterTypes';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -714,6 +716,108 @@ function applyCalculatedFields(data: any[], calculatedFields: CalculatedField[])
   });
 }
 
+// Global filtreleri veriye uygula (Dashboard ile tutarlılık için)
+function applyGlobalFiltersToPreviewData(data: any[], filters: GlobalFilters): any[] {
+  if (!data || data.length === 0) return data;
+  
+  // Helper: Belirli alan veride var mı kontrol et
+  const hasField = (fieldName: string) => {
+    if (data.length === 0) return false;
+    return data.some(item => item[fieldName] !== undefined);
+  };
+  
+  let filtered = [...data];
+  
+  // 1. Cari Kart Tipi filtresi
+  if (filters.cariKartTipi && filters.cariKartTipi.length > 0 && hasField('carikarttipi')) {
+    filtered = filtered.filter(item => 
+      filters.cariKartTipi.includes(item.carikarttipi)
+    );
+  }
+  
+  // 2. Satış Temsilcisi filtresi
+  if (filters.satisTemsilcisi && filters.satisTemsilcisi.length > 0) {
+    const temsilciField = hasField('satistemsilcisi') ? 'satistemsilcisi' : 
+                          hasField('satis_temsilcisi') ? 'satis_temsilcisi' :
+                          hasField('temsilci') ? 'temsilci' : null;
+    if (temsilciField) {
+      filtered = filtered.filter(item => 
+        filters.satisTemsilcisi.includes(item[temsilciField])
+      );
+    }
+  }
+  
+  // 3. Şube filtresi
+  if (filters.sube && filters.sube.length > 0) {
+    const subeField = hasField('subekodu') ? 'subekodu' : 
+                      hasField('sube_kodu') ? 'sube_kodu' :
+                      hasField('sube') ? 'sube' : null;
+    if (subeField) {
+      filtered = filtered.filter(item => 
+        filters.sube.includes(item[subeField])
+      );
+    }
+  }
+  
+  // 4. Depo filtresi
+  if (filters.depo && filters.depo.length > 0) {
+    const depoField = hasField('depokodu') ? 'depokodu' : 
+                      hasField('depo_kodu') ? 'depo_kodu' :
+                      hasField('depo') ? 'depo' : null;
+    if (depoField) {
+      filtered = filtered.filter(item => 
+        filters.depo.includes(item[depoField])
+      );
+    }
+  }
+  
+  // 5. Özel Kod 1-3 filtreleri
+  if (filters.ozelkod1 && filters.ozelkod1.length > 0 && hasField('ozelkod1kod')) {
+    filtered = filtered.filter(item => filters.ozelkod1.includes(item.ozelkod1kod));
+  }
+  if (filters.ozelkod2 && filters.ozelkod2.length > 0 && hasField('ozelkod2kod')) {
+    filtered = filtered.filter(item => filters.ozelkod2.includes(item.ozelkod2kod));
+  }
+  if (filters.ozelkod3 && filters.ozelkod3.length > 0 && hasField('ozelkod3kod')) {
+    filtered = filtered.filter(item => filters.ozelkod3.includes(item.ozelkod3kod));
+  }
+  
+  // 6. Şehir filtresi
+  if (filters.sehir && filters.sehir.length > 0) {
+    const sehirField = hasField('il') ? 'il' : 
+                       hasField('sehir') ? 'sehir' : null;
+    if (sehirField) {
+      filtered = filtered.filter(item => 
+        filters.sehir.includes(item[sehirField])
+      );
+    }
+  }
+  
+  // 7. Durum filtresi
+  if (filters.durum && filters.durum !== 'hepsi' && hasField('durum')) {
+    if (filters.durum === 'aktif') {
+      filtered = filtered.filter(item => 
+        item.durum !== 'P' && item.durum !== 'Pasif'
+      );
+    } else if (filters.durum === 'pasif') {
+      filtered = filtered.filter(item => 
+        item.durum === 'P' || item.durum === 'Pasif'
+      );
+    }
+  }
+  
+  // 8. Görünüm Modu filtresi
+  if (filters.gorunumModu && filters.gorunumModu !== 'hepsi' && hasField('potansiyel')) {
+    if (filters.gorunumModu === 'cari') {
+      filtered = filtered.filter(item => !item.potansiyel);
+    } else if (filters.gorunumModu === 'potansiyel') {
+      filtered = filtered.filter(item => item.potansiyel === true);
+    }
+  }
+  
+  return filtered;
+}
+
 function evaluateExpression(expr: any, row: Record<string, any>): number {
   if (!expr) return 0;
   
@@ -774,6 +878,9 @@ export function LiveWidgetPreview({
 }: LiveWidgetPreviewProps) {
   const { impersonatedUserId, isImpersonating } = useImpersonation();
   const { colors: userColors, currentPaletteName } = useChartColorPalette();
+  
+  // Global filtreler - dashboard ile aynı filtreleri kullan
+  const { filters: globalFilters } = useGlobalFilters();
   const [rawData, setRawData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -902,7 +1009,7 @@ export function LiveWidgetPreview({
     return isDateField(xAxisFieldName, sampleValue);
   }, [fieldWells, xAxisField, rawData]);
 
-  // İşlenmiş veri (filtreler + hesaplamalar + tarih filtresi uygulanmış)
+  // İşlenmiş veri (filtreler + hesaplamalar + tarih filtresi + GLOBAL FİLTRELER uygulanmış)
   const processedData = useMemo(() => {
     if (!rawData || rawData.length === 0) return [];
     
@@ -923,7 +1030,11 @@ export function LiveWidgetPreview({
       );
     }
     
-    // 4. Tarih alanına göre sırala (X ekseni tarihse veya dateFilterConfig varsa)
+    // 4. GLOBAL FİLTRELER - Dashboard ile aynı görünüm için (KRİTİK!)
+    // Bu sayede önizleme ve dashboard aynı sonucu gösterir
+    data = applyGlobalFiltersToPreviewData(data, globalFilters);
+    
+    // 5. Tarih alanına göre sırala (X ekseni tarihse veya dateFilterConfig varsa)
     const sortField = detectedDateField || dateFilterConfig?.dateField;
     if (sortField && data.length > 0) {
       const sampleValue = data[0][sortField];
@@ -933,7 +1044,7 @@ export function LiveWidgetPreview({
     }
     
     return data;
-  }, [rawData, calculatedFields, postFetchFilters, dateFilterConfig, detectedDateField]);
+  }, [rawData, calculatedFields, postFetchFilters, dateFilterConfig, detectedDateField, globalFilters]);
 
   // Ortalama değer hesapla (trend/average çizgileri için)
   const averageValue = useMemo(() => {
