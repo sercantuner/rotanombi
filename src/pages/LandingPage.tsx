@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useTheme } from '@/hooks/useTheme';
 import rotanombiLogo from '@/assets/rotanombi-logo.png';
+import rotanombiLogoDark from '@/assets/rotanombi-logo-dark.svg';
 import rotaLogoDark from '@/assets/rota-logo-dark.svg';
 import rotaLogoLight from '@/assets/rota-logo-light.svg';
 import { Brain, Zap, GripVertical, Database, Store, Users, Check, ArrowRight, BarChart3, Sparkles, ExternalLink } from 'lucide-react';
@@ -12,28 +13,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 function useLiveStats() {
   const [stats, setStats] = useState({
-    users: 7,
-    widgets: 29,
-    aiWidgets: 29
+    users: 0,
+    widgets: 0,
+    aiWidgets: 0
   });
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [profilesRes, widgetsRes, aiRes] = await Promise.all([supabase.from('profiles').select('id', {
-          count: 'exact',
-          head: true
-        }), supabase.from('widgets').select('id', {
-          count: 'exact',
-          head: true
-        }).eq('is_active', true), supabase.from('widgets').select('id', {
-          count: 'exact',
-          head: true
-        }).not('builder_config', 'is', null)]);
-        if (profilesRes.count !== null || widgetsRes.count !== null) {
+        const { data, error } = await supabase.rpc('get_landing_stats');
+        if (!error && data && data.length > 0) {
           setStats({
-            users: profilesRes.count ?? 7,
-            widgets: widgetsRes.count ?? 29,
-            aiWidgets: aiRes.count ?? 29
+            users: Number(data[0].user_count) || 0,
+            widgets: Number(data[0].widget_count) || 0,
+            aiWidgets: Number(data[0].ai_widget_count) || 0
           });
         }
       } catch {
@@ -59,10 +51,12 @@ function useScrolled() {
 /* ─── Header ─── */
 function LandingHeader() {
   const scrolled = useScrolled();
+  const { theme } = useTheme();
+  const headerLogo = theme === 'dark' ? rotanombiLogoDark : rotanombiLogo;
   return <header className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${scrolled ? 'bg-background/95 backdrop-blur-md border-b border-border shadow-sm' : 'bg-transparent'}`}>
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16">
         <Link to="/" className="flex items-center gap-2">
-          <img src={rotanombiLogo} alt="RotanomBI" className="h-8" />
+          <img src={headerLogo} alt="RotanomBI" className="h-8" />
           <span className="text-lg font-bold text-foreground hidden sm:inline">
         </span>
         </Link>
@@ -157,10 +151,6 @@ function StatsSection() {
 
 /* ─── Features ─── */
 const features = [{
-  icon: Brain,
-  title: 'AI Widget Üretici',
-  desc: 'Yapay zeka ile saniyeler içinde özel widget\'lar oluşturun.'
-}, {
   icon: Zap,
   title: 'Gerçek Zamanlı Veri',
   desc: 'DIA ERP verilerinizi anlık olarak izleyin ve analiz edin.'
@@ -172,6 +162,10 @@ const features = [{
   icon: Database,
   title: 'DIA ERP Entegrasyonu',
   desc: 'Cari, stok, fatura ve daha fazla modüle doğrudan erişim.'
+}, {
+  icon: BarChart3,
+  title: 'Özel Raporlama',
+  desc: 'İhtiyacınıza özel raporlar oluşturun ve paylaşın.'
 }, {
   icon: Store,
   title: 'Widget Marketplace',
