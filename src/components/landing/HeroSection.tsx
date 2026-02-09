@@ -4,7 +4,7 @@ import { ArrowRight, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useTheme } from '@/hooks/useTheme';
-import diaDevices from '@/assets/dia-devices.png';
+import diaDevices from '@/assets/dia-devices.svg';
 import diaLogoDark from '@/assets/dia-logo-dark.svg';
 import diaLogoLight from '@/assets/dia-logo-light.svg';
 
