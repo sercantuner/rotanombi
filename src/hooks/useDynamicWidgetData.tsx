@@ -1,6 +1,7 @@
 // useDynamicWidgetData - Widget Builder ile oluşturulan widget'lar için dinamik veri çekme
 // DB-FIRST v4.0: Widget'lar company_data_cache tablosundan veri okur, DIA API yerine
 // Global filtreler desteklenir - veriler DB'den okunduktan sonra post-fetch olarak uygulanır
+// SCOPE-AWARE: Cache key'ler sunucu:firma:dönem bazlı ayrılarak dönem karışması önlenir
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,6 +11,7 @@ import { useDiaProfile } from './useDiaProfile';
 import { WidgetBuilderConfig, AggregationType, CalculatedField, CalculationExpression, QueryMerge, DatePeriod, DiaApiFilter, PostFetchFilter, FilterOperator } from '@/lib/widgetBuilderTypes';
 import { queuedDiaFetch, handleRateLimitError } from '@/lib/diaRequestQueue';
 import { GlobalFilters, convertToDiaFilters, CrossFilter } from '@/lib/filterTypes';
+import { DataScope, findBestPeriodForSource } from '@/lib/dataScopingUtils';
 import { 
   startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, 
   startOfQuarter, endOfQuarter, startOfYear, endOfYear, 
@@ -636,16 +638,19 @@ function applyGlobalFilters(data: any[], globalFilters: GlobalFilters): any[] {
 
 // company_data_cache tablosundan veri çek - sayfalama ile tüm veriyi çek
 // lastSyncedAt da döndürür (Stale-While-Revalidate için)
+// KRİTİK: Her zaman donem_kodu ile filtreleme yapılır - dönem karışması önlenir
 interface DbFetchResult {
   data: any[];
   lastSyncedAt: Date | null;
+  resolvedDonem: number;
 }
 
 async function fetchFromDatabase(
   dataSourceSlug: string,
   sunucuAdi: string,
   firmaKodu: string,
-  donemKodu: number
+  donemKodu: number,
+  isPeriodIndependent: boolean = false
 ): Promise<DbFetchResult> {
   const PAGE_SIZE = 1000; // Supabase max 1000 satır döndürür
   let allData: any[] = [];
@@ -653,14 +658,26 @@ async function fetchFromDatabase(
   let hasMore = true;
   let lastUpdatedAt: string | null = null;
   
+  // Period-independent kaynaklar için en güncel dönemi bul
+  let resolvedDonem = donemKodu;
+  if (isPeriodIndependent) {
+    resolvedDonem = await findBestPeriodForSource(
+      dataSourceSlug,
+      sunucuAdi,
+      firmaKodu,
+      donemKodu
+    );
+  }
+  
   while (hasMore) {
+    // KRİTİK: Her zaman donem_kodu filtresi uygula - dönem karışmasını önle
     const { data, error } = await supabase
       .from('company_data_cache')
       .select('data, updated_at')
       .eq('data_source_slug', dataSourceSlug)
       .eq('sunucu_adi', sunucuAdi)
       .eq('firma_kodu', firmaKodu)
-      .eq('donem_kodu', donemKodu)
+      .eq('donem_kodu', resolvedDonem) // Her zaman donem filtresi uygula
       .eq('is_deleted', false)
       .order('updated_at', { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
@@ -683,12 +700,13 @@ async function fetchFromDatabase(
     }
   }
   
-  console.log(`[DB] Fetched ${allData.length} records from ${dataSourceSlug}${lastUpdatedAt ? ` (last sync: ${lastUpdatedAt})` : ''}`);
+  console.log(`[DB] Fetched ${allData.length} records from ${dataSourceSlug} (dönem: ${resolvedDonem}${isPeriodIndependent ? ' [period-independent]' : ''})${lastUpdatedAt ? ` (last sync: ${lastUpdatedAt})` : ''}`);
   
   // JSONB data alanlarını düz obje olarak döndür
   return {
     data: allData,
     lastSyncedAt: lastUpdatedAt ? new Date(lastUpdatedAt) : null,
+    resolvedDonem,
   };
 }
 
@@ -1082,6 +1100,12 @@ export function useDynamicWidgetData(
         return dataSource?.slug || null;
       };
       
+      // Helper: DataSource ID'den period-independent flag al
+      const isPeriodIndependent = (dataSourceId: string): boolean => {
+        const dataSource = ds.find(d => d.id === dataSourceId);
+        return dataSource?.is_period_independent === true;
+      };
+      
       // Sonuç: lastSyncedAt bilgisini de takip ediyoruz
       let lastSyncedAt: Date | null = null;
       
@@ -1092,6 +1116,8 @@ export function useDynamicWidgetData(
           console.warn(`[Widget] DataSource ${dataSourceId} slug not found`);
           return [];
         }
+        
+        const isSourcePeriodIndependent = isPeriodIndependent(dataSourceId);
         
         // 1. Önce memory cache kontrol et
         const { data: cachedSourceData, isStale } = getDataWithStale(dataSourceId);
@@ -1108,7 +1134,7 @@ export function useDynamicWidgetData(
         }
         
         // 2. Memory cache boş veya stale - DB'den oku
-        console.log(`[Widget] Fetching from DB - DataSource: ${slug} (sunucu: ${sunucuAdi}, firma: ${firmaKodu}, dönem: ${effectiveDonem})`);
+        console.log(`[Widget] Fetching from DB - DataSource: ${slug} (sunucu: ${sunucuAdi}, firma: ${firmaKodu}, dönem: ${effectiveDonem}${isSourcePeriodIndependent ? ' [period-independent]' : ''})`);
         
         // Cache'den gösteriyorsak önce cache'i kullan
         if (cachedSourceData && isStale) {
@@ -1120,12 +1146,19 @@ export function useDynamicWidgetData(
         }
         
         try {
-          const dbResult = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, effectiveDonem);
+          // Period-independent flag'i fetchFromDatabase'e geçir
+          const dbResult = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, effectiveDonem, isSourcePeriodIndependent);
           
           if (dbResult.data.length > 0) {
-            console.log(`[Widget] DB HIT - DataSource ${slug}: ${dbResult.data.length} kayıt`);
-            // Memory cache'i güncelle
-            setDsData(dataSourceId, dbResult.data);
+            console.log(`[Widget] DB HIT - DataSource ${slug}: ${dbResult.data.length} kayıt (dönem: ${dbResult.resolvedDonem})`);
+            
+            // Scope ile memory cache'i güncelle (dönem karışmasını önle)
+            const scope: DataScope = {
+              sunucuAdi,
+              firmaKodu,
+              donemKodu: dbResult.resolvedDonem,
+            };
+            setDsData(dataSourceId, dbResult.data, undefined, scope);
             incHit();
             
             // lastSyncedAt güncelle
