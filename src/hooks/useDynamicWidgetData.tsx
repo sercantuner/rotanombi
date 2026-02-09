@@ -1,6 +1,6 @@
 // useDynamicWidgetData - Widget Builder ile oluşturulan widget'lar için dinamik veri çekme
 // DB-FIRST v4.0: Widget'lar company_data_cache tablosundan veri okur, DIA API yerine
-// Global filtreler desteklenir - veriler DB'den okunduktan sonra post-fetch olarak uygulanır
+// Widget-bazlı filtreler desteklenir - veriler DB'den okunduktan sonra post-fetch olarak uygulanır
 // SCOPE-AWARE: Cache key'ler sunucu:firma:dönem bazlı ayrılarak dönem karışması önlenir
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -10,7 +10,8 @@ import { useDataSources } from './useDataSources';
 import { useDiaProfile } from './useDiaProfile';
 import { WidgetBuilderConfig, AggregationType, CalculatedField, CalculationExpression, QueryMerge, DatePeriod, DiaApiFilter, PostFetchFilter, FilterOperator } from '@/lib/widgetBuilderTypes';
 import { queuedDiaFetch, handleRateLimitError } from '@/lib/diaRequestQueue';
-import { GlobalFilters, convertToDiaFilters, CrossFilter } from '@/lib/filterTypes';
+import { WidgetLocalFilters } from './useWidgetLocalFilters';
+import { DiaAutoFilter } from '@/lib/filterTypes';
 import { DataScope, findBestPeriodForSource } from '@/lib/dataScopingUtils';
 import { 
   startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, 
@@ -429,7 +430,7 @@ function applyPostFetchFilters(data: any[], filters: PostFetchFilter[]): any[] {
   });
 }
 
-// ============= GLOBAL FİLTRELERİ UYGULAMA =============
+// ============= WIDGET FİLTRELERİ UYGULAMA =============
 
 // Helper: Veri setinde belirli alanlardan en az biri var mı kontrol et
 function dataHasField(data: any[], fields: string[]): boolean {
@@ -438,100 +439,98 @@ function dataHasField(data: any[], fields: string[]): boolean {
   return fields.some(f => f in sample && sample[f] !== undefined);
 }
 
-function applyGlobalFilters(data: any[], globalFilters: GlobalFilters): any[] {
-  if (!globalFilters) return data;
+function applyWidgetFilters(data: any[], widgetFilters: WidgetLocalFilters, diaAutoFilters?: DiaAutoFilter[]): any[] {
   if (!data || data.length === 0) return data;
+  if (!widgetFilters && (!diaAutoFilters || diaAutoFilters.length === 0)) return data;
   
   let filtered = [...data];
   
-  // Arama terimi - tüm verilere uygulanabilir
-  if (globalFilters.searchTerm && globalFilters.searchTerm.trim()) {
-    const term = globalFilters.searchTerm.toLowerCase();
-    filtered = filtered.filter(row => {
-      // Tüm string alanlarında ara
-      return Object.values(row).some(val => 
-        val && String(val).toLowerCase().includes(term)
-      );
-    });
+  const wf = widgetFilters || {};
+  
+  // Arama terimi
+  if (wf.searchTerm && wf.searchTerm.trim()) {
+    const term = wf.searchTerm.toLowerCase();
+    filtered = filtered.filter(row => 
+      Object.values(row).some(val => val && String(val).toLowerCase().includes(term))
+    );
   }
   
-  // Cari kart tipi (AL, AS, ST) - SADECE cari verilere uygulanmalı
-  // Banka, Kasa, Stok gibi verilere uygulanmamalı
+  // Cari kart tipi (AL, AS, ST)
   const cariKartTipiFields = ['carikarttipi', 'carikarttip', 'karttipi', 'cari_kart_tipi'];
-  if (globalFilters.cariKartTipi.length > 0 && dataHasField(data, cariKartTipiFields)) {
+  if (wf.cariKartTipi && wf.cariKartTipi.length > 0 && dataHasField(data, cariKartTipiFields)) {
     filtered = filtered.filter(row => {
       const kartTipi = row.carikarttipi || row.carikarttip || row.karttipi || row.cari_kart_tipi;
-      return kartTipi && globalFilters.cariKartTipi.includes(String(kartTipi).toUpperCase());
+      return kartTipi && wf.cariKartTipi!.includes(String(kartTipi).toUpperCase());
     });
   }
   
-  // Satış temsilcisi - SADECE ilgili alan varsa uygulanmalı
+  // Satış temsilcisi
   const satisTemsilcisiFields = ['satiselemani', 'satis_elemani', 'temsilci'];
-  if (globalFilters.satisTemsilcisi.length > 0 && dataHasField(data, satisTemsilcisiFields)) {
+  if (wf.satisTemsilcisi && wf.satisTemsilcisi.length > 0 && dataHasField(data, satisTemsilcisiFields)) {
     filtered = filtered.filter(row => {
       const eleman = row.satiselemani || row.satis_elemani || row.temsilci;
-      return eleman && globalFilters.satisTemsilcisi.includes(String(eleman));
+      return eleman && wf.satisTemsilcisi!.includes(String(eleman));
     });
   }
   
-  // Şube - SADECE ilgili alan varsa uygulanmalı
+  // Şube
   const subeFields = ['subekodu', 'sube_kodu', 'sube'];
-  if (globalFilters.sube.length > 0 && dataHasField(data, subeFields)) {
+  if (wf.sube && wf.sube.length > 0 && dataHasField(data, subeFields)) {
     filtered = filtered.filter(row => {
       const sube = row.subekodu || row.sube_kodu || row.sube;
-      return sube && globalFilters.sube.includes(String(sube));
+      return sube && wf.sube!.includes(String(sube));
     });
   }
   
-  // Depo - SADECE ilgili alan varsa uygulanmalı
+  // Depo
   const depoFields = ['depokodu', 'depo_kodu', 'depo'];
-  if (globalFilters.depo.length > 0 && dataHasField(data, depoFields)) {
+  if (wf.depo && wf.depo.length > 0 && dataHasField(data, depoFields)) {
     filtered = filtered.filter(row => {
       const depo = row.depokodu || row.depo_kodu || row.depo;
-      return depo && globalFilters.depo.includes(String(depo));
+      return depo && wf.depo!.includes(String(depo));
     });
   }
   
-  // Özel kodlar - SADECE ilgili alan varsa uygulanmalı
+  // Özel kodlar
   const ozelkod1Fields = ['ozelkod1kod', 'ozelkod1', 'ozel_kod_1'];
-  if (globalFilters.ozelkod1.length > 0 && dataHasField(data, ozelkod1Fields)) {
+  if (wf.ozelkod1 && wf.ozelkod1.length > 0 && dataHasField(data, ozelkod1Fields)) {
     filtered = filtered.filter(row => {
       const kod = row.ozelkod1kod || row.ozelkod1 || row.ozel_kod_1;
-      return kod && globalFilters.ozelkod1.includes(String(kod));
+      return kod && wf.ozelkod1!.includes(String(kod));
     });
   }
   
   const ozelkod2Fields = ['ozelkod2kod', 'ozelkod2', 'ozel_kod_2'];
-  if (globalFilters.ozelkod2.length > 0 && dataHasField(data, ozelkod2Fields)) {
+  if (wf.ozelkod2 && wf.ozelkod2.length > 0 && dataHasField(data, ozelkod2Fields)) {
     filtered = filtered.filter(row => {
       const kod = row.ozelkod2kod || row.ozelkod2 || row.ozel_kod_2;
-      return kod && globalFilters.ozelkod2.includes(String(kod));
+      return kod && wf.ozelkod2!.includes(String(kod));
     });
   }
   
   const ozelkod3Fields = ['ozelkod3kod', 'ozelkod3', 'ozel_kod_3'];
-  if (globalFilters.ozelkod3.length > 0 && dataHasField(data, ozelkod3Fields)) {
+  if (wf.ozelkod3 && wf.ozelkod3.length > 0 && dataHasField(data, ozelkod3Fields)) {
     filtered = filtered.filter(row => {
       const kod = row.ozelkod3kod || row.ozelkod3 || row.ozel_kod_3;
-      return kod && globalFilters.ozelkod3.includes(String(kod));
+      return kod && wf.ozelkod3!.includes(String(kod));
     });
   }
   
-  // Şehir - SADECE ilgili alan varsa uygulanmalı
+  // Şehir
   const sehirFields = ['sehir', 'city'];
-  if (globalFilters.sehir.length > 0 && dataHasField(data, sehirFields)) {
+  if (wf.sehir && wf.sehir.length > 0 && dataHasField(data, sehirFields)) {
     filtered = filtered.filter(row => {
       const sehir = row.sehir || row.city;
-      return sehir && globalFilters.sehir.includes(String(sehir));
+      return sehir && wf.sehir!.includes(String(sehir));
     });
   }
   
-  // Durum (aktif/pasif) - SADECE ilgili alan varsa uygulanmalı
+  // Durum (aktif/pasif)
   const durumFields = ['durum', 'status'];
-  if (globalFilters.durum !== 'hepsi' && dataHasField(data, durumFields)) {
+  if (wf.durum && wf.durum !== 'hepsi' && dataHasField(data, durumFields)) {
     filtered = filtered.filter(row => {
       const durum = row.durum || row.status;
-      if (globalFilters.durum === 'aktif') {
+      if (wf.durum === 'aktif') {
         return durum === 'A' || durum === 'aktif' || durum === true;
       } else {
         return durum === 'P' || durum === 'pasif' || durum === false;
@@ -539,39 +538,25 @@ function applyGlobalFilters(data: any[], globalFilters: GlobalFilters): any[] {
     });
   }
   
-  // Görünüm modu (potansiyel/cari) - SADECE ilgili alan varsa uygulanmalı
+  // Görünüm modu (potansiyel/cari)
   const potansiyelFields = ['potansiyel'];
-  if (globalFilters.gorunumModu !== 'hepsi' && dataHasField(data, potansiyelFields)) {
+  if (wf.gorunumModu && wf.gorunumModu !== 'hepsi' && dataHasField(data, potansiyelFields)) {
     filtered = filtered.filter(row => {
       const potansiyel = row.potansiyel;
       const potansiyelStr = String(potansiyel || '').toUpperCase();
       
-      if (globalFilters.gorunumModu === 'potansiyel') {
-        // Potansiyel müşteriler: E, Evet, true, t, 1
-        return potansiyel === true || 
-               potansiyel === 't' || 
-               potansiyelStr === 'E' || 
-               potansiyelStr === 'EVET' ||
-               potansiyelStr === '1' ||
-               potansiyelStr === 'TRUE';
+      if (wf.gorunumModu === 'potansiyel') {
+        return potansiyel === true || potansiyel === 't' || potansiyelStr === 'E' || potansiyelStr === 'EVET' || potansiyelStr === '1' || potansiyelStr === 'TRUE';
       } else {
-        // Gerçek cariler: H, Hayır, false, f, 0, boş
-        return potansiyel === false || 
-               potansiyel === 'f' || 
-               potansiyelStr === 'H' || 
-               potansiyelStr === 'HAYIR' ||
-               potansiyelStr === '0' ||
-               potansiyelStr === 'FALSE' ||
-               !potansiyel;
+        return potansiyel === false || potansiyel === 'f' || potansiyelStr === 'H' || potansiyelStr === 'HAYIR' || potansiyelStr === '0' || potansiyelStr === 'FALSE' || !potansiyel;
       }
     });
   }
   
   // DIA zorunlu filtreler (kullanıcıya ait kilitli filtreler)
-  // Bu filtreler de SADECE ilgili alan varsa uygulanmalı
-  if (globalFilters._diaAutoFilters && globalFilters._diaAutoFilters.length > 0) {
-    for (const autoFilter of globalFilters._diaAutoFilters) {
-      // İlgili alan verinin içinde var mı kontrol et
+  const autoFilters = diaAutoFilters || [];
+  if (autoFilters.length > 0) {
+    for (const autoFilter of autoFilters) {
       if (dataHasField(data, [autoFilter.field])) {
         filtered = filtered.filter(row => {
           const val = row[autoFilter.field];
@@ -585,49 +570,6 @@ function applyGlobalFilters(data: any[], globalFilters: GlobalFilters): any[] {
           return true;
         });
       }
-    }
-  }
-  
-  // Çapraz filtre (Power BI tarzı widget tıklaması)
-  // Bu filtre de SADECE ilgili alan varsa uygulanmalı
-  if (globalFilters._crossFilter) {
-    const crossFilter = globalFilters._crossFilter;
-    // crossFilter.field globalFilterKey olarak gelir, ilgili veri alanına eşleştirilmeli
-    // Şimdilik basit eşleştirme: globalFilterKey -> data field mapping
-    const crossFilterFieldMap: Record<string, string[]> = {
-      'cariKartTipi': ['carikarttipi', 'carikarttip', 'karttipi', 'cari_kart_tipi'],
-      'satisTemsilcisi': ['satiselemani', 'satis_elemani', 'temsilci'],
-      'sube': ['subekodu', 'sube_kodu', 'sube'],
-      'depo': ['depokodu', 'depo_kodu', 'depo'],
-      'sehir': ['sehir', 'city'],
-      'ozelkod1': ['ozelkod1kod', 'ozelkod1', 'ozel_kod_1'],
-      'ozelkod2': ['ozelkod2kod', 'ozelkod2', 'ozel_kod_2'],
-      'ozelkod3': ['ozelkod3kod', 'ozelkod3', 'ozel_kod_3'],
-    };
-    
-    const possibleFields = crossFilterFieldMap[crossFilter.field] || [crossFilter.field];
-    
-    if (dataHasField(data, possibleFields)) {
-      filtered = filtered.filter(row => {
-        // İlk eşleşen alanı bul
-        let fieldValue: any = null;
-        for (const f of possibleFields) {
-          if (row[f] !== undefined) {
-            fieldValue = row[f];
-            break;
-          }
-        }
-        
-        if (fieldValue === null || fieldValue === undefined) return true;
-        
-        const rowValue = String(fieldValue).toLowerCase();
-        
-        if (Array.isArray(crossFilter.value)) {
-          return crossFilter.value.map(v => String(v).toLowerCase()).includes(rowValue);
-        } else {
-          return rowValue === String(crossFilter.value).toLowerCase();
-        }
-      });
     }
   }
   
@@ -710,10 +652,10 @@ async function fetchFromDatabase(
   };
 }
 
-// Hook for using global filters in widgets
+// Hook for using widget-local filters
 export function useDynamicWidgetData(
   config: WidgetBuilderConfig | null,
-  globalFilters?: GlobalFilters
+  widgetFilters?: WidgetLocalFilters
 ): DynamicWidgetDataResult {
   const [data, setData] = useState<any>(null);
   const [rawData, setRawData] = useState<any[]>([]);
@@ -743,9 +685,45 @@ export function useDynamicWidgetData(
   // OPTIMIZATION: Config'i stabil JSON string'e çevir - dependency kontrolü için
   const configKey = useMemo(() => config ? JSON.stringify(config) : '', [config]);
   
-  // OPTIMIZATION: globalFilters ve sharedData için ref kullan - dependency array'den çıkar
-  const globalFiltersRef = useRef(globalFilters);
-  globalFiltersRef.current = globalFilters;
+  // OPTIMIZATION: widgetFilters için ref kullan - dependency array'den çıkar
+  const widgetFiltersRef = useRef(widgetFilters);
+  widgetFiltersRef.current = widgetFilters;
+  
+  // DIA zorunlu filtreler (profil bazlı) - ayrı ref olarak tutuluyor
+  const diaAutoFiltersRef = useRef<DiaAutoFilter[]>([]);
+  
+  // DIA auto filters'ı profil'den yükle
+  useEffect(() => {
+    const loadAutoFilters = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
+      
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('dia_satis_elemani, dia_auto_filters')
+        .eq('user_id', session.user.id)
+        .single();
+      
+      if (profile) {
+        const autoFilters: DiaAutoFilter[] = [];
+        if (profile.dia_satis_elemani) {
+          autoFilters.push({
+            field: 'satiselemani',
+            operator: '=',
+            value: profile.dia_satis_elemani,
+            isLocked: true,
+            label: profile.dia_satis_elemani,
+          });
+        }
+        const diaAutoFilters = profile.dia_auto_filters as unknown as DiaAutoFilter[] | null;
+        if (diaAutoFilters && Array.isArray(diaAutoFilters)) {
+          autoFilters.push(...diaAutoFilters);
+        }
+        diaAutoFiltersRef.current = autoFilters;
+      }
+    };
+    loadAutoFilters();
+  }, []);
   
   // Cache context - Memory cache hala kullanılıyor (DB sonuçlarını da cache'leyebiliriz)
   const { 
@@ -919,16 +897,14 @@ export function useDynamicWidgetData(
   const processDataWithFilters = useCallback(() => {
     if (!config || rawDataCacheRef.current.length === 0) return;
     
-    const currentFilters = globalFiltersRef.current;
+    const currentFilters = widgetFiltersRef.current;
     let processedData = [...rawDataCacheRef.current];
     
-    // Global filtreleri uygula
-    if (currentFilters) {
-      const beforeCount = processedData.length;
-      processedData = applyGlobalFilters(processedData, currentFilters);
-      if (processedData.length !== beforeCount) {
-        console.log(`[Filter Change] Applied: ${beforeCount} → ${processedData.length} records`);
-      }
+    // Widget filtreleri uygula
+    const beforeCount = processedData.length;
+    processedData = applyWidgetFilters(processedData, currentFilters || {}, diaAutoFiltersRef.current);
+    if (processedData.length !== beforeCount) {
+      console.log(`[Filter Change] Applied: ${beforeCount} → ${processedData.length} records`);
     }
     
     // Görselleştirme verisini güncelle
@@ -1021,12 +997,9 @@ export function useDynamicWidgetData(
           error: null,
         });
         
-        // Global filtreleri uygula ve UI'ı güncelle
+        // Widget filtreleri uygula ve UI'ı güncelle
         let filteredData = [...freshDbResult.data];
-        const currentFilters = globalFiltersRef.current;
-        if (currentFilters) {
-          filteredData = applyGlobalFilters(filteredData, currentFilters);
-        }
+        filteredData = applyWidgetFilters(filteredData, widgetFiltersRef.current || {}, diaAutoFiltersRef.current);
         
         // Görselleştirme verisini güncelle (UI sessizce yenilenir)
         processVisualizationData(filteredData, currentConfig);
@@ -1074,7 +1047,6 @@ export function useDynamicWidgetData(
     }
     
     // REF'lerden güncel değerleri oku - dependency array'e eklenmeden
-    const currentGlobalFilters = globalFiltersRef.current;
     const currentSharedData = sharedDataRef.current;
     const { 
       getCachedData: getCached, 
@@ -1335,15 +1307,12 @@ export function useDynamicWidgetData(
       rawDataCacheRef.current = fetchedData;
       hasInitialDataRef.current = true;
       
-      // Global filtreleri uygula ve görselleştir
+      // Widget filtreleri uygula ve görselleştir
       let filteredData = [...fetchedData];
-      const currentGlobalFilters = globalFiltersRef.current;
-      if (currentGlobalFilters) {
-        const beforeCount = filteredData.length;
-        filteredData = applyGlobalFilters(filteredData, currentGlobalFilters);
-        if (filteredData.length !== beforeCount) {
-          console.log(`[Global Filters] Applied: ${beforeCount} → ${filteredData.length} records`);
-        }
+      const beforeCount = filteredData.length;
+      filteredData = applyWidgetFilters(filteredData, widgetFiltersRef.current || {}, diaAutoFiltersRef.current);
+      if (filteredData.length !== beforeCount) {
+        console.log(`[Widget Filters] Applied: ${beforeCount} → ${filteredData.length} records`);
       }
       
       // Görselleştirme verisini oluştur
@@ -1417,39 +1386,22 @@ export function useDynamicWidgetData(
   }, [configKey, sunucuAdi, firmaKodu, effectiveDonem, dataSourcesReadyKey]);
 
   // Filtre değişikliklerini izle - raw veri üzerinde yeniden işle (API çağrısı yapmadan)
-  const globalFiltersKey = useMemo(() => {
-    if (!globalFilters) return '';
-    // Sadece değişen filtre değerlerini izle
-    return JSON.stringify({
-      searchTerm: globalFilters.searchTerm,
-      cariKartTipi: globalFilters.cariKartTipi,
-      satisTemsilcisi: globalFilters.satisTemsilcisi,
-      sube: globalFilters.sube,
-      depo: globalFilters.depo,
-      ozelkod1: globalFilters.ozelkod1,
-      ozelkod2: globalFilters.ozelkod2,
-      ozelkod3: globalFilters.ozelkod3,
-      sehir: globalFilters.sehir,
-      durum: globalFilters.durum,
-      gorunumModu: globalFilters.gorunumModu,
-      _diaAutoFilters: globalFilters._diaAutoFilters,
-      _crossFilter: globalFilters._crossFilter,
-    });
-  }, [globalFilters]);
+  const widgetFiltersKey = useMemo(() => {
+    if (!widgetFilters) return '';
+    return JSON.stringify(widgetFilters);
+  }, [widgetFilters]);
 
   const prevFiltersKeyRef = useRef<string>('');
 
   useEffect(() => {
-    // İlk veri yüklendikten sonra filtre değişikliklerini izle
     if (!hasInitialDataRef.current) return;
     
-    // İlk render değilse VE filtre değiştiyse yeniden işle
-    if (prevFiltersKeyRef.current && prevFiltersKeyRef.current !== globalFiltersKey) {
-      console.log('[Filter Watch] Filters changed, reprocessing data...');
+    if (prevFiltersKeyRef.current && prevFiltersKeyRef.current !== widgetFiltersKey) {
+      console.log('[Filter Watch] Widget filters changed, reprocessing data...');
       processDataWithFilters();
     }
-    prevFiltersKeyRef.current = globalFiltersKey;
-  }, [globalFiltersKey, processDataWithFilters]);
+    prevFiltersKeyRef.current = widgetFiltersKey;
+  }, [widgetFiltersKey, processDataWithFilters]);
 
   return { data, rawData, multiQueryData, isLoading, error, refetch: fetchData, dataStatus };
 }

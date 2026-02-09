@@ -7,7 +7,7 @@ import { Header } from '@/components/layout/Header';
 import { ContainerBasedDashboard } from '@/components/dashboard/ContainerBasedDashboard';
 import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
 
-import { FilterSidePanel } from '@/components/filters/FilterSidePanel';
+// FilterSidePanel kaldırıldı - widget-bazlı filtrelere geçildi
 import { UserPage } from '@/lib/pageTypes';
 import { Button } from '@/components/ui/button';
 import { Trash2, Plus, Move, Check, X, Edit } from 'lucide-react';
@@ -151,8 +151,7 @@ export function DynamicPage() {
           />
 
           <main className="flex-1 p-2 md:p-4 overflow-auto">
-            {/* Filter Side Panel - Sağda gizlenebilir */}
-            <FilterSidePanel />
+            {/* Filter Side Panel kaldırıldı - widget-bazlı filtrelere geçildi */}
 
             {/* ContainerBasedDashboard - FloatingActions gizli, alt bar'da gösterilecek */}
             <ContainerBasedDashboard 
