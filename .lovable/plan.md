@@ -1,98 +1,52 @@
 
 
-# Veritabanı Sorgu Timeout Sorunu - Cozum Plani
+# Veritabanı Kilitlenmesini Kırma Planı
 
-## Sorunun Analizi
+## Sorun
+Dashboard her açıldığında yavaş RLS sorguları veritabanı bağlantı havuzunu dolduruyor. Migration uygulanamıyor çünkü veritabanı sürekli meşgul.
 
-Dashboard acildiginda veriler `company_data_cache` tablosundan cekilmeye calisiyor ancak sorgular **statement timeout** hatasi veriyor. Bu nedenle sistem DB yerine DIA API'ye dusuyor (kontor harciyor) veya tamamen basarisiz oluyor.
+## Çözüm: 2 Aşamalı Yaklaşım
 
-### Kok Neden
+### Aşama 1: Frontend'den DB Sorgularını Geçici Olarak Durdur
 
-Tablo 424,000+ satir iceriyor. Her sorgu icin RLS (Row Level Security) politikasi su kontrolu yapiyor:
+`useDataSourceLoader.tsx` dosyasındaki `loadDataSourceFromDatabase` fonksiyonunun başına bir "kill switch" eklenecek. Bu sayede uygulama açılsa bile DB'ye sorgu gitmeyecek.
 
-```text
-Her satir icin --> profiles tablosundan kullanicinin sunucu_adi ve firma_kodu eslestirilir
+```
+// Geçici kill switch - migration sonrası kaldırılacak
+const DB_QUERIES_ENABLED = false;
 ```
 
-Bu, 424K satirin her biri icin ayri bir alt sorgu anlamina geliyor ve buyuk tablolarda timeout'a neden oluyor.
+`loadDataSourceFromDatabase` fonksiyonu `DB_QUERIES_ENABLED === false` ise hemen `null` dönecek. Böylece:
+- Bağlantı havuzu boşalır
+- Migration uygulanabilir hale gelir
 
-Ek olarak:
-- 86K dead tuple (temizlenmemis silinen satirlar) performansi dusuruyor
-- JSONB projeksiyon islemi (jsonb_each + jsonb_object_agg) agir
-- Birden fazla veri kaynagi ayni anda sorgulanarak veritabani ek yuk altina giriyor
+### Aşama 2: Migration Uygula ve Kill Switch'i Kaldır
 
-## Cozum Adimlari
+Bağlantı havuzu boşaldıktan sonra sırasıyla:
 
-### Adim 1: RLS Politikasini Optimize Et
+1. `get_user_company_scope()` SECURITY DEFINER fonksiyonunu oluştur
+2. Eski RLS politikasını kaldır, yeni optimize politikayı ekle
+3. `get_projected_cache_data` RPC'yi SECURITY DEFINER olarak güncelle
+4. VACUUM ANALYZE çalıştır
+5. Kill switch'i kaldır (`DB_QUERIES_ENABLED = true`)
 
-Mevcut politikayi kaldirip, `auth.uid()` ile profil eslestirmesini onbellekleyen daha hizli bir politika ile degistir. `EXISTS` icindeki JOIN yerine, `profiles` tablosunu her satir icin sorgulamadan calistir:
+## Teknik Detay
 
-```sql
--- Eski (yavas): Her satir icin profiles tablosuna bakiyor
-EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = auth.uid() AND ...)
+Değişecek dosya: `src/hooks/useDataSourceLoader.tsx`
 
--- Yeni (hizli): auth.jwt() icindeki bilgiyi dogrudan kullan
--- VEYA profiles sorgusu icin fonksiyon + SECURITY DEFINER kullan
+`loadDataSourceFromDatabase` fonksiyonunun başına (satır ~137):
+```typescript
+// TEMPORARY: DB queries disabled for migration
+const DB_KILL_SWITCH = false;
+if (!DB_KILL_SWITCH) {
+  return { data: null, resolvedDonem: 1 };
+}
 ```
 
-Strateji: `SECURITY DEFINER` bir SQL fonksiyon olusturarak kullanicinin sunucu_adi ve firma_kodu bilgisini tek seferde cekip RLS icinde kullanmak. Bu sayede 424K satir icin 424K alt sorgu yerine sadece 1 alt sorgu calisir.
+Migration SQL'leri (önceki plandaki gibi):
+- `get_user_company_scope()` fonksiyonu
+- Optimize RLS politikası
+- SECURITY DEFINER `get_projected_cache_data`
 
-### Adim 2: VACUUM Calistir
-
-86K dead tuple temizlenerek tablo boyutu ve sorgu performansi iyilestirilir.
-
-```sql
-VACUUM ANALYZE company_data_cache;
-```
-
-### Adim 3: get_projected_cache_data RPC'yi Optimize Et
-
-Mevcut RPC fonksiyonu RLS'den gectiginden ayni sorundan etkileniyor. Fonksiyonu `SECURITY DEFINER` olarak yeniden tanimlayip, icinde kullanici yetki kontrolu yaparak RLS bypass edecek sekilde guncelleyecegiz. Bu, performansi dramatik olarak arttirir.
-
-### Adim 4: Frontend Seri Yukleme
-
-Birden fazla veri kaynagini ayni anda sorgulamak yerine, sirayla (seri) yuklemeye devam et (mevcut kod zaten bunu yapiyor). Ancak timeout sonrasi gereksiz API cagrisi yapmamasi icin retry mantigi eklenmeli.
-
-## Teknik Detaylar
-
-### Yeni RLS Yardimci Fonksiyonu
-
-```sql
-CREATE OR REPLACE FUNCTION get_user_company_scope()
-RETURNS TABLE(sunucu_adi TEXT, firma_kodu TEXT)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT p.dia_sunucu_adi, p.firma_kodu
-  FROM profiles p
-  WHERE p.user_id = auth.uid()
-  LIMIT 1;
-$$;
-```
-
-### Yeni RLS Politikasi
-
-```sql
--- Eski politikayi kaldir
-DROP POLICY "Users can view their company data" ON company_data_cache;
-
--- Yeni optimize politika
-CREATE POLICY "Users can view their company data" ON company_data_cache
-FOR SELECT USING (
-  (sunucu_adi, firma_kodu) IN (SELECT * FROM get_user_company_scope())
-);
-```
-
-### Optimize get_projected_cache_data
-
-Fonksiyonu `SECURITY DEFINER` yapip iceride yetki kontrolu yaparak RLS'yi bypass et. Bu, sorgu suresini saniyelerden milisaniyelere dusurur.
-
-## Beklenen Sonuc
-
-- DB sorgulari timeout yerine 100ms-500ms icinde tamamlanir
-- Dashboard acildiginda veri aninda DB'den yuklenir
-- DIA API'ye dusme (kontor harcama) tamamen onlenir
-- 424K satirlik tabloda bile hizli calisir
+Migration başarılı olduktan sonra kill switch satırları silinecek.
 
