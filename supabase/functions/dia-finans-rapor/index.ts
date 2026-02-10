@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getDiaSession } from "../_shared/diaAutoLogin.ts";
+import { getTurkeyNow, getTurkeyToday } from "../_shared/turkeyTime.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,8 +71,8 @@ function hesaplaYaslandirma(borcHareketler: any[]): VadeYaslandirma {
 
   if (!Array.isArray(borcHareketler)) return yaslandirma;
 
-  const bugun = new Date();
-  bugun.setHours(0, 0, 0, 0);
+  const bugun = getTurkeyNow();
+  bugun.setUTCHours(0, 0, 0, 0);
 
   for (const hareket of borcHareketler) {
     const vadetarihi = new Date(hareket.vadetarihi);
@@ -108,7 +109,7 @@ function hesaplaYaslandirma(borcHareketler: any[]): VadeYaslandirma {
 }
 
 function getToday(): string {
-  return new Date().toISOString().split("T")[0];
+  return getTurkeyToday();
 }
 
 serve(async (req) => {

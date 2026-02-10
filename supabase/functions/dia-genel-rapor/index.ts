@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getDiaSession } from "../_shared/diaAutoLogin.ts";
+import { getTurkeyNow, getTurkeyToday } from "../_shared/turkeyTime.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -120,26 +121,26 @@ interface GenelRapor {
 }
 
 function getToday(): string {
-  return new Date().toISOString().split("T")[0];
+  return getTurkeyToday();
 }
 
 function hesaplaGunFarki(tarihStr: string): number {
   if (!tarihStr) return 0;
-  const bugun = new Date();
-  bugun.setHours(0, 0, 0, 0);
+  const bugun = getTurkeyNow();
+  bugun.setUTCHours(0, 0, 0, 0);
   const tarih = new Date(tarihStr);
-  tarih.setHours(0, 0, 0, 0);
+  tarih.setUTCHours(0, 0, 0, 0);
   return Math.floor((bugun.getTime() - tarih.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 function hesaplaGecikme(vadetarihiStr: string): number {
   if (!vadetarihiStr) return 0;
-  const bugun = new Date();
-  bugun.setHours(0, 0, 0, 0);
+  const bugun = getTurkeyNow();
+  bugun.setUTCHours(0, 0, 0, 0);
   const vadetarihi = new Date(vadetarihiStr);
-  vadetarihi.setHours(0, 0, 0, 0);
+  vadetarihi.setUTCHours(0, 0, 0, 0);
   const fark = Math.floor((bugun.getTime() - vadetarihi.getTime()) / (1000 * 60 * 60 * 24));
-  return fark > 0 ? fark : 0; // Sadece gecikmiş günleri döndür
+  return fark > 0 ? fark : 0;
 }
 
 // FIFO Açık Hesap Kapatma Algoritması
@@ -332,8 +333,8 @@ function hesaplaYaslandirma(borcHareketler: any[], fifoAcikFaturalar?: AcikFatur
 
   // FIFO açık faturalardan yaşlandırma yap
   if (fifoAcikFaturalar && fifoAcikFaturalar.length > 0) {
-    const bugun = new Date();
-    bugun.setHours(0, 0, 0, 0);
+    const bugun = getTurkeyNow();
+    bugun.setUTCHours(0, 0, 0, 0);
 
     for (const fatura of fifoAcikFaturalar) {
       const vadetarihi = new Date(fatura.vadetarihi);
@@ -358,8 +359,8 @@ function hesaplaYaslandirma(borcHareketler: any[], fifoAcikFaturalar?: AcikFatur
   // Fallback: DIA'nın kalantutar alanını kullan
   if (!Array.isArray(borcHareketler)) return yaslandirma;
 
-  const bugun = new Date();
-  bugun.setHours(0, 0, 0, 0);
+  const bugun = getTurkeyNow();
+  bugun.setUTCHours(0, 0, 0, 0);
 
   for (const hareket of borcHareketler) {
     const vadetarihi = new Date(hareket.vadetarihi);

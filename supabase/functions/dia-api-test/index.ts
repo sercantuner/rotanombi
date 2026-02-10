@@ -4,6 +4,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getDiaSession } from "../_shared/diaAutoLogin.ts";
+import { getTurkeyToday } from "../_shared/turkeyTime.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -529,7 +530,7 @@ serve(async (req) => {
         methodParams.params = {
           detaygoster: "True",  // __borchareketler dizisini döndürmek için ZORUNLU
           irsaliyeleriDahilEt: "True",
-          tarihreferans: new Date().toISOString().split('T')[0], // Bugünün tarihi
+          tarihreferans: getTurkeyToday(), // Bugünün tarihi (Türkiye UTC+3)
         };
         console.log(`[DIA Params] Added required params for ${method}:`, methodParams.params);
       }
