@@ -25,7 +25,7 @@ import { tr } from 'date-fns/locale';
 export function SyncButton() {
   const { isConfigured } = useDiaProfile();
   const { lastSyncTime, syncHistory } = useSyncStatus();
-  const { progress, startFullOrchestration, quickSync, abort } = useSyncOrchestrator();
+  const { progress, startFullOrchestration, startIncrementalAll, quickSync, abort } = useSyncOrchestrator();
 
   if (!isConfigured) return null;
 
@@ -96,6 +96,10 @@ export function SyncButton() {
           </DropdownMenuItem>
         ) : (
           <>
+            <DropdownMenuItem onClick={() => startIncrementalAll()}>
+              <Zap className="w-4 h-4 mr-2" />
+              <span>Güncel Verileri Getir</span>
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => startFullOrchestration()}>
               <RefreshCw className="w-4 h-4 mr-2" />
               <span>Tüm Verileri Senkronize Et</span>
