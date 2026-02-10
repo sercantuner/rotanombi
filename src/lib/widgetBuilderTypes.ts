@@ -466,6 +466,10 @@ export interface WidgetBuilderConfig {
     globalFilterKey: string;
     label: string;
   };
+  
+  // JSONB Alan Projeksiyonu: Widget'ın ihtiyaç duyduğu alanlar
+  // Belirtildiğinde DB sorgusu sadece bu alanları döndürür (~10x veri azalması)
+  requiredFields?: string[];
 }
 
 // Grafik tipleri listesi

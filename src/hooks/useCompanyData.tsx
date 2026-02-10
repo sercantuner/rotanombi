@@ -12,6 +12,7 @@ interface CompanyDataFilter {
   donemKodu?: number;
   includeDeleted?: boolean;
   isPeriodIndependent?: boolean;
+  requiredFields?: string[];
 }
 
 interface SyncOptions {
@@ -54,36 +55,56 @@ export function useCompanyData(filter: CompanyDataFilter) {
       // Period-independent kaynaklar tüm dönemlerden veri çeker (donem filtresi uygulanmaz)
       let resolvedDonem = effectiveDonem;
 
-      // Sayfalama ile tüm veriyi çek - Supabase varsayılan 1000 limit'i aşmak için
+      // Sayfalama ile tüm veriyi çek
       const PAGE_SIZE = 1000;
       let allData: any[] = [];
       let from = 0;
       let hasMore = true;
+      const useProjection = filter.requiredFields && filter.requiredFields.length > 0;
       
       while (hasMore) {
-        let query = supabase
-          .from('company_data_cache')
-          .select('data')
-          .eq('data_source_slug', filter.dataSourceSlug)
-          .range(from, from + PAGE_SIZE - 1);
+        let rows: any[] = [];
+        let fetchError: any = null;
+        
+        if (useProjection) {
+          // RPC ile alan projeksiyonu
+          const { data, error } = await supabase.rpc('get_projected_cache_data', {
+            p_data_source_slug: filter.dataSourceSlug,
+            p_sunucu_adi: sunucuAdi!,
+            p_firma_kodu: firmaKodu!,
+            p_donem_kodu: filter.isPeriodIndependent ? null : resolvedDonem,
+            p_fields: filter.requiredFields!,
+            p_limit: PAGE_SIZE,
+            p_offset: from,
+          });
+          fetchError = error;
+          rows = (data as any[]) || [];
+        } else {
+          // Eski yöntem
+          let query = supabase
+            .from('company_data_cache')
+            .select('data')
+            .eq('data_source_slug', filter.dataSourceSlug)
+            .range(from, from + PAGE_SIZE - 1);
 
-        // Period-dependent kaynaklar için dönem filtresi uygula
-        if (!filter.isPeriodIndependent) {
-          query = query.eq('donem_kodu', resolvedDonem) as typeof query;
+          if (!filter.isPeriodIndependent) {
+            query = query.eq('donem_kodu', resolvedDonem) as typeof query;
+          }
+
+          if (!filter.includeDeleted) {
+            query = query.eq('is_deleted', false) as typeof query;
+          }
+
+          const { data, error } = await query;
+          fetchError = error;
+          rows = data || [];
         }
 
-        if (!filter.includeDeleted) {
-          query = query.eq('is_deleted', false) as typeof query;
+        if (fetchError) {
+          console.error('[useCompanyData] Error fetching data:', fetchError);
+          throw fetchError;
         }
 
-        const { data, error } = await query;
-
-        if (error) {
-          console.error('[useCompanyData] Error fetching data:', error);
-          throw error;
-        }
-
-        const rows = data || [];
         allData = allData.concat(rows.map(row => row.data));
         
         if (rows.length < PAGE_SIZE) {

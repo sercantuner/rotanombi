@@ -1410,6 +1410,21 @@ export type Database = {
           widget_count: number
         }[]
       }
+      get_projected_cache_data: {
+        Args: {
+          p_data_source_slug: string
+          p_donem_kodu?: number
+          p_fields?: string[]
+          p_firma_kodu: string
+          p_limit?: number
+          p_offset?: number
+          p_sunucu_adi: string
+        }
+        Returns: {
+          data: Json
+          updated_at: string
+        }[]
+      }
       get_safe_profile: {
         Args: { _target_user_id: string }
         Returns: {
