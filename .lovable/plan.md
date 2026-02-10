@@ -1,104 +1,84 @@
 
-# Veri İsteği Havuzu (Field Pool) - Sayfa Bazlı Tek Sorgu Optimizasyonu
+# "Guncel" = DIA ile Birebir Ayni - reconcileKeys Entegrasyonu
 
-## Mevcut Durum (Problem)
+## Problem
 
-Bir sayfada ayni veri kaynagini (ornegin `scf_fatura_listele`) kullanan 5 widget varsa:
+Simdi "Guncel" gostergesi sadece "yeni/guncellenen kayitlari DIA'dan cektim" anlamina geliyor. Ama DIA'da silinen kayitlar tespit edilmiyor cunku `backgroundRevalidate` fonksiyonu `syncSingleSource` action'ini cagiriyor ve bu action icerisinde `reconcileKeys` calismyor.
 
-```text
-Widget A: requiredFields = [tarih, net, turu]         --> 1 RPC sorgusu (44K kayit)
-Widget B: requiredFields = [tarih, toplam, __cariunvan] --> 1 RPC sorgusu (44K kayit)
-Widget C: requiredFields = [tarih, net, kdv]           --> 1 RPC sorgusu (44K kayit)
-Widget D: requiredFields = [turu, net]                 --> 1 RPC sorgusu (44K kayit)
-Widget E: (custom code, no requiredFields)             --> 1 full SELECT (44K kayit)
+Sonuc: Widget yesil ucgen gosteriyor ("Guncel") ama aslinda DB'de DIA'da artik olmayan kayitlar duruyor.
 
-Toplam: 5 ayri veritabani sorgusu = ~220K satir isleniyor
-```
+## Cozum
 
-## Hedef
+`backgroundRevalidate` isleminin sonunda, sync basarili olduktan sonra `reconcileKeys` action'ini da cagirmak. Boylece:
 
-```text
-Havuz: UNION(tum requiredFields) = [tarih, net, turu, toplam, __cariunvan, kdv]
---> 1 RPC sorgusu (44K kayit, 6 alan)
+1. Yeni/guncellenen kayitlar yazilir (syncSingleSource - mevcut)
+2. Silinen kayitlar tespit edilip `is_deleted: true` olarak isaretlenir (reconcileKeys - yeni eklenen adim)
+3. Ancak ondan sonra gosterge "Guncel" olur
 
-Toplam: 1 veritabani sorgusu = ~44K satir isleniyor (5x azalma)
-```
+## Teknik Degisiklik
 
-## Teknik Degisiklikler
+### Degisecek Dosya: `src/hooks/useDynamicWidgetData.tsx`
 
-### 1. useDataSourceLoader.tsx - Alan Havuzu Olusturma
-
-`findUsedDataSources` fonksiyonu zaten sayfa widgetlarinin `builder_config`'lerini cekerken `dataSourceId` topluyor. Bu adima ek olarak:
-
-- Her widget'in `builder_config.requiredFields` dizisini de topla
-- Ayni veri kaynagini kullanan widgetlarin alanlarini birlestir (Set union)
-- Eger herhangi bir widget `requiredFields` tanimlamadiysa (null/bos), o kaynak icin projeksiyon uygulanmaz (geri uyumluluk: tum veri cekilir)
-
-Fonksiyonun donusu degisir:
+`backgroundRevalidate` fonksiyonu icinde, `syncSingleSource` basarili olduktan sonra ve DB'den taze veri cekmeden once, `reconcileKeys` cagrisi eklenir:
 
 ```typescript
-// Oncesi:
-async function findUsedDataSources(): Promise<string[]>
+// Mevcut: syncSingleSource cagir
+const result = await response.json();
 
-// Sonrasi:
-interface DataSourceFieldPool {
-  dataSourceId: string;
-  // null = projeksiyon yok, tum veri cekilecek (en az 1 widget requiredFields tanimlamadiysa)
-  pooledFields: string[] | null;
+// YENİ: reconcileKeys cagir (silinen kayitlari tespit et)
+try {
+  const recResponse = await fetch(`${SUPABASE_URL}/functions/v1/dia-data-sync`, {
+    method: 'POST',
+    headers: { 
+      'Authorization': `Bearer ${session.access_token}`, 
+      'Content-Type': 'application/json' 
+    },
+    body: JSON.stringify({
+      action: 'reconcileKeys',
+      dataSourceSlug: slug,
+      periodNo: effectiveDonem,
+    }),
+  });
+  const recResult = await recResponse.json();
+  if (recResult.markedDeleted > 0) {
+    console.log(`[Background Revalidate] reconcileKeys: ${recResult.markedDeleted} silinen kayit tespit edildi`);
+  }
+} catch (recErr) {
+  // reconcileKeys hatasi sync'i engellemez - log ve devam
+  console.warn(`[Background Revalidate] reconcileKeys error:`, recErr);
 }
-async function findUsedDataSources(): Promise<DataSourceFieldPool[]>
+
+// Sonra DB'den taze veriyi cek (is_deleted=false filtreli)
+const freshDbResult = await fetchFromDatabase(...);
 ```
 
-### 2. useDataSourceLoader.tsx - loadDataSourceFromDatabase Guncelleme
+### Sira Onemli
 
-`loadDataSourceFromDatabase` fonksiyonu zaten `requiredFields` parametresi alabilir. `loadAllDataSources` icinde her veri kaynagi yuklenirken havuzdaki birlesmis alan listesi (`pooledFields`) gecilecek:
-
-```typescript
-// loadAllDataSources icinde:
-for (const pool of fieldPools) {
-  const dataSource = getDataSourceById(pool.dataSourceId);
-  // Havuzdaki birlesmis alanlarla tek sorgu
-  const dbResult = await loadDataSourceFromDatabase(dataSource, pool.pooledFields);
-  // Sonuc memory cache'e kaydedilir - tum widgetlar buradan okur
-}
+```text
+1. syncSingleSource  --> Yeni/guncellenen kayitlari yaz
+2. reconcileKeys     --> DIA'da olmayan kayitlari is_deleted=true yap
+3. fetchFromDatabase --> DB'den is_deleted=false kayitlari cek (temiz veri)
+4. dataStatus = "Guncel" --> Simdi gercekten guncel
 ```
 
-### 3. useDynamicWidgetData.tsx - DB Sorgusunu Atla, Cache Kullan
+### Performans Etkisi
 
-`useDynamicWidgetData` icindeki `fetchDataForSource` fonksiyonu zaten once memory cache'i kontrol ediyor. Havuz sistemi sayesinde:
+`reconcileKeys` DIA'dan sadece `_key` listesini ceker (limit: 0, tek alan). Bu genelde hizli bir islemdir (< 2-3 saniye). `backgroundRevalidate` zaten arka planda calisiyor, kullanici bunu fark etmez.
 
-1. `useDataSourceLoader` sayfa yuklenmesinde havuzlanmis veriyi cekip memory cache'e koyar
-2. Her widget `fetchDataForSource` cagirildiginda memory cache'de veriyi bulur
-3. Widget kendi `requiredFields` icinde olmayan alanlar da havuzda olacak (baska widgetlardan) - bu sorun degil cunku fazla alan widget kodunu bozmaz
+### Edge Case: Period-Independent Kaynaklar
 
-**Kritik**: `useDynamicWidgetData` icindeki `fetchFromDatabase` cagrisi artik gereksiz hale gelir (cunku veri zaten `useDataSourceLoader` tarafindan memory cache'e yuklenmis olacak). Ancak geri uyumluluk icin kalir - cache miss durumunda yedek olarak calisir.
-
-### 4. Ozel Durum: requiredFields Olmayan Widget
-
-Bir sayfada ayni veri kaynagini kullanan widgetlardan biri bile `requiredFields` tanimlamadiysa, o kaynak icin projeksiyon yapilmaz ve tum veri cekilir. Bu, custom code widgetlarin beklenmedik alan eksikliginden etkilenmesini engeller.
-
-### 5. Ozel Durum: Multi-Query Widgetlar
-
-Bir widget birden fazla veri kaynagi kullaniyorsa (multi-query), her veri kaynaginin alanlari ayri havuzlara eklenir. Ornegin:
-- Widget X: query1 = fatura[tarih, net], query2 = cari[carikodu, bakiye]
-- Widget Y: query1 = fatura[tarih, turu]
-
-Sonuc:
-- fatura havuzu: [tarih, net, turu]
-- cari havuzu: [carikodu, bakiye]
+`reconcileKeys` zaten edge function icerisinde `periodNo` parametresini zorunlu tutuyor. Period-independent kaynaklar icin de mevcut donem kodu gonderilir (ayni sekilde `syncSingleSource` de yapiyor).
 
 ## Degisecek Dosyalar
 
 | Dosya | Degisiklik |
 |-------|------------|
-| `src/hooks/useDataSourceLoader.tsx` | `findUsedDataSources` donus tipini genislet, `loadAllDataSources` icinde havuzlanmis alanlari `loadDataSourceFromDatabase`'e gecir |
-| `src/hooks/useDynamicWidgetData.tsx` | Degisiklik yok - mevcut memory cache onceligi zaten dogru calisiyor |
+| `src/hooks/useDynamicWidgetData.tsx` | `backgroundRevalidate` icine `reconcileKeys` cagrisi eklenir |
 
-## Beklenen Kazanim
+## Sonuc
 
-| Senaryo | Oncesi | Sonrasi |
-|---------|--------|---------|
-| 5 fatura widgeti olan sayfa | 5 RPC sorgusu | 1 RPC sorgusu |
-| 3 farkli kaynak, 10 widget | 10 sorgu | 3 sorgu |
-| DB islem suresi | ~5x tekrar | 1x |
-| Bellek | Her widget ayri kopyalar | Tek kopya paylasilir |
+Widget "Guncel" dediginde artik su garantiyi verir:
+- Tum yeni kayitlar DIA'dan cekildi
+- Tum guncellenen kayitlar DIA'dan cekildi
+- DIA'da silinen kayitlar DB'de `is_deleted: true` olarak isaretlendi
+- Widget sadece `is_deleted: false` kayitlari gosteriyor
