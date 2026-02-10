@@ -708,20 +708,28 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ success: false, error: e instanceof Error ? e.message : "Fetch error" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       
-      // DB'deki mevcut key'leri çek (is_deleted: false)
-      const { data: dbRecords, error: dbErr } = await sb.from('company_data_cache')
-        .select('dia_key')
-        .eq('sunucu_adi', sun)
-        .eq('firma_kodu', fk)
-        .eq('donem_kodu', periodNo)
-        .eq('data_source_slug', dataSourceSlug)
-        .eq('is_deleted', false);
-      
-      if (dbErr) {
-        return new Response(JSON.stringify({ success: false, error: dbErr.message }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      // DB'deki mevcut key'leri çek (is_deleted: false) - sayfalama ile 1000 limit aşılır
+      const dbKeys = new Set<number>();
+      let dbOffset = 0;
+      const DB_PAGE = 1000;
+      while (true) {
+        const { data: dbPage, error: dbErr } = await sb.from('company_data_cache')
+          .select('dia_key')
+          .eq('sunucu_adi', sun)
+          .eq('firma_kodu', fk)
+          .eq('donem_kodu', periodNo)
+          .eq('data_source_slug', dataSourceSlug)
+          .eq('is_deleted', false)
+          .range(dbOffset, dbOffset + DB_PAGE - 1);
+        
+        if (dbErr) {
+          return new Response(JSON.stringify({ success: false, error: dbErr.message }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        if (!dbPage || dbPage.length === 0) break;
+        for (const r of dbPage) dbKeys.add(Number(r.dia_key));
+        if (dbPage.length < DB_PAGE) break;
+        dbOffset += DB_PAGE;
       }
-      
-      const dbKeys = new Set((dbRecords || []).map((r: any) => Number(r.dia_key)));
       console.log(`[reconcileKeys] DB has ${dbKeys.size} active keys for ${src.slug} period ${periodNo}`);
       
       // DB'de olup DIA'da olmayan key'leri bul
