@@ -1,73 +1,69 @@
 
 
-# Personel Mesai Analizi - Parametre ve Filtreleri Dış Filtre Butonuna Taşıma
+## Tum Parametrelere "Mobilde Goster" Ayari Ekleme
 
-## Mevcut Durum
+### Ozet
+Her widget filtre ve parametresine `showOnMobile` (boolean) alani eklenecek. Mobil cihazlarda sadece `showOnMobile: true` olan filtre/parametreler gorunecek. Varsayilan olarak KPI widget'larinin parametreleri mobilde gorunur, diger widget turlerinde gizli olacak.
 
-Widget kodu icinde sol panelde ("Ayarlar") su kontroller var:
-- **Personel Secimi** (dropdown/select - `selectedUser` state)
-- **Calisma Gunleri** (Pt-Pz toggle butonlari - `workingDays` state)
-- **Mesai Baslangic/Bitis saati** (time input - `workHours` state)
-- **Gec Tolerans / Erken Tolerans** (number input - `tolerance` state)
-- **Resmi Tatiller** (checkbox + date input - `useNationalHolidays`, `holidays` state)
+### Degisiklikler
 
-Bunlarin hepsi widget icindeki `React.useState` ile yonetiliyor ve sol panelde render ediliyor.
+#### 1. Tip Tanimlari (widgetBuilderTypes.ts)
+- `WidgetFilterDef` ve `WidgetParamDef` interface'lerine `showOnMobile?: boolean` alani eklenecek.
 
-## Hedef
+#### 2. WidgetFiltersButton Bileseninde Mobil Filtreleme (WidgetFiltersButton.tsx)
+- `useIsMobile()` hook'u import edilecek.
+- Mobil cihazda iken `widgetFilters` ve `widgetParameters` dizileri `showOnMobile === true` olanlara gore filtrelenecek.
+- Desktop'ta tum filtre/parametreler eskisi gibi gorunmeye devam edecek.
 
-Bu kontrolleri widget kodundan cikarip `Widget.filters` ve `Widget.parameters` metadata tanimlarina tasimak. Boylece kullanici bunlari widget'in sag ust kosesindeki filtre/ayar butonundan (WidgetFiltersButton) yonetebilecek.
+#### 3. ContainerRenderer'da Mobil Gorunurluk (ContainerRenderer.tsx)
+- Filtre/parametre butonunun gorunurluk mantigi (satir 316) mobil durumda `showOnMobile: true` olan tanimlara gore kontrol edilecek. Eger mobilde gosterilecek hicbir filtre/parametre yoksa buton gizlenecek.
 
-## Plan
+#### 4. Widget Builder UI (Opsiyonel Iyilestirme)
+- `WidgetFiltersParamsEditor.tsx` icerisinde her filtre/parametre satirina bir "Mobilde Goster" toggle'i eklenecek, boylece super admin bu ayari gorsel olarak yonetebilecek.
 
-### 1. Widget koduna `Widget.filters` ve `Widget.parameters` tanimlarini ekle
+#### 5. Veritabani Guncelleme (SQL Migration)
+Mevcut tum widget'larin `builder_config` icindeki `widgetFilters` ve `widgetParameters` dizilerine `showOnMobile` alani eklenecek:
 
-```javascript
-Widget.filters = [
-  { key: "personel", label: "Personel", type: "multi-select" }
-];
+- **KPI turundeki widget'lar**: Tum filtre ve parametrelere `showOnMobile: true`
+- **Diger turler (chart, table, list, summary)**: Tum filtre ve parametrelere `showOnMobile: false`
 
-Widget.parameters = [
-  { key: "mesaiBaslangic", label: "Mesai Baslangic", type: "text", defaultValue: "08:00" },
-  { key: "mesaiBitis", label: "Mesai Bitis", type: "text", defaultValue: "18:00" },
-  { key: "gecTolerans", label: "Gec Tolerans (dk)", type: "number", defaultValue: 15, min: 0, max: 60 },
-  { key: "erkenTolerans", label: "Erken Tolerans (dk)", type: "number", defaultValue: 15, min: 0, max: 60 },
-  { key: "resmiTatiller", label: "Resmi Tatiller", type: "toggle", defaultValue: true }
-];
-```
-
-### 2. Widget kodunu guncelle
-
-- **Kaldirilacaklar:**
-  - `selectedUser` state ve sol paneldeki personel dropdown
-  - `workHours` state ve saat inputlari
-  - `tolerance` state ve tolerans inputlari
-  - `useNationalHolidays` state ve checkbox
-  - `showSettings` state ve sol panel toggle butonu
-  - Sol panel UI blogu tamamen (250px panel)
-
-- **Korunacaklar:**
-  - `holidays` state (ozel tatil ekleme islemi karmasik bir UI gerektirdigi icin widget icinde kalabilir veya basitlestirilir)
-  - Tum veri isleme mantigi
-  - Grafik ve KPI render kodu
-  - Detayli liste popup'i
-
-- **Degistirilecekler:**
-  - `selectedUser` yerine `filters.personel` kullanilacak (multi-select array)
-  - `workHours.start` yerine `filters.mesaiBaslangic || '08:00'`
-  - `workHours.end` yerine `filters.mesaiBitis || '18:00'`
-  - `tolerance.late` yerine `filters.gecTolerans || 15`
-  - `tolerance.early` yerine `filters.erkenTolerans || 15`
-  - `useNationalHolidays` yerine `filters.resmiTatiller !== false`
-  - Personel filtreleme multi-select'e donusecek (birden fazla personel secimi)
-
-### 3. Veritabani guncelleme
-
-`widgets` tablosundaki `builder_config` alaninin `widgetFilters` ve `widgetParameters` JSON alanlari guncellenecek. Ayrica `customCode` alani yeni kod ile degistirilecek.
+Bu islem, parametre/filtre tanimli tum aktif widget'lar icin SQL ile toplu guncelleme yapilarak gerceklestirilecek. Etkilenen widget'lar:
+- Banka Varliklari Ozeti (chart) - false
+- Gelecek Vadeli Cek Analizi (chart) - false  
+- Haftalik Kendi Ceklerimiz (chart) - false
+- Kasa Varlik Ozeti (chart) - false
+- Nakit Akis Yaslandirma Analizi (chart) - false
+- Nakit Akisi ve Yaslandirma (chart) - false
+- Personel Mesai Analizi (chart) - false
+- Personel Performans Radari (chart) - false
+- Aylik Acik Teklif Analizi (chart) - false
 
 ### Teknik Detaylar
 
-- Widget ID: `947b4596-5271-4d21-8aa1-7cf084fa650a`
-- Tek bir SQL UPDATE ile `builder_config` guncellenecek
-- Sol panel tamamen kaldirilinca widget alani tamamen grafige ayrilacak, daha genis bir gorunum elde edilecek
-- `holidays` (ozel tatil ekleme) kompleks bir UI gerektirdigi icin simdilik widget icinde minimal bir sekilde tutulabilir veya tamamen kaldirilabilir
+```text
+WidgetFilterDef / WidgetParamDef
++---------------------+
+| key: string         |
+| label: string       |
+| type: ...           |
+| showOnMobile?: bool | <-- YENi ALAN
+| options?: ...       |
++---------------------+
+
+WidgetFiltersButton (render mantigi)
++----------------------------------+
+| isMobile?                        |
+|   -> filtre listesini filtrele   |
+|      showOnMobile === true       |
+| Desktop?                         |
+|   -> tum filtreler gorunur       |
++----------------------------------+
+```
+
+Degistirilecek dosyalar:
+- `src/lib/widgetBuilderTypes.ts` - Tip tanimlari
+- `src/components/dashboard/WidgetFiltersButton.tsx` - Mobil filtreleme mantigi
+- `src/components/pages/ContainerRenderer.tsx` - Buton gorunurluk mantigi
+- `src/components/admin/WidgetFiltersParamsEditor.tsx` - Builder UI toggle
+- Veritabani: `widgets` tablosunda toplu `builder_config` guncellemesi
 
