@@ -1025,27 +1025,63 @@ export function useDynamicWidgetData(
       
       console.log(`[Background Revalidate] Starting sync for ${slug}...`);
       
-      // dia-data-sync edge function'ı çağır
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/dia-data-sync`, {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${session.access_token}`, 
-          'Content-Type': 'application/json' 
-        },
-        body: JSON.stringify({
-          action: 'syncSingleSource',
-          dataSourceSlug: slug,
-          periodNo: effectiveDonem,
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Sync failed: ${response.status} - ${errorText}`);
+      // Chunk-based sync: 300'erli parçalar halinde veri çek (timeout önleme)
+      const CHUNK_SIZE = 300;
+      let offset = 0;
+      let totalFetched = 0;
+      let totalWritten = 0;
+      let hasMore = true;
+      let chunkCount = 0;
+
+      while (hasMore) {
+        const chunkResponse = await fetch(`${SUPABASE_URL}/functions/v1/dia-data-sync`, {
+          method: 'POST',
+          headers: { 
+            'Authorization': `Bearer ${session.access_token}`, 
+            'Content-Type': 'application/json' 
+          },
+          body: JSON.stringify({
+            action: 'syncChunk',
+            dataSourceSlug: slug,
+            periodNo: effectiveDonem,
+            offset,
+            chunkSize: CHUNK_SIZE,
+          }),
+        });
+
+        if (!chunkResponse.ok) {
+          const errorText = await chunkResponse.text();
+          // İlk chunk bile başarısız olduysa hata fırlat
+          if (totalFetched === 0) {
+            throw new Error(`Sync failed: ${chunkResponse.status} - ${errorText}`);
+          }
+          // Kısmi veri var, döngüden çık ama yazılan veriyi koru
+          console.warn(`[Background Revalidate] Chunk ${chunkCount + 1} failed for ${slug}, stopping with ${totalFetched} fetched so far`);
+          break;
+        }
+
+        const chunkResult = await chunkResponse.json();
+        
+        if (!chunkResult.success && !chunkResult.written) {
+          if (totalFetched === 0) {
+            throw new Error(chunkResult.error || 'Chunk sync failed');
+          }
+          console.warn(`[Background Revalidate] Chunk error for ${slug}, stopping with ${totalFetched} fetched`);
+          break;
+        }
+
+        totalFetched += chunkResult.fetched || 0;
+        totalWritten += chunkResult.written || 0;
+        hasMore = chunkResult.hasMore === true;
+        offset = chunkResult.nextOffset || (offset + CHUNK_SIZE);
+        chunkCount++;
+
+        if (chunkResult.partialError) {
+          console.log(`[Background Revalidate] Partial error in chunk ${chunkCount} for ${slug}: ${chunkResult.partialError}`);
+        }
       }
-      
-      const result = await response.json();
-      console.log(`[Background Revalidate] Sync completed for ${slug}:`, result);
+
+      console.log(`[Background Revalidate] Sync completed for ${slug}: ${chunkCount} chunks, ${totalFetched} fetched, ${totalWritten} written`);
       
       // reconcileKeys: DIA'da silinen kayıtları tespit et ve is_deleted=true yap
       try {
