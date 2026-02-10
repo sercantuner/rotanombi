@@ -81,6 +81,14 @@ function ParamItemEditor({ item, onChange, onDelete }: {
             {PARAM_TYPES.map(t => <SelectItem key={t.value} value={t.value} className="text-xs">{t.label}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center shrink-0">
+              <Switch checked={item.showOnMobile ?? false} onCheckedChange={(val) => onChange({ ...item, showOnMobile: val })} className="h-4 w-7 [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-3" />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-[10px]">Mobilde Göster</TooltipContent>
+        </Tooltip>
         <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setExpanded(!expanded)}>
           {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
         </Button>
@@ -91,10 +99,6 @@ function ParamItemEditor({ item, onChange, onDelete }: {
 
       {expanded && (
         <div className="space-y-2 pt-1 pl-6">
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground w-24">Mobilde Göster:</Label>
-            <Switch checked={item.showOnMobile ?? false} onCheckedChange={(val) => onChange({ ...item, showOnMobile: val })} />
-          </div>
           {item.type === 'toggle' ? (
             <div className="flex items-center gap-2">
               <Label className="text-xs text-muted-foreground w-24">Varsayılan:</Label>
