@@ -564,6 +564,30 @@ Deno.serve(async (req) => {
       await sb.from('period_sync_status').upsert({ sunucu_adi: sun, firma_kodu: fk, donem_kodu: periodNo, data_source_slug: dataSourceSlug||'all', is_locked: true, updated_at: new Date().toISOString() }, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug' });
       return new Response(JSON.stringify({ success: true, message: `Period ${periodNo} locked` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
+    // ===== markFullSyncComplete - Orchestrator full sync bitince çağırır =====
+    if (action === 'markFullSyncComplete') {
+      if (!dataSourceSlug || periodNo === undefined) {
+        return new Response(JSON.stringify({ success: false, error: "dataSourceSlug and periodNo required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const totalRecords = body.totalRecords || 0;
+      await sb.from('period_sync_status').upsert({ 
+        sunucu_adi: sun, firma_kodu: fk, donem_kodu: periodNo, 
+        data_source_slug: dataSourceSlug, 
+        last_full_sync: new Date().toISOString(),
+        last_incremental_sync: new Date().toISOString(),
+        total_records: totalRecords,
+        updated_at: new Date().toISOString() 
+      }, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug' });
+      
+      // Cache kayıt sayısını güncelle
+      const { data: countData } = await sb.rpc('get_cache_record_counts', { p_sunucu_adi: sun, p_firma_kodu: fk });
+      const totalForSlug = countData?.find((c: any) => c.data_source_slug === dataSourceSlug)?.record_count || totalRecords;
+      await sb.from('data_sources').update({ last_record_count: totalForSlug, last_fetched_at: new Date().toISOString() }).eq('slug', dataSourceSlug);
+      
+      console.log(`[markFullSyncComplete] ${dataSourceSlug} period ${periodNo}: marked complete with ${totalRecords} records`);
+      return new Response(JSON.stringify({ success: true, message: `Full sync marked complete for ${dataSourceSlug} period ${periodNo}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     
     const { data: ds } = await sb.from('data_sources').select('slug, module, method, name, is_period_independent, is_non_dia').eq('is_active', true);
     if (!ds?.length) return new Response(JSON.stringify({ success: false, error: "No active data sources" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

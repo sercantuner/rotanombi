@@ -234,7 +234,17 @@ export function useSyncOrchestrator() {
         if (task.type === 'full') {
           const result = await syncFullChunked(task.slug, task.periodNo, i, syncOptions);
           
-          // Full sync tamamlandı - aktif dönem değilse kilitle
+          // Full sync tamamlandı → period_sync_status'a last_full_sync yaz
+          if (result.fetched > 0) {
+            await callEdgeFunction({ 
+              action: 'markFullSyncComplete', 
+              dataSourceSlug: task.slug, 
+              periodNo: task.periodNo,
+              totalRecords: result.fetched 
+            });
+          }
+          
+          // Aktif dönem değilse kilitle
           const isCurrentPeriod = task.periodNo === currentPeriod;
           if (!isCurrentPeriod && result.fetched > 0) {
             await callEdgeFunction({ action: 'lockPeriod', periodNo: task.periodNo, dataSourceSlug: task.slug });
@@ -247,8 +257,11 @@ export function useSyncOrchestrator() {
         } else {
           const result = await syncIncremental(task.slug, task.periodNo);
           
-          if (result.needsFullSync) {
+           if (result.needsFullSync) {
             const fullResult = await syncFullChunked(task.slug, task.periodNo, i, syncOptions);
+            if (fullResult.fetched > 0) {
+              await callEdgeFunction({ action: 'markFullSyncComplete', dataSourceSlug: task.slug, periodNo: task.periodNo, totalRecords: fullResult.fetched });
+            }
             setProgress(prev => ({
               ...prev,
               tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'completed', type: 'full', fetched: fullResult.fetched, written: fullResult.written } : t),
@@ -324,6 +337,9 @@ export function useSyncOrchestrator() {
       if (result.needsFullSync) {
         setProgress(prev => ({ ...prev, currentType: 'full', tasks: [{ ...prev.tasks[0], type: 'full' }] }));
         const fullResult = await syncFullChunked(slug, periodNo, 0);
+        if (fullResult.fetched > 0) {
+          await callEdgeFunction({ action: 'markFullSyncComplete', dataSourceSlug: slug, periodNo, totalRecords: fullResult.fetched });
+        }
         toast.success(`${source.name}: ${fullResult.fetched} kayıt çekildi (tam sync)`);
       } else {
         toast.success(`${source.name}: ${result.fetched} yeni/güncellenen kayıt`);
