@@ -1,71 +1,63 @@
 
 
-## Widget Bazinda "Mobilde Goster/Gizle" Kullanici Ayari
+## Timezone Duzeltmesi ve Kasa Verisi Guncellik Sorunu
 
-### Ozet
-Her kullanici, kendi dashboard'undaki her widget icin "Bu widget mobilde gorunsun mu?" secenegini belirleyebilecek. Bu, super admin degil **kullanicinin kendisinin** kontrol ettigi bir ayar olacak. Widget hem masaustunde hem mobilde gorunebilir veya sadece masaustunde gorunur olabilir.
+### Sorun Analizi
 
-### Nasil Calisacak
-- Kullanici, widget'in sag ust kosesindeki ayarlar popover'inda (WidgetFiltersButton) bir "Mobilde Goster" toggle'i gorecek.
-- Toggle kapali oldugunda, o widget mobil cihazlarda tamamen gizlenecek.
-- Toggle acik oldugunda (varsayilan), widget her iki platformda da gorunecek.
-- Bu ayar kullaniciya ozeldir - her kullanici kendi tercihini yapar.
+**1. Kasa verisi 5 gun eski:**
+- Veritabanindaki MERKEZ KASA TL bakiyesi: **125.920,60 TL** (Donem 2) ve **123.569,45 TL** (Donem 3)
+- Gercek deger DIA'da: **105.754,79 TL**
+- Son sync: **5 Subat 2026** - 5 gundur yeni veri cekilmemis
+- 9 Subat'ta girilen hareketler hic senkronize edilmemis
 
-### Teknik Degisiklikler
+**2. Timezone sorunu:**
+- Tum edge function'larda `new Date()` kullaniliyor (UTC)
+- `getToday()` fonksiyonu `new Date().toISOString().split("T")[0]` ile tarih hesapliyor - bu UTC'de gece yarisi sonrasi Turkiye saatiyle sabah 03:00'e kadar bir onceki gunu dondurur
+- Vade hesaplamalari, tarih filtreleri ve "son guncelleme" gosterimleri 3 saat kaymali
 
-#### 1. ContainerWidgetSettings Guncelleme (ContainerRenderer.tsx)
-`ContainerWidgetSettings` interface'ine `hideOnMobile?: boolean` alani eklenecek. Varsayilan `false` (yani widget mobilde gorunur).
+### Cozum Plani
 
-```text
-ContainerWidgetSettings
-+---------------------------+
-| filters?: ...             |
-| heightMultiplier?: ...    |
-| hideOnMobile?: boolean    |  <-- YENI ALAN
-+---------------------------+
-```
+#### 1. Turkiye Saat Dilimi Yardimci Fonksiyonu (Yeni Dosya)
+`supabase/functions/_shared/turkeyTime.ts` dosyasi olusturulacak:
+- `getTurkeyNow()`: UTC+3 olarak simdi
+- `getTurkeyToday()`: UTC+3'e gore bugunun tarihini (YYYY-MM-DD) dondurur
+- `getTurkeyMonthStart()`: Ayin ilk gunu (UTC+3)
+- `toTurkeyDate(date)`: Herhangi bir Date objesini Turkiye saatine cevirir
 
-#### 2. ContainerRenderer.tsx - Mobil Gizleme Mantigi
-`renderSlots()` icerisinde, widget render edilmeden once mobil kontrolu yapilacak:
-- `isMobile === true` ve `hideOnMobile === true` ise, o slot tamamen gizlenecek (render edilmeyecek).
-- Masaustunde tum widget'lar her zaman gorunur.
+#### 2. Edge Function Guncellemeleri
+Asagidaki dosyalardaki `getToday()`, `new Date()` ve vade hesaplamalarindaki tarih kullanimi duzeltilecek:
 
-#### 3. ContainerRenderer.tsx - Toggle Degisikligi Kaydetme
-Yeni bir `handleMobileVisibilityChange` fonksiyonu eklenecek. Bu fonksiyon `container_widgets` tablosundaki `settings` JSONB alanina `hideOnMobile` degerini yazacak.
+**supabase/functions/dia-genel-rapor/index.ts:**
+- `getToday()` -> `getTurkeyToday()` kullanacak
+- `hesaplaGunFarki()` ve `hesaplaGecikme()` fonksiyonlarindaki `new Date()` -> `getTurkeyNow()` olacak
+- Yaslandirma hesaplarindaki `bugun` degiskenleri Turkiye saati kullanacak
 
-#### 4. WidgetFiltersButton.tsx - "Mobilde Goster" Toggle UI
-Popover icerisine yeni bir bolum eklenecek:
-- "Gorunum" basliginin altinda bir "Mobilde Goster" switch'i olacak.
-- Toggle degistiginde `onMobileVisibilityChange` callback'i cagirilacak.
-- Bu toggle **tum kullanicilar** icin gorunur olacak (super admin degil, herkes kendi widget'ini yonetebilir).
+**supabase/functions/dia-finans-rapor/index.ts:**
+- `getToday()` -> `getTurkeyToday()`
+- Yaslandirma hesaplarindaki `bugun` -> `getTurkeyNow()`
 
-Yeni prop'lar:
-- `hideOnMobile?: boolean` - mevcut deger
-- `onMobileVisibilityChange?: (hide: boolean) => void` - degisiklik callback'i
+**supabase/functions/dia-satis-rapor/index.ts:**
+- `getToday()` -> `getTurkeyToday()`
+- `getMonthStart()` -> `getTurkeyMonthStart()`
 
-#### 5. Veri Akisi
+**supabase/functions/dia-api-test/index.ts:**
+- `tarihreferans` parametresindeki `new Date().toISOString().split('T')[0]` -> `getTurkeyToday()`
 
-```text
-Kullanici Toggle'i Degistirir
-         |
-         v
-WidgetFiltersButton -> onMobileVisibilityChange(true/false)
-         |
-         v
-ContainerRenderer -> handleMobileVisibilityChange()
-         |
-         v
-UPDATE container_widgets SET settings = {..., hideOnMobile: true/false}
-WHERE id = containerWidgetId
-         |
-         v
-Mobilde: hideOnMobile === true ise widget gizlenir
-Masaustunde: Her zaman gorunur
-```
+#### 3. Frontend "Son Guncelleme" Gosterimi
+`src/components/sync/SyncButton.tsx` dosyasindaki `formatDistanceToNow` cagirisi zaten dogru calisiyor (UTC timestamp'i local'e cevirir). Ancak DIA verilerinden gelen `sonGuncelleme` alanlari da Turkiye saatiyle uretilecek.
 
-Degistirilecek dosyalar:
-- `src/components/pages/ContainerRenderer.tsx` - Gizleme mantigi, ayar kaydetme, prop gecisi
-- `src/components/dashboard/WidgetFiltersButton.tsx` - Mobilde Goster toggle UI
+#### 4. Kasa Verisi Icin Aninda Cozum
+Kasa verisi sync yapildiginda guncel bakiye gelecektir. Timezone duzeltmesi sayesinde `tarihreferans` parametresi dogru gunu gonderecek ve DIA dogru bakiyeyi dondurecek.
 
-Veritabani degisikligi gerekmez - mevcut `container_widgets.settings` JSONB alani kullanilacak.
+### Degistirilecek Dosyalar
+- `supabase/functions/_shared/turkeyTime.ts` (YENI)
+- `supabase/functions/dia-genel-rapor/index.ts`
+- `supabase/functions/dia-finans-rapor/index.ts`
+- `supabase/functions/dia-satis-rapor/index.ts`
+- `supabase/functions/dia-api-test/index.ts`
 
+### Etki Alani
+- Vade yaslandirma hesaplari dogru gune gore yapilacak
+- `tarihreferans` parametresi Turkiye saatine gore dogru tarihi gonderecek
+- Gunluk/aylik satis hesaplari dogru tarih araligini kullanacak
+- Gece 00:00-03:00 UTC arasindaki 3 saatlik kayma sorunu ortadan kalkacak
