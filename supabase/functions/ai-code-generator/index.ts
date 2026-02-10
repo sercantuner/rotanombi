@@ -1301,6 +1301,23 @@ KRİTİK KURALLAR:
 
 ═══════════════════════════════════════════════════════════════════════════════
 
+🗂️ REQUIRED FIELDS (JSONB ALAN PROJEKSİYONU - ZORUNLU!)
+───────────────────────────────────────────────────────────────────────────────
+Widget metadata'sında "requiredFields" dizisi ZORUNLUDUR. Bu dizi, widget kodunun
+veri kaynağından hangi alanları kullandığını belirtir. DB sorgusu sadece bu alanları
+döndürerek veri transferini ~10x azaltır (145 MB → 13 MB).
+
+requiredFields dizisi, kodda item.ALAN, d.ALAN, row.ALAN gibi erişilen TÜM 
+veri alanlarını içermelidir. __prefix'li alanlar (computed fields) dahil!
+
+Örnek: Eğer kodda item.tarih, item.net, item.__cariunvan, item.turu kullanılıyorsa:
+→ requiredFields: ['tarih', 'net', '__cariunvan', 'turu']
+
+⚠️ EKSİK ALAN BIRAKMA! Eksik alan widget'ın bozulmasına neden olur.
+⚠️ Fazla alan eklemek sorun olmaz ama eksik alan kritiktir.
+
+═══════════════════════════════════════════════════════════════════════════════
+
 ⚠️ KRİTİK UYARI - KODU TAMAMLA!
 ───────────────────────────────────────────────────────────────────────────────
 - Kodu MUTLAKA tamamla, ASLA yarıda bırakma!
@@ -1906,9 +1923,14 @@ const getWidgetMetadataTool = () => ({
         dataFlow: { 
           type: "string", 
           description: "Verinin işlenme akışı - filtre, gruplama, sıralama adımları" 
+        },
+        requiredFields: {
+          type: "array",
+          items: { type: "string" },
+          description: "Widget kodunun ihtiyaç duyduğu veri alanlarının listesi. Kodda item.fieldName, d.fieldName şeklinde erişilen TÜM alanları listele. Örnek: ['tarih', 'net', '__cariunvan', 'turu', 'toplam_tutar']. Bu liste DB sorgusunda JSONB alan projeksiyonu için kullanılarak veri transferini ~10x azaltır. HER ALANI ekle, eksik bırakma!"
         }
       },
-      required: ["code", "suggestedName", "suggestedIcon", "suggestedTags", "shortDescription", "longDescription", "usedFields", "dataFlow"]
+      required: ["code", "suggestedName", "suggestedIcon", "suggestedTags", "shortDescription", "longDescription", "usedFields", "dataFlow", "requiredFields"]
     }
   }
 });
@@ -2216,6 +2238,7 @@ ${sampleData ? '═════════════════════�
             suggestedTags: args.suggestedTags || [],
             shortDescription: args.shortDescription || "",
             longDescription: args.longDescription || "",
+            requiredFields: args.requiredFields || [],
             technicalNotes: {
               usedFields: args.usedFields || [],
               calculations: args.calculations || [],

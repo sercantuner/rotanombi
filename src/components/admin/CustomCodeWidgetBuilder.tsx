@@ -486,6 +486,66 @@ Widget.parameters = [];
 return Widget;
 `;
 
+// Widget kodundan kullandığı veri alanlarını otomatik olarak çıkar (requiredFields)
+function extractRequiredFieldsFromCode(code: string): string[] {
+  if (!code) return [];
+  
+  const fields = new Set<string>();
+  
+  // Pattern 1: item.fieldName, d.fieldName, row.fieldName, entry.fieldName, record.fieldName, p.fieldName
+  const dotAccessPattern = /(?:item|d|row|entry|record|p|q|r|el|obj|v|cari|fatura|stok|hareket|kalem)\.([a-zA-Z_][a-zA-Z0-9_]*)/g;
+  let match;
+  while ((match = dotAccessPattern.exec(code)) !== null) {
+    const field = match[1];
+    // React/JS built-in'leri ve helper fonksiyonları filtrele
+    if (!['length', 'map', 'filter', 'reduce', 'forEach', 'sort', 'slice', 'indexOf',
+          'includes', 'find', 'findIndex', 'some', 'every', 'join', 'concat', 'push',
+          'pop', 'shift', 'unshift', 'splice', 'keys', 'values', 'entries',
+          'toString', 'valueOf', 'toFixed', 'toLocaleString', 'toLowerCase', 'toUpperCase',
+          'trim', 'split', 'replace', 'match', 'search', 'charAt', 'charCodeAt',
+          'substring', 'substr', 'startsWith', 'endsWith', 'padStart', 'padEnd',
+          'assign', 'create', 'freeze', 'getTime', 'getFullYear', 'getMonth', 'getDate',
+          'setDate', 'toISOString', 'parse', 'stringify', 'abs', 'round', 'floor', 'ceil',
+          'min', 'max', 'pow', 'sqrt', 'log', 'random', 'PI', 'apply', 'call', 'bind',
+          'prototype', 'constructor', 'hasOwnProperty', 'isArray', 'now',
+          'style', 'className', 'onClick', 'onChange', 'onSubmit', 'children', 'key', 'ref',
+          'current', 'target', 'value', 'name', 'type', 'id', 'href', 'src', 'alt',
+          'preventDefault', 'stopPropagation', 'currentTarget'
+    ].includes(field)) {
+      fields.add(field);
+    }
+  }
+  
+  // Pattern 2: item['fieldName'] veya item["fieldName"]
+  const bracketAccessPattern = /(?:item|d|row|entry|record|p)\[['"]([a-zA-Z_][a-zA-Z0-9_]*)['"]\]/g;
+  while ((match = bracketAccessPattern.exec(code)) !== null) {
+    fields.add(match[1]);
+  }
+  
+  // Pattern 3: parseFloat(item.fieldName) veya parseInt(item.fieldName) 
+  const parsePattern = /parse(?:Float|Int)\(\s*(?:item|d|row|entry|record|p)\.([a-zA-Z_][a-zA-Z0-9_]*)/g;
+  while ((match = parsePattern.exec(code)) !== null) {
+    fields.add(match[1]);
+  }
+  
+  // Pattern 4: dataKey: 'fieldName' (Recharts)
+  const dataKeyPattern = /dataKey:\s*['"]([a-zA-Z_][a-zA-Z0-9_]*)['"]/g;
+  while ((match = dataKeyPattern.exec(code)) !== null) {
+    const field = match[1];
+    if (!['value', 'name', 'label', 'count', 'percentage', 'trend', 'key', 'id', 'index'].includes(field)) {
+      fields.add(field);
+    }
+  }
+
+  // Pattern 5: __prefixed alanlar (DIA computed fields) - item.__cariunvan, d.__stokunvan vb.
+  const dunderPattern = /(?:item|d|row|entry|record|p)\.(__[a-zA-Z_][a-zA-Z0-9_]*)/g;
+  while ((match = dunderPattern.exec(code)) !== null) {
+    fields.add(match[1]);
+  }
+  
+  return Array.from(fields).sort();
+}
+
 // Widget kodundan Widget.filters veya Widget.parameters parse et
 function parseWidgetMetaFromCode(code: string, metaKey: 'filters' | 'parameters'): any[] {
   try {
@@ -1526,6 +1586,9 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
     const parsedFilters = parseWidgetMetaFromCode(customCode, 'filters');
     const parsedParams = parseWidgetMetaFromCode(customCode, 'parameters');
 
+    // Widget kodundan requiredFields otomatik çıkar
+    const autoRequiredFields = extractRequiredFieldsFromCode(customCode);
+
     const builderConfig: Record<string, any> = {
       customCode: customCode,
       visualization: {
@@ -1535,6 +1598,8 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
       // Widget tanımlı filtre/parametre yapısı (v2)
       widgetFilters: parsedFilters,
       widgetParameters: parsedParams,
+      // JSONB Alan Projeksiyonu - otomatik olarak koddan çıkarılan alanlar
+      requiredFields: autoRequiredFields.length > 0 ? autoRequiredFields : undefined,
       // Yeni alanlar
       diaModelLinks: diaModelLinks.length > 0 ? diaModelLinks : undefined,
       aiRequirements: aiRequirements.filter(r => r.isActive && !r.isDefault).map(r => r.id),
