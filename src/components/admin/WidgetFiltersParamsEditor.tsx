@@ -268,7 +268,7 @@ export function WidgetFiltersParamsEditor({ filters, parameters, onFiltersChange
   // ─── Parametre Ekleme ───
   const addParameter = () => {
     const newKey = `param_${parameters.length + 1}`;
-    onParametersChange([...parameters, { key: newKey, label: 'Yeni Parametre', type: 'dropdown', options: [] }]);
+    onParametersChange([...parameters, { key: newKey, label: 'Yeni Parametre', type: 'dropdown', options: [], showOnMobile: false }]);
   };
 
   // ─── AI Parametre Önerisi ───
