@@ -124,16 +124,8 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     const effectiveDonem = parseInt(donemKodu || '1');
     const isPeriodIndependent = dataSource.is_period_independent === true;
     
-    // Period-independent kaynaklar için en güncel dönemi bul
-    let resolvedDonem = effectiveDonem;
-    if (isPeriodIndependent) {
-      resolvedDonem = await findBestPeriodForSource(
-        dataSource.slug,
-        sunucuAdi,
-        firmaKodu,
-        effectiveDonem
-      );
-    }
+    // Period-independent kaynaklar tüm dönemlerden veri çeker (donem filtresi uygulanmaz)
+    const resolvedDonem = effectiveDonem;
 
     try {
       // Sayfalama ile tüm veriyi çek - Supabase varsayılan 1000 limit'i aşmak için
@@ -143,16 +135,21 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       let hasMore = true;
       
       while (hasMore) {
-        // KRİTİK: Her zaman donem_kodu filtresi uygula - dönem karışmasını önle
-        const { data, error } = await supabase
+        let query = supabase
           .from('company_data_cache')
           .select('data')
           .eq('data_source_slug', dataSource.slug)
           .eq('sunucu_adi', sunucuAdi)
           .eq('firma_kodu', firmaKodu)
-          .eq('donem_kodu', resolvedDonem) // Her zaman donem filtresi uygula
           .eq('is_deleted', false)
           .range(from, from + PAGE_SIZE - 1);
+
+        // Period-dependent kaynaklar için dönem filtresi uygula
+        if (!isPeriodIndependent) {
+          query = query.eq('donem_kodu', resolvedDonem);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
           console.error(`[DataSourceLoader] DB-FIRST error for ${dataSource.name}:`, error);

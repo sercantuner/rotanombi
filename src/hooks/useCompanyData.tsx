@@ -51,20 +51,8 @@ export function useCompanyData(filter: CompanyDataFilter) {
         return [];
       }
 
-      // Period-independent kaynaklar için is_current dönemi tercih et
+      // Period-independent kaynaklar tüm dönemlerden veri çeker (donem filtresi uygulanmaz)
       let resolvedDonem = effectiveDonem;
-      if (filter.isPeriodIndependent) {
-        const { data: currentPeriod } = await supabase
-          .from('firma_periods')
-          .select('period_no')
-          .eq('sunucu_adi', sunucuAdi)
-          .eq('firma_kodu', firmaKodu)
-          .eq('is_current', true)
-          .single();
-        if (currentPeriod?.period_no) {
-          resolvedDonem = currentPeriod.period_no;
-        }
-      }
 
       // Sayfalama ile tüm veriyi çek - Supabase varsayılan 1000 limit'i aşmak için
       const PAGE_SIZE = 1000;
@@ -77,8 +65,12 @@ export function useCompanyData(filter: CompanyDataFilter) {
           .from('company_data_cache')
           .select('data')
           .eq('data_source_slug', filter.dataSourceSlug)
-          .eq('donem_kodu', resolvedDonem)
           .range(from, from + PAGE_SIZE - 1);
+
+        // Period-dependent kaynaklar için dönem filtresi uygula
+        if (!filter.isPeriodIndependent) {
+          query = query.eq('donem_kodu', resolvedDonem) as typeof query;
+        }
 
         if (!filter.includeDeleted) {
           query = query.eq('is_deleted', false) as typeof query;

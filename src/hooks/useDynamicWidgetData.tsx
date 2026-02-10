@@ -660,29 +660,27 @@ async function fetchFromDatabase(
   let hasMore = true;
   let lastUpdatedAt: string | null = null;
   
-  // Period-independent kaynaklar için en güncel dönemi bul
-  let resolvedDonem = donemKodu;
-  if (isPeriodIndependent) {
-    resolvedDonem = await findBestPeriodForSource(
-      dataSourceSlug,
-      sunucuAdi,
-      firmaKodu,
-      donemKodu
-    );
-  }
+  // Period-independent kaynaklar tüm dönemlerden veri çeker (donem filtresi uygulanmaz)
+  // Period-dependent kaynaklar sadece belirli dönemden çeker
+  const resolvedDonem = donemKodu;
   
   while (hasMore) {
-    // KRİTİK: Her zaman donem_kodu filtresi uygula - dönem karışmasını önle
-    const { data, error } = await supabase
+    let query = supabase
       .from('company_data_cache')
       .select('data, updated_at')
       .eq('data_source_slug', dataSourceSlug)
       .eq('sunucu_adi', sunucuAdi)
       .eq('firma_kodu', firmaKodu)
-      .eq('donem_kodu', resolvedDonem) // Her zaman donem filtresi uygula
       .eq('is_deleted', false)
       .order('updated_at', { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
+    
+    // Period-dependent kaynaklar için dönem filtresi uygula
+    if (!isPeriodIndependent) {
+      query = query.eq('donem_kodu', resolvedDonem);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('[DB] Error fetching from company_data_cache:', error);
