@@ -14,8 +14,8 @@ const CHUNK_SIZE = 300;
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [2000, 4000, 8000]; // Exponential backoff
 
-// Ağır veri kaynakları - küçük pageSize ile çekilecek (nested data, büyük kayıtlar)
-const HEAVY_SOURCES = ['Fatura_listele_ayrintili', 'fatura_listele_ayrintili'];
+// KURAL: Tüm kaynaklar küçük pageSize ile çekilir (CancelledError/timeout önlenir)
+const DEFAULT_PAGE_SIZE = 50;
 // Lisanssız/yetkisiz modüller - hata alınca skip edilecek
 const SKIP_ERROR_PATTERNS = ['Session refresh fail', 'dönem yetki', 'INVALID_SESSION', '404'];
 
@@ -222,9 +222,8 @@ export function useSyncOrchestrator() {
       }));
 
       try {
-        // Ağır kaynaklar için küçük pageSize kullan
-        const isHeavy = HEAVY_SOURCES.some(h => task.slug.toLowerCase().includes(h.toLowerCase()));
-        const syncOptions = isHeavy ? { pageSize: 50 } : undefined;
+        // KURAL: Tüm kaynaklar küçük pageSize ile çekilir
+        const syncOptions = { pageSize: DEFAULT_PAGE_SIZE };
 
         if (task.type === 'full') {
           const result = await syncFullChunked(task.slug, task.periodNo, i, syncOptions);

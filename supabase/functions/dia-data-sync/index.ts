@@ -7,11 +7,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const PAGE_SIZE = 200, MAX_RECORDS = 50000;
+// KURAL: Tüm veri kaynakları küçük parçalar halinde çekilir ve yazılır.
+// PAGE_SIZE: DIA'dan tek seferde çekilecek kayıt (küçük tutulur, timeout önlenir)
+// UPSERT_BATCH_SIZE: DB'ye tek seferde yazılacak kayıt (statement timeout önlenir)
+const PAGE_SIZE = 50, MAX_RECORDS = 50000;
 const CLEANUP_TIMEOUT_MS = 15 * 60 * 1000;
 const NON_DIA = ['takvim', '_system_calendar', 'system_calendar'];
 
-const DEFAULT_CHUNK_SIZE = 500;
+const DEFAULT_CHUNK_SIZE = 300;
 const MAX_CHUNK_SIZE = 1000;
 const UPSERT_BATCH_SIZE = 50;
 
@@ -292,7 +295,7 @@ async function incrementalSync(
     console.log(`[incrementalSync] ${src.slug} period ${pn}: fetching _cdate >= ${today}`);
     
     const cdateResult = await streamChunk(
-      sb, uid, sess, src.module, src.method, pn, sun, fk, src.slug, 0, MAX_RECORDS, cdateFilters
+      sb, uid, sess, src.module, src.method, pn, sun, fk, src.slug, 0, MAX_RECORDS, cdateFilters, PAGE_SIZE
     );
 
     // Sorgu 2: _date >= last_sync (son sync'ten beri değiştirilen kayıtlar)
@@ -302,7 +305,7 @@ async function incrementalSync(
     console.log(`[incrementalSync] ${src.slug} period ${pn}: fetching _date >= ${lastSyncDate}`);
     
     const dateResult = await streamChunk(
-      sb, uid, sess, src.module, src.method, pn, sun, fk, src.slug, 0, MAX_RECORDS, dateFilters
+      sb, uid, sess, src.module, src.method, pn, sun, fk, src.slug, 0, MAX_RECORDS, dateFilters, PAGE_SIZE
     );
 
     const totalFetched = (cdateResult.fetched || 0) + (dateResult.fetched || 0);
