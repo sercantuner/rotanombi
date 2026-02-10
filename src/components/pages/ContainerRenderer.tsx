@@ -1,6 +1,7 @@
 // Dinamik Konteyner Render Bileşeni
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useNavigate } from 'react-router-dom';
 import { useContainerWidgets } from '@/hooks/useUserPages';
 // NOT: useDataSourceLoader KALDIRILDI - her container için ayrı instance oluşturuyordu!
@@ -56,6 +57,7 @@ export function ContainerRenderer({
   loadSingleDataSource
 }: ContainerRendererProps) {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { widgets: containerWidgets, addWidget, removeWidget, refreshWidgets } = useContainerWidgets(container.id);
   const { currentPaletteName, setPalette } = useChartColorPalette();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -313,9 +315,16 @@ export function ContainerRenderer({
             {/* Filtre/parametre tanımlı widget'larda her zaman görünür, diğerlerinde hover */}
             <div className={cn(
               "absolute top-1 right-1 flex items-center gap-0.5 transition-opacity z-20",
-              ((widgetDetail.builder_config as any)?.widgetFilters?.length > 0 || (widgetDetail.builder_config as any)?.widgetParameters?.length > 0)
-                ? 'opacity-100'
-                : 'opacity-0 group-hover:opacity-100'
+              (() => {
+                const wf = (widgetDetail.builder_config as any)?.widgetFilters || [];
+                const wp = (widgetDetail.builder_config as any)?.widgetParameters || [];
+                if (isMobile) {
+                  const hasMobileVisible = wf.some((f: any) => f.showOnMobile) || wp.some((p: any) => p.showOnMobile);
+                  return hasMobileVisible ? 'opacity-100' : 'opacity-0 group-hover:opacity-100';
+                }
+                return (wf.length > 0 || wp.length > 0) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100';
+              })()
+
             )}>
               {/* Widget Filtre Butonu */}
               <WidgetFiltersButton
