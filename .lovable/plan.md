@@ -1,121 +1,104 @@
 
+# Veri İsteği Havuzu (Field Pool) - Sayfa Bazlı Tek Sorgu Optimizasyonu
 
-# JSONB Alan Projeksiyonu ile Veritabanı Sorgu Optimizasyonu
+## Mevcut Durum (Problem)
 
-## Problem
-
-Fatura tablosu gibi buyuk veri kaynaklarinda her kayit ortalama **3.3 KB** ve **100+ alan** iceriyor. 44.000 kayit cekildiginde ~145 MB veri transfer ediliyor, oysa bir grafik genellikle sadece 5-6 alan kullaniyor (ornegin: `tarih`, `net`, `__cariunvan`, `turu`).
-
-## Cozum Yaklasimi
-
-Veritabaninda bir **RPC fonksiyonu** olusturulacak. Bu fonksiyon, istenen JSONB alanlarini filtreleyerek sadece gerekli veriyi dondurur. Widget'lar hangi alanlara ihtiyac duydugunu belirtecek ve sorgu bu alanlara daraltilacak.
+Bir sayfada ayni veri kaynagini (ornegin `scf_fatura_listele`) kullanan 5 widget varsa:
 
 ```text
-Oncesi:  SELECT data FROM company_data_cache  -->  3.3 KB x 44,000 = ~145 MB
-Sonrasi: SELECT projected_data              -->  ~0.3 KB x 44,000 = ~13 MB  (10x azalma)
+Widget A: requiredFields = [tarih, net, turu]         --> 1 RPC sorgusu (44K kayit)
+Widget B: requiredFields = [tarih, toplam, __cariunvan] --> 1 RPC sorgusu (44K kayit)
+Widget C: requiredFields = [tarih, net, kdv]           --> 1 RPC sorgusu (44K kayit)
+Widget D: requiredFields = [turu, net]                 --> 1 RPC sorgusu (44K kayit)
+Widget E: (custom code, no requiredFields)             --> 1 full SELECT (44K kayit)
+
+Toplam: 5 ayri veritabani sorgusu = ~220K satir isleniyor
+```
+
+## Hedef
+
+```text
+Havuz: UNION(tum requiredFields) = [tarih, net, turu, toplam, __cariunvan, kdv]
+--> 1 RPC sorgusu (44K kayit, 6 alan)
+
+Toplam: 1 veritabani sorgusu = ~44K satir isleniyor (5x azalma)
 ```
 
 ## Teknik Degisiklikler
 
-### 1. Veritabani: RPC Fonksiyonu Olustur
+### 1. useDataSourceLoader.tsx - Alan Havuzu Olusturma
 
-`get_projected_cache_data` adinda bir PostgreSQL fonksiyonu olusturulacak:
+`findUsedDataSources` fonksiyonu zaten sayfa widgetlarinin `builder_config`'lerini cekerken `dataSourceId` topluyor. Bu adima ek olarak:
 
-```sql
-CREATE OR REPLACE FUNCTION get_projected_cache_data(
-  p_data_source_slug text,
-  p_sunucu_adi text,
-  p_firma_kodu text,
-  p_donem_kodu integer DEFAULT NULL,
-  p_fields text[] DEFAULT NULL,
-  p_limit integer DEFAULT 1000,
-  p_offset integer DEFAULT 0
-)
-RETURNS TABLE(data jsonb, updated_at timestamptz) AS $$
-BEGIN
-  RETURN QUERY
-  SELECT
-    CASE 
-      WHEN p_fields IS NOT NULL THEN
-        (SELECT jsonb_object_agg(key, value)
-         FROM jsonb_each(c.data)
-         WHERE key = ANY(p_fields))
-      ELSE c.data
-    END as data,
-    c.updated_at
-  FROM company_data_cache c
-  WHERE c.data_source_slug = p_data_source_slug
-    AND c.sunucu_adi = p_sunucu_adi
-    AND c.firma_kodu = p_firma_kodu
-    AND c.is_deleted = false
-    AND (p_donem_kodu IS NULL OR c.donem_kodu = p_donem_kodu)
-  ORDER BY c.dia_key
-  LIMIT p_limit
-  OFFSET p_offset;
-END;
-$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
-```
+- Her widget'in `builder_config.requiredFields` dizisini de topla
+- Ayni veri kaynagini kullanan widgetlarin alanlarini birlestir (Set union)
+- Eger herhangi bir widget `requiredFields` tanimlamadiysa (null/bos), o kaynak icin projeksiyon uygulanmaz (geri uyumluluk: tum veri cekilir)
 
-- `p_fields` NULL olursa tum veri doner (geri uyumluluk).
-- `p_donem_kodu` NULL ise period-independent calisir.
-- RLS politikasina uyumlu (SECURITY DEFINER + icinde sunucu/firma kontrolu).
-
-### 2. Widget Yapilandirmasi: `requiredFields` Alani
-
-`WidgetBuilderConfig` tipine yeni bir opsiyonel alan eklenecek:
+Fonksiyonun donusu degisir:
 
 ```typescript
-// widgetBuilderTypes.ts
-export interface WidgetBuilderConfig {
-  // ... mevcut alanlar
-  requiredFields?: string[];  // Widget'in ihtiyac duydugu JSONB alanlari
+// Oncesi:
+async function findUsedDataSources(): Promise<string[]>
+
+// Sonrasi:
+interface DataSourceFieldPool {
+  dataSourceId: string;
+  // null = projeksiyon yok, tum veri cekilecek (en az 1 widget requiredFields tanimlamadiysa)
+  pooledFields: string[] | null;
+}
+async function findUsedDataSources(): Promise<DataSourceFieldPool[]>
+```
+
+### 2. useDataSourceLoader.tsx - loadDataSourceFromDatabase Guncelleme
+
+`loadDataSourceFromDatabase` fonksiyonu zaten `requiredFields` parametresi alabilir. `loadAllDataSources` icinde her veri kaynagi yuklenirken havuzdaki birlesmis alan listesi (`pooledFields`) gecilecek:
+
+```typescript
+// loadAllDataSources icinde:
+for (const pool of fieldPools) {
+  const dataSource = getDataSourceById(pool.dataSourceId);
+  // Havuzdaki birlesmis alanlarla tek sorgu
+  const dbResult = await loadDataSourceFromDatabase(dataSource, pool.pooledFields);
+  // Sonuc memory cache'e kaydedilir - tum widgetlar buradan okur
 }
 ```
 
-Widget Builder (Step 3) icinde veya AI tarafindan widget olusturulurken, widgetin kullandigi alanlar `requiredFields` olarak belirtilebilecek.
+### 3. useDynamicWidgetData.tsx - DB Sorgusunu Atla, Cache Kullan
 
-### 3. Veri Cekme Katmani: `fetchFromDatabase` Guncelleme
+`useDynamicWidgetData` icindeki `fetchDataForSource` fonksiyonu zaten once memory cache'i kontrol ediyor. Havuz sistemi sayesinde:
 
-`useDynamicWidgetData.tsx` icindeki `fetchFromDatabase` fonksiyonu:
+1. `useDataSourceLoader` sayfa yuklenmesinde havuzlanmis veriyi cekip memory cache'e koyar
+2. Her widget `fetchDataForSource` cagirildiginda memory cache'de veriyi bulur
+3. Widget kendi `requiredFields` icinde olmayan alanlar da havuzda olacak (baska widgetlardan) - bu sorun degil cunku fazla alan widget kodunu bozmaz
 
-- `requiredFields` parametresi alacak.
-- Eger `requiredFields` varsa, dogrudan tablo sorgusu yerine `supabase.rpc('get_projected_cache_data', {...})` cagrisini kullanacak.
-- Ayni sayfalama mantigi korunacak (offset ile dongu).
+**Kritik**: `useDynamicWidgetData` icindeki `fetchFromDatabase` cagrisi artik gereksiz hale gelir (cunku veri zaten `useDataSourceLoader` tarafindan memory cache'e yuklenmis olacak). Ancak geri uyumluluk icin kalir - cache miss durumunda yedek olarak calisir.
 
-```typescript
-async function fetchFromDatabase(
-  dataSourceSlug: string,
-  sunucuAdi: string,
-  firmaKodu: string,
-  donemKodu: number,
-  isPeriodIndependent: boolean = false,
-  requiredFields?: string[]  // YENi
-): Promise<DbFetchResult> {
-  // requiredFields varsa -> RPC kullan
-  // yoksa -> mevcut .select('data') mantigi (geri uyumluluk)
-}
-```
+### 4. Ozel Durum: requiredFields Olmayan Widget
 
-### 4. Diger Hook'lara Yayginlastirma
+Bir sayfada ayni veri kaynagini kullanan widgetlardan biri bile `requiredFields` tanimlamadiysa, o kaynak icin projeksiyon yapilmaz ve tum veri cekilir. Bu, custom code widgetlarin beklenmedik alan eksikliginden etkilenmesini engeller.
 
-- `useDataSourceLoader.tsx`: Ayni RPC mantigi eklenecek (preview/test icin).
-- `useCompanyData.tsx`: Opsiyonel `requiredFields` parametresi eklenecek.
+### 5. Ozel Durum: Multi-Query Widgetlar
 
-### 5. Widget Builder UI (Opsiyonel Ama Onerilen)
+Bir widget birden fazla veri kaynagi kullaniyorsa (multi-query), her veri kaynaginin alanlari ayri havuzlara eklenir. Ornegin:
+- Widget X: query1 = fatura[tarih, net], query2 = cari[carikodu, bakiye]
+- Widget Y: query1 = fatura[tarih, turu]
 
-Widget Builder Step 3'te, AI tarafindan uretilen koddan hangi alanlarin kullanildigini otomatik parse eden bir mekanizma. Ornegin `data.tarih`, `data.net`, `item.__cariunvan` gibi referanslardan `requiredFields` listesini cikarabilen bir yardimci fonksiyon.
+Sonuc:
+- fatura havuzu: [tarih, net, turu]
+- cari havuzu: [carikodu, bakiye]
 
-## Geri Uyumluluk
+## Degisecek Dosyalar
 
-- `requiredFields` tanimlanmamis widget'lar icin mevcut davranis aynen devam eder (tum alanlar cekilir).
-- Yeni widget'lar veya guncellenen widget'lar icin alan listesi belirlendiginde otomatik optimizasyon devreye girer.
-- RPC fonksiyonu `p_fields = NULL` oldugunda tum datayi dondurur.
+| Dosya | Degisiklik |
+|-------|------------|
+| `src/hooks/useDataSourceLoader.tsx` | `findUsedDataSources` donus tipini genislet, `loadAllDataSources` icinde havuzlanmis alanlari `loadDataSourceFromDatabase`'e gecir |
+| `src/hooks/useDynamicWidgetData.tsx` | Degisiklik yok - mevcut memory cache onceligi zaten dogru calisiyor |
 
-## Beklenen Performans Kazanimi
+## Beklenen Kazanim
 
-| Metrik | Oncesi | Sonrasi |
-|--------|--------|---------|
-| Fatura verisi (44K kayit) | ~145 MB | ~13 MB |
-| Sorgu suresi | ~3-5 sn | ~0.5-1 sn |
-| Bellek kullanimi (frontend) | Yuksek | ~10x dusuk |
-
+| Senaryo | Oncesi | Sonrasi |
+|---------|--------|---------|
+| 5 fatura widgeti olan sayfa | 5 RPC sorgusu | 1 RPC sorgusu |
+| 3 farkli kaynak, 10 widget | 10 sorgu | 3 sorgu |
+| DB islem suresi | ~5x tekrar | 1x |
+| Bellek | Her widget ayri kopyalar | Tek kopya paylasilir |
