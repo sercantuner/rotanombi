@@ -1,105 +1,97 @@
 
 
-# Corlugrup Eksik Veri Tamamlama ve CancelledError Cozumu
+# Corlugrup Sync Iyilestirmeleri - Master Plan
 
-## Mevcut Durum Analizi
+## Uygulanan Ozellikler
 
-Veritabanindaki gercek kayit sayilari:
+### 1. Sunucu Bazli Sync Kilidi (sync_locks) ✅
 
-| Kaynak | D1 (2024) | D2 (2025) | D3 (2026) | Durum |
-|--------|-----------|-----------|-----------|-------|
-| Fatura_listele_ayrintili | 200 | 600 | 1000 | EKSIK - CancelledError |
-| scf_fatura_listele | 3069 | 38022 | 3041 | D2 tamamlanmis olabilir |
-| scf_kasaislemleri_listele | 582 | **0** | 600 | D2 HIC CEKILMEMIS |
-| Cek Senet Listesi | 7 | 117 | 9 | Tamam |
-| Gorev Listesi | - | 0 | - | LISANS YOK - atla |
-| Siparis Listesi | - | - | - | YETKI YOK - atla |
+**Problem**: Ayni sunucu/firma icin birden fazla kullanici ayni anda sync baslatabiliyordu.
 
-## Temel Sorunlar
+**Cozum**: `sync_locks` tablosu ile atomic kilit mekanizmasi.
 
-1. **CancelledError**: DIA sunucusu buyuk veri setlerinde (ozellikle fatura ayrintili) timeout yapiyor. PAGE_SIZE=200 bile buyuk kayitlar icin fazla olabiliyor cunku her kayit icinde kalemler (nested data) var.
+- `acquireLock` action: Kilit almaya calisir, suresi dolmuslari otomatik temizler
+- `releaseLock` action: Sync bitince (basarili/basarisiz) kilidi serbest birakir
+- UNIQUE(sunucu_adi, firma_kodu) constraint ile race condition onlenir
+- 30 dakika TTL: Tarayici kapansa bile kilit sonsuza kadar kalmaz
+- UI geri bildirimi: "Senkronizasyon zaten devam ediyor (kullanici@email.com)"
+- Farkli sunucular birbirini etkilemez, paralel calisir
 
-2. **Kasa D2 eksik**: `period_sync_status` tablosunda D2 icin hic kayit yok - muhtemelen daha once hic denenmemis veya denenmis ama tamamen basarisiz olmus.
+### 2. DIA'da Silinen Kayitlarin Tespiti (reconcileKeys) ✅
 
-3. **Fatura Ayrintili**: Tum donemlerde eksik. 200/600/1000 gibi yuvarlak sayilar, tam olarak chunk sinirinda kesildigini gosteriyor.
+**Problem**: Artimli sync ve kilitli donemler silinen kayitlari yakalayamiyordu.
 
-## Cozum Plani
+**Cozum**: Key Reconciliation - sadece `_key` listesi cekilerek hafif karsilastirma.
 
-### Adim 1: Edge Function'a Tarih Bazli Parcalama Ekle
+- `reconcileKeys` action: DIA'dan `selectedcolumns: ["_key"]` ile sadece key listesi cekilir
+- DB'deki `is_deleted: false` key'lerle karsilastirilir
+- DB'de olup DIA'da olmayanlar `is_deleted: true` isaretlenir
+- Full sync, incremental sync ve kilitli donemlerde calisir
+- Cache kayit sayisi otomatik guncellenir
 
-`dia-data-sync/index.ts` dosyasina yeni bir `syncByDateRange` stratejisi eklenecek:
-
-- Yeni action: `syncChunkByDate` - belirli bir tarih araligindaki verileri cekmek icin
-- `_cdate` filtresi ile gun gun veya ay ay veri ceker
-- Her tarih dilimi icin bagimsiz olarak `streamChunk` calistirir
-- Frontend orchestrator tarih araligini belirler
-
-Alternatif olarak mevcut `syncChunk` action'i iyilestirilecek:
-- `PAGE_SIZE` parametresini istek bazinda ayarlanabilir yapmak (ornegin 50 veya 100)
-- CancelledError alindiginda otomatik olarak daha kucuk sayfa boyutuyla tekrar deneme
-
-```text
-Frontend Orchestrator
-       |
-       v
-  syncChunk (action)
-       |
-       +-- pageSize: 50 (kucuk)
-       +-- filters: [{ field: "_cdate", operator: ">=", value: "2025-01-01" },
-       |             { field: "_cdate", operator: "<=", value: "2025-01-31" }]
-       +-- chunkSize: 200
-       |
-       v
-  DIA API (kucuk parcalar halinde)
-       |
-       v
-  writeBatch (50'serlik upsert)
+**Akis**:
+```
+Full Sync tamamlandi → reconcileKeys calistir
+Incremental Sync tamamlandi → reconcileKeys calistir
+Kilitli Donem → sync atla AMA reconcileKeys calistir
 ```
 
-### Adim 2: PAGE_SIZE'i Istek Bazinda Ayarlanabilir Yap
+### 3. Frontend Orchestrator Entegrasyonu ✅
 
-Mevcut sabit `PAGE_SIZE = 200` yerine:
-- `syncChunk` action'ina `pageSize` parametresi eklenir
-- Varsayilan 200 kalir ama buyuk/agir veri kaynaklari icin 50-100 arasi gonderilebilir
-- `fetchPageSimple` fonksiyonuna `pageSize` parametresi iletilir
+- `SyncTask` interface'ine `deleted` alani ve `reconcile` tipi eklendi
+- `SyncProgress`'e `totalDeleted` alani eklendi
+- Tum sync akislarinda (full, incremental, quick) otomatik reconcileKeys
+- Kilitli donemlerde `type: 'reconcile'` olarak sadece silme kontrolu
+- Toast mesajlarinda silinen kayit sayisi gosterilir
 
-### Adim 3: Gorev Listesi ve Siparis Listesi Icin Hata Toleransi
+### 4. markFullSyncComplete Action ✅
 
-- Gorev Listesi: `gts` modulu olmayan sunucularda 404 veya session hatasi alininca kaynak otomatik olarak `skipped` isaretlenir
-- Siparis Listesi: "donem yetkiniz" hatasi alininca `skipped` olarak kaydedilir, tekrar denenmez
-- Bu hatalar `period_sync_status` tablosuna `skip_reason` olarak yazilir
+- Full sync tamamlandiginda `period_sync_status` tablosuna `last_full_sync` yazar
+- `get_cache_record_counts` RPC ile gercek kayit sayisi guncellenir
+- `data_sources.last_record_count` ve `last_fetched_at` guncellenir
 
-### Adim 4: Frontend Orchestrator'a Tarih Bazli Chunking Eklenmesi
+## Onceki Iyilestirmeler
 
-`useSyncOrchestrator.tsx` dosyasinda:
-- Buyuk veri kaynaklari icin (fatura, kasa gibi) tarih aralikli sync stratejisi
-- Her donem icin ay ay (veya gerekirse gun gun) tarih filtresi ile `syncChunk` cagirilir
-- Ornek: D2 (2025) icin Ocak'tan Subat'a kadar 14 aylik parcalar
+### PAGE_SIZE Optimizasyonu ✅
+- Tum kaynaklar 50'serlik parcalarla cekilir (CancelledError onlenir)
+- Frontend orchestrator `pageSize: 50` gonderir
 
-### Adim 5: Corlugrup Verilerini Tamamla
+### Hata Toleransi ✅
+- Lisanssiz moduller (gts) ve yetkisiz donemler otomatik atlanir
+- `SKIP_ERROR_PATTERNS` ile bilinen hatalar handle edilir
 
-Degisiklikler deploy edildikten sonra eksik verileri cek:
-1. `Fatura_listele_ayrintili` - D1, D2, D3 (kucuk pageSize + tarih filtresi ile)
-2. `scf_kasaislemleri_listele` - D2 (eksik donem)
-3. Sonuclari dogrula
+## Veritabani Degisiklikleri
 
-## Teknik Detaylar
+### sync_locks tablosu
+```sql
+CREATE TABLE public.sync_locks (
+  id UUID PK,
+  sunucu_adi TEXT NOT NULL,
+  firma_kodu TEXT NOT NULL,
+  locked_by UUID NOT NULL,
+  locked_by_email TEXT,
+  locked_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ NOT NULL,
+  sync_type TEXT DEFAULT 'full',
+  UNIQUE(sunucu_adi, firma_kodu)
+);
+```
 
-### Edge Function Degisiklikleri (`dia-data-sync/index.ts`)
+## Edge Function Action'lari
 
-1. **`fetchPageSimple` fonksiyonu**: `pageSize` parametresi eklenir (varsayilan `PAGE_SIZE`)
-2. **`streamChunk` fonksiyonu**: `pageSize` parametresi eklenir ve `fetchPageSimple`'a iletilir
-3. **`syncChunk` action handler**: Request body'den `pageSize` okunur, `Math.min(pageSize || PAGE_SIZE, PAGE_SIZE)` ile sinirlanir
-4. **Hata yonetimi**: CancelledError alindiginda mevcut yazilan veriyi koruyup `hasMore: true` ile donus yapar (mevcut davranis zaten boyle)
+| Action | Amac | Input |
+|--------|------|-------|
+| acquireLock | Sync kilidi al | syncType |
+| releaseLock | Kilidi birak | lockId |
+| reconcileKeys | Silinen kayit tespiti | dataSourceSlug, periodNo |
+| markFullSyncComplete | Full sync bitisini kaydet | dataSourceSlug, periodNo, totalRecords |
+| syncChunk | Chunk bazli veri cekme | dataSourceSlug, periodNo, offset, chunkSize, pageSize |
+| incrementalSync | Artimli guncelleme | dataSourceSlug, periodNo |
+| lockPeriod | Donemi kilitle | periodNo, dataSourceSlug |
+| getSyncStatus | Sync durumu sorgula | - |
 
-### Frontend Degisiklikleri (`useSyncOrchestrator.tsx`)
+## Bilinen Kisitlamalar
 
-1. **`syncFullChunked` fonksiyonu**: Buyuk kaynaklar icin `pageSize: 50` ve tarih filtresi gonderme yetisi
-2. **Tarih araligi hesaplama**: Donem baslangic/bitis tarihlerinden aylik parcalar olusturma
-3. **Hata durumunda fallback**: CancelledError alinirsa `pageSize`'i daha da kucultup tekrar deneme
-
-### Atlanacak Kaynaklar
-
-- `Gorev Listesi` (`gts` modulu): corlugrup icin devre disi birakilacak veya hata toleransi ile atlanacak
-- `Siparis Listesi`: Yetki hatasi bildirilecek, sync denenmeyecek
-
+- `selectedcolumns: ["_key"]` bazi DIA modullerinde calismayabilir (test gerekli)
+- Cok buyuk tablolarda (100.000+) reconcileKeys suresi uzayabilir
+- Cron job henuz kilit mekanizmasiyla entegre degil (gelecek iyilestirme)

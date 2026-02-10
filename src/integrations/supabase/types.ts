@@ -714,6 +714,42 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_locks: {
+        Row: {
+          created_at: string
+          expires_at: string
+          firma_kodu: string
+          id: string
+          locked_at: string
+          locked_by: string
+          locked_by_email: string | null
+          sunucu_adi: string
+          sync_type: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          firma_kodu: string
+          id?: string
+          locked_at?: string
+          locked_by: string
+          locked_by_email?: string | null
+          sunucu_adi: string
+          sync_type?: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          firma_kodu?: string
+          id?: string
+          locked_at?: string
+          locked_by?: string
+          locked_by_email?: string | null
+          sunucu_adi?: string
+          sync_type?: string
+        }
+        Relationships: []
+      }
       user_dashboard_settings: {
         Row: {
           created_at: string | null
