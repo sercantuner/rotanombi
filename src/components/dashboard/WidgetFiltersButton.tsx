@@ -3,6 +3,7 @@
 
 import { useState, useMemo } from 'react';
 import { Filter, FilterX, RotateCcw, SlidersHorizontal, Search } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
@@ -217,6 +218,20 @@ export function WidgetFiltersButton({
 }: WidgetFiltersButtonProps) {
   const [open, setOpen] = useState(false);
   const [localWidgetData, setLocalWidgetData] = useState<any[]>([]);
+  const isMobile = useIsMobile();
+
+  // Mobilde sadece showOnMobile: true olanları göster
+  const visibleFilters = useMemo(() => {
+    if (!widgetFilters) return undefined;
+    if (!isMobile) return widgetFilters;
+    return widgetFilters.filter(f => f.showOnMobile === true);
+  }, [widgetFilters, isMobile]);
+
+  const visibleParameters = useMemo(() => {
+    if (!widgetParameters) return undefined;
+    if (!isMobile) return widgetParameters;
+    return widgetParameters.filter(p => p.showOnMobile === true);
+  }, [widgetParameters, isMobile]);
 
   // Popover açıldığında ref'ten veriyi oku
   const handleOpenChange = (isOpen: boolean) => {
@@ -282,8 +297,8 @@ export function WidgetFiltersButton({
               <Filter className="w-3 h-3" />
               Filtreler
             </span>
-            {widgetFilters && widgetFilters.length > 0 ? (
-              widgetFilters.map(def => (
+            {visibleFilters && visibleFilters.length > 0 ? (
+              visibleFilters.map(def => (
                 <div key={def.key} className="space-y-1.5">
                   <Label className="text-xs font-medium text-muted-foreground">{def.label}</Label>
                   <DynamicField
@@ -306,8 +321,8 @@ export function WidgetFiltersButton({
               <SlidersHorizontal className="w-3 h-3" />
               Parametreler
             </span>
-            {widgetParameters && widgetParameters.length > 0 ? (
-              widgetParameters.map(def => (
+            {visibleParameters && visibleParameters.length > 0 ? (
+              visibleParameters.map(def => (
                 <div key={def.key} className="space-y-1.5">
                   <Label className="text-xs font-medium text-muted-foreground">{def.label}</Label>
                   <DynamicField

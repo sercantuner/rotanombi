@@ -91,6 +91,10 @@ function ParamItemEditor({ item, onChange, onDelete }: {
 
       {expanded && (
         <div className="space-y-2 pt-1 pl-6">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground w-24">Mobilde Göster:</Label>
+            <Switch checked={item.showOnMobile ?? false} onCheckedChange={(val) => onChange({ ...item, showOnMobile: val })} />
+          </div>
           {item.type === 'toggle' ? (
             <div className="flex items-center gap-2">
               <Label className="text-xs text-muted-foreground w-24">Varsayılan:</Label>

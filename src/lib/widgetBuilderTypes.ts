@@ -336,6 +336,7 @@ export interface WidgetFilterDef {
   defaultValue?: any;
   min?: number;  // range/number için
   max?: number;
+  showOnMobile?: boolean; // Mobilde gösterilsin mi?
 }
 
 // Widget kodunda tanımlanan parametre tanımı
@@ -347,6 +348,7 @@ export interface WidgetParamDef {
   defaultValue?: any;
   min?: number;
   max?: number;
+  showOnMobile?: boolean; // Mobilde gösterilsin mi?
 }
 
 // Özel grafik yapılandırması
