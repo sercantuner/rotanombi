@@ -1047,7 +1047,32 @@ export function useDynamicWidgetData(
       const result = await response.json();
       console.log(`[Background Revalidate] Sync completed for ${slug}:`, result);
       
-      // Sync tamamlandı - DB'den yeni veriyi çek
+      // reconcileKeys: DIA'da silinen kayıtları tespit et ve is_deleted=true yap
+      try {
+        const recResponse = await fetch(`${SUPABASE_URL}/functions/v1/dia-data-sync`, {
+          method: 'POST',
+          headers: { 
+            'Authorization': `Bearer ${session.access_token}`, 
+            'Content-Type': 'application/json' 
+          },
+          body: JSON.stringify({
+            action: 'reconcileKeys',
+            dataSourceSlug: slug,
+            periodNo: effectiveDonem,
+          }),
+        });
+        const recResult = await recResponse.json();
+        if (recResult.markedDeleted > 0) {
+          console.log(`[Background Revalidate] reconcileKeys: ${recResult.markedDeleted} silinen kayıt tespit edildi (${slug})`);
+        } else {
+          console.log(`[Background Revalidate] reconcileKeys: DIA ile birebir eşleşiyor (${slug})`);
+        }
+      } catch (recErr) {
+        // reconcileKeys hatası sync'i engellemez - log ve devam
+        console.warn(`[Background Revalidate] reconcileKeys error for ${slug}:`, recErr);
+      }
+      
+      // Sync + reconcile tamamlandı - DB'den temiz veriyi çek (is_deleted=false)
       const freshDbResult = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, effectiveDonem);
       
       if (freshDbResult.data.length > 0) {
