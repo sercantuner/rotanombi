@@ -456,11 +456,16 @@ Deno.serve(async (req) => {
       if (fp?.length) periods = fp.map(p => p.period_no);
     }
     
+    // Dönem bağımsız kaynaklar için is_current olan dönemi bul
+    const { data: currentPeriodData } = await sb.from('firma_periods').select('period_no').eq('sunucu_adi', sun).eq('firma_kodu', fk).eq('is_current', true).single();
+    const currentPeriod = currentPeriodData?.period_no || curDon;
+    console.log(`[DIA Sync] Current period for period-independent sources: ${currentPeriod} (profile curDon: ${curDon})`);
+    
     const results: any[] = [];
     for (const src of srcs) {
-      // Dönem bağımsız kaynaklar sadece aktif dönemde çekilir (bir kez yeterli)
-      const srcPeriods = src.is_period_independent ? [curDon] : periods;
-      console.log(`[DIA Sync] ${src.slug}: ${src.is_period_independent ? 'period-independent (1 period)' : `period-dependent (${srcPeriods.length} periods)`}`);
+      // Dönem bağımsız kaynaklar is_current dönemden çekilir, dönem bağımlılar tüm dönemlerden
+      const srcPeriods = src.is_period_independent ? [currentPeriod] : periods;
+      console.log(`[DIA Sync] ${src.slug}: ${src.is_period_independent ? `period-independent (period ${currentPeriod})` : `period-dependent (${srcPeriods.length} periods)`}`);
       for (const pn of srcPeriods) results.push(await syncOne(sb, euid, session, src, pn, sun, fk, user.id));
     }
     return new Response(JSON.stringify({ success: results.some(r=>r.success), results, totalSynced: results.filter(r=>r.success).length, totalFailed: results.filter(r=>!r.success).length, periodsProcessed: periods.length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

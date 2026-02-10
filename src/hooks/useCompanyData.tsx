@@ -11,6 +11,7 @@ interface CompanyDataFilter {
   dataSourceSlug: string;
   donemKodu?: number;
   includeDeleted?: boolean;
+  isPeriodIndependent?: boolean;
 }
 
 interface SyncOptions {
@@ -40,7 +41,8 @@ export function useCompanyData(filter: CompanyDataFilter) {
   const { user } = useAuth();
   const { sunucuAdi, firmaKodu, donemKodu: profileDonem } = useDiaProfile();
 
-  const effectiveDonem = filter.donemKodu || parseInt(profileDonem || '1');
+  const profileDonemNum = parseInt(profileDonem || '1');
+  const effectiveDonem = filter.donemKodu || profileDonemNum;
 
   return useQuery({
     queryKey: ['companyData', filter.dataSourceSlug, sunucuAdi, firmaKodu, effectiveDonem],
@@ -49,8 +51,23 @@ export function useCompanyData(filter: CompanyDataFilter) {
         return [];
       }
 
+      // Period-independent kaynaklar için is_current dönemi tercih et
+      let resolvedDonem = effectiveDonem;
+      if (filter.isPeriodIndependent) {
+        const { data: currentPeriod } = await supabase
+          .from('firma_periods')
+          .select('period_no')
+          .eq('sunucu_adi', sunucuAdi)
+          .eq('firma_kodu', firmaKodu)
+          .eq('is_current', true)
+          .single();
+        if (currentPeriod?.period_no) {
+          resolvedDonem = currentPeriod.period_no;
+        }
+      }
+
       // Sayfalama ile tüm veriyi çek - Supabase varsayılan 1000 limit'i aşmak için
-      const PAGE_SIZE = 1000; // Supabase max 1000 satır döndürür
+      const PAGE_SIZE = 1000;
       let allData: any[] = [];
       let from = 0;
       let hasMore = true;
@@ -60,11 +77,11 @@ export function useCompanyData(filter: CompanyDataFilter) {
           .from('company_data_cache')
           .select('data')
           .eq('data_source_slug', filter.dataSourceSlug)
-          .eq('donem_kodu', effectiveDonem)
+          .eq('donem_kodu', resolvedDonem)
           .range(from, from + PAGE_SIZE - 1);
 
         if (!filter.includeDeleted) {
-          query = query.eq('is_deleted', false);
+          query = query.eq('is_deleted', false) as typeof query;
         }
 
         const { data, error } = await query;
@@ -84,12 +101,11 @@ export function useCompanyData(filter: CompanyDataFilter) {
         }
       }
 
-      // JSONB data alanlarını düz obje olarak döndür
       return allData;
     },
     enabled: !!user && !!sunucuAdi && !!firmaKodu && !!filter.dataSourceSlug,
-    staleTime: 5 * 60 * 1000, // 5 dakika
-    gcTime: 30 * 60 * 1000, // 30 dakika
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
 }
 
