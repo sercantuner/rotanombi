@@ -13,7 +13,7 @@ const NON_DIA = ['takvim', '_system_calendar', 'system_calendar'];
 
 const DEFAULT_CHUNK_SIZE = 500;
 const MAX_CHUNK_SIZE = 1000;
-const UPSERT_BATCH_SIZE = 200;
+const UPSERT_BATCH_SIZE = 50;
 
 function parse(r: any, m: string): any[] {
   if (r.result) {
