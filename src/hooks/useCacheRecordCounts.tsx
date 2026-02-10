@@ -26,25 +26,33 @@ export function useCacheRecordCounts() {
 
       if (error) {
         console.error('[useCacheRecordCounts] RPC error:', error);
-        // Fallback: Doğrudan sorgu (dönem filtreli)
-        let query = supabase
-          .from('company_data_cache')
-          .select('data_source_slug')
-          .eq('sunucu_adi', diaProfile.sunucuAdi)
-          .eq('firma_kodu', diaProfile.firmaKodu)
-          .eq('is_deleted', false);
-        
-        if (donemKodu) {
-          query = query.eq('donem_kodu', donemKodu);
-        }
-        
-        const { data: fallbackData } = await query;
-
-        if (fallbackData) {
-          const counts: Record<string, number> = {};
-          fallbackData.forEach(row => {
+        // Fallback: Sayfalama ile doğrudan sorgu (dönem filtreli)
+        const counts: Record<string, number> = {};
+        let offset = 0;
+        const PAGE = 1000;
+        while (true) {
+          let query = supabase
+            .from('company_data_cache')
+            .select('data_source_slug')
+            .eq('sunucu_adi', diaProfile.sunucuAdi!)
+            .eq('firma_kodu', diaProfile.firmaKodu!)
+            .eq('is_deleted', false)
+            .range(offset, offset + PAGE - 1);
+          
+          if (donemKodu) {
+            query = query.eq('donem_kodu', donemKodu);
+          }
+          
+          const { data: fallbackPage } = await query;
+          if (!fallbackPage || fallbackPage.length === 0) break;
+          fallbackPage.forEach(row => {
             counts[row.data_source_slug] = (counts[row.data_source_slug] || 0) + 1;
           });
+          if (fallbackPage.length < PAGE) break;
+          offset += PAGE;
+        }
+
+        if (Object.keys(counts).length > 0) {
           return counts;
         }
         return {};
