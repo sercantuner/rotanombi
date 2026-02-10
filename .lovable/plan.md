@@ -1,84 +1,85 @@
 
-# "Guncel" = DIA ile Birebir Ayni - reconcileKeys Entegrasyonu
+
+# backgroundRevalidate: Chunk-Based Sync + reconcileKeys
+
+## Kullanici Senaryosu
+
+Sabah uygulamaya girildiginde:
+1. **Aninda**: Gece 03:00 cron'unun veritabanina yazdigi veriler ile grafikler olusur (< 1 saniye)
+2. **Arka planda**: Her widget icin DIA ile senkronizasyon baslar (chunk-based)
+3. **Birkaç saniye icinde**: Yeni/guncellenen kayitlar yazilir, silinen kayitlar isaretlenir, widget sessizce yenilenir
+4. **Sonuc**: Yesil ucgen = "DIA ile birebir ayni"
+
+Gun icinde tekrar girildiginde ayni dongü tekrar eder: once DB'deki veri (birkaç saat onceki sync), sonra arka planda taze cekme.
 
 ## Problem
 
-Simdi "Guncel" gostergesi sadece "yeni/guncellenen kayitlari DIA'dan cektim" anlamina geliyor. Ama DIA'da silinen kayitlar tespit edilmiyor cunku `backgroundRevalidate` fonksiyonu `syncSingleSource` action'ini cagiriyor ve bu action icerisinde `reconcileKeys` calismyor.
+`backgroundRevalidate` fonksiyonu `syncSingleSource` action'ini cagiriyor. Bu action tek bir Edge Function cagrisinda **tum** veriyi cekmeye calisiyor. Buyuk tablolarda (Gorev Listesi: 8504 kayit, Cari Vade Bakiye: 1891 kayit) 150 saniye timeout limitine takiliyor.
 
-Sonuc: Widget yesil ucgen gosteriyor ("Guncel") ama aslinda DB'de DIA'da artik olmayan kayitlar duruyor.
+Sonuc:
+- Gorev Listesi: 504 timeout, widget guncellenemiyor
+- Cari Vade Bakiye: Kismi sync, 4 gun onceki veri kaliyor
+- Sozlesmeli Musteri ve Nakit Akis Yaslandirmasi: Bagimli oldugu kaynak (Cari Vade Bakiye) eksik oldugu icin yanlis/eski veri gosteriyor
 
 ## Cozum
 
-`backgroundRevalidate` isleminin sonunda, sync basarili olduktan sonra `reconcileKeys` action'ini da cagirmak. Boylece:
-
-1. Yeni/guncellenen kayitlar yazilir (syncSingleSource - mevcut)
-2. Silinen kayitlar tespit edilip `is_deleted: true` olarak isaretlenir (reconcileKeys - yeni eklenen adim)
-3. Ancak ondan sonra gosterge "Guncel" olur
+`syncSingleSource` yerine `syncChunk` action'ini kullanarak veriyi 300'erli parcalar halinde cekmek. Bu action zaten Edge Function'da mevcut ve frontend orkestratorde sorunsuz calisiyor.
 
 ## Teknik Degisiklik
 
 ### Degisecek Dosya: `src/hooks/useDynamicWidgetData.tsx`
 
-`backgroundRevalidate` fonksiyonu icinde, `syncSingleSource` basarili olduktan sonra ve DB'den taze veri cekmeden once, `reconcileKeys` cagrisi eklenir:
-
-```typescript
-// Mevcut: syncSingleSource cagir
-const result = await response.json();
-
-// YENİ: reconcileKeys cagir (silinen kayitlari tespit et)
-try {
-  const recResponse = await fetch(`${SUPABASE_URL}/functions/v1/dia-data-sync`, {
-    method: 'POST',
-    headers: { 
-      'Authorization': `Bearer ${session.access_token}`, 
-      'Content-Type': 'application/json' 
-    },
-    body: JSON.stringify({
-      action: 'reconcileKeys',
-      dataSourceSlug: slug,
-      periodNo: effectiveDonem,
-    }),
-  });
-  const recResult = await recResponse.json();
-  if (recResult.markedDeleted > 0) {
-    console.log(`[Background Revalidate] reconcileKeys: ${recResult.markedDeleted} silinen kayit tespit edildi`);
-  }
-} catch (recErr) {
-  // reconcileKeys hatasi sync'i engellemez - log ve devam
-  console.warn(`[Background Revalidate] reconcileKeys error:`, recErr);
-}
-
-// Sonra DB'den taze veriyi cek (is_deleted=false filtreli)
-const freshDbResult = await fetchFromDatabase(...);
-```
-
-### Sira Onemli
+`backgroundRevalidate` fonksiyonundaki ~1029-1048 satirlari arasindaki `syncSingleSource` cagrisi asagidaki chunk-based dongu ile degistirilir:
 
 ```text
-1. syncSingleSource  --> Yeni/guncellenen kayitlari yaz
-2. reconcileKeys     --> DIA'da olmayan kayitlari is_deleted=true yap
-3. fetchFromDatabase --> DB'den is_deleted=false kayitlari cek (temiz veri)
-4. dataStatus = "Guncel" --> Simdi gercekten guncel
+ESKI (tek cagri, timeout riski):
+  fetch({ action: 'syncSingleSource', dataSourceSlug, periodNo })
+  --> 8504 kayit = 170 sayfa = timeout
+
+YENI (parcali, her biri < 30sn):
+  while (hasMore) {
+    fetch({ action: 'syncChunk', dataSourceSlug, periodNo, offset, chunkSize: 300 })
+    offset += 300
+  }
+  --> 8504 kayit = 29 chunk x ~5-10sn = basarili
 ```
 
-### Performans Etkisi
+Detayli adimlar:
 
-`reconcileKeys` DIA'dan sadece `_key` listesini ceker (limit: 0, tek alan). Bu genelde hizli bir islemdir (< 2-3 saniye). `backgroundRevalidate` zaten arka planda calisiyor, kullanici bunu fark etmez.
+**Adim 1 - Chunk-based sync dongusu:**
+- `offset = 0`, `chunkSize = 300` ile basla
+- Her chunk sonucunda `hasMore` kontrol et
+- `hasMore === false` olana kadar devam et
+- Herhangi bir chunk'ta hata olursa donguden cik ama o ana kadar yazilan veriyi koru
 
-### Edge Case: Period-Independent Kaynaklar
+**Adim 2 - reconcileKeys (mevcut, degisiklik yok):**
+- Sync tamamlandiktan sonra DIA'daki key listesi ile DB karsilastirilir
+- Eksik kayitlar `is_deleted: true` olarak isaretlenir
+- Hata olursa catch blogu yakalar, sync'i engellemez
 
-`reconcileKeys` zaten edge function icerisinde `periodNo` parametresini zorunlu tutuyor. Period-independent kaynaklar icin de mevcut donem kodu gonderilir (ayni sekilde `syncSingleSource` de yapiyor).
+**Adim 3 - DB'den temiz veri cek (mevcut, degisiklik yok):**
+- `is_deleted = false` kayitlar cekilir
+- Widget UI sessizce guncellenir
+- DataStatus "Guncel" olarak isaretlenir
+
+### Beklenen Sonuc
+
+| Widget | Onceki | Sonrasi |
+|--------|--------|---------|
+| Gorev Listesi (8504) | 504 timeout | 29 chunk, basarili |
+| Cari Vade Bakiye (1891) | Kismi sync | 7 chunk, tam sync |
+| Nakit Akis Yaslandirma | "Eski veri" | Guncel |
+| Sozlesmeli Musteri | Bos | Dogru veri |
+
+### Performans
+
+- Her chunk ~5-10 saniye surer (300 kayit = 6 sayfa x 50)
+- `backgroundRevalidate` zaten arka planda calisiyor, kullanici bunu fark etmez
+- Kuyruk sistemi (DiaRequestQueue, maxConcurrent: 2) asiri yuku dengeler
 
 ## Degisecek Dosyalar
 
 | Dosya | Degisiklik |
 |-------|------------|
-| `src/hooks/useDynamicWidgetData.tsx` | `backgroundRevalidate` icine `reconcileKeys` cagrisi eklenir |
+| `src/hooks/useDynamicWidgetData.tsx` | `backgroundRevalidate` icindeki `syncSingleSource` cagrisi `syncChunk` dongusune donusturulur |
 
-## Sonuc
-
-Widget "Guncel" dediginde artik su garantiyi verir:
-- Tum yeni kayitlar DIA'dan cekildi
-- Tum guncellenen kayitlar DIA'dan cekildi
-- DIA'da silinen kayitlar DB'de `is_deleted: true` olarak isaretlendi
-- Widget sadece `is_deleted: false` kayitlari gosteriyor
