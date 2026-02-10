@@ -148,15 +148,20 @@ export function useSyncOrchestrator() {
     return { fetched: result.fetched || 0, written: result.written || 0 };
   };
 
+  // Aktif kaynakları filtrele (ortak yardımcı)
+  const getActiveSources = () => {
+    const NON_DIA = ['takvim', '_system_calendar', 'system_calendar'];
+    return dataSources.filter(ds => 
+      ds.is_active && !NON_DIA.includes(ds.slug) && !ds.slug.startsWith('_system') && !ds.is_non_dia
+    );
+  };
+
   // Tam orkestrasyon: tüm kaynakları ve dönemleri sırayla işle
-  const startFullOrchestration = useCallback(async () => {
+  const startFullOrchestration = useCallback(async (forceIncremental = false) => {
     if (!isConfigured || progress.isRunning) return;
     abortRef.current = false;
 
-    const NON_DIA = ['takvim', '_system_calendar', 'system_calendar'];
-    const activeSources = dataSources.filter(ds => 
-      ds.is_active && !NON_DIA.includes(ds.slug) && !ds.slug.startsWith('_system') && !ds.is_non_dia
-    );
+    const activeSources = getActiveSources();
 
     if (activeSources.length === 0) {
       toast.info('Senkronize edilecek aktif veri kaynağı yok');
@@ -184,9 +189,10 @@ export function useSyncOrchestrator() {
         const isLocked = pss?.is_locked;
         const hasFullSync = pss?.last_full_sync;
         
-        if (isLocked) {
+        if (isLocked && !forceIncremental) {
           tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'skipped', type: 'full', fetched: 0, written: 0 });
-        } else if (hasFullSync) {
+        } else if (hasFullSync || forceIncremental) {
+          // forceIncremental: Kullanıcı manuel artımlı sync istedi → her zaman _cdate/_date kontrolü yap
           tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'incremental', fetched: 0, written: 0 });
         } else {
           tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'full', fetched: 0, written: 0 });
@@ -345,9 +351,15 @@ export function useSyncOrchestrator() {
     toast.info('Senkronizasyon durduruluyor...');
   }, []);
 
+  // Artımlı senkronizasyon: tüm kaynaklar için _cdate/_date kontrolü
+  const startIncrementalAll = useCallback(async () => {
+    return startFullOrchestration(true);
+  }, [startFullOrchestration]);
+
   return {
     progress,
     startFullOrchestration,
+    startIncrementalAll,
     quickSync,
     abort,
   };
