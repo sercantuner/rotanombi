@@ -555,8 +555,17 @@ Deno.serve(async (req) => {
     if (action === 'getSyncStatus') {
       const { data: sh } = await sb.from('sync_history').select('*').eq('sunucu_adi', sun).eq('firma_kodu', fk).order('started_at', { ascending: false }).limit(10);
       const { data: ps } = await sb.from('period_sync_status').select('*').eq('sunucu_adi', sun).eq('firma_kodu', fk);
-      const { data: rc } = await sb.from('company_data_cache').select('data_source_slug').eq('sunucu_adi', sun).eq('firma_kodu', fk).eq('is_deleted', false);
-      const cnt: Record<string,number> = {}; (rc||[]).forEach((r:any) => { cnt[r.data_source_slug] = (cnt[r.data_source_slug]||0)+1; });
+      // Sayfalama ile tüm kayıtları say (1000 limit aşımı)
+      const cnt: Record<string,number> = {};
+      let rcOffset = 0;
+      const RC_PAGE = 1000;
+      while (true) {
+        const { data: rcPage } = await sb.from('company_data_cache').select('data_source_slug').eq('sunucu_adi', sun).eq('firma_kodu', fk).eq('is_deleted', false).range(rcOffset, rcOffset + RC_PAGE - 1);
+        if (!rcPage || rcPage.length === 0) break;
+        rcPage.forEach((r:any) => { cnt[r.data_source_slug] = (cnt[r.data_source_slug]||0)+1; });
+        if (rcPage.length < RC_PAGE) break;
+        rcOffset += RC_PAGE;
+      }
       return new Response(JSON.stringify({ success: true, syncHistory: sh||[], periodStatus: ps||[], recordCounts: cnt, currentPeriod: curDon }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     

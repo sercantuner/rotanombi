@@ -69,17 +69,25 @@ export async function upsertData(
   
   if (!records.length) return stats;
 
-  const { data: existingRecords } = await supabase
-    .from('company_data_cache')
-    .select('id, dia_key')
-    .eq('sunucu_adi', sunucuAdi)
-    .eq('firma_kodu', firmaKodu)
-    .eq('donem_kodu', donemKodu)
-    .eq('data_source_slug', dataSourceSlug)
-    .eq('is_deleted', false);
-
+  // Sayfalama ile tüm mevcut kayıtları çek (1000 limit aşımı)
   const existingMap = new Map<number, string>();
-  (existingRecords || []).forEach((r: any) => existingMap.set(r.dia_key, r.id));
+  let exOffset = 0;
+  const EX_PAGE = 1000;
+  while (true) {
+    const { data: exPage } = await supabase
+      .from('company_data_cache')
+      .select('id, dia_key')
+      .eq('sunucu_adi', sunucuAdi)
+      .eq('firma_kodu', firmaKodu)
+      .eq('donem_kodu', donemKodu)
+      .eq('data_source_slug', dataSourceSlug)
+      .eq('is_deleted', false)
+      .range(exOffset, exOffset + EX_PAGE - 1);
+    if (!exPage || exPage.length === 0) break;
+    exPage.forEach((r: any) => existingMap.set(r.dia_key, r.id));
+    if (exPage.length < EX_PAGE) break;
+    exOffset += EX_PAGE;
+  }
 
   const incomingKeys = new Set<number>();
   const batchSize = 500;
