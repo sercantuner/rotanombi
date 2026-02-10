@@ -49,6 +49,13 @@ interface WidgetWithDataSource {
   };
 }
 
+// Field Pool: Aynı veri kaynağını kullanan widget'ların requiredFields'lerini birleştirir
+interface DataSourceFieldPool {
+  dataSourceId: string;
+  // null = projeksiyon yok (en az 1 widget requiredFields tanımlamadıysa tüm veri çekilir)
+  pooledFields: string[] | null;
+}
+
 export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResult {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -194,7 +201,7 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       return { data: null, resolvedDonem };
     }
   }, [diaProfile]);
-  const findUsedDataSources = useCallback(async (): Promise<string[]> => {
+  const findUsedDataSources = useCallback(async (): Promise<DataSourceFieldPool[]> => {
     if (!pageId) {
       console.log('[DataSourceLoader] No pageId, returning empty sources');
       return [];
@@ -255,22 +262,39 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
         return [];
       }
 
-      // Benzersiz dataSourceId'leri topla
-      const usedSourceIds = new Set<string>();
+      // FIELD POOL: dataSourceId -> { fields: Set, hasWidgetWithoutFields: boolean }
+      const poolMap = new Map<string, { fields: Set<string>; hasWidgetWithoutFields: boolean }>();
+      
+      const addToPool = (dataSourceId: string, requiredFields: string[] | null | undefined) => {
+        if (!poolMap.has(dataSourceId)) {
+          poolMap.set(dataSourceId, { fields: new Set(), hasWidgetWithoutFields: false });
+        }
+        const pool = poolMap.get(dataSourceId)!;
+        
+        if (!requiredFields || requiredFields.length === 0) {
+          // Bu widget requiredFields tanımlamadı - projeksiyon yapılamaz
+          pool.hasWidgetWithoutFields = true;
+        } else {
+          for (const field of requiredFields) {
+            pool.fields.add(field);
+          }
+        }
+      };
       
       for (const widget of widgets) {
         const config = widget.builder_config as any;
         
         // 1. Tek sorgu - üst düzey dataSourceId
         if (config?.dataSourceId) {
-          usedSourceIds.add(config.dataSourceId);
+          addToPool(config.dataSourceId, config.requiredFields);
         }
         
         // 2. MultiQuery - her sorgunun dataSourceId'sini kontrol et
         if (config?.multiQuery?.queries && Array.isArray(config.multiQuery.queries)) {
           for (const query of config.multiQuery.queries) {
             if (query.dataSourceId) {
-              usedSourceIds.add(query.dataSourceId);
+              // Multi-query widget'lar için üst seviye requiredFields kullan
+              addToPool(query.dataSourceId, config.requiredFields);
             }
           }
         }
@@ -279,16 +303,23 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
         if (config?.isMultiQuery && config?.queries && Array.isArray(config.queries)) {
           for (const query of config.queries) {
             if (query.dataSourceId) {
-              usedSourceIds.add(query.dataSourceId);
+              addToPool(query.dataSourceId, config.requiredFields);
             }
           }
         }
       }
 
-      console.log(`[DataSourceLoader] Found ${usedSourceIds.size} unique data sources:`, 
-        Array.from(usedSourceIds));
+      // Pool'u DataSourceFieldPool[] formatına çevir
+      const fieldPools: DataSourceFieldPool[] = Array.from(poolMap.entries()).map(([dataSourceId, pool]) => ({
+        dataSourceId,
+        // Herhangi bir widget requiredFields tanımlamadıysa projeksiyon yapma
+        pooledFields: pool.hasWidgetWithoutFields ? null : Array.from(pool.fields),
+      }));
 
-      return Array.from(usedSourceIds);
+      console.log(`[DataSourceLoader] Found ${fieldPools.length} unique data sources with field pools:`,
+        fieldPools.map(p => `${p.dataSourceId}: ${p.pooledFields ? p.pooledFields.length + ' fields' : 'FULL'}`));
+
+      return fieldPools;
     } catch (err) {
       console.error('[DataSourceLoader] Error finding used data sources:', err);
       return [];
@@ -504,10 +535,10 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
         throw new Error('Oturum bulunamadı');
       }
 
-      // Sayfadaki widget'ların kullandığı veri kaynaklarını bul
-      const usedSourceIds = await findUsedDataSources();
+      // Sayfadaki widget'ların kullandığı veri kaynaklarını ve alan havuzlarını bul
+      const fieldPools = await findUsedDataSources();
       
-      if (usedSourceIds.length === 0) {
+      if (fieldPools.length === 0) {
         console.log('[DataSourceLoader] No data sources used on this page');
         setLoadedSources([]);
         setTotalSources(0);
@@ -522,39 +553,37 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       // FIX: Zaten sorgulanmış VE cache'de gerçekten veri olanları ayır (SCOPE-AWARE)
       const lookupScope = currentScope || { sunucuAdi: diaProfile.sunucuAdi || '', firmaKodu: diaProfile.firmaKodu || '', donemKodu: effectiveDonem };
       
-      const alreadyFetched = usedSourceIds.filter(id => {
-        const inRegistry = isDataSourceFetchedRef.current(id, lookupScope);
-        const cachedData = getDataSourceData(id, lookupScope);
-        // Registry'de var VE cache'de gerçekten veri var mı?
+      const alreadyFetched = fieldPools.filter(pool => {
+        const inRegistry = isDataSourceFetchedRef.current(pool.dataSourceId, lookupScope);
+        const cachedData = getDataSourceData(pool.dataSourceId, lookupScope);
         return inRegistry && cachedData && cachedData.length > 0;
       });
       
       // FIX: Registry'de olsa bile cache boşsa yeniden fetch et
       const needToFetch = forceRefresh 
-        ? usedSourceIds 
-        : usedSourceIds.filter(id => {
-            const inRegistry = isDataSourceFetchedRef.current(id, lookupScope);
-            const cachedData = getDataSourceData(id, lookupScope);
-            // Registry'de yok VEYA cache boş/geçersiz
+        ? fieldPools 
+        : fieldPools.filter(pool => {
+            const inRegistry = isDataSourceFetchedRef.current(pool.dataSourceId, lookupScope);
+            const cachedData = getDataSourceData(pool.dataSourceId, lookupScope);
             return !inRegistry || !cachedData || cachedData.length === 0;
           });
 
-      console.log(`[DataSourceLoader] Page needs ${usedSourceIds.length} sources (scope: dönem ${lookupScope.donemKodu}):`);
+      console.log(`[DataSourceLoader] Page needs ${fieldPools.length} sources (scope: dönem ${lookupScope.donemKodu}):`);
       console.log(`  - Already fetched (with valid cache): ${alreadyFetched.length}`);
       console.log(`  - Need to fetch (missing or empty cache): ${needToFetch.length}`);
 
-      setTotalSources(needToFetch.length || 1); // En az 1 göster progress için
+      setTotalSources(needToFetch.length || 1);
 
       // Zaten sorgulanmış olanları hemen yükle
       const newDataMap = new Map<string, any[]>();
       const successfulSources: LoadedSourceInfo[] = [];
       
-      for (const sourceId of alreadyFetched) {
-        const data = getDataSourceData(sourceId, lookupScope);
-        const ds = getDataSourceById(sourceId);
+      for (const pool of alreadyFetched) {
+        const data = getDataSourceData(pool.dataSourceId, lookupScope);
+        const ds = getDataSourceById(pool.dataSourceId);
         if (data) {
-          newDataMap.set(sourceId, data);
-          successfulSources.push({ id: sourceId, name: ds?.name || sourceId });
+          newDataMap.set(pool.dataSourceId, data);
+          successfulSources.push({ id: pool.dataSourceId, name: ds?.name || pool.dataSourceId });
           incrementCacheHitRef.current();
         }
       }
@@ -573,24 +602,50 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
         return;
       }
 
-      // SIRAYLA yükle (kontör tasarrufu - paralel değil)
+      // FIELD POOL: Sırayla yükle - her kaynak için havuzlanmış alanlarla tek sorgu
       for (let i = 0; i < needToFetch.length; i++) {
-        const sourceId = needToFetch[i];
-        const dataSource = getDataSourceById(sourceId);
+        const pool = needToFetch[i];
+        const dataSource = getDataSourceById(pool.dataSourceId);
         
         if (!dataSource) {
-          console.warn(`[DataSourceLoader] Data source not found: ${sourceId}`);
+          console.warn(`[DataSourceLoader] Data source not found: ${pool.dataSourceId}`);
           continue;
         }
         
         // Aktif kaynak ismini güncelle
         setCurrentSourceName(dataSource.name);
         
-        const data = await loadDataSource(dataSource, session.access_token, forceRefresh);
+        // FIELD POOL: Havuzlanmış alanlarla DB'den çek (loadDataSource yerine doğrudan DB-first with pooled fields)
+        let data: any[] | null = null;
+        
+        if (!forceRefresh) {
+          // DB-FIRST with pooled fields
+          const dbResult = await loadDataSourceFromDatabase(dataSource, pool.pooledFields ?? undefined);
+          if (dbResult.data && dbResult.data.length > 0) {
+            const scope: DataScope = {
+              sunucuAdi: diaProfile.sunucuAdi || '',
+              firmaKodu: diaProfile.firmaKodu || '',
+              donemKodu: dbResult.resolvedDonem,
+            };
+            setDataSourceData(dataSource.id, dbResult.data, DEFAULT_TTL, scope);
+            markDataSourceFetched(dataSource.id, scope);
+            incrementCacheHitRef.current();
+            data = dbResult.data;
+            
+            if (pool.pooledFields) {
+              console.log(`[DataSourceLoader] FIELD POOL: ${dataSource.name} - ${pool.pooledFields.length} pooled fields, ${dbResult.data.length} records`);
+            }
+          }
+        }
+        
+        // DB'de yoksa normal loadDataSource akışına düş (API fetch)
+        if (!data) {
+          data = await loadDataSource(dataSource, session.access_token, forceRefresh);
+        }
         
         if (data) {
-          newDataMap.set(sourceId, data);
-          successfulSources.push({ id: sourceId, name: dataSource.name });
+          newDataMap.set(pool.dataSourceId, data);
+          successfulSources.push({ id: pool.dataSourceId, name: dataSource.name });
         }
         
         // Progress güncelle
@@ -699,21 +754,21 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       
       // Sayfa geçişlerinde cache kontrol et - tüm kaynaklar zaten cache'de mi?
       (async () => {
-        const usedSourceIds = await findUsedDataSourcesRef.current();
-        const allSourcesCached = usedSourceIds.length === 0 || usedSourceIds.every(id => {
-          const cachedData = getDataSourceDataRef.current(id);
+        const fieldPools = await findUsedDataSourcesRef.current();
+        const allSourcesCached = fieldPools.length === 0 || fieldPools.every(pool => {
+          const cachedData = getDataSourceDataRef.current(pool.dataSourceId);
           return cachedData && cachedData.length > 0;
         });
         
-        if (allSourcesCached && usedSourceIds.length > 0) {
+        if (allSourcesCached && fieldPools.length > 0) {
           // Tüm kaynaklar cache'de - loading gösterme, hemen hazır
-          console.log(`[DataSourceLoader] All ${usedSourceIds.length} sources already in cache - skipping loading state`);
+          console.log(`[DataSourceLoader] All ${fieldPools.length} sources already in cache - skipping loading state`);
           setIsLoading(false);
           setIsInitialLoad(false);
           setPageDataReady(true);
-          setLoadedSources(usedSourceIds.map(id => ({
-            id,
-            name: getDataSourceByIdRef.current(id)?.name || id
+          setLoadedSources(fieldPools.map(pool => ({
+            id: pool.dataSourceId,
+            name: getDataSourceByIdRef.current(pool.dataSourceId)?.name || pool.dataSourceId
           })));
           setLoadProgress(100);
         } else {
