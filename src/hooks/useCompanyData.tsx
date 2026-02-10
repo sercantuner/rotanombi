@@ -52,69 +52,91 @@ export function useCompanyData(filter: CompanyDataFilter) {
         return [];
       }
 
-      // Period-independent kaynaklar tüm dönemlerden veri çeker (donem filtresi uygulanmaz)
-      let resolvedDonem = effectiveDonem;
-
-      // Sayfalama ile tüm veriyi çek
       const PAGE_SIZE = 1000;
-      let allData: any[] = [];
-      let from = 0;
-      let hasMore = true;
       const useProjection = filter.requiredFields && filter.requiredFields.length > 0;
-      
-      while (hasMore) {
-        let rows: any[] = [];
-        let fetchError: any = null;
-        
-        if (useProjection) {
-          // RPC ile alan projeksiyonu
-          const { data, error } = await supabase.rpc('get_projected_cache_data', {
-            p_data_source_slug: filter.dataSourceSlug,
-            p_sunucu_adi: sunucuAdi!,
-            p_firma_kodu: firmaKodu!,
-            p_donem_kodu: filter.isPeriodIndependent ? null : resolvedDonem,
-            p_fields: filter.requiredFields!,
-            p_limit: PAGE_SIZE,
-            p_offset: from,
-          });
-          fetchError = error;
-          rows = (data as any[]) || [];
-        } else {
-          // Eski yöntem
-          let query = supabase
-            .from('company_data_cache')
-            .select('data')
-            .eq('data_source_slug', filter.dataSourceSlug)
-            .range(from, from + PAGE_SIZE - 1);
 
-          if (!filter.isPeriodIndependent) {
-            query = query.eq('donem_kodu', resolvedDonem) as typeof query;
+      // Helper: Tek dönem için sayfalayarak veri çeker
+      const fetchPeriod = async (donem: number): Promise<any[]> => {
+        let periodData: any[] = [];
+        let from = 0;
+        let hasMore = true;
+
+        while (hasMore) {
+          let rows: any[] = [];
+          let fetchError: any = null;
+
+          if (useProjection) {
+            const { data, error } = await supabase.rpc('get_projected_cache_data', {
+              p_data_source_slug: filter.dataSourceSlug,
+              p_sunucu_adi: sunucuAdi!,
+              p_firma_kodu: firmaKodu!,
+              p_donem_kodu: donem,
+              p_fields: filter.requiredFields!,
+              p_limit: PAGE_SIZE,
+              p_offset: from,
+            });
+            fetchError = error;
+            rows = (data as any[]) || [];
+          } else {
+            let query = supabase
+              .from('company_data_cache')
+              .select('data')
+              .eq('data_source_slug', filter.dataSourceSlug)
+              .eq('donem_kodu', donem)
+              .range(from, from + PAGE_SIZE - 1);
+
+            if (!filter.includeDeleted) {
+              query = query.eq('is_deleted', false) as typeof query;
+            }
+
+            const { data, error } = await query;
+            fetchError = error;
+            rows = data || [];
           }
 
-          if (!filter.includeDeleted) {
-            query = query.eq('is_deleted', false) as typeof query;
+          if (fetchError) {
+            console.error('[useCompanyData] Error fetching data:', fetchError);
+            throw fetchError;
           }
 
-          const { data, error } = await query;
-          fetchError = error;
-          rows = data || [];
-        }
-
-        if (fetchError) {
-          console.error('[useCompanyData] Error fetching data:', fetchError);
-          throw fetchError;
-        }
-
-        allData = allData.concat(rows.map(row => row.data));
-        
-        if (rows.length < PAGE_SIZE) {
-          hasMore = false;
-        } else {
+          periodData = periodData.concat(rows.map(row => row.data));
+          hasMore = rows.length >= PAGE_SIZE;
           from += PAGE_SIZE;
         }
-      }
+        return periodData;
+      };
 
-      return allData;
+      if (filter.isPeriodIndependent) {
+        // PERIOD-BATCHED: Mevcut dönemleri tespit et, her biri için ayrı sorgu at
+        const { data: periodsData, error: periodsError } = await supabase
+          .from('company_data_cache')
+          .select('donem_kodu')
+          .eq('data_source_slug', filter.dataSourceSlug)
+          .eq('sunucu_adi', sunucuAdi!)
+          .eq('firma_kodu', firmaKodu!)
+          .eq('is_deleted', false);
+
+        if (periodsError) {
+          console.error('[useCompanyData] Period discovery error:', periodsError);
+          throw periodsError;
+        }
+
+        const distinctPeriods = [...new Set((periodsData || []).map(r => r.donem_kodu))].sort((a, b) => a - b);
+
+        if (distinctPeriods.length === 0) return [];
+
+        console.log(`[useCompanyData] PERIOD-BATCH: ${filter.dataSourceSlug} - ${distinctPeriods.length} periods`);
+
+        let allData: any[] = [];
+        for (const period of distinctPeriods) {
+          const periodData = await fetchPeriod(period);
+          allData = allData.concat(periodData);
+        }
+        return allData;
+      } else {
+        // Normal tek-dönem sorgusu
+        return await fetchPeriod(effectiveDonem);
+      }
     },
     enabled: !!user && !!sunucuAdi && !!firmaKodu && !!filter.dataSourceSlug,
     staleTime: 5 * 60 * 1000,
