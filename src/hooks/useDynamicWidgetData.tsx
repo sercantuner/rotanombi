@@ -652,57 +652,75 @@ async function fetchFromDatabase(
   sunucuAdi: string,
   firmaKodu: string,
   donemKodu: number,
-  isPeriodIndependent: boolean = false
+  isPeriodIndependent: boolean = false,
+  requiredFields?: string[]
 ): Promise<DbFetchResult> {
-  const PAGE_SIZE = 1000; // Supabase max 1000 satır döndürür
+  const PAGE_SIZE = 1000;
   let allData: any[] = [];
   let from = 0;
   let hasMore = true;
   let lastUpdatedAt: string | null = null;
   
-  // Period-independent kaynaklar tüm dönemlerden veri çeker (donem filtresi uygulanmaz)
-  // Period-dependent kaynaklar sadece belirli dönemden çeker
   const resolvedDonem = donemKodu;
+  const useProjection = requiredFields && requiredFields.length > 0;
   
   while (hasMore) {
-    let query = supabase
-      .from('company_data_cache')
-      .select('data, updated_at')
-      .eq('data_source_slug', dataSourceSlug)
-      .eq('sunucu_adi', sunucuAdi)
-      .eq('firma_kodu', firmaKodu)
-      .eq('is_deleted', false)
-      .order('updated_at', { ascending: false })
-      .range(from, from + PAGE_SIZE - 1);
+    let rows: { data: any; updated_at: string }[] = [];
+    let fetchError: any = null;
     
-    // Period-dependent kaynaklar için dönem filtresi uygula
-    if (!isPeriodIndependent) {
-      query = query.eq('donem_kodu', resolvedDonem);
+    if (useProjection) {
+      // RPC ile alan projeksiyonu - sadece gerekli alanları çek
+      const { data, error } = await supabase.rpc('get_projected_cache_data', {
+        p_data_source_slug: dataSourceSlug,
+        p_sunucu_adi: sunucuAdi,
+        p_firma_kodu: firmaKodu,
+        p_donem_kodu: isPeriodIndependent ? null : resolvedDonem,
+        p_fields: requiredFields,
+        p_limit: PAGE_SIZE,
+        p_offset: from,
+      });
+      fetchError = error;
+      rows = (data as any[]) || [];
+    } else {
+      // Eski yöntem - tüm data alanını çek
+      let query = supabase
+        .from('company_data_cache')
+        .select('data, updated_at')
+        .eq('data_source_slug', dataSourceSlug)
+        .eq('sunucu_adi', sunucuAdi)
+        .eq('firma_kodu', firmaKodu)
+        .eq('is_deleted', false)
+        .order('updated_at', { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+      
+      if (!isPeriodIndependent) {
+        query = query.eq('donem_kodu', resolvedDonem);
+      }
+
+      const { data, error } = await query;
+      fetchError = error;
+      rows = data || [];
     }
 
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('[DB] Error fetching from company_data_cache:', error);
+    if (fetchError) {
+      console.error('[DB] Error fetching from company_data_cache:', fetchError);
       break;
     }
     
-    if (data && data.length > 0) {
-      allData = allData.concat(data.map(row => row.data));
-      // İlk sayfadan updated_at al (en güncel)
-      if (!lastUpdatedAt && data[0]?.updated_at) {
-        lastUpdatedAt = data[0].updated_at;
+    if (rows.length > 0) {
+      allData = allData.concat(rows.map(row => row.data));
+      if (!lastUpdatedAt && rows[0]?.updated_at) {
+        lastUpdatedAt = rows[0].updated_at;
       }
       from += PAGE_SIZE;
-      hasMore = data.length === PAGE_SIZE;
+      hasMore = rows.length === PAGE_SIZE;
     } else {
       hasMore = false;
     }
   }
   
-  console.log(`[DB] Fetched ${allData.length} records from ${dataSourceSlug} (dönem: ${resolvedDonem}${isPeriodIndependent ? ' [period-independent]' : ''})${lastUpdatedAt ? ` (last sync: ${lastUpdatedAt})` : ''}`);
+  console.log(`[DB] Fetched ${allData.length} records from ${dataSourceSlug}${useProjection ? ` (projected: ${requiredFields!.length} fields)` : ''} (dönem: ${resolvedDonem}${isPeriodIndependent ? ' [period-independent]' : ''})${lastUpdatedAt ? ` (last sync: ${lastUpdatedAt})` : ''}`);
   
-  // JSONB data alanlarını düz obje olarak döndür
   return {
     data: allData,
     lastSyncedAt: lastUpdatedAt ? new Date(lastUpdatedAt) : null,
@@ -1197,8 +1215,8 @@ export function useDynamicWidgetData(
         }
         
         try {
-          // Period-independent flag'i fetchFromDatabase'e geçir
-          const dbResult = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, effectiveDonem, isSourcePeriodIndependent);
+          // Period-independent flag'i ve requiredFields'i fetchFromDatabase'e geçir
+          const dbResult = await fetchFromDatabase(slug, sunucuAdi, firmaKodu, effectiveDonem, isSourcePeriodIndependent, config.requiredFields);
           
           if (dbResult.data.length > 0) {
             console.log(`[Widget] DB HIT - DataSource ${slug}: ${dbResult.data.length} kayıt (dönem: ${dbResult.resolvedDonem})`);
