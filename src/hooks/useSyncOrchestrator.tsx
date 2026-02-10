@@ -14,6 +14,11 @@ const CHUNK_SIZE = 300;
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [2000, 4000, 8000]; // Exponential backoff
 
+// Ağır veri kaynakları - küçük pageSize ile çekilecek (nested data, büyük kayıtlar)
+const HEAVY_SOURCES = ['Fatura_listele_ayrintili', 'fatura_listele_ayrintili'];
+// Lisanssız/yetkisiz modüller - hata alınca skip edilecek
+const SKIP_ERROR_PATTERNS = ['Session refresh fail', 'dönem yetki', 'INVALID_SESSION', '404'];
+
 export interface SyncTask {
   slug: string;
   name: string;
@@ -82,12 +87,16 @@ export function useSyncOrchestrator() {
     }
   };
 
-  // Full sync: chunk bazlı
-  const syncFullChunked = async (slug: string, periodNo: number, taskIndex: number): Promise<{ fetched: number; written: number }> => {
+  // Full sync: chunk bazlı, opsiyonel pageSize ve filters desteği
+  const syncFullChunked = async (
+    slug: string, periodNo: number, taskIndex: number, 
+    options?: { pageSize?: number; filters?: any[] }
+  ): Promise<{ fetched: number; written: number }> => {
     let offset = 0;
     let totalFetched = 0;
     let totalWritten = 0;
     let hasMore = true;
+    const effectivePageSize = options?.pageSize;
 
     while (hasMore && !abortRef.current) {
       const result = await callEdgeFunction({
@@ -96,14 +105,21 @@ export function useSyncOrchestrator() {
         periodNo,
         offset,
         chunkSize: CHUNK_SIZE,
+        ...(effectivePageSize && { pageSize: effectivePageSize }),
+        ...(options?.filters && { filters: options.filters }),
       });
 
-      if (!result.success) throw new Error(result.error || 'Chunk sync failed');
+      if (!result.success && !result.written) throw new Error(result.error || 'Chunk sync failed');
 
       totalFetched += result.fetched || 0;
       totalWritten += result.written || 0;
       hasMore = result.hasMore;
       offset = result.nextOffset || offset + CHUNK_SIZE;
+
+      // Partial error (CancelledError sonrası kurtarma)
+      if (result.partialError) {
+        console.log(`[SyncOrchestrator] Partial error for ${slug}: ${result.partialError}, continuing...`);
+      }
 
       // Task progress güncelle
       setProgress(prev => {
@@ -206,8 +222,12 @@ export function useSyncOrchestrator() {
       }));
 
       try {
+        // Ağır kaynaklar için küçük pageSize kullan
+        const isHeavy = HEAVY_SOURCES.some(h => task.slug.toLowerCase().includes(h.toLowerCase()));
+        const syncOptions = isHeavy ? { pageSize: 50 } : undefined;
+
         if (task.type === 'full') {
-          const result = await syncFullChunked(task.slug, task.periodNo, i);
+          const result = await syncFullChunked(task.slug, task.periodNo, i, syncOptions);
           
           // Full sync tamamlandı - aktif dönem değilse kilitle
           const isCurrentPeriod = task.periodNo === currentPeriod;
@@ -223,8 +243,7 @@ export function useSyncOrchestrator() {
           const result = await syncIncremental(task.slug, task.periodNo);
           
           if (result.needsFullSync) {
-            // Full sync'e düş
-            const fullResult = await syncFullChunked(task.slug, task.periodNo, i);
+            const fullResult = await syncFullChunked(task.slug, task.periodNo, i, syncOptions);
             setProgress(prev => ({
               ...prev,
               tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'completed', type: 'full', fetched: fullResult.fetched, written: fullResult.written } : t),
@@ -238,10 +257,11 @@ export function useSyncOrchestrator() {
         }
       } catch (e) {
         const error = e instanceof Error ? e.message : 'Bilinmeyen hata';
-        console.error(`[SyncOrchestrator] Error for ${task.slug} period ${task.periodNo}:`, error);
+        const shouldSkip = SKIP_ERROR_PATTERNS.some(p => error.toLowerCase().includes(p.toLowerCase()));
+        console.error(`[SyncOrchestrator] ${shouldSkip ? 'Skipping' : 'Error'} ${task.slug} period ${task.periodNo}:`, error);
         setProgress(prev => ({
           ...prev,
-          tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'failed', error } : t),
+          tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: shouldSkip ? 'skipped' : 'failed', error } : t),
         }));
       }
 
