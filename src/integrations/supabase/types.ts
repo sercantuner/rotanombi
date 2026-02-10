@@ -1341,6 +1341,37 @@ export type Database = {
       }
     }
     Views: {
+      invoice_summary_mv: {
+        Row: {
+          __carifirma: string | null
+          __sourcesubeadi: string | null
+          amount: number | null
+          belgeno: string | null
+          cari_unvan: string | null
+          dia_key: number | null
+          donem_kodu: number | null
+          dovizkuru: number | null
+          dovizturu: string | null
+          firma_kodu: string | null
+          firmaadi: string | null
+          fisno: string | null
+          iptal: string | null
+          isReturn: string | null
+          net: number | null
+          netdvz: number | null
+          rawAmount: number | null
+          satiselemani: string | null
+          sunucu_adi: string | null
+          tarih: string | null
+          toplam: number | null
+          toplamara: number | null
+          toplamkdvdvz: number | null
+          turu_kisa: string | null
+          turuack: string | null
+          vatMode: string | null
+        }
+        Relationships: []
+      }
       profiles_safe: {
         Row: {
           avatar_url: string | null
@@ -1400,6 +1431,40 @@ export type Database = {
         Returns: {
           data_source_slug: string
           record_count: number
+        }[]
+      }
+      get_invoice_summary: {
+        Args: {
+          p_donem_kodu?: number
+          p_firma_kodu: string
+          p_limit?: number
+          p_offset?: number
+          p_sunucu_adi: string
+        }
+        Returns: {
+          __carifirma: string
+          __sourcesubeadi: string
+          amount: number
+          belgeno: string
+          cari_unvan: string
+          donem_kodu: number
+          dovizkuru: number
+          dovizturu: string
+          firmaadi: string
+          fisno: string
+          iptal: string
+          isReturn: string
+          net: number
+          netdvz: number
+          rawAmount: number
+          satiselemani: string
+          tarih: string
+          toplam: number
+          toplamara: number
+          toplamkdvdvz: number
+          turu_kisa: string
+          turuack: string
+          vatMode: string
         }[]
       }
       get_landing_stats: {

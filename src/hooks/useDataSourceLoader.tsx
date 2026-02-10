@@ -115,9 +115,93 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     return [];
   }, [setDataSourceData, markDataSourceFetched]);
 
+  // Helper: Belirli bir dönem için sayfalayarak veri çeker
+  const fetchPeriodData = useCallback(async (
+    dataSource: DataSource,
+    sunucuAdi: string,
+    firmaKodu: string,
+    donemKodu: number,
+    requiredFields?: string[]
+  ): Promise<any[]> => {
+    const PAGE_SIZE = 1000;
+    const useProjection = requiredFields && requiredFields.length > 0;
+    let allData: any[] = [];
+    let from = 0;
+    let hasMore = true;
+
+    // Invoice MV optimizasyonu: scf_fatura_listele için get_invoice_summary kullan
+    if (dataSource.slug === 'scf_fatura_listele') {
+      while (hasMore) {
+        const { data, error } = await supabase.rpc('get_invoice_summary', {
+          p_sunucu_adi: sunucuAdi,
+          p_firma_kodu: firmaKodu,
+          p_donem_kodu: donemKodu,
+          p_limit: PAGE_SIZE,
+          p_offset: from,
+        });
+        if (error) {
+          console.error(`[DataSourceLoader] Invoice MV error for period ${donemKodu}:`, error);
+          // Fallback: MV yoksa normal yoldan devam et
+          break;
+        }
+        const rows = (data as any[]) || [];
+        allData = allData.concat(rows);
+        hasMore = rows.length >= PAGE_SIZE;
+        from += PAGE_SIZE;
+      }
+      if (allData.length > 0) {
+        console.log(`[DataSourceLoader] Invoice MV HIT: period ${donemKodu}, ${allData.length} rows`);
+        return allData;
+      }
+      // MV boşsa normal yoldan dene
+      from = 0;
+      hasMore = true;
+    }
+
+    while (hasMore) {
+      let rows: any[] = [];
+      let fetchError: any = null;
+
+      if (useProjection) {
+        const { data, error } = await supabase.rpc('get_projected_cache_data', {
+          p_data_source_slug: dataSource.slug,
+          p_sunucu_adi: sunucuAdi,
+          p_firma_kodu: firmaKodu,
+          p_donem_kodu: donemKodu,
+          p_fields: requiredFields!,
+          p_limit: PAGE_SIZE,
+          p_offset: from,
+        });
+        fetchError = error;
+        rows = (data as any[]) || [];
+      } else {
+        const { data, error } = await supabase
+          .from('company_data_cache')
+          .select('data')
+          .eq('data_source_slug', dataSource.slug)
+          .eq('sunucu_adi', sunucuAdi)
+          .eq('firma_kodu', firmaKodu)
+          .eq('donem_kodu', donemKodu)
+          .eq('is_deleted', false)
+          .range(from, from + PAGE_SIZE - 1);
+        fetchError = error;
+        rows = data || [];
+      }
+
+      if (fetchError) {
+        console.error(`[DataSourceLoader] DB error for ${dataSource.name} period ${donemKodu}:`, fetchError);
+        return allData; // return what we have so far
+      }
+
+      allData = allData.concat(rows.map(row => row.data));
+      hasMore = rows.length >= PAGE_SIZE;
+      from += PAGE_SIZE;
+    }
+    return allData;
+  }, []);
+
   // DB-FIRST: Veritabanından veri çekme fonksiyonu
-  // KRİTİK: Her zaman donem_kodu ile filtreleme yapılır - dönem karışması önlenir
-  // Period-independent kaynaklar için findBestPeriodForSource ile en güncel dönem bulunur
+  // Period-independent kaynaklar için PERIOD-BATCHED fetching: her dönem ayrı sorgulanır
   const loadDataSourceFromDatabase = useCallback(async (
     dataSource: DataSource,
     requiredFields?: string[]
@@ -132,76 +216,66 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
 
     const effectiveDonem = parseInt(donemKodu || '1');
     const isPeriodIndependent = dataSource.is_period_independent === true;
-    const resolvedDonem = effectiveDonem;
-    const useProjection = requiredFields && requiredFields.length > 0;
 
     try {
-      const PAGE_SIZE = 1000;
-      let allData: any[] = [];
-      let from = 0;
-      let hasMore = true;
-      
-      while (hasMore) {
-        let rows: any[] = [];
-        let fetchError: any = null;
-        
-        if (useProjection) {
-          const { data, error } = await supabase.rpc('get_projected_cache_data', {
-            p_data_source_slug: dataSource.slug,
-            p_sunucu_adi: sunucuAdi,
-            p_firma_kodu: firmaKodu,
-            p_donem_kodu: isPeriodIndependent ? null : resolvedDonem,
-            p_fields: requiredFields,
-            p_limit: PAGE_SIZE,
-            p_offset: from,
-          });
-          fetchError = error;
-          rows = (data as any[]) || [];
-        } else {
-          let query = supabase
-            .from('company_data_cache')
-            .select('data')
-            .eq('data_source_slug', dataSource.slug)
-            .eq('sunucu_adi', sunucuAdi)
-            .eq('firma_kodu', firmaKodu)
-            .eq('is_deleted', false)
-            .range(from, from + PAGE_SIZE - 1);
+      if (isPeriodIndependent) {
+        // PERIOD-BATCHED: Önce mevcut dönemleri tespit et, sonra her biri için ayrı sorgu at
+        const { data: periodsData, error: periodsError } = await supabase
+          .from('company_data_cache')
+          .select('donem_kodu')
+          .eq('data_source_slug', dataSource.slug)
+          .eq('sunucu_adi', sunucuAdi)
+          .eq('firma_kodu', firmaKodu)
+          .eq('is_deleted', false);
 
-          if (!isPeriodIndependent) {
-            query = query.eq('donem_kodu', resolvedDonem);
+        if (periodsError) {
+          console.error(`[DataSourceLoader] Period discovery error for ${dataSource.name}:`, periodsError);
+          return { data: null, resolvedDonem: effectiveDonem };
+        }
+
+        // Distinct dönemleri çıkar
+        const distinctPeriods = [...new Set((periodsData || []).map(r => r.donem_kodu))].sort((a, b) => a - b);
+
+        if (distinctPeriods.length === 0) {
+          console.log(`[DataSourceLoader] DB-FIRST MISS: ${dataSource.name} - no periods found`);
+          return { data: null, resolvedDonem: effectiveDonem };
+        }
+
+        console.log(`[DataSourceLoader] PERIOD-BATCH: ${dataSource.name} - ${distinctPeriods.length} periods found: [${distinctPeriods.join(', ')}]`);
+
+        // Her dönem için seri olarak veri çek (DB yükünü dağıt)
+        let allData: any[] = [];
+        for (const period of distinctPeriods) {
+          const periodData = await fetchPeriodData(dataSource, sunucuAdi, firmaKodu, period, requiredFields);
+          allData = allData.concat(periodData);
+          if (periodData.length > 0) {
+            console.log(`[DataSourceLoader] PERIOD-BATCH: ${dataSource.name} period ${period} -> ${periodData.length} rows`);
           }
-
-          const { data, error } = await query;
-          fetchError = error;
-          rows = data || [];
         }
 
-        if (fetchError) {
-          console.error(`[DataSourceLoader] DB-FIRST error for ${dataSource.name}:`, fetchError);
-          return { data: null, resolvedDonem };
+        if (allData.length > 0) {
+          console.log(`[DataSourceLoader] PERIOD-BATCH COMPLETE: ${dataSource.name} total ${allData.length} rows from ${distinctPeriods.length} periods`);
+          return { data: allData, resolvedDonem: effectiveDonem };
         }
 
-        allData = allData.concat(rows.map(row => row.data));
+        return { data: null, resolvedDonem: effectiveDonem };
+      } else {
+        // Normal tek-dönem sorgusu
+        const data = await fetchPeriodData(dataSource, sunucuAdi, firmaKodu, effectiveDonem, requiredFields);
         
-        if (rows.length < PAGE_SIZE) {
-          hasMore = false;
-        } else {
-          from += PAGE_SIZE;
+        if (data.length > 0) {
+          console.log(`[DataSourceLoader] DB-FIRST HIT: ${dataSource.name} (${data.length} kayıt, dönem: ${effectiveDonem})`);
+          return { data, resolvedDonem: effectiveDonem };
         }
-      }
 
-      if (allData.length > 0) {
-        console.log(`[DataSourceLoader] DB-FIRST HIT: ${dataSource.name} (${allData.length} kayıt${useProjection ? `, projected: ${requiredFields!.length} fields` : ''}, dönem: ${resolvedDonem}${isPeriodIndependent ? ' [period-independent]' : ''})`);
-        return { data: allData, resolvedDonem };
+        console.log(`[DataSourceLoader] DB-FIRST MISS: ${dataSource.name} - no data in DB for dönem ${effectiveDonem}`);
+        return { data: null, resolvedDonem: effectiveDonem };
       }
-
-      console.log(`[DataSourceLoader] DB-FIRST MISS: ${dataSource.name} - no data in DB for dönem ${resolvedDonem}`);
-      return { data: null, resolvedDonem };
     } catch (err) {
       console.error(`[DataSourceLoader] DB-FIRST exception for ${dataSource.name}:`, err);
-      return { data: null, resolvedDonem };
+      return { data: null, resolvedDonem: effectiveDonem };
     }
-  }, [diaProfile]);
+  }, [diaProfile, fetchPeriodData]);
   const findUsedDataSources = useCallback(async (): Promise<DataSourceFieldPool[]> => {
     if (!pageId) {
       console.log('[DataSourceLoader] No pageId, returning empty sources');

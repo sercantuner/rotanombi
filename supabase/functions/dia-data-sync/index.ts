@@ -254,6 +254,33 @@ async function syncOne(sb: any, uid: string, sess: any, src: any, pn: number, su
     await sb.from('data_sources').update({ last_record_count: totalForSlug, last_fetched_at: new Date().toISOString() }).eq('slug', src.slug);
     console.log(`[syncOne] Updated data_sources.last_record_count for ${src.slug}: ${totalForSlug}`);
     
+    // Invoice MV refresh after fatura sync
+    if (src.slug === 'scf_fatura_listele') {
+      try {
+        console.log(`[syncOne] Refreshing invoice_summary_mv after fatura sync...`);
+        await sb.rpc('get_invoice_summary', { p_sunucu_adi: sun, p_firma_kodu: fk, p_limit: 1 }).then(() => {
+          // MV exists, refresh it
+          return sb.from('invoice_summary_mv').select('dia_key').limit(0);
+        });
+        // Use raw SQL via service role to refresh MV
+        const dbUrl = Deno.env.get("SUPABASE_DB_URL");
+        if (dbUrl) {
+          const { Pool } = await import("https://deno.land/x/postgres@v0.19.3/mod.ts");
+          const pool = new Pool(dbUrl, 1, true);
+          const conn = await pool.connect();
+          try {
+            await conn.queryObject("REFRESH MATERIALIZED VIEW CONCURRENTLY public.invoice_summary_mv");
+            console.log(`[syncOne] invoice_summary_mv refreshed successfully`);
+          } finally {
+            conn.release();
+            await pool.end();
+          }
+        }
+      } catch (mvErr) {
+        console.log(`[syncOne] MV refresh warning (non-fatal):`, mvErr instanceof Error ? mvErr.message : mvErr);
+      }
+    }
+    
     return { success: true, slug: src.slug, pn, fetched: r.fetched, written: r.written };
   } catch (e) { const em = e instanceof Error ? e.message : "Error"; if (h?.id) await sb.from('sync_history').update({ status: 'failed', error: em, completed_at: new Date().toISOString() }).eq('id', h.id); return { success: false, slug: src.slug, pn, error: em }; }
 }
@@ -332,6 +359,28 @@ async function incrementalSync(
     const { data: countData } = await sb.rpc('get_cache_record_counts', { p_sunucu_adi: sun, p_firma_kodu: fk });
     const totalForSlug = countData?.find((c: any) => c.data_source_slug === src.slug)?.record_count || 0;
     await sb.from('data_sources').update({ last_record_count: totalForSlug, last_fetched_at: new Date().toISOString() }).eq('slug', src.slug);
+
+    // Invoice MV refresh after fatura incremental sync
+    if (src.slug === 'scf_fatura_listele' && totalWritten > 0) {
+      try {
+        console.log(`[incrementalSync] Refreshing invoice_summary_mv...`);
+        const dbUrl = Deno.env.get("SUPABASE_DB_URL");
+        if (dbUrl) {
+          const { Pool } = await import("https://deno.land/x/postgres@v0.19.3/mod.ts");
+          const pool = new Pool(dbUrl, 1, true);
+          const conn = await pool.connect();
+          try {
+            await conn.queryObject("REFRESH MATERIALIZED VIEW CONCURRENTLY public.invoice_summary_mv");
+            console.log(`[incrementalSync] invoice_summary_mv refreshed successfully`);
+          } finally {
+            conn.release();
+            await pool.end();
+          }
+        }
+      } catch (mvErr) {
+        console.log(`[incrementalSync] MV refresh warning (non-fatal):`, mvErr instanceof Error ? mvErr.message : mvErr);
+      }
+    }
 
     return { success: true, slug: src.slug, pn, fetched: totalFetched, written: totalWritten };
   } catch (e) {
