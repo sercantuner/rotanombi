@@ -129,15 +129,16 @@ async function fetchPage(sb: any, uid: string, sess: any, mod: string, met: stri
   } catch (e) { return { ok: false, data: [], err: e instanceof Error ? e.message : "Fetch error" }; }
 }
 
-// ===== fetchPageSimple - opsiyonel filters desteği eklendi =====
-async function fetchPageSimple(sess: any, mod: string, met: string, dk: number, off: number, filters?: any[]) {
+// ===== fetchPageSimple - opsiyonel filters ve pageSize desteği =====
+async function fetchPageSimple(sess: any, mod: string, met: string, dk: number, off: number, filters?: any[], pageSize?: number) {
+  const effectivePageSize = pageSize || PAGE_SIZE;
   const url = `https://${sess.sunucuAdi}.ws.dia.com.tr/api/v3/${mod}/json`;
   const fm = met.startsWith(`${mod}_`) ? met : `${mod}_${met}`;
   const pl: any = { [fm]: { 
     session_id: sess.sessionId, 
     firma_kodu: sess.firmaKodu, 
     donem_kodu: dk, 
-    limit: PAGE_SIZE, 
+    limit: effectivePageSize, 
     offset: off 
   }};
   
@@ -155,17 +156,17 @@ async function fetchPageSimple(sess: any, mod: string, met: string, dk: number, 
     }
     if (r.code && r.code !== "200") return { ok: false, data: [], err: r.msg || `Error ${r.code}` };
     if (r.error || r.hata) return { ok: false, data: [], err: r.error?.message || r.hata?.aciklama || "API error" };
-    return { ok: true, data: parse(r, fm) };
+    return { ok: true, data: parse(r, fm), effectivePageSize };
   } catch (e) { 
     return { ok: false, data: [], err: e instanceof Error ? e.message : "Fetch error" }; 
   }
 }
 
-// ===== streamChunk - filters desteği eklendi =====
+// ===== streamChunk - filters ve pageSize desteği =====
 async function streamChunk(
   sb: any, uid: string, sess: any, mod: string, met: string, dk: number, 
   sun: string, fk: string, slug: string, startOffset: number, chunkSize: number,
-  filters?: any[]
+  filters?: any[], pageSize?: number
 ) {
   const sr = await ensureValidSession(sb, uid, sess);
   if (!sr.success || !sr.session) {
@@ -176,11 +177,12 @@ async function streamChunk(
   let off = startOffset;
   let fetched = 0;
   let written = 0;
+  const effectivePageSize = pageSize || PAGE_SIZE;
   
-  console.log(`[syncChunk] Starting: ${slug}, offset=${startOffset}, chunkSize=${chunkSize}${filters ? `, filters=${JSON.stringify(filters)}` : ''}`);
+  console.log(`[syncChunk] Starting: ${slug}, offset=${startOffset}, chunkSize=${chunkSize}, pageSize=${effectivePageSize}${filters ? `, filters=${JSON.stringify(filters)}` : ''}`);
   
   while (fetched < chunkSize) {
-    const r = await fetchPageSimple(validSession, mod, met, dk, off, filters);
+    const r = await fetchPageSimple(validSession, mod, met, dk, off, filters, effectivePageSize);
     
     if (r.needsRefresh) {
       console.log(`[syncChunk] Session expired, refreshing...`);
@@ -194,8 +196,12 @@ async function streamChunk(
     }
     
     if (!r.ok) {
-      if (fetched === 0) return { ok: false, fetched, written, hasMore: false, nextOffset: off, err: r.err };
-      break;
+      // CancelledError veya diğer hatalarda yazılan veriyi koru
+      if (fetched > 0) {
+        console.log(`[syncChunk] Error after ${fetched} records, preserving written data. Error: ${r.err}`);
+        return { ok: true, fetched, written, hasMore: true, nextOffset: off, partialError: r.err };
+      }
+      return { ok: false, fetched, written, hasMore: false, nextOffset: off, err: r.err };
     }
     
     if (r.data.length > 0) {
@@ -203,11 +209,11 @@ async function streamChunk(
       fetched += r.data.length;
     }
     
-    if (r.data.length < PAGE_SIZE) {
+    if (r.data.length < effectivePageSize) {
       return { ok: true, fetched, written, hasMore: false, nextOffset: off + r.data.length };
     }
     
-    off += PAGE_SIZE;
+    off += effectivePageSize;
     if (fetched >= chunkSize) {
       return { ok: true, fetched, written, hasMore: true, nextOffset: off };
     }
@@ -465,7 +471,7 @@ Deno.serve(async (req) => {
     const { data: { user }, error: ue } = await sb.auth.getUser(auth.replace("Bearer ", ""));
     if (ue || !user) return new Response(JSON.stringify({ success: false, error: "Invalid token" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     
-    const { dataSourceSlug, periodNo, targetUserId, syncAllPeriods, offset, chunkSize, filters: reqFilters } = body;
+    const { dataSourceSlug, periodNo, targetUserId, syncAllPeriods, offset, chunkSize, filters: reqFilters, pageSize: reqPageSize } = body;
     let euid = user.id;
     if ((action === 'syncAllForUser' || action === 'syncSingleSource' || action === 'syncChunk' || action === 'incrementalSync') && targetUserId) {
       const { data: rc } = await sb.from('user_roles').select('role').eq('user_id', user.id).eq('role', 'super_admin').single();
@@ -501,13 +507,14 @@ Deno.serve(async (req) => {
       
       const startOffset = offset || 0;
       const requestedChunkSize = Math.min(chunkSize || DEFAULT_CHUNK_SIZE, MAX_CHUNK_SIZE);
+      const effectivePageSize = reqPageSize ? Math.min(reqPageSize, PAGE_SIZE) : undefined;
       
-      console.log(`[syncChunk] Processing: ${src.slug}, period=${periodNo}, offset=${startOffset}, chunkSize=${requestedChunkSize}`);
+      console.log(`[syncChunk] Processing: ${src.slug}, period=${periodNo}, offset=${startOffset}, chunkSize=${requestedChunkSize}, pageSize=${effectivePageSize || PAGE_SIZE}`);
       
       const result = await streamChunk(
         sb, euid, session, src.module, src.method, periodNo, 
         sun, fk, src.slug, startOffset, requestedChunkSize,
-        reqFilters // Opsiyonel filtre desteği
+        reqFilters, effectivePageSize
       );
       
       if (!result.ok) {
