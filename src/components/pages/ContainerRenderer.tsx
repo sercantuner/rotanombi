@@ -33,6 +33,7 @@ import { toast } from 'sonner';
 interface ContainerWidgetSettings {
   filters?: WidgetLocalFilters;
   heightMultiplier?: 0.5 | 1 | 1.5 | 2 | 2.5 | 3;
+  hideOnMobile?: boolean;
 }
 
 interface ContainerRendererProps {
@@ -284,6 +285,10 @@ export function ContainerRenderer({
         const widgetSettings = slotWidget.settings as ContainerWidgetSettings | null;
         const widgetFilters = widgetSettings?.filters;
         const heightMultiplier = widgetSettings?.heightMultiplier || 1;
+        const hideOnMobile = widgetSettings?.hideOnMobile ?? false;
+
+        // Mobilde gizle
+        if (isMobile && hideOnMobile) return null;
 
         // Yükseklik çarpanına göre height hesapla
         const heightPx = heightMultiplier * 280;
@@ -339,6 +344,23 @@ export function ContainerRenderer({
                 }, 0)}
                 widgetFilters={(widgetDetail.builder_config as any)?.widgetFilters}
                 widgetParameters={(widgetDetail.builder_config as any)?.widgetParameters}
+                hideOnMobile={hideOnMobile}
+                onMobileVisibilityChange={async (hide) => {
+                  try {
+                    const existingSettings = (slotWidget.settings as ContainerWidgetSettings) || {};
+                    await supabase
+                      .from('container_widgets')
+                      .update({
+                        settings: { ...existingSettings, hideOnMobile: hide } as any,
+                        updated_at: new Date().toISOString()
+                      })
+                      .eq('id', slotWidget.id);
+                    refreshWidgets();
+                    toast.success(hide ? 'Widget mobilde gizlenecek' : 'Widget mobilde gösterilecek');
+                  } catch (error) {
+                    toast.error('Ayar kaydedilemedi');
+                  }
+                }}
                 getWidgetData={() => {
                   const raw = widgetUnfilteredDataRef.current[slotWidget.id] || widgetRawDataRef.current[slotWidget.id];
                   if (!raw) return undefined;

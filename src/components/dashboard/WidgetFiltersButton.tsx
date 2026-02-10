@@ -2,7 +2,7 @@
 // Widget'ın builder_config'indeki widgetFilters ve widgetParameters tanımlarına göre UI üretir
 
 import { useState, useMemo } from 'react';
-import { Filter, FilterX, RotateCcw, SlidersHorizontal, Search } from 'lucide-react';
+import { Filter, FilterX, RotateCcw, SlidersHorizontal, Search, Smartphone, Monitor } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -27,6 +27,8 @@ interface WidgetFiltersButtonProps {
   widgetParameters?: WidgetParamDef[];
   getWidgetData?: () => any[] | undefined;
   className?: string;
+  hideOnMobile?: boolean;
+  onMobileVisibilityChange?: (hide: boolean) => void;
 }
 
 // Tek bir filtre/parametre alanını render eden bileşen
@@ -215,6 +217,8 @@ export function WidgetFiltersButton({
   widgetParameters,
   getWidgetData,
   className,
+  hideOnMobile,
+  onMobileVisibilityChange,
 }: WidgetFiltersButtonProps) {
   const [open, setOpen] = useState(false);
   const [localWidgetData, setLocalWidgetData] = useState<any[]>([]);
@@ -289,6 +293,29 @@ export function WidgetFiltersButton({
               </Button>
             )}
           </div>
+
+          {/* Mobilde Göster Toggle */}
+          {onMobileVisibilityChange && (
+            <>
+              <Separator />
+              <div className="space-y-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <Monitor className="w-3 h-3" />
+                  Görünüm
+                </span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Smartphone className="w-3.5 h-3.5 text-muted-foreground" />
+                    <Label className="text-xs font-medium">Mobilde Göster</Label>
+                  </div>
+                  <Switch
+                    checked={!hideOnMobile}
+                    onCheckedChange={(checked) => onMobileVisibilityChange(!checked)}
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Filtreler Bölümü */}
           <Separator />
