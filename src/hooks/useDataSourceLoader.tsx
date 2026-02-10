@@ -122,13 +122,6 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     dataSource: DataSource,
     requiredFields?: string[]
   ): Promise<{ data: any[] | null; resolvedDonem: number }> => {
-    // ⚠️ TEMPORARY KILL SWITCH - Migration sonrası kaldırılacak
-    // DB bağlantı havuzunu boşaltmak için tüm DB sorguları geçici olarak devre dışı
-    const DB_QUERIES_ENABLED = false;
-    if (!DB_QUERIES_ENABLED) {
-      console.log(`[DataSourceLoader] ⛔ DB queries disabled (kill switch active). Skipping: ${dataSource.name}`);
-      return { data: null, resolvedDonem: 1 };
-    }
 
     const { sunucuAdi, firmaKodu, donemKodu } = diaProfile;
     

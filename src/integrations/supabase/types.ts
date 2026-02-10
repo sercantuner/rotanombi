@@ -1438,6 +1438,13 @@ export type Database = {
         }[]
       }
       get_team_members: { Args: { _admin_id: string }; Returns: string[] }
+      get_user_company_scope: {
+        Args: { _user_id: string }
+        Returns: {
+          firma_kodu: string
+          sunucu_adi: string
+        }[]
+      }
       get_user_team_admin: { Args: { _user_id: string }; Returns: string }
       has_module_permission: {
         Args: { _module: string; _permission?: string; _user_id: string }
