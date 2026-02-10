@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getDiaSession } from "../_shared/diaAutoLogin.ts";
+import { getTurkeyToday, getTurkeyMonthStart } from "../_shared/turkeyTime.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -406,10 +407,9 @@ serve(async (req) => {
 });
 
 function getToday(): string {
-  return new Date().toISOString().split("T")[0];
+  return getTurkeyToday();
 }
 
 function getMonthStart(): string {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+  return getTurkeyMonthStart();
 }
