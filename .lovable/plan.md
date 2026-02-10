@@ -1,69 +1,71 @@
 
 
-## Tum Parametrelere "Mobilde Goster" Ayari Ekleme
+## Widget Bazinda "Mobilde Goster/Gizle" Kullanici Ayari
 
 ### Ozet
-Her widget filtre ve parametresine `showOnMobile` (boolean) alani eklenecek. Mobil cihazlarda sadece `showOnMobile: true` olan filtre/parametreler gorunecek. Varsayilan olarak KPI widget'larinin parametreleri mobilde gorunur, diger widget turlerinde gizli olacak.
+Her kullanici, kendi dashboard'undaki her widget icin "Bu widget mobilde gorunsun mu?" secenegini belirleyebilecek. Bu, super admin degil **kullanicinin kendisinin** kontrol ettigi bir ayar olacak. Widget hem masaustunde hem mobilde gorunebilir veya sadece masaustunde gorunur olabilir.
 
-### Degisiklikler
+### Nasil Calisacak
+- Kullanici, widget'in sag ust kosesindeki ayarlar popover'inda (WidgetFiltersButton) bir "Mobilde Goster" toggle'i gorecek.
+- Toggle kapali oldugunda, o widget mobil cihazlarda tamamen gizlenecek.
+- Toggle acik oldugunda (varsayilan), widget her iki platformda da gorunecek.
+- Bu ayar kullaniciya ozeldir - her kullanici kendi tercihini yapar.
 
-#### 1. Tip Tanimlari (widgetBuilderTypes.ts)
-- `WidgetFilterDef` ve `WidgetParamDef` interface'lerine `showOnMobile?: boolean` alani eklenecek.
+### Teknik Degisiklikler
 
-#### 2. WidgetFiltersButton Bileseninde Mobil Filtreleme (WidgetFiltersButton.tsx)
-- `useIsMobile()` hook'u import edilecek.
-- Mobil cihazda iken `widgetFilters` ve `widgetParameters` dizileri `showOnMobile === true` olanlara gore filtrelenecek.
-- Desktop'ta tum filtre/parametreler eskisi gibi gorunmeye devam edecek.
-
-#### 3. ContainerRenderer'da Mobil Gorunurluk (ContainerRenderer.tsx)
-- Filtre/parametre butonunun gorunurluk mantigi (satir 316) mobil durumda `showOnMobile: true` olan tanimlara gore kontrol edilecek. Eger mobilde gosterilecek hicbir filtre/parametre yoksa buton gizlenecek.
-
-#### 4. Widget Builder UI (Opsiyonel Iyilestirme)
-- `WidgetFiltersParamsEditor.tsx` icerisinde her filtre/parametre satirina bir "Mobilde Goster" toggle'i eklenecek, boylece super admin bu ayari gorsel olarak yonetebilecek.
-
-#### 5. Veritabani Guncelleme (SQL Migration)
-Mevcut tum widget'larin `builder_config` icindeki `widgetFilters` ve `widgetParameters` dizilerine `showOnMobile` alani eklenecek:
-
-- **KPI turundeki widget'lar**: Tum filtre ve parametrelere `showOnMobile: true`
-- **Diger turler (chart, table, list, summary)**: Tum filtre ve parametrelere `showOnMobile: false`
-
-Bu islem, parametre/filtre tanimli tum aktif widget'lar icin SQL ile toplu guncelleme yapilarak gerceklestirilecek. Etkilenen widget'lar:
-- Banka Varliklari Ozeti (chart) - false
-- Gelecek Vadeli Cek Analizi (chart) - false  
-- Haftalik Kendi Ceklerimiz (chart) - false
-- Kasa Varlik Ozeti (chart) - false
-- Nakit Akis Yaslandirma Analizi (chart) - false
-- Nakit Akisi ve Yaslandirma (chart) - false
-- Personel Mesai Analizi (chart) - false
-- Personel Performans Radari (chart) - false
-- Aylik Acik Teklif Analizi (chart) - false
-
-### Teknik Detaylar
+#### 1. ContainerWidgetSettings Guncelleme (ContainerRenderer.tsx)
+`ContainerWidgetSettings` interface'ine `hideOnMobile?: boolean` alani eklenecek. Varsayilan `false` (yani widget mobilde gorunur).
 
 ```text
-WidgetFilterDef / WidgetParamDef
-+---------------------+
-| key: string         |
-| label: string       |
-| type: ...           |
-| showOnMobile?: bool | <-- YENi ALAN
-| options?: ...       |
-+---------------------+
+ContainerWidgetSettings
++---------------------------+
+| filters?: ...             |
+| heightMultiplier?: ...    |
+| hideOnMobile?: boolean    |  <-- YENI ALAN
++---------------------------+
+```
 
-WidgetFiltersButton (render mantigi)
-+----------------------------------+
-| isMobile?                        |
-|   -> filtre listesini filtrele   |
-|      showOnMobile === true       |
-| Desktop?                         |
-|   -> tum filtreler gorunur       |
-+----------------------------------+
+#### 2. ContainerRenderer.tsx - Mobil Gizleme Mantigi
+`renderSlots()` icerisinde, widget render edilmeden once mobil kontrolu yapilacak:
+- `isMobile === true` ve `hideOnMobile === true` ise, o slot tamamen gizlenecek (render edilmeyecek).
+- Masaustunde tum widget'lar her zaman gorunur.
+
+#### 3. ContainerRenderer.tsx - Toggle Degisikligi Kaydetme
+Yeni bir `handleMobileVisibilityChange` fonksiyonu eklenecek. Bu fonksiyon `container_widgets` tablosundaki `settings` JSONB alanina `hideOnMobile` degerini yazacak.
+
+#### 4. WidgetFiltersButton.tsx - "Mobilde Goster" Toggle UI
+Popover icerisine yeni bir bolum eklenecek:
+- "Gorunum" basliginin altinda bir "Mobilde Goster" switch'i olacak.
+- Toggle degistiginde `onMobileVisibilityChange` callback'i cagirilacak.
+- Bu toggle **tum kullanicilar** icin gorunur olacak (super admin degil, herkes kendi widget'ini yonetebilir).
+
+Yeni prop'lar:
+- `hideOnMobile?: boolean` - mevcut deger
+- `onMobileVisibilityChange?: (hide: boolean) => void` - degisiklik callback'i
+
+#### 5. Veri Akisi
+
+```text
+Kullanici Toggle'i Degistirir
+         |
+         v
+WidgetFiltersButton -> onMobileVisibilityChange(true/false)
+         |
+         v
+ContainerRenderer -> handleMobileVisibilityChange()
+         |
+         v
+UPDATE container_widgets SET settings = {..., hideOnMobile: true/false}
+WHERE id = containerWidgetId
+         |
+         v
+Mobilde: hideOnMobile === true ise widget gizlenir
+Masaustunde: Her zaman gorunur
 ```
 
 Degistirilecek dosyalar:
-- `src/lib/widgetBuilderTypes.ts` - Tip tanimlari
-- `src/components/dashboard/WidgetFiltersButton.tsx` - Mobil filtreleme mantigi
-- `src/components/pages/ContainerRenderer.tsx` - Buton gorunurluk mantigi
-- `src/components/admin/WidgetFiltersParamsEditor.tsx` - Builder UI toggle
-- Veritabani: `widgets` tablosunda toplu `builder_config` guncellemesi
+- `src/components/pages/ContainerRenderer.tsx` - Gizleme mantigi, ayar kaydetme, prop gecisi
+- `src/components/dashboard/WidgetFiltersButton.tsx` - Mobilde Goster toggle UI
+
+Veritabani degisikligi gerekmez - mevcut `container_widgets.settings` JSONB alani kullanilacak.
 
