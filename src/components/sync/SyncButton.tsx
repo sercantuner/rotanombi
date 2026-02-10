@@ -1,6 +1,6 @@
 // SyncButton - Header'da kullanılacak senkronizasyon butonu
 import React from 'react';
-import { RefreshCw, Check, AlertCircle, Clock } from 'lucide-react';
+import { RefreshCw, Check, AlertCircle, Clock, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -15,37 +15,26 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useSyncData, useSyncStatus, useLastSyncTime } from '@/hooks/useCompanyData';
+import { Progress } from '@/components/ui/progress';
+import { useSyncStatus } from '@/hooks/useSyncData';
+import { useSyncOrchestrator } from '@/hooks/useSyncOrchestrator';
 import { useDiaProfile } from '@/hooks/useDiaProfile';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
 export function SyncButton() {
   const { isConfigured } = useDiaProfile();
-  const { data: syncStatus, isLoading: statusLoading } = useSyncStatus();
-  const { mutate: syncData, isPending: isSyncing } = useSyncData();
-  const lastSyncTime = useLastSyncTime();
+  const { lastSyncTime, syncHistory } = useSyncStatus();
+  const { progress, startFullOrchestration, quickSync, abort } = useSyncOrchestrator();
 
-  // DIA yapılandırılmamışsa gösterme
-  if (!isConfigured) {
-    return null;
-  }
-
-  const handleSyncAll = () => {
-    syncData({ forceRefresh: false });
-  };
-
-  const handleSyncSource = (slug: string) => {
-    syncData({ dataSourceSlug: slug, forceRefresh: false });
-  };
+  if (!isConfigured) return null;
 
   const formatLastSync = () => {
     if (!lastSyncTime) return 'Hiç senkronize edilmedi';
-    return formatDistanceToNow(lastSyncTime, { addSuffix: true, locale: tr });
+    return formatDistanceToNow(new Date(lastSyncTime), { addSuffix: true, locale: tr });
   };
 
-  // Son sync history'deki durumları göster
-  const recentSyncs = syncStatus?.syncHistory?.slice(0, 5) || [];
+  const recentSyncs = (syncHistory || []).slice(0, 5);
 
   return (
     <DropdownMenu>
@@ -55,12 +44,12 @@ export function SyncButton() {
             <Button
               variant="ghost"
               size="icon"
-              disabled={isSyncing}
+              disabled={false}
               className="relative"
             >
-              <RefreshCw className={`w-4 h-4 md:w-5 md:h-5 ${isSyncing ? 'animate-spin' : ''}`} />
-              {syncStatus?.recordCounts && Object.keys(syncStatus.recordCounts).length > 0 && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 bg-success rounded-full" />
+              <RefreshCw className={`w-4 h-4 md:w-5 md:h-5 ${progress.isRunning ? 'animate-spin' : ''}`} />
+              {progress.isRunning && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
               )}
             </Button>
           </DropdownMenuTrigger>
@@ -71,7 +60,7 @@ export function SyncButton() {
         </TooltipContent>
       </Tooltip>
 
-      <DropdownMenuContent align="end" className="w-72">
+      <DropdownMenuContent align="end" className="w-80">
         <DropdownMenuLabel className="flex items-center justify-between">
           <span>Veri Senkronizasyonu</span>
           <span className="text-xs font-normal text-muted-foreground">
@@ -81,24 +70,36 @@ export function SyncButton() {
         
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem onClick={handleSyncAll} disabled={isSyncing}>
-          <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-          <span>Tüm Verileri Senkronize Et</span>
-        </DropdownMenuItem>
+        {/* Progress göstergesi */}
+        {progress.isRunning && (
+          <div className="px-2 py-3">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="font-medium truncate flex-1">
+                {progress.currentSource || 'Hazırlanıyor...'}
+              </span>
+              <span className="text-muted-foreground ml-2">
+                {progress.currentType === 'incremental' ? '⚡ Artımlı' : '📦 Tam'} • %{progress.overallPercent}
+              </span>
+            </div>
+            <Progress value={progress.overallPercent} className="h-1.5" />
+            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+              <span>{progress.totalFetched} kayıt çekildi</span>
+              <span>{progress.totalWritten} yazıldı</span>
+            </div>
+          </div>
+        )}
 
-        {syncStatus?.recordCounts && Object.keys(syncStatus.recordCounts).length > 0 && (
+        {progress.isRunning ? (
+          <DropdownMenuItem onClick={abort} className="text-destructive">
+            <AlertCircle className="w-4 h-4 mr-2" />
+            <span>Senkronizasyonu Durdur</span>
+          </DropdownMenuItem>
+        ) : (
           <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              Veri Kaynakları
-            </DropdownMenuLabel>
-            {Object.entries(syncStatus.recordCounts).slice(0, 5).map(([slug, count]) => (
-              <DropdownMenuItem key={slug} onClick={() => handleSyncSource(slug)}>
-                <Check className="w-4 h-4 mr-2 text-success" />
-                <span className="flex-1 truncate">{slug}</span>
-                <span className="text-xs text-muted-foreground">{count} kayıt</span>
-              </DropdownMenuItem>
-            ))}
+            <DropdownMenuItem onClick={() => startFullOrchestration()}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              <span>Tüm Verileri Senkronize Et</span>
+            </DropdownMenuItem>
           </>
         )}
 
@@ -111,14 +112,15 @@ export function SyncButton() {
             {recentSyncs.map((sync: any) => (
               <DropdownMenuItem key={sync.id} className="text-xs" disabled>
                 {sync.status === 'completed' ? (
-                  <Check className="w-3 h-3 mr-2 text-success" />
+                  <Check className="w-3 h-3 mr-2 text-green-500" />
                 ) : sync.status === 'failed' ? (
                   <AlertCircle className="w-3 h-3 mr-2 text-destructive" />
                 ) : (
-                  <Clock className="w-3 h-3 mr-2 text-warning" />
+                  <Clock className="w-3 h-3 mr-2 text-yellow-500" />
                 )}
                 <span className="flex-1 truncate">{sync.data_source_slug}</span>
-                <span className="text-muted-foreground">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  {sync.sync_type === 'incremental' && <Zap className="w-3 h-3" />}
                   {sync.records_fetched || 0}
                 </span>
               </DropdownMenuItem>
