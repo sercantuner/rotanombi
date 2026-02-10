@@ -1,11 +1,13 @@
 // DataManagementTab - Veri Yönetimi Sekmesi
-// Veri kaynakları listesi, kayıt sayıları ve sync butonları
+// Veri kaynakları listesi, kayıt sayıları, dönem kilitleme ve sync butonları
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useDataSources } from '@/hooks/useDataSources';
-import { useSyncData, useSyncStatus } from '@/hooks/useSyncData';
+import { useSyncStatus } from '@/hooks/useSyncData';
+import { useSyncOrchestrator } from '@/hooks/useSyncOrchestrator';
 import { useDiaProfile } from '@/hooks/useDiaProfile';
 import { useCacheRecordCounts } from '@/hooks/useCacheRecordCounts';
+import { useFirmaPeriods } from '@/hooks/useFirmaPeriods';
 import {
   Database,
   RefreshCw,
@@ -18,6 +20,9 @@ import {
   Zap,
   BarChart3,
   Calendar,
+  Lock,
+  Unlock,
+  StopCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,34 +39,16 @@ import { tr } from 'date-fns/locale';
 
 export function DataManagementTab() {
   const { dataSources, isLoading: isDataSourcesLoading } = useDataSources();
-  const { syncDataSource, syncAllDataSources, isSyncing, currentSyncSource, syncProgress } = useSyncData();
   const { lastSyncTime, syncHistory, isLoading: isSyncStatusLoading } = useSyncStatus();
+  const { progress, startFullOrchestration, quickSync, abort } = useSyncOrchestrator();
   const diaProfile = useDiaProfile();
   const { data: cacheRecordCounts, isLoading: isCacheCountsLoading } = useCacheRecordCounts();
-
-  const [syncingSourceId, setSyncingSourceId] = useState<string | null>(null);
+  const { periods } = useFirmaPeriods();
 
   const activeDataSources = dataSources.filter(ds => ds.is_active);
-
-  // Kayıt sayısını cache'den al (gerçek değer)
   const getRecordCount = (slug: string) => cacheRecordCounts?.[slug] || 0;
+  const currentPeriod = periods.find(p => p.is_current);
 
-  // Tek veri kaynağını senkronize et
-  const handleSyncSource = async (dataSourceSlug: string, sourceId: string) => {
-    setSyncingSourceId(sourceId);
-    try {
-      await syncDataSource(dataSourceSlug);
-    } finally {
-      setSyncingSourceId(null);
-    }
-  };
-
-  // Tüm veri kaynaklarını senkronize et
-  const handleSyncAll = async () => {
-    await syncAllDataSources();
-  };
-
-  // Son sync zamanını formatla
   const formatSyncTime = (time: string | null) => {
     if (!time) return 'Henüz senkronize edilmedi';
     try {
@@ -97,41 +84,66 @@ export function DataManagementTab() {
             <div>
               <h3 className="text-lg font-semibold">Veri Senkronizasyonu</h3>
               <p className="text-sm text-muted-foreground">
-                DIA'dan çekilen veriler yerel veritabanında saklanır
+                DIA'dan çekilen veriler yerel veritabanında saklanır • Her gece 03:00'te otomatik güncellenir
               </p>
             </div>
           </div>
 
-          <Button
-            onClick={handleSyncAll}
-            disabled={isSyncing}
-            className="gap-2"
-          >
-            {isSyncing ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Senkronize Ediliyor...
-              </>
+          <div className="flex gap-2">
+            {progress.isRunning ? (
+              <Button onClick={abort} variant="destructive" className="gap-2">
+                <StopCircle className="h-4 w-4" />
+                Durdur
+              </Button>
             ) : (
-              <>
+              <Button onClick={() => startFullOrchestration()} disabled={progress.isRunning} className="gap-2">
                 <RefreshCw className="h-4 w-4" />
                 Tümünü Senkronize Et
-              </>
+              </Button>
             )}
-          </Button>
+          </div>
         </div>
 
-        {/* Sync Progress */}
-        {isSyncing && currentSyncSource && (
+        {/* Orchestrator Progress */}
+        {progress.isRunning && (
           <div className="mb-6 p-4 rounded-lg bg-primary/5 border border-primary/20">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                {currentSyncSource} senkronize ediliyor...
+                {progress.currentSource || 'Hazırlanıyor...'}
+                {progress.currentType === 'incremental' && (
+                  <Badge variant="secondary" className="text-xs"><Zap className="w-3 h-3 mr-1" />Artımlı</Badge>
+                )}
+                {progress.currentType === 'full' && (
+                  <Badge variant="outline" className="text-xs">Tam Sync</Badge>
+                )}
               </span>
-              <span className="text-sm text-muted-foreground">{syncProgress}%</span>
+              <span className="text-sm text-muted-foreground">%{progress.overallPercent}</span>
             </div>
-            <Progress value={syncProgress} className="h-2" />
+            <Progress value={progress.overallPercent} className="h-2 mb-2" />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{progress.totalFetched.toLocaleString('tr-TR')} kayıt çekildi</span>
+              <span>{progress.totalWritten.toLocaleString('tr-TR')} yazıldı</span>
+              <span>
+                {progress.tasks.filter(t => t.status === 'completed').length}/{progress.tasks.filter(t => t.status !== 'skipped').length} görev
+              </span>
+            </div>
+
+            {/* Task mini list */}
+            {progress.tasks.filter(t => t.status !== 'skipped').length > 1 && (
+              <div className="mt-3 space-y-1 max-h-32 overflow-y-auto">
+                {progress.tasks.filter(t => t.status !== 'skipped').map((task, idx) => (
+                  <div key={`${task.slug}-${task.periodNo}-${idx}`} className="flex items-center gap-2 text-xs">
+                    {task.status === 'completed' && <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />}
+                    {task.status === 'running' && <Loader2 className="w-3 h-3 animate-spin text-primary shrink-0" />}
+                    {task.status === 'failed' && <AlertCircle className="w-3 h-3 text-destructive shrink-0" />}
+                    {task.status === 'pending' && <Clock className="w-3 h-3 text-muted-foreground shrink-0" />}
+                    <span className="truncate flex-1">{task.name} (D{task.periodNo})</span>
+                    {task.fetched > 0 && <span className="text-muted-foreground">{task.fetched}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -171,11 +183,11 @@ export function DataManagementTab() {
 
           <div className="p-4 rounded-lg bg-secondary/30">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Zap className="h-4 w-4" />
-              <span className="text-xs">Firma / Dönem</span>
+              <Calendar className="h-4 w-4" />
+              <span className="text-xs">Aktif Dönem</span>
             </div>
             <p className="text-sm font-medium truncate">
-              {diaProfile.firmaAdi || diaProfile.firmaKodu} / {diaProfile.donemYili || diaProfile.donemKodu}
+              {currentPeriod ? `${currentPeriod.period_name || `D${currentPeriod.period_no}`}` : diaProfile.donemYili || diaProfile.donemKodu}
             </p>
           </div>
         </div>
@@ -202,71 +214,78 @@ export function DataManagementTab() {
             <div className="space-y-2">
               <TooltipProvider>
               {activeDataSources.map((ds) => {
-                  const recordCount = getRecordCount(ds.slug);
-                  const isCurrentlySyncing = syncingSourceId === ds.id || (isSyncing && currentSyncSource === ds.name);
-                  const lastFetched = ds.last_fetched_at;
+                const recordCount = getRecordCount(ds.slug);
+                const isCurrentlySyncing = progress.isRunning && progress.tasks.some(t => t.slug === ds.slug && t.status === 'running');
+                const lastFetched = ds.last_fetched_at;
 
-                  return (
-                    <div
-                      key={ds.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        {/* Status Icon */}
-                        <div className={`p-1.5 rounded ${recordCount && recordCount > 0 ? 'bg-green-500/20' : 'bg-muted'}`}>
-                          {recordCount && recordCount > 0 ? (
-                            <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <AlertCircle className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </div>
-
-                        {/* Source Info */}
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate">{ds.name}</p>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{ds.module}/{ds.method}</span>
-                            {lastFetched && (
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <span className="flex items-center gap-1">
-                                    <Calendar className="h-3 w-3" />
-                                    {formatSyncTime(lastFetched)}
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  {format(new Date(lastFetched), 'dd MMM yyyy HH:mm', { locale: tr })}
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
-                          </div>
-                        </div>
+                return (
+                  <div
+                    key={ds.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={`p-1.5 rounded ${recordCount && recordCount > 0 ? 'bg-green-500/20' : 'bg-muted'}`}>
+                        {recordCount && recordCount > 0 ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                        )}
                       </div>
 
-                      {/* Record Count Badge */}
-                      <div className="flex items-center gap-3">
-                        <Badge variant="outline" className="font-mono text-xs">
-                          {recordCount !== null ? recordCount.toLocaleString('tr-TR') : '-'} kayıt
-                        </Badge>
-
-                        {/* Sync Button */}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSyncSource(ds.slug, ds.id)}
-                          disabled={isCurrentlySyncing || isSyncing}
-                          className="h-8 w-8 p-0"
-                        >
-                          {isCurrentlySyncing ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-4 w-4" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{ds.name}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>{ds.module}/{ds.method}</span>
+                          {ds.is_period_independent && (
+                            <Badge variant="outline" className="text-[10px] px-1 py-0">Dönem Bağımsız</Badge>
                           )}
-                        </Button>
+                          {lastFetched && (
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {formatSyncTime(lastFetched)}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {format(new Date(lastFetched), 'dd MMM yyyy HH:mm', { locale: tr })}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  );
-                })}
+
+                    <div className="flex items-center gap-3">
+                      <Badge variant="outline" className="font-mono text-xs">
+                        {recordCount !== null ? recordCount.toLocaleString('tr-TR') : '-'} kayıt
+                      </Badge>
+
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const pn = currentPeriod?.period_no || parseInt(diaProfile.donemKodu || '0');
+                              if (pn) quickSync(ds.slug, pn);
+                            }}
+                            disabled={isCurrentlySyncing || progress.isRunning}
+                            className="h-8 w-8 p-0"
+                          >
+                            {isCurrentlySyncing ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Zap className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Hızlı artımlı güncelleme</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </div>
+                );
+              })}
               </TooltipProvider>
             </div>
           </ScrollArea>
@@ -292,13 +311,15 @@ export function DataManagementTab() {
                     {history.status === 'completed' ? (
                       <CheckCircle2 className="h-4 w-4 text-green-500" />
                     ) : history.status === 'failed' ? (
-                      <AlertCircle className="h-4 w-4 text-red-500" />
+                      <AlertCircle className="h-4 w-4 text-destructive" />
                     ) : (
                       <Loader2 className="h-4 w-4 animate-spin text-primary" />
                     )}
                     <span className="font-medium">{history.data_source_slug}</span>
                     <Badge variant="secondary" className="text-xs">
-                      {history.sync_type === 'full' ? 'Tam' : 'Artımlı'}
+                      {history.sync_type === 'incremental' ? (
+                        <><Zap className="w-3 h-3 mr-1" />Artımlı</>
+                      ) : history.sync_type === 'full' ? 'Tam' : 'Tekil'}
                     </Badge>
                   </div>
                   <div className="flex items-center gap-3 text-muted-foreground text-xs">
@@ -314,12 +335,12 @@ export function DataManagementTab() {
 
       {/* Info Box */}
       <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
-        <h4 className="font-medium text-primary mb-2">Senkronizasyon Hakkında</h4>
+        <h4 className="font-medium text-primary mb-2">Artımlı Senkronizasyon</h4>
         <ul className="text-sm text-muted-foreground space-y-1">
-          <li>• Veriler DIA API'den çekilip yerel veritabanında saklanır</li>
-          <li>• Geçmiş dönemler bir kez çekilir ve kilitlenir (kontör tasarrufu)</li>
-          <li>• Aktif dönemde son 2 aylık veriler artımlı güncellenir</li>
-          <li>• Her kayıt _key değerine göre güncellenir veya eklenir</li>
+          <li>• <strong>İlk çekme:</strong> Tüm veriler küçük parçalar halinde çekilir ve dönem kilitlenir</li>
+          <li>• <strong>Günlük güncelleme:</strong> Sadece yeni (_cdate) ve değişen (_date) kayıtlar çekilir</li>
+          <li>• <strong>Otomatik:</strong> Her gece 03:00'te tüm sunucularda otomatik çalışır</li>
+          <li>• <strong>Hızlı güncelleme (⚡):</strong> Anlık artımlı sync ile en güncel veriye erişin</li>
         </ul>
       </div>
     </div>
