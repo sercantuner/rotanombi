@@ -580,13 +580,184 @@ Deno.serve(async (req) => {
         updated_at: new Date().toISOString() 
       }, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug' });
       
-      // Cache kayıt sayısını güncelle
       const { data: countData } = await sb.rpc('get_cache_record_counts', { p_sunucu_adi: sun, p_firma_kodu: fk });
       const totalForSlug = countData?.find((c: any) => c.data_source_slug === dataSourceSlug)?.record_count || totalRecords;
       await sb.from('data_sources').update({ last_record_count: totalForSlug, last_fetched_at: new Date().toISOString() }).eq('slug', dataSourceSlug);
       
       console.log(`[markFullSyncComplete] ${dataSourceSlug} period ${periodNo}: marked complete with ${totalRecords} records`);
       return new Response(JSON.stringify({ success: true, message: `Full sync marked complete for ${dataSourceSlug} period ${periodNo}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ===== acquireLock - Sunucu bazlı senkronizasyon kilidi =====
+    if (action === 'acquireLock') {
+      const syncType = body.syncType || 'full';
+      const lockDurationMs = 30 * 60 * 1000; // 30 dakika
+      
+      // Süresi dolmuş kilitleri temizle
+      await sb.from('sync_locks').delete().lt('expires_at', new Date().toISOString());
+      
+      // Mevcut aktif kilit var mı?
+      const { data: existingLock } = await sb.from('sync_locks')
+        .select('*')
+        .eq('sunucu_adi', sun)
+        .eq('firma_kodu', fk)
+        .single();
+      
+      if (existingLock) {
+        console.log(`[acquireLock] Lock exists for ${sun}:${fk} by ${existingLock.locked_by_email}, expires ${existingLock.expires_at}`);
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: 'SYNC_IN_PROGRESS', 
+          lockedBy: existingLock.locked_by_email || existingLock.locked_by,
+          lockedAt: existingLock.locked_at,
+          expiresAt: existingLock.expires_at,
+          syncType: existingLock.sync_type
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      
+      // Kullanıcı email'ini al
+      const { data: prof } = await sb.from('profiles').select('email').eq('user_id', user.id).single();
+      
+      // Yeni kilit oluştur
+      const expiresAt = new Date(Date.now() + lockDurationMs).toISOString();
+      const { data: lock, error: lockErr } = await sb.from('sync_locks').insert({
+        sunucu_adi: sun,
+        firma_kodu: fk,
+        locked_by: user.id,
+        locked_by_email: prof?.email || user.email,
+        expires_at: expiresAt,
+        sync_type: syncType,
+      }).select().single();
+      
+      if (lockErr) {
+        // UNIQUE constraint violation = başka biri aynı anda kilit aldı
+        if (lockErr.code === '23505') {
+          return new Response(JSON.stringify({ success: false, error: 'SYNC_IN_PROGRESS', message: 'Concurrent lock attempt' }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        return new Response(JSON.stringify({ success: false, error: lockErr.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      
+      console.log(`[acquireLock] Lock acquired for ${sun}:${fk} by ${prof?.email}, expires ${expiresAt}`);
+      return new Response(JSON.stringify({ success: true, lockId: lock.id, expiresAt }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ===== releaseLock - Kilidi serbest bırak =====
+    if (action === 'releaseLock') {
+      const lockId = body.lockId;
+      if (lockId) {
+        await sb.from('sync_locks').delete().eq('id', lockId);
+      } else {
+        // lockId yoksa sunucu+firma bazlı temizle (güvenlik: sadece kendi kilidi)
+        await sb.from('sync_locks').delete().eq('sunucu_adi', sun).eq('firma_kodu', fk).eq('locked_by', user.id);
+      }
+      console.log(`[releaseLock] Lock released for ${sun}:${fk}`);
+      return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ===== reconcileKeys - DIA'da silinen kayıtları tespit et =====
+    if (action === 'reconcileKeys') {
+      if (!dataSourceSlug || periodNo === undefined) {
+        return new Response(JSON.stringify({ success: false, error: "dataSourceSlug and periodNo required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      
+      const { data: src } = await sb.from('data_sources').select('slug, module, method, name, selected_columns').eq('slug', dataSourceSlug).eq('is_active', true).single();
+      if (!src) return new Response(JSON.stringify({ success: false, error: `Source not found: ${dataSourceSlug}` }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      
+      console.log(`[reconcileKeys] Starting for ${src.slug} period ${periodNo}`);
+      
+      // DIA'dan sadece _key listesini çek (limit: 0 = tüm kayıtlar)
+      const sr = await ensureValidSession(sb, euid, session);
+      if (!sr.success || !sr.session) {
+        return new Response(JSON.stringify({ success: false, error: sr.error || "Session fail" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      
+      const validSession = sr.session;
+      const mod = src.module;
+      const met = src.method.startsWith(`${mod}_`) ? src.method : `${mod}_${src.method}`;
+      const url = `https://${validSession.sunucuAdi}.ws.dia.com.tr/api/v3/${mod}/json`;
+      
+      // _key listesini çekmek için selectedcolumns kullan
+      const pl: any = { [met]: { 
+        session_id: validSession.sessionId, 
+        firma_kodu: validSession.firmaKodu, 
+        donem_kodu: periodNo, 
+        limit: 0,
+        params: { selectedcolumns: ["_key"] }
+      }};
+      
+      let diaKeys = new Set<number>();
+      try {
+        const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pl) });
+        if (!res.ok) {
+          return new Response(JSON.stringify({ success: false, error: `DIA HTTP ${res.status}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        const r = await res.json();
+        if (r.msg === 'INVALID_SESSION' || r.code === '401') {
+          return new Response(JSON.stringify({ success: false, error: 'INVALID_SESSION' }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        if (r.code && r.code !== "200") {
+          return new Response(JSON.stringify({ success: false, error: r.msg || `Error ${r.code}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        const records = parse(r, met);
+        for (let i = 0; i < records.length; i++) {
+          const k = extractKey(records[i], i);
+          if (k) diaKeys.add(k);
+        }
+        console.log(`[reconcileKeys] DIA returned ${diaKeys.size} keys for ${src.slug} period ${periodNo}`);
+      } catch (e) {
+        return new Response(JSON.stringify({ success: false, error: e instanceof Error ? e.message : "Fetch error" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      
+      // DB'deki mevcut key'leri çek (is_deleted: false)
+      const { data: dbRecords, error: dbErr } = await sb.from('company_data_cache')
+        .select('dia_key')
+        .eq('sunucu_adi', sun)
+        .eq('firma_kodu', fk)
+        .eq('donem_kodu', periodNo)
+        .eq('data_source_slug', dataSourceSlug)
+        .eq('is_deleted', false);
+      
+      if (dbErr) {
+        return new Response(JSON.stringify({ success: false, error: dbErr.message }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      
+      const dbKeys = new Set((dbRecords || []).map((r: any) => Number(r.dia_key)));
+      console.log(`[reconcileKeys] DB has ${dbKeys.size} active keys for ${src.slug} period ${periodNo}`);
+      
+      // DB'de olup DIA'da olmayan key'leri bul
+      const deletedKeys: number[] = [];
+      for (const k of dbKeys) {
+        if (!diaKeys.has(k)) deletedKeys.push(k);
+      }
+      
+      // Silinen kayıtları is_deleted: true yap (batch halinde)
+      let markedDeleted = 0;
+      for (let i = 0; i < deletedKeys.length; i += 100) {
+        const batch = deletedKeys.slice(i, i + 100);
+        const { error: updErr } = await sb.from('company_data_cache')
+          .update({ is_deleted: true, updated_at: new Date().toISOString() })
+          .eq('sunucu_adi', sun)
+          .eq('firma_kodu', fk)
+          .eq('donem_kodu', periodNo)
+          .eq('data_source_slug', dataSourceSlug)
+          .in('dia_key', batch);
+        
+        if (!updErr) markedDeleted += batch.length;
+        else console.log(`[reconcileKeys] Error marking deleted:`, updErr.message);
+      }
+      
+      console.log(`[reconcileKeys] ${src.slug} period ${periodNo}: totalInDia=${diaKeys.size}, totalInDb=${dbKeys.size}, markedDeleted=${markedDeleted}`);
+      
+      // Cache kayıt sayısını güncelle
+      if (markedDeleted > 0) {
+        const { data: countData } = await sb.rpc('get_cache_record_counts', { p_sunucu_adi: sun, p_firma_kodu: fk });
+        const totalForSlug = countData?.find((c: any) => c.data_source_slug === dataSourceSlug)?.record_count || 0;
+        await sb.from('data_sources').update({ last_record_count: totalForSlug, last_fetched_at: new Date().toISOString() }).eq('slug', dataSourceSlug);
+      }
+      
+      return new Response(JSON.stringify({ 
+        success: true, totalInDia: diaKeys.size, totalInDb: dbKeys.size, markedDeleted 
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     
     const { data: ds } = await sb.from('data_sources').select('slug, module, method, name, is_period_independent, is_non_dia').eq('is_active', true);

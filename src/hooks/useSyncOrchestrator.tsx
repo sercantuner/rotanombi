@@ -1,5 +1,5 @@
 // useSyncOrchestrator - Frontend orkestrasyon hook'u
-// Chunk bazlı full sync ve incremental sync yönetimi
+// Chunk bazlı full sync, incremental sync, kilit mekanizması ve silinen kayıt tespiti
 
 import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,11 +12,8 @@ import { toast } from 'sonner';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const CHUNK_SIZE = 300;
 const MAX_RETRIES = 3;
-const RETRY_DELAYS = [2000, 4000, 8000]; // Exponential backoff
-
-// KURAL: Tüm kaynaklar küçük pageSize ile çekilir (CancelledError/timeout önlenir)
+const RETRY_DELAYS = [2000, 4000, 8000];
 const DEFAULT_PAGE_SIZE = 50;
-// Lisanssız/yetkisiz modüller - hata alınca skip edilecek
 const SKIP_ERROR_PATTERNS = ['Session refresh fail', 'dönem yetki', 'INVALID_SESSION', '404'];
 
 export interface SyncTask {
@@ -24,9 +21,10 @@ export interface SyncTask {
   name: string;
   periodNo: number;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
-  type: 'full' | 'incremental';
+  type: 'full' | 'incremental' | 'reconcile';
   fetched: number;
   written: number;
+  deleted: number;
   error?: string;
 }
 
@@ -34,11 +32,12 @@ export interface SyncProgress {
   isRunning: boolean;
   currentSource: string | null;
   currentPeriod: number | null;
-  currentType: 'full' | 'incremental' | null;
+  currentType: 'full' | 'incremental' | 'reconcile' | null;
   tasks: SyncTask[];
   overallPercent: number;
   totalFetched: number;
   totalWritten: number;
+  totalDeleted: number;
 }
 
 export function useSyncOrchestrator() {
@@ -47,6 +46,7 @@ export function useSyncOrchestrator() {
   const { dataSources } = useDataSources();
   const { periods } = useFirmaPeriods();
   const abortRef = useRef(false);
+  const lockIdRef = useRef<string | null>(null);
   
   const [progress, setProgress] = useState<SyncProgress>({
     isRunning: false,
@@ -57,6 +57,7 @@ export function useSyncOrchestrator() {
     overallPercent: 0,
     totalFetched: 0,
     totalWritten: 0,
+    totalDeleted: 0,
   });
 
   const getAuthToken = async (): Promise<string | null> => {
@@ -87,7 +88,34 @@ export function useSyncOrchestrator() {
     }
   };
 
-  // Full sync: chunk bazlı, opsiyonel pageSize ve filters desteği
+  // Kilit al
+  const acquireLock = async (syncType: string): Promise<{ success: boolean; lockId?: string; error?: string; lockedBy?: string }> => {
+    try {
+      const result = await callEdgeFunction({ action: 'acquireLock', syncType });
+      if (result.success) {
+        lockIdRef.current = result.lockId;
+        return { success: true, lockId: result.lockId };
+      }
+      return { success: false, error: result.error, lockedBy: result.lockedBy };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Lock error' };
+    }
+  };
+
+  // Kilit bırak
+  const releaseLock = async () => {
+    try {
+      if (lockIdRef.current) {
+        await callEdgeFunction({ action: 'releaseLock', lockId: lockIdRef.current });
+        lockIdRef.current = null;
+      }
+    } catch (e) {
+      console.error('[SyncOrchestrator] releaseLock error:', e);
+      lockIdRef.current = null;
+    }
+  };
+
+  // Full sync: chunk bazlı
   const syncFullChunked = async (
     slug: string, periodNo: number, taskIndex: number, 
     options?: { pageSize?: number; filters?: any[] }
@@ -116,12 +144,10 @@ export function useSyncOrchestrator() {
       hasMore = result.hasMore;
       offset = result.nextOffset || offset + CHUNK_SIZE;
 
-      // Partial error (CancelledError sonrası kurtarma)
       if (result.partialError) {
         console.log(`[SyncOrchestrator] Partial error for ${slug}: ${result.partialError}, continuing...`);
       }
 
-      // Task progress güncelle
       setProgress(prev => {
         const tasks = [...prev.tasks];
         if (tasks[taskIndex]) {
@@ -148,7 +174,29 @@ export function useSyncOrchestrator() {
     return { fetched: result.fetched || 0, written: result.written || 0 };
   };
 
-  // Aktif kaynakları filtrele (ortak yardımcı)
+  // Silinen kayıt tespiti (reconcileKeys)
+  const reconcileKeys = async (slug: string, periodNo: number): Promise<{ markedDeleted: number }> => {
+    try {
+      const result = await callEdgeFunction({
+        action: 'reconcileKeys',
+        dataSourceSlug: slug,
+        periodNo,
+      });
+
+      if (!result.success) {
+        console.log(`[SyncOrchestrator] reconcileKeys failed for ${slug} period ${periodNo}: ${result.error}`);
+        return { markedDeleted: 0 };
+      }
+
+      console.log(`[SyncOrchestrator] reconcileKeys ${slug} period ${periodNo}: DIA=${result.totalInDia}, DB=${result.totalInDb}, deleted=${result.markedDeleted}`);
+      return { markedDeleted: result.markedDeleted || 0 };
+    } catch (e) {
+      console.error(`[SyncOrchestrator] reconcileKeys error for ${slug}:`, e);
+      return { markedDeleted: 0 };
+    }
+  };
+
+  // Aktif kaynakları filtrele
   const getActiveSources = () => {
     const NON_DIA = ['takvim', '_system_calendar', 'system_calendar'];
     return dataSources.filter(ds => 
@@ -156,162 +204,213 @@ export function useSyncOrchestrator() {
     );
   };
 
-  // Tam orkestrasyon: tüm kaynakları ve dönemleri sırayla işle
+  // Cache invalidation helper
+  const invalidateCaches = () => {
+    queryClient.invalidateQueries({ queryKey: ['company-data'] });
+    queryClient.invalidateQueries({ queryKey: ['sync-history'] });
+    queryClient.invalidateQueries({ queryKey: ['cache-record-counts'] });
+    queryClient.invalidateQueries({ queryKey: ['last-sync-time'] });
+  };
+
+  // Tam orkestrasyon
   const startFullOrchestration = useCallback(async (forceIncremental = false) => {
     if (!isConfigured || progress.isRunning) return;
     abortRef.current = false;
 
     const activeSources = getActiveSources();
-
     if (activeSources.length === 0) {
       toast.info('Senkronize edilecek aktif veri kaynağı yok');
       return;
     }
 
-    // Period sync status'ları çek
-    const token = await getAuthToken();
-    if (!token) { toast.error('Oturum bulunamadı'); return; }
-    
-    const statusRes = await callEdgeFunction({ action: 'getSyncStatus' });
-    const periodStatuses = statusRes?.periodStatus || [];
-    const currentPeriod = periods.find(p => p.is_current)?.period_no || statusRes?.currentPeriod;
-
-    // Task listesi oluştur
-    const tasks: SyncTask[] = [];
-    for (const src of activeSources) {
-      const srcPeriods = src.is_period_independent 
-        ? [currentPeriod].filter(Boolean) 
-        : periods.map(p => p.period_no);
-      
-      for (const pn of srcPeriods) {
-        if (!pn) continue;
-        const pss = periodStatuses.find((ps: any) => ps.data_source_slug === src.slug && ps.donem_kodu === pn);
-        const isLocked = pss?.is_locked;
-        const hasFullSync = pss?.last_full_sync;
-        
-        if (isLocked && !forceIncremental) {
-          tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'skipped', type: 'full', fetched: 0, written: 0 });
-        } else if (hasFullSync || forceIncremental) {
-          // forceIncremental: Kullanıcı manuel artımlı sync istedi → her zaman _cdate/_date kontrolü yap
-          tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'incremental', fetched: 0, written: 0 });
-        } else {
-          tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'full', fetched: 0, written: 0 });
-        }
+    // Kilit al
+    const lockResult = await acquireLock(forceIncremental ? 'incremental' : 'full');
+    if (!lockResult.success) {
+      if (lockResult.error === 'SYNC_IN_PROGRESS') {
+        toast.error(`Senkronizasyon zaten devam ediyor (${lockResult.lockedBy || 'başka kullanıcı'})`);
+      } else {
+        toast.error(`Kilit alınamadı: ${lockResult.error}`);
       }
+      return;
     }
 
-    setProgress({
-      isRunning: true,
-      currentSource: null,
-      currentPeriod: null,
-      currentType: null,
-      tasks,
-      overallPercent: 0,
-      totalFetched: 0,
-      totalWritten: 0,
-    });
+    try {
+      const token = await getAuthToken();
+      if (!token) { toast.error('Oturum bulunamadı'); return; }
+      
+      const statusRes = await callEdgeFunction({ action: 'getSyncStatus' });
+      const periodStatuses = statusRes?.periodStatus || [];
+      const currentPeriod = periods.find(p => p.is_current)?.period_no || statusRes?.currentPeriod;
 
-    const totalTasks = tasks.filter(t => t.status !== 'skipped').length;
-    let completedTasks = 0;
-
-    for (let i = 0; i < tasks.length; i++) {
-      if (abortRef.current) break;
-      const task = tasks[i];
-      if (task.status === 'skipped') continue;
-
-      setProgress(prev => ({
-        ...prev,
-        currentSource: task.name,
-        currentPeriod: task.periodNo,
-        currentType: task.type,
-        tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'running' } : t),
-      }));
-
-      try {
-        // KURAL: Tüm kaynaklar küçük pageSize ile çekilir
-        const syncOptions = { pageSize: DEFAULT_PAGE_SIZE };
-
-        if (task.type === 'full') {
-          const result = await syncFullChunked(task.slug, task.periodNo, i, syncOptions);
+      // Task listesi oluştur
+      const tasks: SyncTask[] = [];
+      for (const src of activeSources) {
+        const srcPeriods = src.is_period_independent 
+          ? [currentPeriod].filter(Boolean) 
+          : periods.map(p => p.period_no);
+        
+        for (const pn of srcPeriods) {
+          if (!pn) continue;
+          const pss = periodStatuses.find((ps: any) => ps.data_source_slug === src.slug && ps.donem_kodu === pn);
+          const isLocked = pss?.is_locked;
+          const hasFullSync = pss?.last_full_sync;
           
-          // Full sync tamamlandı → period_sync_status'a last_full_sync yaz
-          if (result.fetched > 0) {
-            await callEdgeFunction({ 
-              action: 'markFullSyncComplete', 
-              dataSourceSlug: task.slug, 
-              periodNo: task.periodNo,
-              totalRecords: result.fetched 
-            });
-          }
-          
-          // Aktif dönem değilse kilitle
-          const isCurrentPeriod = task.periodNo === currentPeriod;
-          if (!isCurrentPeriod && result.fetched > 0) {
-            await callEdgeFunction({ action: 'lockPeriod', periodNo: task.periodNo, dataSourceSlug: task.slug });
-          }
-
-          setProgress(prev => ({
-            ...prev,
-            tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'completed', fetched: result.fetched, written: result.written } : t),
-          }));
-        } else {
-          const result = await syncIncremental(task.slug, task.periodNo);
-          
-           if (result.needsFullSync) {
-            const fullResult = await syncFullChunked(task.slug, task.periodNo, i, syncOptions);
-            if (fullResult.fetched > 0) {
-              await callEdgeFunction({ action: 'markFullSyncComplete', dataSourceSlug: task.slug, periodNo: task.periodNo, totalRecords: fullResult.fetched });
-            }
-            setProgress(prev => ({
-              ...prev,
-              tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'completed', type: 'full', fetched: fullResult.fetched, written: fullResult.written } : t),
-            }));
+          if (isLocked && !forceIncremental) {
+            // Kilitli dönemde sadece reconcileKeys çalıştır (silinen kayıt tespiti)
+            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'reconcile', fetched: 0, written: 0, deleted: 0 });
+          } else if (hasFullSync || forceIncremental) {
+            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'incremental', fetched: 0, written: 0, deleted: 0 });
           } else {
-            setProgress(prev => ({
-              ...prev,
-              tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'completed', fetched: result.fetched, written: result.written } : t),
-            }));
+            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'full', fetched: 0, written: 0, deleted: 0 });
           }
         }
-      } catch (e) {
-        const error = e instanceof Error ? e.message : 'Bilinmeyen hata';
-        const shouldSkip = SKIP_ERROR_PATTERNS.some(p => error.toLowerCase().includes(p.toLowerCase()));
-        console.error(`[SyncOrchestrator] ${shouldSkip ? 'Skipping' : 'Error'} ${task.slug} period ${task.periodNo}:`, error);
+      }
+
+      setProgress({
+        isRunning: true,
+        currentSource: null,
+        currentPeriod: null,
+        currentType: null,
+        tasks,
+        overallPercent: 0,
+        totalFetched: 0,
+        totalWritten: 0,
+        totalDeleted: 0,
+      });
+
+      const totalTasks = tasks.length;
+      let completedTasks = 0;
+
+      for (let i = 0; i < tasks.length; i++) {
+        if (abortRef.current) break;
+        const task = tasks[i];
+
         setProgress(prev => ({
           ...prev,
-          tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: shouldSkip ? 'skipped' : 'failed', error } : t),
+          currentSource: task.name,
+          currentPeriod: task.periodNo,
+          currentType: task.type,
+          tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'running' } : t),
+        }));
+
+        try {
+          const syncOptions = { pageSize: DEFAULT_PAGE_SIZE };
+
+          if (task.type === 'reconcile') {
+            // Kilitli dönem: sadece silinen kayıt kontrolü
+            const recResult = await reconcileKeys(task.slug, task.periodNo);
+            setProgress(prev => ({
+              ...prev,
+              tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'completed', deleted: recResult.markedDeleted } : t),
+              totalDeleted: prev.totalDeleted + recResult.markedDeleted,
+            }));
+          } else if (task.type === 'full') {
+            const result = await syncFullChunked(task.slug, task.periodNo, i, syncOptions);
+            
+            if (result.fetched > 0) {
+              await callEdgeFunction({ 
+                action: 'markFullSyncComplete', 
+                dataSourceSlug: task.slug, 
+                periodNo: task.periodNo,
+                totalRecords: result.fetched 
+              });
+            }
+            
+            // Aktif dönem değilse kilitle
+            const isCurrentPeriod = task.periodNo === currentPeriod;
+            if (!isCurrentPeriod && result.fetched > 0) {
+              await callEdgeFunction({ action: 'lockPeriod', periodNo: task.periodNo, dataSourceSlug: task.slug });
+            }
+
+            // Sync sonrası silinen kayıt kontrolü
+            let deletedCount = 0;
+            if (!abortRef.current) {
+              const recResult = await reconcileKeys(task.slug, task.periodNo);
+              deletedCount = recResult.markedDeleted;
+            }
+
+            setProgress(prev => ({
+              ...prev,
+              tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'completed', fetched: result.fetched, written: result.written, deleted: deletedCount } : t),
+              totalDeleted: prev.totalDeleted + deletedCount,
+            }));
+          } else {
+            // Incremental
+            const result = await syncIncremental(task.slug, task.periodNo);
+            
+            if (result.needsFullSync) {
+              const fullResult = await syncFullChunked(task.slug, task.periodNo, i, syncOptions);
+              if (fullResult.fetched > 0) {
+                await callEdgeFunction({ action: 'markFullSyncComplete', dataSourceSlug: task.slug, periodNo: task.periodNo, totalRecords: fullResult.fetched });
+              }
+
+              // Full sync sonrası reconcile
+              let deletedCount = 0;
+              if (!abortRef.current) {
+                const recResult = await reconcileKeys(task.slug, task.periodNo);
+                deletedCount = recResult.markedDeleted;
+              }
+
+              setProgress(prev => ({
+                ...prev,
+                tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'completed', type: 'full', fetched: fullResult.fetched, written: fullResult.written, deleted: deletedCount } : t),
+                totalDeleted: prev.totalDeleted + deletedCount,
+              }));
+            } else {
+              // Incremental sonrası reconcile
+              let deletedCount = 0;
+              if (!abortRef.current) {
+                const recResult = await reconcileKeys(task.slug, task.periodNo);
+                deletedCount = recResult.markedDeleted;
+              }
+
+              setProgress(prev => ({
+                ...prev,
+                tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'completed', fetched: result.fetched, written: result.written, deleted: deletedCount } : t),
+                totalDeleted: prev.totalDeleted + deletedCount,
+              }));
+            }
+          }
+        } catch (e) {
+          const error = e instanceof Error ? e.message : 'Bilinmeyen hata';
+          const shouldSkip = SKIP_ERROR_PATTERNS.some(p => error.toLowerCase().includes(p.toLowerCase()));
+          console.error(`[SyncOrchestrator] ${shouldSkip ? 'Skipping' : 'Error'} ${task.slug} period ${task.periodNo}:`, error);
+          setProgress(prev => ({
+            ...prev,
+            tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: shouldSkip ? 'skipped' : 'failed', error } : t),
+          }));
+        }
+
+        completedTasks++;
+        setProgress(prev => ({
+          ...prev,
+          overallPercent: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 100,
         }));
       }
 
-      completedTasks++;
+      // Tamamlandı
       setProgress(prev => ({
         ...prev,
-        overallPercent: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 100,
+        isRunning: false,
+        currentSource: null,
+        currentPeriod: null,
+        currentType: null,
+        overallPercent: 100,
       }));
-    }
 
-    // Tamamlandı
-    setProgress(prev => ({
-      ...prev,
-      isRunning: false,
-      currentSource: null,
-      currentPeriod: null,
-      currentType: null,
-      overallPercent: 100,
-    }));
+      invalidateCaches();
 
-    // Cache'leri invalidate et
-    queryClient.invalidateQueries({ queryKey: ['company-data'] });
-    queryClient.invalidateQueries({ queryKey: ['sync-history'] });
-    queryClient.invalidateQueries({ queryKey: ['cache-record-counts'] });
-    queryClient.invalidateQueries({ queryKey: ['last-sync-time'] });
-
-    const failedCount = tasks.filter(t => t.status === 'failed').length;
-    const completedCount = tasks.filter(t => t.status === 'completed').length;
-    if (failedCount === 0) {
-      toast.success(`Senkronizasyon tamamlandı (${completedCount} görev)`);
-    } else {
-      toast.warning(`${completedCount} başarılı, ${failedCount} başarısız`);
+      const failedCount = tasks.filter(t => t.status === 'failed').length;
+      const completedCount = tasks.filter(t => t.status === 'completed').length;
+      const totalDeleted = tasks.reduce((sum, t) => sum + t.deleted, 0);
+      
+      if (failedCount === 0) {
+        toast.success(`Senkronizasyon tamamlandı (${completedCount} görev${totalDeleted > 0 ? `, ${totalDeleted} silinen kayıt tespit edildi` : ''})`);
+      } else {
+        toast.warning(`${completedCount} başarılı, ${failedCount} başarısız`);
+      }
+    } finally {
+      await releaseLock();
     }
   }, [isConfigured, dataSources, periods, progress.isRunning, queryClient]);
 
@@ -321,13 +420,24 @@ export function useSyncOrchestrator() {
     const source = dataSources.find(ds => ds.slug === slug);
     if (!source) return;
 
+    // Kilit al
+    const lockResult = await acquireLock('incremental');
+    if (!lockResult.success) {
+      if (lockResult.error === 'SYNC_IN_PROGRESS') {
+        toast.error(`Senkronizasyon zaten devam ediyor (${lockResult.lockedBy || 'başka kullanıcı'})`);
+      } else {
+        toast.error(`Kilit alınamadı: ${lockResult.error}`);
+      }
+      return;
+    }
+
     setProgress(prev => ({
       ...prev,
       isRunning: true,
       currentSource: source.name,
       currentPeriod: periodNo,
       currentType: 'incremental',
-      tasks: [{ slug, name: source.name, periodNo, status: 'running', type: 'incremental', fetched: 0, written: 0 }],
+      tasks: [{ slug, name: source.name, periodNo, status: 'running', type: 'incremental', fetched: 0, written: 0, deleted: 0 }],
       overallPercent: 0,
     }));
 
@@ -340,9 +450,13 @@ export function useSyncOrchestrator() {
         if (fullResult.fetched > 0) {
           await callEdgeFunction({ action: 'markFullSyncComplete', dataSourceSlug: slug, periodNo, totalRecords: fullResult.fetched });
         }
-        toast.success(`${source.name}: ${fullResult.fetched} kayıt çekildi (tam sync)`);
+        // Reconcile
+        const recResult = await reconcileKeys(slug, periodNo);
+        toast.success(`${source.name}: ${fullResult.fetched} kayıt çekildi (tam sync)${recResult.markedDeleted > 0 ? `, ${recResult.markedDeleted} silinen tespit edildi` : ''}`);
       } else {
-        toast.success(`${source.name}: ${result.fetched} yeni/güncellenen kayıt`);
+        // Reconcile
+        const recResult = await reconcileKeys(slug, periodNo);
+        toast.success(`${source.name}: ${result.fetched} yeni/güncellenen kayıt${recResult.markedDeleted > 0 ? `, ${recResult.markedDeleted} silinen tespit edildi` : ''}`);
       }
     } catch (e) {
       const error = e instanceof Error ? e.message : 'Hata';
@@ -356,9 +470,8 @@ export function useSyncOrchestrator() {
         currentType: null,
         overallPercent: 100,
       }));
-      queryClient.invalidateQueries({ queryKey: ['company-data'] });
-      queryClient.invalidateQueries({ queryKey: ['cache-record-counts'] });
-      queryClient.invalidateQueries({ queryKey: ['last-sync-time'] });
+      await releaseLock();
+      invalidateCaches();
     }
   }, [dataSources, progress.isRunning, queryClient]);
 
@@ -367,7 +480,6 @@ export function useSyncOrchestrator() {
     toast.info('Senkronizasyon durduruluyor...');
   }, []);
 
-  // Artımlı senkronizasyon: tüm kaynaklar için _cdate/_date kontrolü
   const startIncrementalAll = useCallback(async () => {
     return startFullOrchestration(true);
   }, [startFullOrchestration]);
