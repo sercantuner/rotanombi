@@ -123,7 +123,8 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     donemKodu: number,
     requiredFields?: string[]
   ): Promise<any[]> => {
-    const PAGE_SIZE = 1000;
+    // scf_fatura_listele fallback'inde timeout önlemek için küçük PAGE_SIZE
+    const PAGE_SIZE = dataSource.slug === 'scf_fatura_listele' ? 200 : 1000;
     const useProjection = requiredFields && requiredFields.length > 0;
     let allData: any[] = [];
     let from = 0;
@@ -218,8 +219,22 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
     const isPeriodIndependent = dataSource.is_period_independent === true;
 
     try {
+      // period_read_mode kontrolü
+      const readMode = dataSource.period_read_mode || 'all_periods';
+      
+      if (isPeriodIndependent && readMode === 'current_only') {
+        // MASTERDATA: Sadece aktif dönemden oku, period-batch yapma
+        console.log(`[DataSourceLoader] CURRENT_ONLY: ${dataSource.name} - only period ${effectiveDonem}`);
+        const data = await fetchPeriodData(dataSource, sunucuAdi, firmaKodu, effectiveDonem, requiredFields);
+        if (data.length > 0) {
+          console.log(`[DataSourceLoader] CURRENT_ONLY HIT: ${dataSource.name} (${data.length} kayıt, dönem: ${effectiveDonem})`);
+          return { data, resolvedDonem: effectiveDonem };
+        }
+        return { data: null, resolvedDonem: effectiveDonem };
+      }
+
       if (isPeriodIndependent) {
-        // PERIOD-BATCHED: Önce mevcut dönemleri tespit et, sonra her biri için ayrı sorgu at
+        // PERIOD-BATCHED: Önce mevcut dönemleri tespit et, sonra her biri için ayrı sorgu at (transaction kaynakları)
         const { data: periodsData, error: periodsError } = await supabase
           .from('company_data_cache')
           .select('donem_kodu')

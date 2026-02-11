@@ -46,6 +46,7 @@ export interface DataSource {
   is_shared: boolean;
   is_period_independent: boolean; // Dönem bağımsız mı?
   is_non_dia: boolean; // DIA dışı kaynak mı?
+  period_read_mode: 'current_only' | 'all_periods'; // Dönem okuma modu
   
   created_at: string;
   updated_at: string;
@@ -98,6 +99,7 @@ export function useDataSources() {
         model_position: (ds as any).model_position as { x: number; y: number } | null,
         is_period_independent: ds.is_period_independent ?? false,
         is_non_dia: (ds as any).is_non_dia ?? false,
+        period_read_mode: (ds as any).period_read_mode ?? 'all_periods',
       })) as DataSource[];
     },
   });
