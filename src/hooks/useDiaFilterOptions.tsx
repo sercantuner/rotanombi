@@ -153,6 +153,34 @@ export function useDiaFilterOptions(): DiaFilterOptionsResult {
     }
   }, []);
 
+  // Fetch satış elemanlarını önce DB cache'den, yoksa DIA API'den çek
+  const fetchSatisElemanlariFromCache = useCallback(async (): Promise<string[]> => {
+    if (!sunucuAdi || !firmaKodu) return [];
+    try {
+      const { data, error } = await supabase
+        .from('company_data_cache')
+        .select('data')
+        .eq('data_source_slug', 'scf_satiselemani_listele')
+        .eq('sunucu_adi', sunucuAdi)
+        .eq('firma_kodu', firmaKodu)
+        .eq('is_deleted', false);
+      
+      if (!error && data && data.length > 0) {
+        const reps = data
+          .map((r: any) => {
+            const d = r.data as any;
+            return d?.satiselemani || d?.aciklama || '';
+          })
+          .filter((s: string) => s && s.trim());
+        console.log(`[DiaFilterOptions] Fetched ${reps.length} sales reps from DB cache`);
+        return reps;
+      }
+    } catch (e) {
+      console.warn('[DiaFilterOptions] DB cache read error for satiselemani:', e);
+    }
+    return [];
+  }, [sunucuAdi, firmaKodu]);
+
   // Fetch from DIA API (satış temsilcileri, özel kodlar, şehirler)
   const fetchFromDia = useCallback(async (): Promise<Partial<FilterOptions>> => {
     const result: Partial<FilterOptions> = {
@@ -171,27 +199,31 @@ export function useDiaFilterOptions(): DiaFilterOptionsResult {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return result;
 
-      // Fetch satış temsilcileri from sis_satiselemani
-      // NOT: Bu endpoint bazı DIA sunucularında mevcut olmayabilir (404)
-      try {
-        const satisElemaniResult = await makeDiaApiCall(
-          session,
-          'sis',
-          'satiselemani_listele',
-          ['satiselemani', 'aciklama']
-        );
+      // Satış elemanlarını önce DB cache'den dene
+      const cachedReps = await fetchSatisElemanlariFromCache();
+      if (cachedReps.length > 0) {
+        result.satisTemsilcileri = cachedReps;
+      } else {
+        // DB'de yoksa DIA API'den çek
+        try {
+          const satisElemaniResult = await makeDiaApiCall(
+            session,
+            'scf',
+            'satiselemani_listele',
+            ['satiselemani', 'aciklama']
+          );
 
-        if (satisElemaniResult?.success && satisElemaniResult?.sampleData) {
-          result.satisTemsilcileri = satisElemaniResult.sampleData
-            .map((s: any) => s.satiselemani || s.aciklama || '')
-            .filter((s: string) => s && s.trim());
-          console.log(`[DiaFilterOptions] Fetched ${result.satisTemsilcileri?.length} sales reps`);
-        } else if (satisElemaniResult?.error) {
-          console.warn(`[DiaFilterOptions] Satış temsilcisi listesi alınamadı: ${satisElemaniResult.error}`);
+          if (satisElemaniResult?.success && satisElemaniResult?.sampleData) {
+            result.satisTemsilcileri = satisElemaniResult.sampleData
+              .map((s: any) => s.satiselemani || s.aciklama || '')
+              .filter((s: string) => s && s.trim());
+            console.log(`[DiaFilterOptions] Fetched ${result.satisTemsilcileri?.length} sales reps from DIA API`);
+          } else if (satisElemaniResult?.error) {
+            console.warn(`[DiaFilterOptions] Satış temsilcisi listesi alınamadı: ${satisElemaniResult.error}`);
+          }
+        } catch (salesRepError) {
+          console.warn('[DiaFilterOptions] Satış temsilcisi listesi çekilirken hata:', salesRepError);
         }
-      } catch (salesRepError) {
-        console.warn('[DiaFilterOptions] Satış temsilcisi listesi çekilirken hata (endpoint mevcut olmayabilir):', salesRepError);
-        // Hata durumunda boş dizi bırak, dashboard çökmesin
       }
 
       // Fetch özel kodlar (sis_ozelkod) - bunlar cari kartlara ait özel kodlar
@@ -278,7 +310,7 @@ export function useDiaFilterOptions(): DiaFilterOptionsResult {
     }
 
     return result;
-  }, [user, isDiaConnected, makeDiaApiCall]);
+  }, [user, isDiaConnected, makeDiaApiCall, fetchSatisElemanlariFromCache]);
 
   // Main fetch function
   const fetchFilterOptions = useCallback(async () => {
