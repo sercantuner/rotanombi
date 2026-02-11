@@ -12,6 +12,7 @@ interface CompanyDataFilter {
   donemKodu?: number;
   includeDeleted?: boolean;
   isPeriodIndependent?: boolean;
+  periodReadMode?: 'current_only' | 'all_periods';
   requiredFields?: string[];
 }
 
@@ -52,7 +53,8 @@ export function useCompanyData(filter: CompanyDataFilter) {
         return [];
       }
 
-      const PAGE_SIZE = 1000;
+      // scf_fatura_listele gibi büyük JSONB kaynaklarda timeout önlemek için küçük PAGE_SIZE
+      const PAGE_SIZE = filter.dataSourceSlug === 'scf_fatura_listele' ? 200 : 1000;
       const useProjection = filter.requiredFields && filter.requiredFields.length > 0;
 
       // Helper: Tek dönem için sayfalayarak veri çeker
@@ -106,8 +108,17 @@ export function useCompanyData(filter: CompanyDataFilter) {
         return periodData;
       };
 
+      // period_read_mode kontrolü: current_only ise sadece aktif dönem
+      const readMode = filter.periodReadMode || 'all_periods';
+      
+      if (filter.isPeriodIndependent && readMode === 'current_only') {
+        // MASTERDATA: Sadece aktif dönemden oku, period-batch yapma
+        console.log(`[useCompanyData] CURRENT_ONLY: ${filter.dataSourceSlug} - only period ${effectiveDonem}`);
+        return await fetchPeriod(effectiveDonem);
+      }
+
       if (filter.isPeriodIndependent) {
-        // PERIOD-BATCHED: Mevcut dönemleri tespit et, her biri için ayrı sorgu at
+        // PERIOD-BATCHED: Mevcut dönemleri tespit et, her biri için ayrı sorgu at (transaction kaynakları)
         const { data: periodsData, error: periodsError } = await supabase
           .from('company_data_cache')
           .select('donem_kodu')
