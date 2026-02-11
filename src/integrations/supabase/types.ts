@@ -217,6 +217,7 @@ export type Database = {
           module: string
           name: string
           period_config: Json | null
+          period_read_mode: string | null
           refresh_schedule: string | null
           selected_columns: string[] | null
           slug: string
@@ -246,6 +247,7 @@ export type Database = {
           module: string
           name: string
           period_config?: Json | null
+          period_read_mode?: string | null
           refresh_schedule?: string | null
           selected_columns?: string[] | null
           slug: string
@@ -275,6 +277,7 @@ export type Database = {
           module?: string
           name?: string
           period_config?: Json | null
+          period_read_mode?: string | null
           refresh_schedule?: string | null
           selected_columns?: string[] | null
           slug?: string
