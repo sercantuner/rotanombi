@@ -46,7 +46,7 @@ export function StatCard({
       <div className="flex items-start justify-between gap-1.5">
         <div className="flex-1 min-w-0">
           <p className="metric-label mb-0.5 line-clamp-2 min-h-[1.75rem] md:min-h-[2rem] text-[10px] md:text-xs">{title}</p>
-          <p className={`metric-value text-base md:text-xl ${variantStyles[variant]}`}>{value}</p>
+          <p className={`metric-value text-sm md:text-lg lg:text-xl truncate ${variantStyles[variant]}`}>{value}</p>
           {subtitle && (
             <p className="text-[9px] md:text-[10px] text-muted-foreground mt-0.5 truncate">{subtitle}</p>
           )}

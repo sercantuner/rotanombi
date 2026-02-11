@@ -158,7 +158,7 @@ export function FilterableStatCard({
           <div className="flex-1 min-w-0 flex flex-col justify-center">
             <p className="metric-label mb-0.5 md:mb-1 line-clamp-2 min-h-[2rem] md:min-h-[2.5rem] text-xs md:text-sm">{title}</p>
             <p className={cn(
-              'metric-value truncate text-lg md:text-2xl',
+              'metric-value truncate text-sm md:text-lg lg:text-2xl',
               variantStyles[variant],
               fontSizeClasses[kpiSettings.fontSize]
             )}>
