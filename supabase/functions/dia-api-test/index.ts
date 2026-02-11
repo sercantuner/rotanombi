@@ -250,7 +250,7 @@ serve(async (req) => {
       method, 
       limit, // undefined olursa limitsiz çeker
       filters, 
-      selectedColumns = [], 
+      selectedColumns, 
       orderby = '',
       rawMode = false,
       rawPayload = '',
@@ -555,12 +555,13 @@ serve(async (req) => {
       }
 
       // Seçili kolonları ekle - DIA API formatı: params objesi içinde array
-      if (selectedColumns.length > 0) {
+      const effectiveColumns = selectedColumns || [];
+      if (effectiveColumns.length > 0) {
         if (!payload[methodKey].params) {
           payload[methodKey].params = {};
         }
-        payload[methodKey].params.selectedcolumns = selectedColumns;
-        console.log(`[DIA] Selected columns: ${selectedColumns.length} fields`);
+        payload[methodKey].params.selectedcolumns = effectiveColumns;
+        console.log(`[DIA] Selected columns: ${effectiveColumns.length} fields`);
       }
 
       // Sıralama ekle
