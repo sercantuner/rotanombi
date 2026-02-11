@@ -655,7 +655,7 @@ async function fetchFromDatabase(
   isPeriodIndependent: boolean = false,
   requiredFields?: string[]
 ): Promise<DbFetchResult> {
-  const PAGE_SIZE = 1000;
+  const PAGE_SIZE = dataSourceSlug === 'scf_fatura_listele' ? 200 : 1000;
   let allData: any[] = [];
   let from = 0;
   let hasMore = true;
@@ -1217,9 +1217,12 @@ export function useDynamicWidgetData(
       };
       
       // Helper: DataSource ID'den period-independent flag al
+      // period_read_mode === 'current_only' ise period-independent olarak işleme - sadece aktif dönemden oku
       const isPeriodIndependent = (dataSourceId: string): boolean => {
         const dataSource = ds.find(d => d.id === dataSourceId);
-        return dataSource?.is_period_independent === true;
+        if (!dataSource) return false;
+        if (dataSource.period_read_mode === 'current_only') return false;
+        return dataSource.is_period_independent === true;
       };
       
       // Sonuç: lastSyncedAt bilgisini de takip ediyoruz
