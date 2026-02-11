@@ -1,58 +1,119 @@
 
+# Performans Optimizasyonu ve Cron Senkronizasyon Planı
 
-# Nakit Akis Yaslandirmasi - Gun Kaydirma Parametresi
+## Tespit Edilen 3 Sorun
 
-## Amac
+### 1. Cron Senkronizasyon Hiç Calismiyordu
+`pg_cron` ve `pg_net` extension'ları aktif ancak `cron.job` tablosu tamamen bos. Yani cron job **hic olusturulmamis**. `handleCronSync` fonksiyonu hazir ama onu tetikleyecek zamanlanmis gorev yok. Bu yuzden veriler 138 saattir otomatik guncellenmedi.
 
-Widget'a bir "Gun Kaydirma" sayisal parametresi eklenecek. Bu parametre, vade tarihlerini belirtilen gun sayisi kadar ileri (+) veya geri (-) kaydirarak "what-if" analizi yapilmasini saglayacak. Ornegin kullanici "+15" girerse tum vade tarihleri 15 gun ileri alinir, boylece 15 gun sonrasinin yaslandirma gorunumu simule edilir.
+**Cozum:** `pg_cron` ile `dia-data-sync` edge function'a `cronSync` action'i gonderen bir zamanlanmis gorev olusturulacak. Gece 03:00 (TR saati, UTC 00:00) calisan bir cron job eklenecek.
 
-## Degisiklikler
+### 2. scf_fatura_listele Timeout Sorunu
+30,000+ kayitli fatura tablosu statement timeout veriyor. `useCompanyData` ve `useDataSourceLoader` icerisindeki `fetchPeriodData` fonksiyonu 1000'lik PAGE_SIZE ile sayfalama yapiyor ama buyuk JSONB veri setlerinde bu yeterli degil.
 
-Tek dosya degisecek: **widgets tablosundaki** `ai_nakit_akis_yaslandirma_analizi_mlb4hlt1` widget'inin `builder_config.customCode` alani.
+**Cozum:**
+- `fetchPeriodData` icerisinde `scf_fatura_listele` icin `get_invoice_summary` RPC'si zaten kullaniliyor (MV optimizasyonu). Ancak MV bos oldugunda fallback olarak full JSONB sorgusu yapiliyor ve bu timeout'a neden oluyor.
+- Fallback sorgusunda PAGE_SIZE'i 1000'den 200'e dusurulecek.
+- Ayrica `useCompanyData`'daki period-batched fetching'de de ayni PAGE_SIZE optimizasyonu uygulanacak.
 
-### 1. Parametre Tanimi Ekleme
+### 3. Period-Independent Kaynaklar Gereksiz Cok Donem Cekiyor
+`Kasa Kart Listesi`, `Banka_Hesap_listesi`, `cari_kart_listesi`, `Stok_listesi`, `kullanici_listele`, `Görev Listesi`, `sis_kayit_listele`, `Cari_vade_bakiye_listele` gibi kaynaklar `is_period_independent: true` olarak isaretli.
 
-`Widget.parameters` dizisine yeni bir `number` tipinde parametre eklenecek:
+**Veri okuma katmaninda (useDataSourceLoader + useCompanyData):** Period-independent kaynaklar tum donemlerdeki veriyi cekip birlestiriyor. Bu "Kasa Kart Listesi" gibi masterdata icin gereksiz - sadece aktif donemdeki guncel veriyi almak yeterli.
 
+**Senkronizasyon katmaninda (useSyncOrchestrator):** Period-independent kaynaklar zaten sadece `currentPeriod`'dan senkronize ediliyor (dogru). Ancak daha once eski donemlere de senkronize edilmis veriler veritabaninda kaldigindan, okuma katmani bunlari da cekiyor.
+
+**Cozum:**
+- `is_period_independent` kaynaklar icin "masterdata" ve "transaction" ayrimi yapilacak:
+  - **Masterdata kaynaklari** (Kasa Kart, Banka Hesap, Stok, Cari Kart, Kullanici, Gorev): Sadece aktif donemden okunacak, period-batched fetching bypass edilecek.
+  - **Transaction kaynaklari** (scf_fatura_listele, Cari_vade_bakiye): Tum donemleri birlestirmeye devam edecek (yillar arasi karsilastirma icin).
+- Bunu ayirt etmek icin `data_sources` tablosuna `period_read_mode` kolonu eklenecek: `'current_only'` veya `'all_periods'`. Default: `'all_periods'` (mevcut davranis korunur).
+
+---
+
+## Teknik Uygulama Detaylari
+
+### Adim 1: Cron Job Olusturma (SQL)
+```sql
+SELECT cron.schedule(
+  'dia-nightly-sync',
+  '0 0 * * *',  -- UTC 00:00 = TR 03:00
+  $$
+  SELECT net.http_post(
+    url := 'https://sdlfeyxgojncjgayktfm.supabase.co/functions/v1/dia-data-sync',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-cron-secret', current_setting('app.settings.cron_secret', true)
+    ),
+    body := '{"action":"cronSync"}'::jsonb
+  ) AS request_id;
+  $$
+);
 ```
-{ key: 'gunKaydirma', label: 'Gun Kaydirma', type: 'number', defaultValue: 0 }
+Not: `CRON_SECRET` zaten secrets'ta mevcut. Ancak pg_cron icerisinden secret'a erisim farkli calisir - body icerisinde gondermek gerekecek:
+```sql
+SELECT cron.schedule(
+  'dia-nightly-sync',
+  '0 0 * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://sdlfeyxgojncjgayktfm.supabase.co/functions/v1/dia-data-sync',
+    headers := '{"Content-Type": "application/json"}'::jsonb,
+    body := '{"action":"cronSync","cronSecret":"ACTUAL_SECRET_VALUE"}'::jsonb
+  ) AS request_id;
+  $$
+);
 ```
 
-### 2. Parametre Okuma
+### Adim 2: data_sources Tablosuna period_read_mode Kolonu
+```sql
+ALTER TABLE data_sources 
+ADD COLUMN period_read_mode TEXT DEFAULT 'all_periods' 
+CHECK (period_read_mode IN ('current_only', 'all_periods'));
 
-Widget fonksiyonunun basinda mevcut `filters` okumasina ek olarak:
+-- Masterdata kaynakları: sadece aktif dönemden okunacak
+UPDATE data_sources SET period_read_mode = 'current_only' 
+WHERE slug IN (
+  'Kasa Kart Listesi', 'Banka_Hesap_listesi', 'cari_kart_listesi',
+  'Stok_listesi', 'kullanici_listele', 'Görev Listesi', 'sis_kayit_listele'
+);
 
-```
-var gunKaydirma = parseInt(filters && filters.gunKaydirma) || 0;
-```
-
-### 3. Vade Tarihi Manipulasyonu
-
-`processedData` icindeki hareket dongusu icerisinde, `vadeTarihi` hesaplandiktan hemen sonra gun kaydirma uygulanacak:
-
-```
-// Mevcut kod:
-var vadeTarihi = new Date(vadeStr);
-vadeTarihi.setHours(0, 0, 0, 0);
-
-// Yeni ekleme:
-vadeTarihi.setDate(vadeTarihi.getDate() + gunKaydirma);
+-- Transaction kaynakları: tüm dönemlerden okunacak (mevcut davranış)
+UPDATE data_sources SET period_read_mode = 'all_periods'
+WHERE slug IN ('scf_fatura_listele', 'Cari_vade_bakiye_listele');
 ```
 
-Bu sayede `diffDays` hesabi otomatik olarak kaydirmali tarihe gore yapilacak ve tum bucket dagilimlari buna gore degisecek.
+### Adim 3: useDataSourceLoader.tsx Degisiklikleri
+`loadDataSourceFromDatabase` fonksiyonunda `isPeriodIndependent` kontrolune `period_read_mode` eklenmesi:
 
-### 4. Baslik Gostergesi
+- `period_read_mode === 'current_only'`: Sadece `effectiveDonem` (aktif donem) icin tek sorgu atilir. Period-batched fetching atlanir.
+- `period_read_mode === 'all_periods'` (veya undefined): Mevcut period-batched davranis korunur.
 
-`gunKaydirma !== 0` ise baslikta kucuk bir bilgilendirme etiketi gosterilecek (ornek: "+15 gun kaydirma" veya "-10 gun kaydirma").
+`useDataSources` hook'undan donen `DataSource` tipine `period_read_mode` alani eklenir.
 
-### 5. useMemo Bagimliliklari
+### Adim 4: useCompanyData.tsx Degisiklikleri
+Ayni mantik `useCompanyData`'ya da uygulanir:
+- `filter.isPeriodIndependent && period_read_mode === 'current_only'` ise period discovery yerine dogrudan aktif donem sorgusu yapilir.
 
-`processedData`'nin `useMemo` bagimlilik dizisine `gunKaydirma` eklenecek, boylece parametre degistiginde grafik yeniden hesaplanacak.
+### Adim 5: scf_fatura_listele Timeout Icin PAGE_SIZE Optimizasyonu
+`useDataSourceLoader.tsx` > `fetchPeriodData` icerisinde, fallback (MV bos oldugunda) sorgusunda PAGE_SIZE'i 200'e dusurme:
+```typescript
+const PAGE_SIZE = dataSource.slug === 'scf_fatura_listele' ? 200 : 1000;
+```
 
-## Teknik Detay
+---
 
-- Widget'in `builder_config` JSON'u veritabaninda guncellenerek `customCode` degistirilecek
-- Mevcut filtreler ve parametreler korunacak, sadece yeni parametre eklenmis olacak
-- `number` tipi parametre, widget filtre panelinde sayi girisi olarak gosterilecek
-- Varsayilan deger 0 oldugu icin mevcut davranis degismeyecek
+## Degisecek Dosyalar
 
+| Dosya | Degisiklik |
+|-------|-----------|
+| SQL (cron.schedule) | Cron job olusturma |
+| SQL (migration) | `period_read_mode` kolonu ekleme + veri guncelleme |
+| `src/hooks/useDataSources.tsx` | `DataSource` tipine `period_read_mode` ekleme |
+| `src/hooks/useDataSourceLoader.tsx` | Period-independent okuma mantigi: `current_only` vs `all_periods` |
+| `src/hooks/useCompanyData.tsx` | Ayni period-read-mode mantigi |
+
+## Risk Degerlendirmesi
+- Cron job eklenmesi sifir risk - mevcut altyapi hazir.
+- `period_read_mode` default `'all_periods'` oldugundan mevcut davranis bozulmaz.
+- PAGE_SIZE degisikligi sadece fallback senaryosunu etkiler (MV aktifse zaten MV kullanilir).
