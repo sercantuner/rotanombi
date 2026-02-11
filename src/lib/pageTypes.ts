@@ -73,7 +73,7 @@ export const CONTAINER_TEMPLATES: {
     description: '5 adet KPI kartı yan yana',
     icon: 'LayoutGrid',
     slots: 5,
-    gridClass: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-0.5 md:gap-1',
+    gridClass: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-0.5 md:gap-1',
   },
   {
     id: 'kpi_row_4',
