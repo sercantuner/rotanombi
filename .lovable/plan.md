@@ -1,105 +1,45 @@
 
-# Performans Optimizasyonu ve Cron Senkronizasyon Planı
+# Veri Yükleme Sorunları - Analiz ve Düzeltme Planı
 
-## Tespit Edilen 3 Sorun
+## Tespit Edilen Sorunlar
 
-### 1. Cron Senkronizasyon Hiç Calismiyordu
-`pg_cron` ve `pg_net` extension'ları aktif ancak `cron.job` tablosu tamamen bos. Yani cron job **hic olusturulmamis**. `handleCronSync` fonksiyonu hazir ama onu tetikleyecek zamanlanmis gorev yok. Bu yuzden veriler 138 saattir otomatik guncellenmedi.
+### Sorun 1: Net Satış Cirosu ve Fatura Sayısı - "pending" durumunda kalıyor
+**Kök Neden:** `invoice_summary_mv` materialized view var ama **populate edilmemiş** (REFRESH yapılmamış). `get_invoice_summary` RPC bu MV'den veri çekiyor, boş dönünce fallback olarak 9 dönemden 52.000+ ham JSONB kaydı çekmeye çalışıyor ve timeout oluyor.
 
-**Cozum:** `pg_cron` ile `dia-data-sync` edge function'a `cronSync` action'i gonderen bir zamanlanmis gorev olusturulacak. Gece 03:00 (TR saati, UTC 00:00) calisan bir cron job eklenecek.
+Ek olarak, `useDynamicWidgetData.tsx` icerisindeki `fetchFromDatabase` fonksiyonu `period_read_mode` parametresini **hiç kontrol etmiyor**. `isPeriodIndependent=true` olan kaynaklar için donem filtresi kaldırılıyor ve tüm dönemler çekilmeye çalışılıyor.
 
-### 2. scf_fatura_listele Timeout Sorunu
-30,000+ kayitli fatura tablosu statement timeout veriyor. `useCompanyData` ve `useDataSourceLoader` icerisindeki `fetchPeriodData` fonksiyonu 1000'lik PAGE_SIZE ile sayfalama yapiyor ama buyuk JSONB veri setlerinde bu yeterli degil.
+### Sorun 2: Nakit Akış Yaşlandırması - veri var ama göstermiyor
+Konsol logları widget'ın 2088 kayıt aldığını gösteriyor (`hasData: true, rawDataLength: 2088`). Veri yüklenmiş durumda. Bu widget `Cari_vade_bakiye_listele` + `cari_kart_listesi` kullanıyor ve her ikisi de artık `current_only` modunda. 
 
-**Cozum:**
-- `fetchPeriodData` icerisinde `scf_fatura_listele` icin `get_invoice_summary` RPC'si zaten kullaniliyor (MV optimizasyonu). Ancak MV bos oldugunda fallback olarak full JSONB sorgusu yapiliyor ve bu timeout'a neden oluyor.
-- Fallback sorgusunda PAGE_SIZE'i 1000'den 200'e dusurulecek.
-- Ayrica `useCompanyData`'daki period-batched fetching'de de ayni PAGE_SIZE optimizasyonu uygulanacak.
-
-### 3. Period-Independent Kaynaklar Gereksiz Cok Donem Cekiyor
-`Kasa Kart Listesi`, `Banka_Hesap_listesi`, `cari_kart_listesi`, `Stok_listesi`, `kullanici_listele`, `Görev Listesi`, `sis_kayit_listele`, `Cari_vade_bakiye_listele` gibi kaynaklar `is_period_independent: true` olarak isaretli.
-
-**Veri okuma katmaninda (useDataSourceLoader + useCompanyData):** Period-independent kaynaklar tum donemlerdeki veriyi cekip birlestiriyor. Bu "Kasa Kart Listesi" gibi masterdata icin gereksiz - sadece aktif donemdeki guncel veriyi almak yeterli.
-
-**Senkronizasyon katmaninda (useSyncOrchestrator):** Period-independent kaynaklar zaten sadece `currentPeriod`'dan senkronize ediliyor (dogru). Ancak daha once eski donemlere de senkronize edilmis veriler veritabaninda kaldigindan, okuma katmani bunlari da cekiyor.
-
-**Cozum:**
-- `is_period_independent` kaynaklar icin "masterdata" ve "transaction" ayrimi yapilacak:
-  - **Masterdata kaynaklari** (Kasa Kart, Banka Hesap, Stok, Cari Kart, Kullanici, Gorev): Sadece aktif donemden okunacak, period-batched fetching bypass edilecek.
-  - **Transaction kaynaklari** (scf_fatura_listele, Cari_vade_bakiye): Tum donemleri birlestirmeye devam edecek (yillar arasi karsilastirma icin).
-- Bunu ayirt etmek icin `data_sources` tablosuna `period_read_mode` kolonu eklenecek: `'current_only'` veya `'all_periods'`. Default: `'all_periods'` (mevcut davranis korunur).
+Muhtemel sorun: `useDynamicWidgetData` icindeki `fetchFromDatabase` fonksiyonu `period_read_mode`'u tanımadığı için `isPeriodIndependent=true` kaynaklarda dönem filtresi yok ve bu da multi-query `forceNoFallback` mantığıyla çelişiyor. Veriler yükleniyor ama left_join sonrası dönem uyumsuzluğu nedeniyle eşleşmeler başarısız olabiliyor.
 
 ---
 
-## Teknik Uygulama Detaylari
+## Düzeltme Planı
 
-### Adim 1: Cron Job Olusturma (SQL)
+### Adim 1: Materialized View'i Populate Et (SQL)
 ```sql
-SELECT cron.schedule(
-  'dia-nightly-sync',
-  '0 0 * * *',  -- UTC 00:00 = TR 03:00
-  $$
-  SELECT net.http_post(
-    url := 'https://sdlfeyxgojncjgayktfm.supabase.co/functions/v1/dia-data-sync',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'x-cron-secret', current_setting('app.settings.cron_secret', true)
-    ),
-    body := '{"action":"cronSync"}'::jsonb
-  ) AS request_id;
-  $$
-);
+REFRESH MATERIALIZED VIEW public.invoice_summary_mv;
 ```
-Not: `CRON_SECRET` zaten secrets'ta mevcut. Ancak pg_cron icerisinden secret'a erisim farkli calisir - body icerisinde gondermek gerekecek:
-```sql
-SELECT cron.schedule(
-  'dia-nightly-sync',
-  '0 0 * * *',
-  $$
-  SELECT net.http_post(
-    url := 'https://sdlfeyxgojncjgayktfm.supabase.co/functions/v1/dia-data-sync',
-    headers := '{"Content-Type": "application/json"}'::jsonb,
-    body := '{"action":"cronSync","cronSecret":"ACTUAL_SECRET_VALUE"}'::jsonb
-  ) AS request_id;
-  $$
-);
+Bu tek komutla `get_invoice_summary` RPC çalışır hale gelecek ve 52K ham JSONB sorgusu yerine optimize edilmiş MV'den okunacak.
+
+### Adim 2: useDynamicWidgetData.tsx - period_read_mode Desteği
+`fetchFromDatabase` fonksiyonuna `periodReadMode` parametresi eklenecek:
+- `current_only` modunda: `isPeriodIndependent` olsa bile `donem_kodu` filtresi uygulanacak
+- `all_periods` modunda (veya tanımsız): Mevcut davranış korunacak
+
+Ek olarak `isPeriodIndependent` helper fonksiyonuna (satır ~1220) `period_read_mode` kontrolü eklenecek:
+```
+const isPeriodIndependent = (dataSourceId) => {
+  const ds = dataSources.find(d => d.id === dataSourceId);
+  if (!ds) return false;
+  if (ds.period_read_mode === 'current_only') return false;
+  return ds.is_period_independent === true;
+};
 ```
 
-### Adim 2: data_sources Tablosuna period_read_mode Kolonu
-```sql
-ALTER TABLE data_sources 
-ADD COLUMN period_read_mode TEXT DEFAULT 'all_periods' 
-CHECK (period_read_mode IN ('current_only', 'all_periods'));
-
--- Masterdata kaynakları: sadece aktif dönemden okunacak
-UPDATE data_sources SET period_read_mode = 'current_only' 
-WHERE slug IN (
-  'Kasa Kart Listesi', 'Banka_Hesap_listesi', 'cari_kart_listesi',
-  'Stok_listesi', 'kullanici_listele', 'Görev Listesi', 'sis_kayit_listele'
-);
-
--- Transaction kaynakları: tüm dönemlerden okunacak (mevcut davranış)
-UPDATE data_sources SET period_read_mode = 'all_periods'
-WHERE slug IN ('scf_fatura_listele', 'Cari_vade_bakiye_listele');
-```
-
-### Adim 3: useDataSourceLoader.tsx Degisiklikleri
-`loadDataSourceFromDatabase` fonksiyonunda `isPeriodIndependent` kontrolune `period_read_mode` eklenmesi:
-
-- `period_read_mode === 'current_only'`: Sadece `effectiveDonem` (aktif donem) icin tek sorgu atilir. Period-batched fetching atlanir.
-- `period_read_mode === 'all_periods'` (veya undefined): Mevcut period-batched davranis korunur.
-
-`useDataSources` hook'undan donen `DataSource` tipine `period_read_mode` alani eklenir.
-
-### Adim 4: useCompanyData.tsx Degisiklikleri
-Ayni mantik `useCompanyData`'ya da uygulanir:
-- `filter.isPeriodIndependent && period_read_mode === 'current_only'` ise period discovery yerine dogrudan aktif donem sorgusu yapilir.
-
-### Adim 5: scf_fatura_listele Timeout Icin PAGE_SIZE Optimizasyonu
-`useDataSourceLoader.tsx` > `fetchPeriodData` icerisinde, fallback (MV bos oldugunda) sorgusunda PAGE_SIZE'i 200'e dusurme:
-```typescript
-const PAGE_SIZE = dataSource.slug === 'scf_fatura_listele' ? 200 : 1000;
-```
+### Adim 3: fetchFromDatabase - scf_fatura_listele PAGE_SIZE Optimizasyonu
+`useDynamicWidgetData` icindeki `fetchFromDatabase` fonksiyonunda da fatura sorguları için PAGE_SIZE küçültülecek (1000 -> 200).
 
 ---
 
@@ -107,13 +47,10 @@ const PAGE_SIZE = dataSource.slug === 'scf_fatura_listele' ? 200 : 1000;
 
 | Dosya | Degisiklik |
 |-------|-----------|
-| SQL (cron.schedule) | Cron job olusturma |
-| SQL (migration) | `period_read_mode` kolonu ekleme + veri guncelleme |
-| `src/hooks/useDataSources.tsx` | `DataSource` tipine `period_read_mode` ekleme |
-| `src/hooks/useDataSourceLoader.tsx` | Period-independent okuma mantigi: `current_only` vs `all_periods` |
-| `src/hooks/useCompanyData.tsx` | Ayni period-read-mode mantigi |
+| SQL (REFRESH MV) | Materialized view populate |
+| `src/hooks/useDynamicWidgetData.tsx` | `fetchFromDatabase`'e `periodReadMode` parametre ekleme, `isPeriodIndependent` helper güncelleme, PAGE_SIZE optimizasyonu |
 
-## Risk Degerlendirmesi
-- Cron job eklenmesi sifir risk - mevcut altyapi hazir.
-- `period_read_mode` default `'all_periods'` oldugundan mevcut davranis bozulmaz.
-- PAGE_SIZE degisikligi sadece fallback senaryosunu etkiler (MV aktifse zaten MV kullanilir).
+## Beklenen Sonuc
+- Net Satış KPI'ları MV'den hızlıca yüklenecek (timeout yok)
+- `current_only` modundaki kaynaklar `useDynamicWidgetData` üzerinden de sadece aktif dönemden okunacak
+- Nakit Akış widget'ı dönem tutarlılığı sağlanarak düzgün render edilecek
