@@ -1,107 +1,58 @@
 
 
-# Fatura Performans Optimizasyonu: Period-Batched Fetching + Invoice Summary MV
+# Nakit Akis Yaslandirmasi - Gun Kaydirma Parametresi
 
-## Sorun
+## Amac
 
-`scf_fatura_listele` veri kaynagi `is_period_independent` olarak yapilandirilmis. 9 donemdeki **52,412 kayit (~162 MB JSONB)** `p_donem_kodu = NULL` ile tek sorguda cekilmeye calisiliyor ve statement timeout oluyor.
+Widget'a bir "Gun Kaydirma" sayisal parametresi eklenecek. Bu parametre, vade tarihlerini belirtilen gun sayisi kadar ileri (+) veya geri (-) kaydirarak "what-if" analizi yapilmasini saglayacak. Ornegin kullanici "+15" girerse tum vade tarihleri 15 gun ileri alinir, boylece 15 gun sonrasinin yaslandirma gorunumu simule edilir.
 
-| Donem | Kayit | Tahmini Boyut |
-|-------|-------|---------------|
-| 1 | 5,194 | ~17 MB |
-| 2 | 40,447 | ~126 MB |
-| 3 | 4,154 | ~13 MB |
-| 4-9 | 2,617 | ~9 MB |
+## Degisiklikler
 
-## Cozum Ozeti
+Tek dosya degisecek: **widgets tablosundaki** `ai_nakit_akis_yaslandirma_analizi_mlb4hlt1` widget'inin `builder_config.customCode` alani.
 
-### Katman 1: Period-Batched Fetching (Frontend)
+### 1. Parametre Tanimi Ekleme
 
-`is_period_independent` kaynaklarda `p_donem_kodu = null` gondermek yerine, once mevcut donemleri ogrenip her donemi ayri ayri sorgulayarak sonuclari birlestirmek.
+`Widget.parameters` dizisine yeni bir `number` tipinde parametre eklenecek:
 
-**Degisecek dosyalar:**
-- `src/hooks/useDataSourceLoader.tsx` - `loadDataSourceFromDatabase` fonksiyonu
-- `src/hooks/useCompanyData.tsx` - Ana veri cekme sorgusu
-
-**Mantik:**
-1. `SELECT DISTINCT donem_kodu FROM company_data_cache WHERE slug = X` ile mevcut donemleri cek (hafif sorgu)
-2. Her donem icin ayri `get_projected_cache_data(p_donem_kodu = N)` cagrisi yap
-3. Sonuclari birlestirip dondur
-
-Bu yaklasim en buyuk donemi (D2: 40K kayit) bile izole eder cunku tek basina timeout sinirinin altindadir.
-
-### Katman 2: Invoice Summary Materialized View (Veritabani)
-
-Widget'larin kullandigi alanlar analiz edildi. Tum fatura widget'lari su alanlarin alt kumelerini kullaniyor:
-
-```text
-tarih, fisno, toplam, toplamara, net, netdvz, toplamkdvdvz, 
-dovizkuru, dovizturu, iptal, turu_kisa, turuack, satiselemani, 
-firmaadi, cari_unvan, __carifirma, __sourcesubeadi, 
-amount, rawAmount, isReturn, vatMode, belgeno
+```
+{ key: 'gunKaydirma', label: 'Gun Kaydirma', type: 'number', defaultValue: 0 }
 ```
 
-Toplam ~22 alan - orijinal JSONB'deki ~200+ alana karsilik.
+### 2. Parametre Okuma
 
-**Yeni SQL nesneleri:**
-- `invoice_summary_mv` Materialized View - JSONB'den sadece gerekli alanlari cikarir
-- Unique index (CONCURRENTLY refresh icin zorunlu)
-- `get_invoice_summary` SECURITY DEFINER RPC fonksiyonu
+Widget fonksiyonunun basinda mevcut `filters` okumasina ek olarak:
 
-```text
-company_data_cache (162 MB JSONB, ~200 alan)
-         |
-         v
-invoice_summary_mv (~15 MB, ~22 alan + scope)
-         |
-         v
-get_invoice_summary() RPC -> Widget'lar
+```
+var gunKaydirma = parseInt(filters && filters.gunKaydirma) || 0;
 ```
 
-### Katman 3: Sync Sonrasi MV Yenileme
+### 3. Vade Tarihi Manipulasyonu
 
-`dia-data-sync` edge function'da basarili fatura senkronizasyonu sonrasi `REFRESH MATERIALIZED VIEW CONCURRENTLY invoice_summary_mv` calistirilacak.
+`processedData` icindeki hareket dongusu icerisinde, `vadeTarihi` hesaplandiktan hemen sonra gun kaydirma uygulanacak:
 
-## Uygulama Adimlari
-
-### Adim 1: SQL Migration
-
-- `invoice_summary_mv` materialized view olustur
-- `(sunucu_adi, firma_kodu, donem_kodu, dia_key)` uzerinde UNIQUE index (concurrent refresh icin)
-- `(sunucu_adi, firma_kodu, donem_kodu)` uzerinde arama indeksi
-- `get_invoice_summary(p_sunucu_adi, p_firma_kodu, p_donem_kodu, p_limit, p_offset)` SECURITY DEFINER fonksiyon
-- Ilk veri icin `REFRESH MATERIALIZED VIEW`
-
-### Adim 2: useDataSourceLoader.tsx - Period Batching
-
-`loadDataSourceFromDatabase` fonksiyonuna `isPeriodIndependent` kontrolu eklenir:
-- Once `DISTINCT donem_kodu` sorgusu ile mevcut donemleri tespit et
-- Her donem icin paralel degil seri olarak (DB yuku icin) ayri `get_projected_cache_data` cagrisi yap
-- Sonuclari birlestir
-
-### Adim 3: useCompanyData.tsx - Period Batching
-
-Ayni period-batching mantigi `useCompanyData` hook'una da eklenir (bazi widget'lar bu hook'u dogrudan kullaniyor olabilir).
-
-### Adim 4: useDataSourceLoader.tsx - Invoice MV Optimizasyonu
-
-Fatura kaynagi icin ozel dal:
-- Kaynak `scf_fatura_listele` ise `get_invoice_summary` RPC'sini kullan
-- JSONB parsing olmadan dogrudan sutun okumasi
-
-### Adim 5: dia-data-sync Edge Function - MV Refresh
-
-`syncOne` ve `incrementalSync` fonksiyonlarinda fatura sync'i tamamlandiginda:
 ```
-REFRESH MATERIALIZED VIEW CONCURRENTLY invoice_summary_mv
+// Mevcut kod:
+var vadeTarihi = new Date(vadeStr);
+vadeTarihi.setHours(0, 0, 0, 0);
+
+// Yeni ekleme:
+vadeTarihi.setDate(vadeTarihi.getDate() + gunKaydirma);
 ```
 
-## Beklenen Sonuc
+Bu sayede `diffDays` hesabi otomatik olarak kaydirmali tarihe gore yapilacak ve tum bucket dagilimlari buna gore degisecek.
 
-| Metrik | Oncesi | Sonrasi |
-|--------|--------|---------|
-| Sorgu boyutu | 162 MB tek sorgu | MV: ~15 MB toplam |
-| En buyuk tek sorgu | 126 MB (D2) | ~12 MB (D2, sadece 22 alan) |
-| Timeout riski | Yuksek | Dusuk (batch) / Sifir (MV) |
-| JSONB parsing | Her istekte | Sadece MV refresh'te |
+### 4. Baslik Gostergesi
+
+`gunKaydirma !== 0` ise baslikta kucuk bir bilgilendirme etiketi gosterilecek (ornek: "+15 gun kaydirma" veya "-10 gun kaydirma").
+
+### 5. useMemo Bagimliliklari
+
+`processedData`'nin `useMemo` bagimlilik dizisine `gunKaydirma` eklenecek, boylece parametre degistiginde grafik yeniden hesaplanacak.
+
+## Teknik Detay
+
+- Widget'in `builder_config` JSON'u veritabaninda guncellenerek `customCode` degistirilecek
+- Mevcut filtreler ve parametreler korunacak, sadece yeni parametre eklenmis olacak
+- `number` tipi parametre, widget filtre panelinde sayi girisi olarak gosterilecek
+- Varsayilan deger 0 oldugu icin mevcut davranis degismeyecek
 
