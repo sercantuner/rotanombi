@@ -259,8 +259,10 @@ export function useSyncOrchestrator() {
       const periodStatuses = statusRes?.periodStatus || [];
       const currentPeriod = periods.find(p => p.is_current)?.period_no || statusRes?.currentPeriod;
 
-      // Task listesi oluştur
+      // Task listesi oluştur (önce expected 0 ile, sonra DIA'dan güncellenecek)
       const tasks: SyncTask[] = [];
+      const sourcesToCount: { slug: string; periodNo: number; taskIndex: number }[] = [];
+
       for (const src of activeSources) {
         const srcPeriods = src.is_period_independent 
           ? [currentPeriod].filter(Boolean) 
@@ -268,7 +270,6 @@ export function useSyncOrchestrator() {
         
         for (const pn of srcPeriods) {
           if (!pn) continue;
-          // Hariç tutulan dönemleri atla
           const excludedPeriods = getExcludedPeriodsForSource(src.slug);
           if (excludedPeriods.includes(pn)) {
             console.log(`[SyncOrchestrator] Skipping excluded period ${pn} for ${src.slug}`);
@@ -278,23 +279,25 @@ export function useSyncOrchestrator() {
           const pss = periodStatuses.find((ps: any) => ps.data_source_slug === src.slug && ps.donem_kodu === pn);
           const isLocked = pss?.is_locked;
           const hasFullSync = pss?.last_full_sync;
-          const expected = pss?.total_records || 0;
           
+          const taskIndex = tasks.length;
           if (isLocked && !forceIncremental) {
-            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'reconcile', fetched: 0, written: 0, deleted: 0, expectedRecords: expected });
+            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'reconcile', fetched: 0, written: 0, deleted: 0, expectedRecords: 0 });
           } else if (hasFullSync || forceIncremental) {
-            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'incremental', fetched: 0, written: 0, deleted: 0, expectedRecords: expected });
+            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'incremental', fetched: 0, written: 0, deleted: 0, expectedRecords: 0 });
           } else {
-            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'full', fetched: 0, written: 0, deleted: 0, expectedRecords: expected });
+            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'full', fetched: 0, written: 0, deleted: 0, expectedRecords: 0 });
+          }
+          // Reconcile görevleri için count çekmeye gerek yok
+          if (tasks[taskIndex].type !== 'reconcile') {
+            sourcesToCount.push({ slug: src.slug, periodNo: pn, taskIndex });
           }
         }
       }
 
-      const totalExpected = tasks.reduce((sum, t) => sum + t.expectedRecords, 0);
-
       setProgress({
         isRunning: true,
-        currentSource: null,
+        currentSource: 'Kayıt sayıları çekiliyor...',
         currentPeriod: null,
         currentType: null,
         tasks,
@@ -302,8 +305,41 @@ export function useSyncOrchestrator() {
         totalFetched: 0,
         totalWritten: 0,
         totalDeleted: 0,
-        totalExpected,
+        totalExpected: 0,
       });
+
+      // DIA'dan gerçek kayıt sayılarını çek (batch halinde, max 10 per call)
+      if (sourcesToCount.length > 0) {
+        const BATCH_SIZE = 10;
+        for (let b = 0; b < sourcesToCount.length; b += BATCH_SIZE) {
+          const batch = sourcesToCount.slice(b, b + BATCH_SIZE);
+          try {
+            const countResult = await callEdgeFunction({
+              action: 'getRecordCounts',
+              sources: batch.map(s => ({ slug: s.slug, periodNo: s.periodNo })),
+            });
+            if (countResult?.success && countResult.counts) {
+              for (const item of batch) {
+                const key = `${item.slug}_${item.periodNo}`;
+                const count = countResult.counts[key] || 0;
+                tasks[item.taskIndex].expectedRecords = count;
+              }
+            }
+          } catch (e) {
+            console.error('[SyncOrchestrator] getRecordCounts error:', e);
+          }
+        }
+      }
+
+      const totalExpected = tasks.reduce((sum, t) => sum + t.expectedRecords, 0);
+      console.log(`[SyncOrchestrator] Total expected records from DIA: ${totalExpected}`);
+
+      setProgress(prev => ({
+        ...prev,
+        currentSource: null,
+        tasks: [...tasks],
+        totalExpected,
+      }));
 
       const totalTasks = tasks.length;
       let completedTasks = 0;
@@ -465,14 +501,19 @@ export function useSyncOrchestrator() {
       return;
     }
 
-    // Fetch expected record count for this specific source+period
-    const { data: pssData } = await supabase
-      .from('period_sync_status')
-      .select('total_records')
-      .eq('data_source_slug', slug)
-      .eq('donem_kodu', periodNo)
-      .maybeSingle();
-    const expected = pssData?.total_records || 0;
+    // DIA'dan gerçek kayıt sayısını çek
+    let expected = 0;
+    try {
+      const countResult = await callEdgeFunction({
+        action: 'getRecordCounts',
+        sources: [{ slug, periodNo }],
+      });
+      if (countResult?.success && countResult.counts) {
+        expected = countResult.counts[`${slug}_${periodNo}`] || 0;
+      }
+    } catch (e) {
+      console.error('[SyncOrchestrator] quickSync getRecordCounts error:', e);
+    }
 
     setProgress(prev => ({
       ...prev,

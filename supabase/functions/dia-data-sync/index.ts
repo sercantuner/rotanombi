@@ -534,6 +534,58 @@ Deno.serve(async (req) => {
     if (!dr.success || !dr.session) return new Response(JSON.stringify({ success: false, error: dr.error || "DIA connection failed" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     const { session } = dr, sun = session.sunucuAdi, fk = String(session.firmaKodu);
     
+    // ===== getRecordCounts - DIA'dan sadece _key ile kayıt sayısı çeker =====
+    if (action === 'getRecordCounts') {
+      const sources = body.sources as { slug: string; periodNo: number }[];
+      if (!sources || !Array.isArray(sources) || sources.length === 0) {
+        return new Response(JSON.stringify({ success: false, error: "sources array required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const sr = await ensureValidSession(sb, euid, session);
+      if (!sr.success || !sr.session) {
+        return new Response(JSON.stringify({ success: false, error: sr.error || "Session fail" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      let validSession = sr.session;
+
+      const counts: Record<string, number> = {};
+      for (const s of sources) {
+        const { data: src } = await sb.from('data_sources').select('slug, module, method').eq('slug', s.slug).eq('is_active', true).single();
+        if (!src) { counts[`${s.slug}_${s.periodNo}`] = 0; continue; }
+
+        const url = `https://${validSession.sunucuAdi}.ws.dia.com.tr/api/v3/${src.module}/json`;
+        const fm = src.method.startsWith(`${src.module}_`) ? src.method : `${src.module}_${src.method}`;
+        const pl: any = { [fm]: { 
+          session_id: validSession.sessionId, 
+          firma_kodu: validSession.firmaKodu, 
+          donem_kodu: s.periodNo, 
+          limit: 0, 
+          offset: 0,
+          selectedcolumns: ["_key"]
+        }};
+
+        try {
+          const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pl) });
+          if (!res.ok) { counts[`${s.slug}_${s.periodNo}`] = 0; continue; }
+          const r = await res.json();
+          if (r.msg === 'INVALID_SESSION' || r.code === '401') {
+            await invalidateSession(sb, euid);
+            const ns = await getDiaSession(sb, euid);
+            if (ns.success && ns.session) { validSession = ns.session; }
+            counts[`${s.slug}_${s.periodNo}`] = 0;
+            continue;
+          }
+          const data = parse(r, fm);
+          counts[`${s.slug}_${s.periodNo}`] = data.length;
+          console.log(`[getRecordCounts] ${s.slug} period ${s.periodNo}: ${data.length} records`);
+        } catch (e) {
+          console.error(`[getRecordCounts] Error for ${s.slug}:`, e);
+          counts[`${s.slug}_${s.periodNo}`] = 0;
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, counts }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // ===== incrementalSync action =====
     if (action === 'incrementalSync') {
       if (!dataSourceSlug || periodNo === undefined) {
