@@ -4,7 +4,8 @@
 import React from 'react';
 import { useDataSources } from '@/hooks/useDataSources';
 import { useSyncStatus } from '@/hooks/useSyncData';
-import { useSyncOrchestrator } from '@/hooks/useSyncOrchestrator';
+import { useSyncOrchestratorContext } from '@/contexts/SyncOrchestratorContext';
+
 import { useDiaProfile } from '@/hooks/useDiaProfile';
 import { useCacheRecordCounts } from '@/hooks/useCacheRecordCounts';
 import { useFirmaPeriods } from '@/hooks/useFirmaPeriods';
@@ -64,7 +65,7 @@ function TaskTypeBadge({ type }: { type: string }) {
 export function DataManagementTab() {
   const { dataSources, isLoading: isDataSourcesLoading } = useDataSources();
   const { lastSyncTime, syncHistory, isLoading: isSyncStatusLoading } = useSyncStatus();
-  const { progress, startFullOrchestration, quickSync, abort } = useSyncOrchestrator();
+  const { progress, startFullOrchestration, quickSync, abort } = useSyncOrchestratorContext();
   const diaProfile = useDiaProfile();
   const { data: cacheRecordCounts, isLoading: isCacheCountsLoading } = useCacheRecordCounts();
   const { periods } = useFirmaPeriods();

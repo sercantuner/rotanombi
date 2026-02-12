@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { UserSettingsProvider } from "@/contexts/UserSettingsContext";
 import { DiaDataCacheProvider } from "@/contexts/DiaDataCacheContext";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
+import { SyncOrchestratorProvider } from "@/contexts/SyncOrchestratorContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
@@ -28,9 +29,11 @@ function AppWithCache({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   return (
     <DiaDataCacheProvider userId={user?.id}>
-      <ImpersonationProvider>
-        {children}
-      </ImpersonationProvider>
+      <SyncOrchestratorProvider>
+        <ImpersonationProvider>
+          {children}
+        </ImpersonationProvider>
+      </SyncOrchestratorProvider>
     </DiaDataCacheProvider>
   );
 }
