@@ -21,19 +21,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    let initialSessionHandled = false;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // INITIAL_SESSION covers getSession – no need for a separate call
+      if (event === 'INITIAL_SESSION') {
+        initialSessionHandled = true;
+      }
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsLoading(false);
-    });
+    // Fallback: if onAuthStateChange hasn't fired INITIAL_SESSION within 1s, resolve manually
+    const fallbackTimer = setTimeout(() => {
+      if (!initialSessionHandled) {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          setSession(session);
+          setUser(session?.user ?? null);
+          setIsLoading(false);
+        });
+      }
+    }, 1000);
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(fallbackTimer);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
