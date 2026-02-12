@@ -14,7 +14,7 @@ const PAGE_SIZE = 100, MAX_RECORDS = 50000;
 const CLEANUP_TIMEOUT_MS = 15 * 60 * 1000;
 const NON_DIA = ['takvim', '_system_calendar', 'system_calendar'];
 
-const DEFAULT_CHUNK_SIZE = 500;
+const DEFAULT_CHUNK_SIZE = 1000;
 const MAX_CHUNK_SIZE = 2000;
 const UPSERT_BATCH_SIZE = 100;
 
@@ -446,7 +446,7 @@ async function handleCronSync(sb: any, cronSecret: string) {
 
       // Aktif veri kaynaklarını al
       const { data: ds } = await sb.from('data_sources')
-        .select('slug, module, method, name, is_period_independent, is_non_dia')
+        .select('slug, module, method, name, is_period_independent, is_non_dia, period_read_mode')
         .eq('is_active', true);
       
       const diaSources = (ds || []).filter((d: any) => !NON_DIA.includes(d.slug) && !d.slug.startsWith('_system') && !d.is_non_dia);
@@ -471,8 +471,9 @@ async function handleCronSync(sb: any, cronSecret: string) {
       const currentPeriod = periods.find((p: any) => p.is_current)?.period_no || periods[0].period_no;
 
       for (const src of diaSources) {
-        // Dönem bağımsız kaynaklar sadece aktif dönemden çekilir
-        const srcPeriods = src.is_period_independent ? [currentPeriod] : periods.map((p: any) => p.period_no);
+        // period_read_mode bazlı dönem seçimi (cronSync)
+        const readMode = src.period_read_mode || 'all_periods';
+        const srcPeriods = readMode === 'current_only' ? [currentPeriod] : periods.map((p: any) => p.period_no);
 
         for (const pn of srcPeriods) {
           try {
@@ -886,13 +887,13 @@ Deno.serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     
-    const { data: ds } = await sb.from('data_sources').select('slug, module, method, name, is_period_independent, is_non_dia').eq('is_active', true);
+    const { data: ds } = await sb.from('data_sources').select('slug, module, method, name, is_period_independent, is_non_dia, period_read_mode').eq('is_active', true);
     if (!ds?.length) return new Response(JSON.stringify({ success: false, error: "No active data sources" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     const dias = ds.filter(d => !NON_DIA.includes(d.slug) && !d.slug.startsWith('_system') && !d.is_non_dia);
     const srcs = (action === 'syncAll' || action === 'syncAllForUser') ? dias : dias.filter(d => d.slug === dataSourceSlug);
     if (!srcs.length) return new Response(JSON.stringify({ success: false, error: `Source not found or non-DIA: ${dataSourceSlug}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     
-    let periods = [curDon];
+    let allPeriods = [curDon];
     if (syncAllPeriods ?? true) {
       let { data: fp } = await sb.from('firma_periods').select('period_no').eq('sunucu_adi', sun).eq('firma_kodu', fk).order('period_no', { ascending: false });
       if (!fp?.length) {
@@ -907,17 +908,21 @@ Deno.serve(async (req) => {
           }
         } catch {}
       }
-      if (fp?.length) periods = fp.map(p => p.period_no);
+      if (fp?.length) allPeriods = fp.map(p => p.period_no);
     }
     
     const { data: currentPeriodData } = await sb.from('firma_periods').select('period_no').eq('sunucu_adi', sun).eq('firma_kodu', fk).eq('is_current', true).single();
     const currentPeriod = currentPeriodData?.period_no || curDon;
-    console.log(`[DIA Sync] Current period for period-independent sources: ${currentPeriod} (profile curDon: ${curDon})`);
+    console.log(`[DIA Sync] Current period: ${currentPeriod} (profile curDon: ${curDon}), total periods: ${allPeriods.length}`);
     
     const results: any[] = [];
     for (const src of srcs) {
-      const srcPeriods = src.is_period_independent ? [currentPeriod] : periods;
-      console.log(`[DIA Sync] ${src.slug}: ${src.is_period_independent ? `period-independent (period ${currentPeriod})` : `period-dependent (${srcPeriods.length} periods)`}`);
+      // period_read_mode bazlı dönem seçimi:
+      // current_only → sadece aktif dönem (masterdata: banka, cari kart, stok vb.)
+      // all_periods → tüm dönemler (transaction: fatura, fiş vb.)
+      const readMode = src.period_read_mode || 'all_periods';
+      const srcPeriods = readMode === 'current_only' ? [currentPeriod] : allPeriods;
+      console.log(`[DIA Sync] ${src.slug}: period_read_mode=${readMode} → ${srcPeriods.length} period(s) [${srcPeriods.join(',')}]`);
       for (const pn of srcPeriods) results.push(await syncOne(sb, euid, session, src, pn, sun, fk, user.id));
     }
     return new Response(JSON.stringify({ success: results.some(r=>r.success), results, totalSynced: results.filter(r=>r.success).length, totalFailed: results.filter(r=>!r.success).length, periodsProcessed: periods.length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
