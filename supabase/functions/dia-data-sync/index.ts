@@ -150,9 +150,12 @@ async function fetchPageSimple(sess: any, mod: string, met: string, dk: number, 
     pl[fm].filters = filters;
   }
   
-  // Seçili kolonlar desteği
+  // Seçili kolonlar desteği - DIA doğru formatı: params.selectedcolumns
   if (selectedColumns && selectedColumns.length > 0) {
-    pl[fm].selectedcolumns = selectedColumns;
+    if (!pl[fm].params) {
+      pl[fm].params = {};
+    }
+    pl[fm].params.selectedcolumns = selectedColumns;
   }
   
   try {
