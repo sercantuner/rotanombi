@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Progress } from '@/components/ui/progress';
 import { useSyncStatus } from '@/hooks/useSyncData';
-import { useSyncOrchestrator } from '@/hooks/useSyncOrchestrator';
+import { useSyncOrchestratorContext } from '@/contexts/SyncOrchestratorContext';
 import { useDiaProfile } from '@/hooks/useDiaProfile';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -25,7 +25,7 @@ import { tr } from 'date-fns/locale';
 export function SyncButton() {
   const { isConfigured } = useDiaProfile();
   const { lastSyncTime, syncHistory } = useSyncStatus();
-  const { progress, startFullOrchestration, startIncrementalAll, quickSync, abort } = useSyncOrchestrator();
+  const { progress, startFullOrchestration, startIncrementalAll, quickSync, abort } = useSyncOrchestratorContext();
 
   if (!isConfigured) return null;
 
