@@ -287,6 +287,36 @@ export type Database = {
         }
         Relationships: []
       }
+      excluded_periods: {
+        Row: {
+          created_at: string
+          data_source_slug: string | null
+          donem_kodu: number
+          excluded_by: string
+          firma_kodu: string
+          id: string
+          sunucu_adi: string
+        }
+        Insert: {
+          created_at?: string
+          data_source_slug?: string | null
+          donem_kodu: number
+          excluded_by: string
+          firma_kodu: string
+          id?: string
+          sunucu_adi: string
+        }
+        Update: {
+          created_at?: string
+          data_source_slug?: string | null
+          donem_kodu?: number
+          excluded_by?: string
+          firma_kodu?: string
+          id?: string
+          sunucu_adi?: string
+        }
+        Relationships: []
+      }
       firma_branches: {
         Row: {
           branch_code: string

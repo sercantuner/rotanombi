@@ -10,6 +10,7 @@ import { useDiaProfile } from '@/hooks/useDiaProfile';
 import { useCacheRecordCounts } from '@/hooks/useCacheRecordCounts';
 import { usePeriodBasedRecordCounts } from '@/hooks/usePeriodBasedRecordCounts';
 import { useFirmaPeriods } from '@/hooks/useFirmaPeriods';
+import { useExcludedPeriods } from '@/hooks/useExcludedPeriods';
 import {
   Database,
   RefreshCw,
@@ -30,7 +31,20 @@ import {
   ArrowUpFromLine,
   Trash2,
   SkipForward,
+  Ban,
+  Undo2,
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -71,6 +85,7 @@ export function DataManagementTab() {
   const { data: cacheRecordCounts, isLoading: isCacheCountsLoading } = useCacheRecordCounts();
   const { data: periodDistribution, isLoading: isPeriodDistLoading } = usePeriodBasedRecordCounts();
   const { periods } = useFirmaPeriods();
+  const { excludePeriod, includePeriod, isExcluded, getExcludedPeriodsForSource } = useExcludedPeriods();
   const [expandedTasks, setExpandedTasks] = React.useState(true);
   const [expandedDistributions, setExpandedDistributions] = React.useState<Record<string, boolean>>({});
 
@@ -457,15 +472,45 @@ export function DataManagementTab() {
                             .map(([periodNo, count]) => {
                               const period = periods.find(p => p.period_no === parseInt(periodNo));
                               const percent = (count / distribution.total) * 100;
+                              const periodNum = parseInt(periodNo);
+                              const excluded = isExcluded(periodNum, ds.slug);
                               return (
                                 <div key={periodNo} className="space-y-1">
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-muted-foreground">
                                       {period?.period_name || `D${periodNo}`}
                                     </span>
-                                    <span className="font-mono font-semibold">
-                                      {count.toLocaleString('tr-TR')}
-                                    </span>
+                                    <div className="flex items-center gap-1">
+                                      <span className="font-mono font-semibold">
+                                        {count.toLocaleString('tr-TR')}
+                                      </span>
+                                      <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                          <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-destructive/70 hover:text-destructive">
+                                            <Trash2 className="h-3 w-3" />
+                                          </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                            <AlertDialogTitle>Dönem Verilerini Sil</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                              <strong>{ds.name}</strong> kaynağının <strong>Dönem {periodNo}</strong> verilerini ({count.toLocaleString('tr-TR')} kayıt) silmek istediğinize emin misiniz?
+                                              <br /><br />
+                                              Bu dönem bundan sonra senkronizasyondan da hariç tutulacaktır.
+                                            </AlertDialogDescription>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                            <AlertDialogCancel>İptal</AlertDialogCancel>
+                                            <AlertDialogAction
+                                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                              onClick={() => excludePeriod.mutate({ donemKodu: periodNum, dataSourceSlug: ds.slug })}
+                                            >
+                                              Sil ve Hariç Tut
+                                            </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                      </AlertDialog>
+                                    </div>
                                   </div>
                                   <Progress value={percent} className="h-1.5" />
                                   <div className="text-[10px] text-muted-foreground text-right">
@@ -475,6 +520,40 @@ export function DataManagementTab() {
                               );
                             })}
                         </div>
+
+                        {/* Hariç tutulan dönemler */}
+                        {(() => {
+                          const excludedForSource = getExcludedPeriodsForSource(ds.slug)
+                            .filter(pn => !distribution.byPeriod[pn]); // Verisi olmayan hariç tutulanlar
+                          if (excludedForSource.length === 0) return null;
+                          return (
+                            <div className="mt-3 pt-3 border-t border-secondary/40">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Ban className="h-3 w-3 text-destructive/60" />
+                                <span className="text-[11px] text-destructive/80 font-medium">Hariç Tutulan Dönemler</span>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {excludedForSource.map(pn => {
+                                  const period = periods.find(p => p.period_no === pn);
+                                  return (
+                                    <Badge key={pn} variant="outline" className="text-[10px] gap-1 border-destructive/30 text-destructive/80">
+                                      <Ban className="h-2.5 w-2.5" />
+                                      {period?.period_name || `D${pn}`}
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-4 w-4 p-0 ml-0.5 text-muted-foreground hover:text-foreground"
+                                        onClick={() => includePeriod.mutate({ donemKodu: pn, dataSourceSlug: ds.slug })}
+                                      >
+                                        <Undo2 className="h-2.5 w-2.5" />
+                                      </Button>
+                                    </Badge>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
