@@ -122,17 +122,35 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { csvContent, dryRun = false } = await req.json();
+    const { csvContent, storageFile, dryRun = false } = await req.json();
     
-    if (!csvContent) {
-      return new Response(JSON.stringify({ error: "csvContent is required" }), {
+    let csv = csvContent;
+    
+    // If storageFile is provided, download from Supabase Storage
+    if (storageFile) {
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from('temp-imports')
+        .download(storageFile);
+      
+      if (downloadError || !fileData) {
+        return new Response(JSON.stringify({ error: `Failed to download file: ${downloadError?.message}` }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      
+      csv = await fileData.text();
+    }
+    
+    if (!csv) {
+      return new Response(JSON.stringify({ error: "csvContent or storageFile is required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     // Parse CSV
-    const records = parseCSV(csvContent);
+    const records = parseCSV(csv);
     
     if (records.length === 0) {
       return new Response(JSON.stringify({ error: "No valid widget records found in CSV" }), {
