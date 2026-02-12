@@ -132,8 +132,8 @@ async function fetchPage(sb: any, uid: string, sess: any, mod: string, met: stri
   } catch (e) { return { ok: false, data: [], err: e instanceof Error ? e.message : "Fetch error" }; }
 }
 
-// ===== fetchPageSimple - opsiyonel filters ve pageSize desteği =====
-async function fetchPageSimple(sess: any, mod: string, met: string, dk: number, off: number, filters?: any[], pageSize?: number) {
+// ===== fetchPageSimple - opsiyonel filters, selectedcolumns ve pageSize desteği =====
+async function fetchPageSimple(sess: any, mod: string, met: string, dk: number, off: number, filters?: any[], pageSize?: number, selectedColumns?: string[]) {
   const effectivePageSize = pageSize || PAGE_SIZE;
   const url = `https://${sess.sunucuAdi}.ws.dia.com.tr/api/v3/${mod}/json`;
   const fm = met.startsWith(`${mod}_`) ? met : `${mod}_${met}`;
@@ -148,6 +148,11 @@ async function fetchPageSimple(sess: any, mod: string, met: string, dk: number, 
   // Filtre desteği
   if (filters && filters.length > 0) {
     pl[fm].filters = filters;
+  }
+  
+  // Seçili kolonlar desteği
+  if (selectedColumns && selectedColumns.length > 0) {
+    pl[fm].selectedcolumns = selectedColumns;
   }
   
   try {
@@ -165,11 +170,11 @@ async function fetchPageSimple(sess: any, mod: string, met: string, dk: number, 
   }
 }
 
-// ===== streamChunk - filters ve pageSize desteği =====
+// ===== streamChunk - filters, selectedcolumns ve pageSize desteği =====
 async function streamChunk(
   sb: any, uid: string, sess: any, mod: string, met: string, dk: number, 
   sun: string, fk: string, slug: string, startOffset: number, chunkSize: number,
-  filters?: any[], pageSize?: number
+  filters?: any[], pageSize?: number, selectedColumns?: string[]
 ) {
   const sr = await ensureValidSession(sb, uid, sess);
   if (!sr.success || !sr.session) {
@@ -182,10 +187,10 @@ async function streamChunk(
   let written = 0;
   const effectivePageSize = pageSize || PAGE_SIZE;
   
-  console.log(`[syncChunk] Starting: ${slug}, offset=${startOffset}, chunkSize=${chunkSize}, pageSize=${effectivePageSize}${filters ? `, filters=${JSON.stringify(filters)}` : ''}`);
+  console.log(`[syncChunk] Starting: ${slug}, offset=${startOffset}, chunkSize=${chunkSize}, pageSize=${effectivePageSize}${filters ? `, filters=${JSON.stringify(filters)}` : ''}${selectedColumns ? `, columns=${selectedColumns.length}` : ''}`);
   
   while (fetched < chunkSize) {
-    const r = await fetchPageSimple(validSession, mod, met, dk, off, filters, effectivePageSize);
+    const r = await fetchPageSimple(validSession, mod, met, dk, off, filters, effectivePageSize, selectedColumns);
     
     if (r.needsRefresh) {
       console.log(`[syncChunk] Session expired, refreshing...`);
@@ -321,19 +326,19 @@ async function incrementalSync(
     const cdateFilters = [{ field: "_cdate", operator: ">=", value: today }];
     console.log(`[incrementalSync] ${src.slug} period ${pn}: fetching _cdate >= ${today}`);
     
-    const cdateResult = await streamChunk(
-      sb, uid, sess, src.module, src.method, pn, sun, fk, src.slug, 0, MAX_RECORDS, cdateFilters, PAGE_SIZE
-    );
+     const cdateResult = await streamChunk(
+       sb, uid, sess, src.module, src.method, pn, sun, fk, src.slug, 0, MAX_RECORDS, cdateFilters, PAGE_SIZE, src.selected_columns
+     );
 
-    // Sorgu 2: _date >= last_sync (son sync'ten beri değiştirilen kayıtlar)
-    // lastSync tarihini YYYY-MM-DD formatına çevir
-    const lastSyncDate = lastSync ? lastSync.split('T')[0] : today;
-    const dateFilters = [{ field: "_date", operator: ">=", value: lastSyncDate }];
-    console.log(`[incrementalSync] ${src.slug} period ${pn}: fetching _date >= ${lastSyncDate}`);
-    
-    const dateResult = await streamChunk(
-      sb, uid, sess, src.module, src.method, pn, sun, fk, src.slug, 0, MAX_RECORDS, dateFilters, PAGE_SIZE
-    );
+     // Sorgu 2: _date >= last_sync (son sync'ten beri değiştirilen kayıtlar)
+     // lastSync tarihini YYYY-MM-DD formatına çevir
+     const lastSyncDate = lastSync ? lastSync.split('T')[0] : today;
+     const dateFilters = [{ field: "_date", operator: ">=", value: lastSyncDate }];
+     console.log(`[incrementalSync] ${src.slug} period ${pn}: fetching _date >= ${lastSyncDate}`);
+     
+     const dateResult = await streamChunk(
+       sb, uid, sess, src.module, src.method, pn, sun, fk, src.slug, 0, MAX_RECORDS, dateFilters, PAGE_SIZE, src.selected_columns
+     );
 
     const totalFetched = (cdateResult.fetched || 0) + (dateResult.fetched || 0);
     const totalWritten = (cdateResult.written || 0) + (dateResult.written || 0);
@@ -591,7 +596,7 @@ Deno.serve(async (req) => {
       if (!dataSourceSlug || periodNo === undefined) {
         return new Response(JSON.stringify({ success: false, error: "dataSourceSlug and periodNo required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      const { data: src } = await sb.from('data_sources').select('slug, module, method, name').eq('slug', dataSourceSlug).eq('is_active', true).single();
+      const { data: src } = await sb.from('data_sources').select('slug, module, method, name, selected_columns').eq('slug', dataSourceSlug).eq('is_active', true).single();
       if (!src) return new Response(JSON.stringify({ success: false, error: `Source not found: ${dataSourceSlug}` }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       
       const result = await incrementalSync(sb, euid, session, src, periodNo, sun, fk, user.id);
@@ -604,7 +609,7 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ success: false, error: "dataSourceSlug and periodNo required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       
-      const { data: src } = await sb.from('data_sources').select('slug, module, method, name').eq('slug', dataSourceSlug).eq('is_active', true).single();
+      const { data: src } = await sb.from('data_sources').select('slug, module, method, name, selected_columns').eq('slug', dataSourceSlug).eq('is_active', true).single();
       if (!src) {
         return new Response(JSON.stringify({ success: false, error: `Source not found: ${dataSourceSlug}` }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -618,7 +623,7 @@ Deno.serve(async (req) => {
       const result = await streamChunk(
         sb, euid, session, src.module, src.method, periodNo, 
         sun, fk, src.slug, startOffset, requestedChunkSize,
-        reqFilters, effectivePageSize
+        reqFilters, effectivePageSize, src.selected_columns
       );
       
       if (!result.ok) {
