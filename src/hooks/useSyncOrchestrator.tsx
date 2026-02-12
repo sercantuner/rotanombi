@@ -265,7 +265,11 @@ export function useSyncOrchestrator() {
       const sourcesToCount: { slug: string; periodNo: number; taskIndex: number }[] = [];
 
       for (const src of activeSources) {
-        const srcPeriods = src.is_period_independent 
+        // period_read_mode bazlı dönem seçimi:
+        // current_only → sadece aktif dönem (masterdata: banka, cari kart, stok vb.)
+        // all_periods → tüm dönemler (transaction: fatura, fiş vb.)
+        const readMode = src.period_read_mode || 'all_periods';
+        const srcPeriods = readMode === 'current_only' 
           ? [currentPeriod].filter(Boolean) 
           : periods.map(p => p.period_no);
         
