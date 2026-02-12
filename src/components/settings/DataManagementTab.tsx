@@ -179,7 +179,7 @@ export function DataManagementTab() {
             <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <ArrowDownToLine className="h-3 w-3" />
-                {progress.totalFetched.toLocaleString('tr-TR')} çekildi
+                {progress.totalFetched.toLocaleString('tr-TR')}{progress.totalExpected > 0 ? ` / ${progress.totalExpected.toLocaleString('tr-TR')}` : ''} çekildi
               </span>
               <span className="flex items-center gap-1">
                 <ArrowUpFromLine className="h-3 w-3" />
@@ -197,14 +197,17 @@ export function DataManagementTab() {
             </div>
 
             {/* Running task chunk detail */}
-            {runningTask && runningTask.fetched > 0 && (
+            {runningTask && (runningTask.fetched > 0 || runningTask.expectedRecords > 0) && (
               <div className="p-2 rounded bg-secondary/40 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="font-medium">{runningTask.name} • Dönem {runningTask.periodNo}</span>
                   <span className="text-muted-foreground font-mono">
-                    {runningTask.fetched.toLocaleString('tr-TR')} kayıt → {runningTask.written.toLocaleString('tr-TR')} yazıldı
+                    {runningTask.fetched.toLocaleString('tr-TR')}{runningTask.expectedRecords > 0 ? ` / ${runningTask.expectedRecords.toLocaleString('tr-TR')}` : ''} kayıt → {runningTask.written.toLocaleString('tr-TR')} yazıldı
                   </span>
                 </div>
+                {runningTask.expectedRecords > 0 && (
+                  <Progress value={Math.min(100, Math.round((runningTask.fetched / runningTask.expectedRecords) * 100))} className="h-1 mt-1.5" />
+                )}
               </div>
             )}
 

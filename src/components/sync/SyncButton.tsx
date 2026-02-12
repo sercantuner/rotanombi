@@ -83,8 +83,8 @@ export function SyncButton() {
             </div>
             <Progress value={progress.overallPercent} className="h-1.5" />
             <div className="flex justify-between text-xs text-muted-foreground mt-1">
-              <span>{progress.totalFetched} kayıt çekildi</span>
-              <span>{progress.totalWritten} yazıldı</span>
+              <span>{progress.totalFetched.toLocaleString('tr-TR')}{progress.totalExpected > 0 ? ` / ${progress.totalExpected.toLocaleString('tr-TR')}` : ''} çekildi</span>
+              <span>{progress.totalWritten.toLocaleString('tr-TR')} yazıldı</span>
             </div>
           </div>
         )}
