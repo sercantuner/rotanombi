@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useDiaProfile } from '@/hooks/useDiaProfile';
 import { useDataSources } from '@/hooks/useDataSources';
 import { useFirmaPeriods } from '@/hooks/useFirmaPeriods';
+import { useExcludedPeriods } from '@/hooks/useExcludedPeriods';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -45,6 +46,7 @@ export function useSyncOrchestrator() {
   const { isConfigured } = useDiaProfile();
   const { dataSources } = useDataSources();
   const { periods } = useFirmaPeriods();
+  const { getExcludedPeriodsForSource } = useExcludedPeriods();
   const abortRef = useRef(false);
   const lockIdRef = useRef<string | null>(null);
   
@@ -251,6 +253,13 @@ export function useSyncOrchestrator() {
         
         for (const pn of srcPeriods) {
           if (!pn) continue;
+          // Hariç tutulan dönemleri atla
+          const excludedPeriods = getExcludedPeriodsForSource(src.slug);
+          if (excludedPeriods.includes(pn)) {
+            console.log(`[SyncOrchestrator] Skipping excluded period ${pn} for ${src.slug}`);
+            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'skipped', type: 'full', fetched: 0, written: 0, deleted: 0, error: 'Hariç tutulan dönem' });
+            continue;
+          }
           const pss = periodStatuses.find((ps: any) => ps.data_source_slug === src.slug && ps.donem_kodu === pn);
           const isLocked = pss?.is_locked;
           const hasFullSync = pss?.last_full_sync;
