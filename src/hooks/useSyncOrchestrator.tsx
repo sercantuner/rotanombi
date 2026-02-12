@@ -11,10 +11,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const CHUNK_SIZE = 300;
+const CHUNK_SIZE = 500;
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [2000, 4000, 8000];
-const DEFAULT_PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 100;
 const SKIP_ERROR_PATTERNS = ['Session refresh fail', 'dönem yetki', 'INVALID_SESSION', '404'];
 
 export interface SyncTask {

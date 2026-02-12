@@ -10,13 +10,13 @@ const corsHeaders = {
 // KURAL: Tüm veri kaynakları küçük parçalar halinde çekilir ve yazılır.
 // PAGE_SIZE: DIA'dan tek seferde çekilecek kayıt (küçük tutulur, timeout önlenir)
 // UPSERT_BATCH_SIZE: DB'ye tek seferde yazılacak kayıt (statement timeout önlenir)
-const PAGE_SIZE = 50, MAX_RECORDS = 50000;
+const PAGE_SIZE = 100, MAX_RECORDS = 50000;
 const CLEANUP_TIMEOUT_MS = 15 * 60 * 1000;
 const NON_DIA = ['takvim', '_system_calendar', 'system_calendar'];
 
-const DEFAULT_CHUNK_SIZE = 300;
-const MAX_CHUNK_SIZE = 1000;
-const UPSERT_BATCH_SIZE = 50;
+const DEFAULT_CHUNK_SIZE = 500;
+const MAX_CHUNK_SIZE = 2000;
+const UPSERT_BATCH_SIZE = 100;
 
 function parse(r: any, m: string): any[] {
   if (r.result) {
@@ -559,7 +559,7 @@ Deno.serve(async (req) => {
       
       const startOffset = offset || 0;
       const requestedChunkSize = Math.min(chunkSize || DEFAULT_CHUNK_SIZE, MAX_CHUNK_SIZE);
-      const effectivePageSize = reqPageSize ? Math.min(reqPageSize, PAGE_SIZE) : undefined;
+      const effectivePageSize = reqPageSize || PAGE_SIZE;
       
       console.log(`[syncChunk] Processing: ${src.slug}, period=${periodNo}, offset=${startOffset}, chunkSize=${requestedChunkSize}, pageSize=${effectivePageSize || PAGE_SIZE}`);
       
