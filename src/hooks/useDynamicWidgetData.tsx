@@ -663,6 +663,45 @@ async function fetchFromDatabase(
   
   const resolvedDonem = donemKodu;
   const useProjection = requiredFields && requiredFields.length > 0;
+
+  // Invoice MV optimizasyonu: scf_fatura_listele için get_invoice_summary kullan
+  // Bu, 44K+ JSONB kaydı yerine optimize edilmiş MV'den okur ve timeout'u önler
+  if (dataSourceSlug === 'scf_fatura_listele') {
+    while (hasMore) {
+      const { data, error } = await supabase.rpc('get_invoice_summary', {
+        p_sunucu_adi: sunucuAdi,
+        p_firma_kodu: firmaKodu,
+        p_donem_kodu: isPeriodIndependent ? null : resolvedDonem,
+        p_limit: PAGE_SIZE,
+        p_offset: from,
+      });
+      if (error) {
+        console.error('[DB] Invoice MV error:', error);
+        // MV yoksa fallback'e düş
+        break;
+      }
+      const rows = (data as any[]) || [];
+      allData = allData.concat(rows);
+      if (!lastUpdatedAt && rows.length > 0) {
+        // MV'den updated_at gelmiyor, tahmini olarak şu anı kullan
+        lastUpdatedAt = new Date().toISOString();
+      }
+      hasMore = rows.length >= PAGE_SIZE;
+      from += PAGE_SIZE;
+    }
+    if (allData.length > 0) {
+      console.log(`[DB] Invoice MV HIT: ${allData.length} records (dönem: ${resolvedDonem}${isPeriodIndependent ? ' [period-independent]' : ''})`);
+      return {
+        data: allData,
+        lastSyncedAt: lastUpdatedAt ? new Date(lastUpdatedAt) : null,
+        resolvedDonem,
+      };
+    }
+    // MV boşsa normal yoldan dene
+    from = 0;
+    hasMore = true;
+    allData = [];
+  }
   
   while (hasMore) {
     let rows: { data: any; updated_at: string }[] = [];
