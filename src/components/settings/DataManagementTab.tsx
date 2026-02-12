@@ -480,10 +480,28 @@ export function DataManagementTab() {
                                     <span className="text-muted-foreground">
                                       {period?.period_name || `D${periodNo}`}
                                     </span>
-                                    <div className="flex items-center gap-1">
+                                    <div className="flex items-center gap-0.5">
                                       <span className="font-mono font-semibold">
                                         {count.toLocaleString('tr-TR')}
                                       </span>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-5 w-5 p-0 text-primary/70 hover:text-primary"
+                                            disabled={progress.isRunning}
+                                            onClick={() => quickSync(ds.slug, periodNum)}
+                                          >
+                                            {progress.isRunning && progress.tasks.some(t => t.slug === ds.slug && t.periodNo === periodNum && t.status === 'running') ? (
+                                              <Loader2 className="h-3 w-3 animate-spin" />
+                                            ) : (
+                                              <RefreshCw className="h-3 w-3" />
+                                            )}
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Bu dönemi güncelle</TooltipContent>
+                                      </Tooltip>
                                       <AlertDialog>
                                         <AlertDialogTrigger asChild>
                                           <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-destructive/70 hover:text-destructive">
