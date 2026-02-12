@@ -89,7 +89,40 @@ export function useExcludedPeriods() {
       const { error: deleteError } = await deleteQuery;
       if (deleteError) {
         console.error('[useExcludedPeriods] Cache delete error:', deleteError);
-        // Silme hatası olsa bile exclusion kaydedildi, devam et
+      }
+
+      // 3. period_sync_status kayıtlarını sil
+      let syncStatusQuery = supabase
+        .from('period_sync_status')
+        .delete()
+        .eq('sunucu_adi', diaProfile.sunucuAdi)
+        .eq('firma_kodu', diaProfile.firmaKodu)
+        .eq('donem_kodu', donemKodu);
+
+      if (dataSourceSlug) {
+        syncStatusQuery = syncStatusQuery.eq('data_source_slug', dataSourceSlug);
+      }
+
+      const { error: syncStatusError } = await syncStatusQuery;
+      if (syncStatusError) {
+        console.error('[useExcludedPeriods] Sync status delete error:', syncStatusError);
+      }
+
+      // 4. sync_history kayıtlarını sil
+      let syncHistoryQuery = supabase
+        .from('sync_history')
+        .delete()
+        .eq('sunucu_adi', diaProfile.sunucuAdi)
+        .eq('firma_kodu', diaProfile.firmaKodu)
+        .eq('donem_kodu', donemKodu);
+
+      if (dataSourceSlug) {
+        syncHistoryQuery = syncHistoryQuery.eq('data_source_slug', dataSourceSlug);
+      }
+
+      const { error: syncHistoryError } = await syncHistoryQuery;
+      if (syncHistoryError) {
+        console.error('[useExcludedPeriods] Sync history delete error:', syncHistoryError);
       }
 
       return { donemKodu, dataSourceSlug };
