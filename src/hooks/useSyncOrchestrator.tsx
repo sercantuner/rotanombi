@@ -26,6 +26,7 @@ export interface SyncTask {
   fetched: number;
   written: number;
   deleted: number;
+  expectedRecords: number;
   error?: string;
 }
 
@@ -39,6 +40,7 @@ export interface SyncProgress {
   totalFetched: number;
   totalWritten: number;
   totalDeleted: number;
+  totalExpected: number;
 }
 
 export function useSyncOrchestrator() {
@@ -60,6 +62,7 @@ export function useSyncOrchestrator() {
     totalFetched: 0,
     totalWritten: 0,
     totalDeleted: 0,
+    totalExpected: 0,
   });
 
   const getAuthToken = async (): Promise<string | null> => {
@@ -155,7 +158,12 @@ export function useSyncOrchestrator() {
         if (tasks[taskIndex]) {
           tasks[taskIndex] = { ...tasks[taskIndex], fetched: totalFetched, written: totalWritten };
         }
-        return { ...prev, tasks, totalFetched: prev.totalFetched + (result.fetched || 0), totalWritten: prev.totalWritten + (result.written || 0) };
+        const newTotalFetched = prev.totalFetched + (result.fetched || 0);
+        const newTotalWritten = prev.totalWritten + (result.written || 0);
+        const pct = prev.totalExpected > 0
+          ? Math.min(99, Math.round((newTotalFetched / prev.totalExpected) * 100))
+          : prev.overallPercent;
+        return { ...prev, tasks, totalFetched: newTotalFetched, totalWritten: newTotalWritten, overallPercent: pct };
       });
     }
 
@@ -264,23 +272,25 @@ export function useSyncOrchestrator() {
           const excludedPeriods = getExcludedPeriodsForSource(src.slug);
           if (excludedPeriods.includes(pn)) {
             console.log(`[SyncOrchestrator] Skipping excluded period ${pn} for ${src.slug}`);
-            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'skipped', type: 'full', fetched: 0, written: 0, deleted: 0, error: 'Hariç tutulan dönem' });
+            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'skipped', type: 'full', fetched: 0, written: 0, deleted: 0, expectedRecords: 0, error: 'Hariç tutulan dönem' });
             continue;
           }
           const pss = periodStatuses.find((ps: any) => ps.data_source_slug === src.slug && ps.donem_kodu === pn);
           const isLocked = pss?.is_locked;
           const hasFullSync = pss?.last_full_sync;
+          const expected = pss?.total_records || 0;
           
           if (isLocked && !forceIncremental) {
-            // Kilitli dönemde sadece reconcileKeys çalıştır (silinen kayıt tespiti)
-            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'reconcile', fetched: 0, written: 0, deleted: 0 });
+            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'reconcile', fetched: 0, written: 0, deleted: 0, expectedRecords: expected });
           } else if (hasFullSync || forceIncremental) {
-            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'incremental', fetched: 0, written: 0, deleted: 0 });
+            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'incremental', fetched: 0, written: 0, deleted: 0, expectedRecords: expected });
           } else {
-            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'full', fetched: 0, written: 0, deleted: 0 });
+            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'full', fetched: 0, written: 0, deleted: 0, expectedRecords: expected });
           }
         }
       }
+
+      const totalExpected = tasks.reduce((sum, t) => sum + t.expectedRecords, 0);
 
       setProgress({
         isRunning: true,
@@ -292,6 +302,7 @@ export function useSyncOrchestrator() {
         totalFetched: 0,
         totalWritten: 0,
         totalDeleted: 0,
+        totalExpected,
       });
 
       const totalTasks = tasks.length;
@@ -402,10 +413,13 @@ export function useSyncOrchestrator() {
         }
 
         completedTasks++;
-        setProgress(prev => ({
-          ...prev,
-          overallPercent: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 100,
-        }));
+        setProgress(prev => {
+          // Calculate percent based on fetched records vs expected, fallback to task-based
+          const pct = prev.totalExpected > 0
+            ? Math.min(99, Math.round((prev.totalFetched / prev.totalExpected) * 100))
+            : totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 100;
+          return { ...prev, overallPercent: pct };
+        });
       }
 
       // Tamamlandı
@@ -451,14 +465,26 @@ export function useSyncOrchestrator() {
       return;
     }
 
+    // Fetch expected record count for this specific source+period
+    const { data: pssData } = await supabase
+      .from('period_sync_status')
+      .select('total_records')
+      .eq('data_source_slug', slug)
+      .eq('donem_kodu', periodNo)
+      .maybeSingle();
+    const expected = pssData?.total_records || 0;
+
     setProgress(prev => ({
       ...prev,
       isRunning: true,
       currentSource: source.name,
       currentPeriod: periodNo,
       currentType: 'incremental',
-      tasks: [{ slug, name: source.name, periodNo, status: 'running', type: 'incremental', fetched: 0, written: 0, deleted: 0 }],
+      tasks: [{ slug, name: source.name, periodNo, status: 'running', type: 'incremental', fetched: 0, written: 0, deleted: 0, expectedRecords: expected }],
       overallPercent: 0,
+      totalExpected: expected,
+      totalFetched: 0,
+      totalWritten: 0,
     }));
 
     try {
