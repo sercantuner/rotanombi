@@ -70,7 +70,7 @@ export function usePeriodBasedRecordCounts() {
       }
     },
     enabled: diaProfile.isConfigured && !!diaProfile.sunucuAdi && !!diaProfile.firmaKodu,
-    staleTime: 60 * 1000, // 1 dakika cache
+    staleTime: 10 * 1000, // 10 saniye - sync sırasında hızlı güncelleme için
     refetchOnWindowFocus: false,
   });
 }
