@@ -198,15 +198,20 @@ export function DataManagementTab() {
 
             {/* Running task chunk detail */}
             {runningTask && (runningTask.fetched > 0 || runningTask.expectedRecords > 0) && (
-              <div className="p-2 rounded bg-secondary/40 text-xs">
+              <div className="p-2 rounded bg-secondary/40 text-xs space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="font-medium">{runningTask.name} • Dönem {runningTask.periodNo}</span>
+                  <span className="font-medium">
+                    {runningTask.name} • Dönem {runningTask.periodNo}
+                    {runningTask.localRecords > 0 && runningTask.localRecords < runningTask.expectedRecords && (
+                      <span className="text-primary/70 ml-1">(kaldığı yerden devam)</span>
+                    )}
+                  </span>
                   <span className="text-muted-foreground font-mono">
-                    {runningTask.fetched.toLocaleString('tr-TR')}{runningTask.expectedRecords > 0 ? ` / ${runningTask.expectedRecords.toLocaleString('tr-TR')}` : ''} kayıt → {runningTask.written.toLocaleString('tr-TR')} yazıldı
+                    {(runningTask.localRecords + runningTask.fetched).toLocaleString('tr-TR')}{runningTask.expectedRecords > 0 ? ` / ${runningTask.expectedRecords.toLocaleString('tr-TR')}` : ''} kayıt
                   </span>
                 </div>
                 {runningTask.expectedRecords > 0 && (
-                  <Progress value={Math.min(100, Math.round((runningTask.fetched / runningTask.expectedRecords) * 100))} className="h-1 mt-1.5" />
+                  <Progress value={Math.min(100, Math.round(((runningTask.localRecords + runningTask.fetched) / runningTask.expectedRecords) * 100))} className="h-1" />
                 )}
               </div>
             )}

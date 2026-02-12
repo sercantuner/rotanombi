@@ -27,6 +27,7 @@ export interface SyncTask {
   written: number;
   deleted: number;
   expectedRecords: number;
+  localRecords: number;
   error?: string;
 }
 
@@ -45,7 +46,7 @@ export interface SyncProgress {
 
 export function useSyncOrchestrator() {
   const queryClient = useQueryClient();
-  const { isConfigured } = useDiaProfile();
+  const { isConfigured, sunucuAdi: profileSunucu, firmaKodu: profileFirma } = useDiaProfile();
   const { dataSources } = useDataSources();
   const { periods } = useFirmaPeriods();
   const { getExcludedPeriodsForSource } = useExcludedPeriods();
@@ -123,9 +124,9 @@ export function useSyncOrchestrator() {
   // Full sync: chunk bazlı
   const syncFullChunked = async (
     slug: string, periodNo: number, taskIndex: number, 
-    options?: { pageSize?: number; filters?: any[] }
+    options?: { pageSize?: number; filters?: any[]; startOffset?: number }
   ): Promise<{ fetched: number; written: number }> => {
-    let offset = 0;
+    let offset = options?.startOffset || 0;
     let totalFetched = 0;
     let totalWritten = 0;
     let hasMore = true;
@@ -273,7 +274,7 @@ export function useSyncOrchestrator() {
           const excludedPeriods = getExcludedPeriodsForSource(src.slug);
           if (excludedPeriods.includes(pn)) {
             console.log(`[SyncOrchestrator] Skipping excluded period ${pn} for ${src.slug}`);
-            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'skipped', type: 'full', fetched: 0, written: 0, deleted: 0, expectedRecords: 0, error: 'Hariç tutulan dönem' });
+            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'skipped', type: 'full', fetched: 0, written: 0, deleted: 0, expectedRecords: 0, localRecords: 0, error: 'Hariç tutulan dönem' });
             continue;
           }
           const pss = periodStatuses.find((ps: any) => ps.data_source_slug === src.slug && ps.donem_kodu === pn);
@@ -282,13 +283,12 @@ export function useSyncOrchestrator() {
           
           const taskIndex = tasks.length;
           if (isLocked && !forceIncremental) {
-            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'reconcile', fetched: 0, written: 0, deleted: 0, expectedRecords: 0 });
+            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'reconcile', fetched: 0, written: 0, deleted: 0, expectedRecords: 0, localRecords: 0 });
           } else if (hasFullSync || forceIncremental) {
-            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'incremental', fetched: 0, written: 0, deleted: 0, expectedRecords: 0 });
+            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'incremental', fetched: 0, written: 0, deleted: 0, expectedRecords: 0, localRecords: 0 });
           } else {
-            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'full', fetched: 0, written: 0, deleted: 0, expectedRecords: 0 });
+            tasks.push({ slug: src.slug, name: src.name, periodNo: pn, status: 'pending', type: 'full', fetched: 0, written: 0, deleted: 0, expectedRecords: 0, localRecords: 0 });
           }
-          // Reconcile görevleri için count çekmeye gerek yok
           if (tasks[taskIndex].type !== 'reconcile') {
             sourcesToCount.push({ slug: src.slug, periodNo: pn, taskIndex });
           }
@@ -297,7 +297,7 @@ export function useSyncOrchestrator() {
 
       setProgress({
         isRunning: true,
-        currentSource: 'Kayıt sayıları çekiliyor...',
+        currentSource: 'Kayıt sayıları kontrol ediliyor...',
         currentPeriod: null,
         currentType: null,
         tasks,
@@ -308,7 +308,7 @@ export function useSyncOrchestrator() {
         totalExpected: 0,
       });
 
-      // DIA'dan gerçek kayıt sayılarını çek (batch halinde, max 10 per call)
+      // 1) DIA'dan gerçek kayıt sayılarını çek
       if (sourcesToCount.length > 0) {
         const BATCH_SIZE = 10;
         for (let b = 0; b < sourcesToCount.length; b += BATCH_SIZE) {
@@ -321,8 +321,7 @@ export function useSyncOrchestrator() {
             if (countResult?.success && countResult.counts) {
               for (const item of batch) {
                 const key = `${item.slug}_${item.periodNo}`;
-                const count = countResult.counts[key] || 0;
-                tasks[item.taskIndex].expectedRecords = count;
+                tasks[item.taskIndex].expectedRecords = countResult.counts[key] || 0;
               }
             }
           } catch (e) {
@@ -331,14 +330,48 @@ export function useSyncOrchestrator() {
         }
       }
 
+      // 2) DB'deki mevcut kayıt sayılarını çek (dönem bazlı)
+      for (const item of sourcesToCount) {
+        try {
+          const { count } = await supabase
+            .from('company_data_cache')
+            .select('*', { count: 'exact', head: true })
+            .eq('sunucu_adi', profileSunucu || '')
+            .eq('firma_kodu', profileFirma || '')
+            .eq('data_source_slug', item.slug)
+            .eq('donem_kodu', item.periodNo)
+            .eq('is_deleted', false);
+          tasks[item.taskIndex].localRecords = count || 0;
+        } catch (e) {
+          console.error(`[SyncOrchestrator] Local count error for ${item.slug}:`, e);
+        }
+      }
+
+      // 3) Karşılaştır: DIA vs DB → task type'ı güncelle
+      for (const item of sourcesToCount) {
+        const task = tasks[item.taskIndex];
+        if (task.expectedRecords > 0 && task.localRecords >= task.expectedRecords) {
+          // DB zaten tamamlanmış, sadece reconcile yap
+          console.log(`[SyncOrchestrator] ${task.slug} D${task.periodNo}: DB(${task.localRecords}) >= DIA(${task.expectedRecords}), skipping to reconcile`);
+          task.type = 'reconcile';
+        } else if (task.expectedRecords > 0 && task.localRecords > 0 && task.localRecords < task.expectedRecords) {
+          // Yarım kalmış, kaldığı yerden devam et (full sync with offset)
+          console.log(`[SyncOrchestrator] ${task.slug} D${task.periodNo}: DB(${task.localRecords}) < DIA(${task.expectedRecords}), resuming from offset ${task.localRecords}`);
+          task.type = 'full'; // Kaldığı yerden devam edecek
+        }
+      }
+
       const totalExpected = tasks.reduce((sum, t) => sum + t.expectedRecords, 0);
-      console.log(`[SyncOrchestrator] Total expected records from DIA: ${totalExpected}`);
+      const totalLocal = tasks.reduce((sum, t) => sum + t.localRecords, 0);
+      console.log(`[SyncOrchestrator] DIA total: ${totalExpected}, DB total: ${totalLocal}, delta: ${totalExpected - totalLocal}`);
 
       setProgress(prev => ({
         ...prev,
         currentSource: null,
         tasks: [...tasks],
         totalExpected,
+        // Mevcut local kayıtları da fetched olarak say (ilerlemeye dahil et)
+        totalFetched: totalLocal,
       }));
 
       const totalTasks = tasks.length;
@@ -357,10 +390,17 @@ export function useSyncOrchestrator() {
         }));
 
         try {
-          const syncOptions = { pageSize: DEFAULT_PAGE_SIZE };
+          // Yarım kalmış veri varsa kaldığı yerden devam et
+          const resumeOffset = (task.type === 'full' && task.localRecords > 0 && task.expectedRecords > task.localRecords) 
+            ? task.localRecords : 0;
+          const syncOptions = { pageSize: DEFAULT_PAGE_SIZE, startOffset: resumeOffset };
+
+          if (resumeOffset > 0) {
+            console.log(`[SyncOrchestrator] Resuming ${task.slug} D${task.periodNo} from offset ${resumeOffset} (local: ${task.localRecords}, expected: ${task.expectedRecords})`);
+          }
 
           if (task.type === 'reconcile') {
-            // Kilitli dönem: sadece silinen kayıt kontrolü
+            // Kilitli dönem veya tamamlanmış: sadece silinen kayıt kontrolü
             const recResult = await reconcileKeys(task.slug, task.periodNo);
             setProgress(prev => ({
               ...prev,
@@ -521,7 +561,7 @@ export function useSyncOrchestrator() {
       currentSource: source.name,
       currentPeriod: periodNo,
       currentType: 'incremental',
-      tasks: [{ slug, name: source.name, periodNo, status: 'running', type: 'incremental', fetched: 0, written: 0, deleted: 0, expectedRecords: expected }],
+      tasks: [{ slug, name: source.name, periodNo, status: 'running', type: 'incremental', fetched: 0, written: 0, deleted: 0, expectedRecords: expected, localRecords: 0 }],
       overallPercent: 0,
       totalExpected: expected,
       totalFetched: 0,
