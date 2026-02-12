@@ -8,6 +8,7 @@ import { useSyncOrchestratorContext } from '@/contexts/SyncOrchestratorContext';
 
 import { useDiaProfile } from '@/hooks/useDiaProfile';
 import { useCacheRecordCounts } from '@/hooks/useCacheRecordCounts';
+import { usePeriodBasedRecordCounts } from '@/hooks/usePeriodBasedRecordCounts';
 import { useFirmaPeriods } from '@/hooks/useFirmaPeriods';
 import {
   Database,
@@ -68,8 +69,10 @@ export function DataManagementTab() {
   const { progress, startFullOrchestration, quickSync, abort } = useSyncOrchestratorContext();
   const diaProfile = useDiaProfile();
   const { data: cacheRecordCounts, isLoading: isCacheCountsLoading } = useCacheRecordCounts();
+  const { data: periodDistribution, isLoading: isPeriodDistLoading } = usePeriodBasedRecordCounts();
   const { periods } = useFirmaPeriods();
   const [expandedTasks, setExpandedTasks] = React.useState(true);
+  const [expandedDistributions, setExpandedDistributions] = React.useState<Record<string, boolean>>({});
 
   const activeDataSources = dataSources.filter(ds => ds.is_active);
   const getRecordCount = (slug: string) => cacheRecordCounts?.[slug] || 0;
@@ -346,76 +349,134 @@ export function DataManagementTab() {
                 const recordCount = getRecordCount(ds.slug);
                 const isCurrentlySyncing = progress.isRunning && progress.tasks.some(t => t.slug === ds.slug && t.status === 'running');
                 const lastFetched = ds.last_fetched_at;
+                const isDistributionExpanded = expandedDistributions[ds.slug];
+                const distribution = periodDistribution?.[ds.slug];
 
                 return (
-                  <div
-                    key={ds.id}
-                    className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
-                      isCurrentlySyncing ? 'bg-primary/10 border border-primary/20' : 'bg-secondary/30 hover:bg-secondary/50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className={`p-1.5 rounded ${recordCount && recordCount > 0 ? 'bg-green-500/20' : 'bg-muted'}`}>
-                        {isCurrentlySyncing ? (
-                          <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                        ) : recordCount && recordCount > 0 ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <AlertCircle className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium truncate">{ds.name}</p>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>{ds.module}/{ds.method}</span>
-                          {ds.is_period_independent && (
-                            <Badge variant="outline" className="text-[10px] px-1 py-0">Dönem Bağımsız</Badge>
-                          )}
-                          {lastFetched && (
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <span className="flex items-center gap-1">
-                                  <Calendar className="h-3 w-3" />
-                                  {formatSyncTime(lastFetched)}
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {format(new Date(lastFetched), 'dd MMM yyyy HH:mm', { locale: tr })}
-                              </TooltipContent>
-                            </Tooltip>
+                  <div key={ds.id} className="space-y-1">
+                    <div
+                      className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
+                        isCurrentlySyncing ? 'bg-primary/10 border border-primary/20' : 'bg-secondary/30 hover:bg-secondary/50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className={`p-1.5 rounded ${recordCount && recordCount > 0 ? 'bg-green-500/20' : 'bg-muted'}`}>
+                          {isCurrentlySyncing ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                          ) : recordCount && recordCount > 0 ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <AlertCircle className="h-4 w-4 text-muted-foreground" />
                           )}
                         </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium truncate">{ds.name}</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{ds.module}/{ds.method}</span>
+                            {ds.is_period_independent && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0">Dönem Bağımsız</Badge>
+                            )}
+                            {lastFetched && (
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    {formatSyncTime(lastFetched)}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {format(new Date(lastFetched), 'dd MMM yyyy HH:mm', { locale: tr })}
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline" className="font-mono text-xs">
-                        {recordCount !== null ? recordCount.toLocaleString('tr-TR') : '-'} kayıt
-                      </Badge>
+                      <div className="flex items-center gap-3">
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {recordCount !== null ? recordCount.toLocaleString('tr-TR') : '-'} kayıt
+                        </Badge>
 
-                      <Tooltip>
-                        <TooltipTrigger asChild>
+                        {distribution && distribution.total > 0 && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => {
-                              const pn = currentPeriod?.period_no || parseInt(diaProfile.donemKodu || '0');
-                              if (pn) quickSync(ds.slug, pn);
-                            }}
-                            disabled={isCurrentlySyncing || progress.isRunning}
+                            onClick={() => setExpandedDistributions(prev => ({
+                              ...prev,
+                              [ds.slug]: !prev[ds.slug]
+                            }))}
                             className="h-8 w-8 p-0"
                           >
-                            {isCurrentlySyncing ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
+                            {isDistributionExpanded ? (
+                              <ChevronDown className="h-4 w-4" />
                             ) : (
-                              <Zap className="h-4 w-4" />
+                              <ChevronRight className="h-4 w-4" />
                             )}
                           </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Hızlı artımlı güncelleme</TooltipContent>
-                      </Tooltip>
+                        )}
+
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const pn = currentPeriod?.period_no || parseInt(diaProfile.donemKodu || '0');
+                                if (pn) quickSync(ds.slug, pn);
+                              }}
+                              disabled={isCurrentlySyncing || progress.isRunning}
+                              className="h-8 w-8 p-0"
+                            >
+                              {isCurrentlySyncing ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Zap className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Hızlı artımlı güncelleme</TooltipContent>
+                        </Tooltip>
+                      </div>
                     </div>
+
+                    {/* Dönem Bazlı Dağılım */}
+                    {isDistributionExpanded && distribution && distribution.total > 0 && (
+                      <div className="ml-3 p-3 rounded-lg bg-secondary/20 border border-secondary/40">
+                        <div className="flex items-center gap-2 mb-2">
+                          <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-xs font-medium text-muted-foreground">Dönem Bazlı Dağılım</span>
+                          <span className="text-xs text-muted-foreground ml-auto">
+                            Toplam: {distribution.total.toLocaleString('tr-TR')} kayıt
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {Object.entries(distribution.byPeriod)
+                            .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
+                            .map(([periodNo, count]) => {
+                              const period = periods.find(p => p.period_no === parseInt(periodNo));
+                              const percent = (count / distribution.total) * 100;
+                              return (
+                                <div key={periodNo} className="space-y-1">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-muted-foreground">
+                                      {period?.period_name || `D${periodNo}`}
+                                    </span>
+                                    <span className="font-mono font-semibold">
+                                      {count.toLocaleString('tr-TR')}
+                                    </span>
+                                  </div>
+                                  <Progress value={percent} className="h-1.5" />
+                                  <div className="text-[10px] text-muted-foreground text-right">
+                                    {percent.toFixed(1)}%
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
