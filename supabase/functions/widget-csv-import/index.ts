@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { csvContent, storageFile, dryRun = false } = await req.json();
+    const { csvContent, storageFile, dryRun = false, forceUpdate = false } = await req.json();
     
     let csv = csvContent;
     
@@ -211,8 +211,8 @@ Deno.serve(async (req) => {
       
       if (existing) {
         const csvVersion = parseIntOrNull(rec.version) || 1;
-        if (csvVersion > existing.version) {
-          // CSV has newer version - update
+        if (forceUpdate || csvVersion > existing.version) {
+          // Force update or CSV has newer version - update
           toUpdate.push({ id: existing.id, ...widgetData });
         } else {
           skipped.push(rec.widget_key + ' (same or older version)');
