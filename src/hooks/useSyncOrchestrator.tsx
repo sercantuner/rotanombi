@@ -212,6 +212,13 @@ export function useSyncOrchestrator() {
     queryClient.invalidateQueries({ queryKey: ['sync-history'] });
     queryClient.invalidateQueries({ queryKey: ['cache-record-counts'] });
     queryClient.invalidateQueries({ queryKey: ['last-sync-time'] });
+    queryClient.invalidateQueries({ queryKey: ['period-based-record-counts'] });
+  };
+
+  // Lightweight invalidation during sync (just counts)
+  const invalidateCountsDuringSync = () => {
+    queryClient.invalidateQueries({ queryKey: ['cache-record-counts'] });
+    queryClient.invalidateQueries({ queryKey: ['period-based-record-counts'] });
   };
 
   // Tam orkestrasyon
@@ -313,6 +320,7 @@ export function useSyncOrchestrator() {
               tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'completed', deleted: recResult.markedDeleted } : t),
               totalDeleted: prev.totalDeleted + recResult.markedDeleted,
             }));
+            invalidateCountsDuringSync();
           } else if (task.type === 'full') {
             const result = await syncFullChunked(task.slug, task.periodNo, i, syncOptions);
             
@@ -343,6 +351,7 @@ export function useSyncOrchestrator() {
               tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'completed', fetched: result.fetched, written: result.written, deleted: deletedCount } : t),
               totalDeleted: prev.totalDeleted + deletedCount,
             }));
+            invalidateCountsDuringSync();
           } else {
             // Incremental
             const result = await syncIncremental(task.slug, task.periodNo);
@@ -365,6 +374,7 @@ export function useSyncOrchestrator() {
                 tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'completed', type: 'full', fetched: fullResult.fetched, written: fullResult.written, deleted: deletedCount } : t),
                 totalDeleted: prev.totalDeleted + deletedCount,
               }));
+              invalidateCountsDuringSync();
             } else {
               // Incremental sonrası reconcile
               let deletedCount = 0;
@@ -378,6 +388,7 @@ export function useSyncOrchestrator() {
                 tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'completed', fetched: result.fetched, written: result.written, deleted: deletedCount } : t),
                 totalDeleted: prev.totalDeleted + deletedCount,
               }));
+              invalidateCountsDuringSync();
             }
           }
         } catch (e) {
