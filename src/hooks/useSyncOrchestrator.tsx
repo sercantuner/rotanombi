@@ -101,9 +101,9 @@ export function useSyncOrchestrator() {
   };
 
   // Kilit al
-  const acquireLock = async (syncType: string): Promise<{ success: boolean; lockId?: string; error?: string; lockedBy?: string }> => {
+  const acquireLock = async (syncType: string, forceAcquire = false): Promise<{ success: boolean; lockId?: string; error?: string; lockedBy?: string }> => {
     try {
-      const result = await callEdgeFunction({ action: 'acquireLock', syncType });
+      const result = await callEdgeFunction({ action: 'acquireLock', syncType, forceAcquire });
       if (result.success) {
         lockIdRef.current = result.lockId;
         return { success: true, lockId: result.lockId };
@@ -249,7 +249,12 @@ export function useSyncOrchestrator() {
     }
 
     // Kilit al
-    const lockResult = await acquireLock(forceIncremental ? 'incremental' : 'full');
+    let lockResult = await acquireLock(forceIncremental ? 'incremental' : 'full');
+    if (!lockResult.success && lockResult.error === 'SYNC_IN_PROGRESS' && targetUserId) {
+      // Super admin impersonation mode - force acquire the lock
+      console.log('[SyncOrchestrator] Lock blocked, force-acquiring as super admin...');
+      lockResult = await acquireLock(forceIncremental ? 'incremental' : 'full', true);
+    }
     if (!lockResult.success) {
       if (lockResult.error === 'SYNC_IN_PROGRESS') {
         toast.error(`Senkronizasyon zaten devam ediyor (${lockResult.lockedBy || 'başka kullanıcı'})`);
@@ -547,7 +552,11 @@ export function useSyncOrchestrator() {
     if (!source) return;
 
     // Kilit al
-    const lockResult = await acquireLock('incremental');
+    let lockResult = await acquireLock('incremental');
+    if (!lockResult.success && lockResult.error === 'SYNC_IN_PROGRESS' && targetUserId) {
+      console.log('[SyncOrchestrator] quickSync: Lock blocked, force-acquiring as super admin...');
+      lockResult = await acquireLock('incremental', true);
+    }
     if (!lockResult.success) {
       if (lockResult.error === 'SYNC_IN_PROGRESS') {
         toast.error(`Senkronizasyon zaten devam ediyor (${lockResult.lockedBy || 'başka kullanıcı'})`);

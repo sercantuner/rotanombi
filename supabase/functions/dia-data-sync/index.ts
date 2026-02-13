@@ -31,6 +31,11 @@ async function getDataSource(sb: any, slug: string) {
   return data;
 }
 
+async function checkSuperAdmin(sb: any, userId: string): Promise<boolean> {
+  const { data } = await sb.from('user_roles').select('role').eq('user_id', userId).eq('role', 'super_admin').single();
+  return !!data;
+}
+
 function buildDiaMethodName(module: string, method: string): string {
   return method.startsWith(`${module}_`) ? method : `${module}_${method}`;
 }
@@ -57,7 +62,16 @@ Deno.serve(async (req) => {
 
       const { data: existing } = await sb.from('sync_locks').select('*').eq('sunucu_adi', sun).eq('firma_kodu', fk).single();
       if (existing) {
-        return respond({ success: false, error: 'SYNC_IN_PROGRESS', lockedBy: existing.locked_by_email || existing.locked_by });
+        // Super admin can force-acquire by passing forceAcquire: true
+        const isSuperAdmin = await checkSuperAdmin(sb, user.id);
+        if (body.forceAcquire && isSuperAdmin) {
+          console.log(`[acquireLock] Super admin ${user.email} force-acquiring lock from ${existing.locked_by_email}`);
+          await sb.from('sync_locks').delete().eq('id', existing.id);
+          // Also abort any running jobs for this server
+          await sb.from('sync_jobs').update({ status: 'failed', completed_at: new Date().toISOString() }).eq('sunucu_adi', sun).eq('firma_kodu', fk).eq('status', 'running');
+        } else {
+          return respond({ success: false, error: 'SYNC_IN_PROGRESS', lockedBy: existing.locked_by_email || existing.locked_by });
+        }
       }
 
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
