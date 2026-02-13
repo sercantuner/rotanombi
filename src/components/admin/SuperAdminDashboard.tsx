@@ -59,21 +59,8 @@ export default function SuperAdminDashboard() {
         supabase.from('widget_tags').select('category_id, widget_categories(name)'),
       ]);
 
-      // Chunked fetch for cache stats (bypass 1000 row limit)
-      const PAGE_SIZE = 5000;
-      const cacheRows: { sunucu_adi: string }[] = [];
-      let offset = 0;
-      while (true) {
-        const { data: page } = await supabase
-          .from('company_data_cache')
-          .select('sunucu_adi')
-          .eq('is_deleted', false)
-          .range(offset, offset + PAGE_SIZE - 1);
-        if (!page || page.length === 0) break;
-        cacheRows.push(...page);
-        if (page.length < PAGE_SIZE) break;
-        offset += PAGE_SIZE;
-      }
+      // Use SECURITY DEFINER RPC to get cache stats across ALL servers
+      const { data: cacheStats } = await supabase.rpc('get_all_cache_stats');
 
       const profiles = profilesRes.data || [];
       const widgets = widgetsRes.data || [];
@@ -94,16 +81,14 @@ export default function SuperAdminDashboard() {
         .sort((a, b) => b.count - a.count)
         .slice(0, 8);
 
-      // Cache data stats per server (already fetched via chunked loop above)
+      // Build server cache map from RPC results
       const serverCacheMap = new Map<string, number>();
-      cacheRows.forEach((row) => {
-        const key = row.sunucu_adi || 'Bilinmiyor';
-        serverCacheMap.set(key, (serverCacheMap.get(key) || 0) + 1);
+      let totalRecords = 0;
+      (cacheStats || []).forEach((row: { sunucu_adi: string; record_count: number }) => {
+        serverCacheMap.set(row.sunucu_adi, Number(row.record_count));
+        totalRecords += Number(row.record_count);
       });
-      const totalRecords = cacheRows.length;
       
-      // Approximate size: we can't get exact size from client, so estimate ~1KB per record
-      // For accurate data we'd need an RPC, but this gives a reasonable estimate
       const estimatedBytesPerRecord = 1024;
       const totalSizeBytes = totalRecords * estimatedBytesPerRecord;
 
