@@ -124,6 +124,8 @@ export default function SuperAdminDataManagement({ users }: Props) {
   const [syncHistory, setSyncHistory] = useState<SyncHistoryItem[]>([]);
   const [widgetUsage, setWidgetUsage] = useState<WidgetUsage>({});
   const [excludedPeriods, setExcludedPeriods] = useState<{ donem_kodu: number; data_source_slug: string | null }[]>([]);
+  const [diaRecordCounts, setDiaRecordCounts] = useState<Record<string, Record<number, number>>>({});
+  const [loadingDiaCounts, setLoadingDiaCounts] = useState<Record<string, boolean>>({});
 
   // Seçili sunucunun sahibi kullanıcıyı bul (sync için targetUserId olarak kullanılacak)
   const getTargetUserId = useCallback((): string | undefined => {
@@ -395,6 +397,38 @@ export default function SuperAdminDataManagement({ users }: Props) {
 
   const isExcluded = (donemKodu: number, slug: string) =>
     excludedPeriods.some(e => e.donem_kodu === donemKodu && (e.data_source_slug === slug || e.data_source_slug === null));
+
+  // DIA'dan anlık kayıt sayısı çek (sadece _key ile)
+  const fetchDiaRecordCount = async (dsSlug: string) => {
+    if (!selectedServer || !targetUserId || periods.length === 0) return;
+    setLoadingDiaCounts(prev => ({ ...prev, [dsSlug]: true }));
+    try {
+      const sources = periods.map(p => ({ slug: dsSlug, periodNo: p.period_no }));
+      const { data, error } = await supabase.functions.invoke('dia-data-sync', {
+        body: {
+          action: 'getRecordCounts',
+          sources,
+          targetUserId,
+        },
+      });
+      if (error) throw error;
+      if (data?.success && data.counts) {
+        const byPeriod: Record<number, number> = {};
+        for (const p of periods) {
+          const key = `${dsSlug}_${p.period_no}`;
+          byPeriod[p.period_no] = data.counts[key] || 0;
+        }
+        setDiaRecordCounts(prev => ({ ...prev, [dsSlug]: byPeriod }));
+        const total = Object.values(byPeriod).reduce((s, c) => s + c, 0);
+        toast.success(`${dsSlug}: DIA'da toplam ${total.toLocaleString('tr-TR')} kayıt`);
+      }
+    } catch (err) {
+      console.error('DIA record count error:', err);
+      toast.error('DIA kayıt sayısı alınamadı');
+    } finally {
+      setLoadingDiaCounts(prev => ({ ...prev, [dsSlug]: false }));
+    }
+  };
 
   const totalRecords = stats.reduce((sum, s) => sum + s.count, 0);
   const currentPeriod = periods.find(p => p.is_current);
@@ -800,6 +834,24 @@ export default function SuperAdminDataManagement({ users }: Props) {
                                   <Badge variant="outline" className="font-mono text-xs">
                                     {ds.count.toLocaleString('tr-TR')} kayıt
                                   </Badge>
+                                  {diaRecordCounts[ds.slug] && (
+                                    <Tooltip>
+                                      <TooltipTrigger>
+                                        <Badge 
+                                          variant={Object.values(diaRecordCounts[ds.slug]).reduce((s, c) => s + c, 0) !== ds.count ? 'destructive' : 'secondary'} 
+                                          className="font-mono text-[10px]"
+                                        >
+                                          DIA: {Object.values(diaRecordCounts[ds.slug]).reduce((s, c) => s + c, 0).toLocaleString('tr-TR')}
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        {Object.values(diaRecordCounts[ds.slug]).reduce((s, c) => s + c, 0) === ds.count
+                                          ? 'DIA ile eşleşiyor ✓'
+                                          : `Fark: ${(Object.values(diaRecordCounts[ds.slug]).reduce((s, c) => s + c, 0) - ds.count).toLocaleString('tr-TR')}`
+                                        }
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )}
 
                                   {distribution && distribution.total > 0 && (
                                     <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
@@ -831,6 +883,28 @@ export default function SuperAdminDataManagement({ users }: Props) {
                                         </Button>
                                       </TooltipTrigger>
                                       <TooltipContent>Hızlı artımlı güncelleme</TooltipContent>
+                                    </Tooltip>
+                                  )}
+
+                                  {/* DIA record count button */}
+                                  {targetUserId && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => fetchDiaRecordCount(ds.slug)}
+                                          disabled={loadingDiaCounts[ds.slug] || progress.isRunning}
+                                          className="h-8 w-8 p-0"
+                                        >
+                                          {loadingDiaCounts[ds.slug] ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                          ) : (
+                                            <Search className="h-4 w-4" />
+                                          )}
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>DIA'dan anlık kayıt sayısı çek</TooltipContent>
                                     </Tooltip>
                                   )}
 
@@ -872,6 +946,21 @@ export default function SuperAdminDataManagement({ users }: Props) {
                                                 <span className="font-mono font-semibold">
                                                   {count.toLocaleString('tr-TR')}
                                                 </span>
+                                                {diaRecordCounts[ds.slug]?.[periodNum] !== undefined && (
+                                                  <Tooltip>
+                                                    <TooltipTrigger>
+                                                      <Badge variant={diaRecordCounts[ds.slug][periodNum] !== count ? 'destructive' : 'secondary'} className="text-[9px] px-1 py-0 font-mono ml-1">
+                                                        DIA: {diaRecordCounts[ds.slug][periodNum].toLocaleString('tr-TR')}
+                                                      </Badge>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                      {diaRecordCounts[ds.slug][periodNum] === count
+                                                        ? 'DIA ile eşleşiyor ✓'
+                                                        : `Fark: ${(diaRecordCounts[ds.slug][periodNum] - count).toLocaleString('tr-TR')} kayıt`
+                                                      }
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                )}
                                                 {/* Per-period refresh */}
                                                 {targetUserId && (
                                                   <Tooltip>
