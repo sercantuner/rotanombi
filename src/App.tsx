@@ -56,7 +56,7 @@ const App = () => (
                   <Route path="/ayarlar" element={<AppLayout><SettingsPage /></AppLayout>} />
                   <Route path="/admin" element={<AppLayout><AdminPage /></AppLayout>} />
                   <Route path="/super-admin" element={<Navigate to="/super-admin-panel" replace />} />
-                  <Route path="/super-admin-panel" element={<AppLayout><SuperAdminPanel /></AppLayout>} />
+                  <Route path="/super-admin-panel" element={<SuperAdminPanel />} />
                   <Route path="/super-admin/users" element={<AppLayout><SuperAdminUsersPage /></AppLayout>} />
                   <Route path="/takim" element={<AppLayout><TeamManagementPage /></AppLayout>} />
                   
