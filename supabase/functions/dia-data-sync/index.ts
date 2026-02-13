@@ -289,6 +289,11 @@ Deno.serve(async (req) => {
         }
       }
 
+      // If we got an error and fetched nothing, stop the loop
+      if (partialError && allRecords.length === 0) {
+        hasMore = false;
+      }
+
       return respond({
         success: true,
         fetched: allRecords.length,
