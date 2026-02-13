@@ -137,6 +137,45 @@ export type Database = {
           },
         ]
       }
+      cron_schedules: {
+        Row: {
+          created_at: string | null
+          cron_expression: string
+          firma_kodu: string
+          id: string
+          is_enabled: boolean | null
+          pg_cron_jobid: number | null
+          schedule_name: string
+          sunucu_adi: string
+          turkey_time_label: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          cron_expression: string
+          firma_kodu: string
+          id?: string
+          is_enabled?: boolean | null
+          pg_cron_jobid?: number | null
+          schedule_name: string
+          sunucu_adi: string
+          turkey_time_label?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          cron_expression?: string
+          firma_kodu?: string
+          id?: string
+          is_enabled?: boolean | null
+          pg_cron_jobid?: number | null
+          schedule_name?: string
+          sunucu_adi?: string
+          turkey_time_label?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       data_source_relationships: {
         Row: {
           created_at: string | null
@@ -1528,6 +1567,17 @@ export type Database = {
         Returns: {
           data_source_slug: string
           record_count: number
+        }[]
+      }
+      get_cron_run_history: {
+        Args: { p_limit?: number }
+        Returns: {
+          end_time: string
+          job_name: string
+          jobid: number
+          return_message: string
+          start_time: string
+          status: string
         }[]
       }
       get_invoice_summary: {

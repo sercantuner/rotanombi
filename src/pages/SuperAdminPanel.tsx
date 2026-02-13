@@ -28,7 +28,8 @@ import {
   LogOut,
   HardDrive,
   ChevronLeft,
-  LayoutDashboard
+  LayoutDashboard,
+  Clock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,6 +47,8 @@ import { ImpersonatedDashboard } from '@/components/admin/ImpersonatedDashboard'
 import { cn } from '@/lib/utils';
 import rotanombiLogo from '@/assets/rotanombi-logo.png';
 import rotanombiLogoDark from '@/assets/rotanombi-logo-dark.svg';
+
+const CronManagement = React.lazy(() => import('@/components/admin/CronManagement'));
 
 // Lazy import widget management components
 const SuperAdminWidgetManager = React.lazy(() => import('@/components/admin/SuperAdminWidgetManager'));
@@ -106,6 +109,7 @@ export default function SuperAdminPanel() {
       'feedback',
       'datamanagement',
       'licenses',
+      'cron',
     ]);
 
     if (allowedTabs.has(tab)) {
@@ -256,6 +260,7 @@ export default function SuperAdminPanel() {
     { key: 'datasources', label: 'Veri Kaynakları', icon: Database },
     { key: 'datamodel', label: 'Veri Modeli', icon: Link2 },
     { key: 'datamanagement', label: 'Veri Yönetimi', icon: HardDrive },
+    { key: 'cron', label: 'Cron Yönetimi', icon: Clock },
     { key: 'feedback', label: 'Geri Bildirimler', icon: MessageSquare },
   ];
 
@@ -294,6 +299,8 @@ export default function SuperAdminPanel() {
         return <React.Suspense fallback={suspenseFallback}><div className="p-6 overflow-auto h-full"><SuperAdminDataManagement users={users} /></div></React.Suspense>;
       case 'licenses':
         return <React.Suspense fallback={suspenseFallback}><div className="p-6 overflow-auto h-full"><LicenseManagement users={users} onRefresh={refreshUsers} /></div></React.Suspense>;
+      case 'cron':
+        return <React.Suspense fallback={suspenseFallback}><div className="h-full"><CronManagement /></div></React.Suspense>;
       case 'feedback':
         return <React.Suspense fallback={suspenseFallback}><div className="p-6 overflow-auto h-full"><FeedbackManager /></div></React.Suspense>;
       default:
