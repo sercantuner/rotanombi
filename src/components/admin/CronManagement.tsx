@@ -72,8 +72,9 @@ function trHourToCron(trHour: number, trMinute: number = 0): string {
   return `${trMinute} ${utcHour} * * *`;
 }
 
-// Default schedules now auto-created when new server is added
+// Default schedules are automatically created when a new server is first encountered
 // Times: 07:00, 12:00, 17:00, 22:00 Turkey time
+// Triggered by: INSERT on firma_periods or company_data_cache tables
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => ({
   value: String(i),
