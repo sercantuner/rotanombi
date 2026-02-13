@@ -1,13 +1,18 @@
-// Widget Field Pool - Widget'ların requiredFields'lerinden dinamik selectedcolumns hesaplama
-// data_sources.selected_columns yerine widget bazlı alan havuzu kullanılır
+// Widget Field Pool - Widget'ların query parametrelerindeki selectedcolumns'dan dinamik havuz hesaplama
+// requiredFields yerine gerçek DIA alanları olan parameters.selectedcolumns kullanılır
 
 /**
- * Tüm aktif widget'ların requiredFields'lerini analiz ederek
+ * Tüm aktif widget'ların query parametrelerindeki selectedcolumns'ları analiz ederek
  * her veri kaynağı için birleştirilmiş (union) alan listesi döndürür.
+ * 
+ * Kaynak: 
+ *   - Tek sorgu: builder_config.parameters.selectedcolumns
+ *   - MultiQuery: builder_config.multiQuery.queries[].parameters.selectedcolumns
+ *   - Legacy: builder_config.queries[].parameters.selectedcolumns
  * 
  * @returns Map<dataSourceId, string[] | null>
  *   - string[]: Havuzlanmış alanlar (projeksiyon yapılabilir)
- *   - null: Projeksiyon yapılamaz (en az 1 widget requiredFields tanımlamadı)
+ *   - null: Projeksiyon yapılamaz (en az 1 widget selectedcolumns tanımlamadı)
  */
 export async function getAllPooledColumns(sb: any): Promise<Map<string, string[] | null>> {
   // Tüm aktif widget'ların builder_config'lerini çek
@@ -20,19 +25,20 @@ export async function getAllPooledColumns(sb: any): Promise<Map<string, string[]
     return new Map();
   }
 
-  // dataSourceId -> { fields: Set<string>, hasWidgetWithoutFields: boolean }
+  // dataSourceId -> { fields: Set<string>, hasQueryWithoutColumns: boolean }
   const poolMap = new Map<string, { fields: Set<string>; noFields: boolean }>();
 
-  const addToPool = (dataSourceId: string, requiredFields: string[] | null | undefined) => {
+  const addToPool = (dataSourceId: string, selectedColumns: string[] | null | undefined) => {
     if (!poolMap.has(dataSourceId)) {
       poolMap.set(dataSourceId, { fields: new Set(), noFields: false });
     }
     const pool = poolMap.get(dataSourceId)!;
 
-    if (!requiredFields || requiredFields.length === 0) {
+    if (!selectedColumns || selectedColumns.length === 0) {
+      // Bu sorgu projeksiyon tanımlamadı → tüm veri çekilmeli
       pool.noFields = true;
     } else {
-      for (const f of requiredFields) {
+      for (const f of selectedColumns) {
         pool.fields.add(f);
       }
     }
@@ -42,16 +48,18 @@ export async function getAllPooledColumns(sb: any): Promise<Map<string, string[]
     const config = w.builder_config as any;
     if (!config) continue;
 
-    // 1. Tek sorgu - üst düzey dataSourceId
+    // 1. Tek sorgu - üst düzey dataSourceId + parameters.selectedcolumns
     if (config.dataSourceId) {
-      addToPool(config.dataSourceId, config.requiredFields);
+      const cols = config.parameters?.selectedcolumns;
+      addToPool(config.dataSourceId, Array.isArray(cols) ? cols : null);
     }
 
-    // 2. MultiQuery
+    // 2. MultiQuery - her sorgunun kendi parameters.selectedcolumns'u var
     if (config.multiQuery?.queries && Array.isArray(config.multiQuery.queries)) {
       for (const q of config.multiQuery.queries) {
         if (q.dataSourceId) {
-          addToPool(q.dataSourceId, config.requiredFields);
+          const cols = q.parameters?.selectedcolumns;
+          addToPool(q.dataSourceId, Array.isArray(cols) ? cols : null);
         }
       }
     }
@@ -60,7 +68,8 @@ export async function getAllPooledColumns(sb: any): Promise<Map<string, string[]
     if (config.isMultiQuery && config.queries && Array.isArray(config.queries)) {
       for (const q of config.queries) {
         if (q.dataSourceId) {
-          addToPool(q.dataSourceId, config.requiredFields);
+          const cols = q.parameters?.selectedcolumns;
+          addToPool(q.dataSourceId, Array.isArray(cols) ? cols : null);
         }
       }
     }
