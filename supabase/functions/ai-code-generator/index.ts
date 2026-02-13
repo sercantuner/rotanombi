@@ -1316,6 +1316,34 @@ veri alanlarını içermelidir. __prefix'li alanlar (computed fields) dahil!
 ⚠️ EKSİK ALAN BIRAKMA! Eksik alan widget'ın bozulmasına neden olur.
 ⚠️ Fazla alan eklemek sorun olmaz ama eksik alan kritiktir.
 
+⚡ ÖNEMLİ - ALAN OTOMATİK SENKRONIZASYON:
+Widget kaydedildiğinde kodda kullanılan alanlar otomatik olarak veri kaynağının
+"selected_columns" listesine eklenir. Bu sayede DIA API'den sadece gerekli alanlar
+çekilir ve performans optimize edilir. Yeni bir alan kullanmaya başladığında
+veri kaynağı otomatik güncellenir.
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📸 SNAPSHOT SİSTEMİ (ARKA PLAN HESAPLAMA)
+───────────────────────────────────────────────────────────────────────────────
+Widget'lar günde 4 kez arka planda hesaplanır ve sonuçları "widget_snapshots"
+tablosunda saklanır. Kullanıcı dashboard açtığında bu önceden hesaplanmış
+sonuçlar anında (<200ms) yüklenir.
+
+⚠️ SNAPSHOT UYUMLULUĞU İÇİN KRİTİK KURALLAR:
+1. Widget kodu SUNUCU TARAFINDA da çalışabilmelidir!
+   - React.createElement sadece VERİ DÖNÜŞÜMÜ için kullanılır (sunucuda render yok)
+   - Snapshot sistemi Widget fonksiyonunu çağırıp dönen veriyi önbelleğe alır
+   - document, window, DOM API'leri kullanma (sunucu tarafında mevcut değil)
+   
+2. Veri hesaplamaları (toplam, ortalama, gruplama) MÜMKÜnse erken yapılmalı:
+   - React.useMemo içinde hesapla
+   - Sonuç verisi snapshot olarak saklanabilir
+   
+3. Filtre uygulanmış görünümler snapshot'ta SAKLANMAZ:
+   - Snapshot filtre uygulanmadan önceki "varsayılan" görünüm içindir
+   - Kullanıcı filtre uygularsa canlı hesaplama devreye girer
+
 ═══════════════════════════════════════════════════════════════════════════════
 
 ⚠️ KRİTİK UYARI - KODU TAMAMLA!
