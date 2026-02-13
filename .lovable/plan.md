@@ -1,83 +1,111 @@
 
+# Cron Yonetimi Sayfasi
 
-## Problem
+## Ozet
+Super Admin paneline yeni bir "Cron Yonetimi" sekmesi eklenecek. Bu sekme, tum sunucularin otomatik senkronizasyon zamanlamalarini yonetmeye, cron calisma gecmisini izlemeye ve hatalari goruntulemeye olanak taniyacak.
 
-Süper Admin panelindeki "Tüm Veri Kaynakları" listesinde, veri kaynağının yanında donem dağılımını gösteren chevron (ok) butonu hiç görünmüyor. Bunun sebebi bir **veritabanı erişim kısıtlaması (RLS)**:
+## Mevcut Durum
+- Sistemde 4 adet cron job tanimli (UTC 00, 06, 12, 18 - Turkiye saatiyle 03, 09, 15, 21)
+- Tum sunucular ayni cron ile tetikleniyor (tek bir `cronSync` action'i tum sunucu/firma ciftlerini sirayla isliyor)
+- `sync_history` tablosunda her senkronizasyonun detayli kaydi tutuluyor (basari/hata, kayit sayilari, sure)
+- `cron.job` ve `cron.job_run_details` tablolari pg_cron tarafindan yonetiliyor
 
-- `company_data_cache` tablosunun okuma politikası, kullanıcının yalnızca **kendi sunucu/firma** verilerini görmesine izin veriyor
-- Süper Admin farklı bir sunucu seçtiğinde, dönem dağılımı sorgusu boş dönüyor
-- Boş dönünce `distribution.total > 0` koşulu sağlanmıyor ve chevron butonu hiç render edilmiyor
+## Plan
 
-## Çözüm
+### 1. Veritabani: Sunucu Bazli Cron Yapilandirma Tablosu (Migration)
 
-### 1. RLS Politikası Güncellemesi (Migration)
-
-`company_data_cache` tablosuna super_admin rolündeki kullanıcıların **tüm verileri okuyabilmesini** sağlayan yeni bir SELECT politikası eklenecek:
+Yeni bir `cron_schedules` tablosu olusturulacak. Her sunucu/firma cifti icin bagimsiz cron zamanlama yapilandirmasi tutacak:
 
 ```sql
-CREATE POLICY "super_admin_read_all_cache"
-ON public.company_data_cache
-FOR SELECT
-USING (
-  EXISTS (
-    SELECT 1 FROM public.user_roles
-    WHERE user_roles.user_id = auth.uid()
-    AND user_roles.role = 'super_admin'
-  )
+CREATE TABLE public.cron_schedules (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  sunucu_adi text NOT NULL,
+  firma_kodu text NOT NULL,
+  schedule_name text NOT NULL,        -- "sync-1", "sync-2" gibi
+  cron_expression text NOT NULL,       -- "0 0 * * *" (cron syntax)
+  turkey_time_label text,             -- "03:00" (gosterim icin)
+  is_enabled boolean DEFAULT true,
+  pg_cron_jobid bigint,              -- cron.job tablosundaki gercek job id
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE(sunucu_adi, firma_kodu, schedule_name)
 );
 ```
 
-Aynı mantık DELETE ve UPDATE politikalarına da eklenecek, böylece super admin herhangi bir sunucunun verilerini silebilir ve yönetebilir.
+RLS: Sadece super_admin erisebilir.
 
-### 2. Dönem Dağılımı Sorgusunda 1000 Satır Limiti Düzeltmesi
+Ayrica bir `get_cron_run_history` RPC fonksiyonu:
+- `cron.job_run_details` tablosundan son calismalari dondurur (SECURITY DEFINER)
 
-Mevcut kodda `company_data_cache` tablosundan `donem_kodu` çekilirken Supabase'in varsayılan 1000 satır limiti uygulanıyor. 73.000+ kayıtlı veri kaynaklarında dağılım eksik hesaplanıyor.
+### 2. Edge Function: Cron CRUD Islemleri
 
-Çözüm: Supabase'de bir `SECURITY DEFINER` RPC fonksiyonu oluşturulacak — doğrudan SQL ile `GROUP BY` yaparak hem RLS sorununu hem de limit sorununu aşacak:
+`dia-data-sync` edge function'a yeni action'lar eklenecek:
+- `manageCronSchedules`: Cron zamanlama olusturma/guncelleme/silme
+- Bu action, `cron.schedule()` ve `cron.unschedule()` SQL fonksiyonlarini cagirarak pg_cron job'larini yonetecek
+- Her sunucu icin ayri cron job'lar olusturulacak (body'de `targetServer` parametresi ile)
+
+### 3. Frontend: CronManagement Bileseni
+
+Yeni `src/components/admin/CronManagement.tsx` bileseni:
+
+**Sol Panel - Sunucu Listesi:**
+- Tum sunucu/firma ciftleri listelenir
+- Her sunucunun yaninda aktif cron sayisi ve son calisma durumu (yesil/kirmizi dot)
+
+**Sag Panel - Secili Sunucu Detaylari:**
+
+**a) Cron Zamanlamalari Karti:**
+- Varsayilan 4 zaman dilimi gosterilir (03:00, 09:00, 15:00, 21:00 TR)
+- Her zamanlama icin: acma/kapama switch'i, saat degistirme (select/input)
+- "Zamanlama Ekle" butonu (yeni saat eklemek icin)
+- "Zamanlama Sil" butonu
+- Degisiklikleri kaydet butonu
+
+**b) Son Calisma Gecmisi Karti:**
+- `sync_history` tablosundan son 50 kayit (secili sunucu icin)
+- Her satir: tarih, veri kaynagi, tip (cron/manual/single), durum (basari/hata), cekilen/yazilan kayit sayilari
+- Hatali satirlar kirmizi vurgulanir, hata mesaji tooltip ile gosterilir
+- Filtre: Sadece hatalar, sadece cron, tum kayitlar
+
+**c) Cron Calisma Durumu Karti:**
+- `cron.job_run_details`'den son 10 cron tetiklemesi
+- Her biri icin: calisma zamani, sonuc (succeeded/failed), sure
+
+### 4. Super Admin Panel Entegrasyonu
+
+`SuperAdminPanel.tsx`'e yeni sidebar item eklenir:
+```
+{ key: 'cron', label: 'Cron Yonetimi', icon: Clock }
+```
+
+---
+
+## Teknik Detaylar
+
+### Cron Expression Donusumu
+Kullanicinin sectigi Turkiye saati UTC'ye cevrilir:
+- TR 03:00 -> UTC 00:00 -> `0 0 * * *`
+- TR 09:00 -> UTC 06:00 -> `0 6 * * *`
+
+### Sunucu Bazli Cron Job'lar
+Mevcut tek cron yerine, her sunucu icin ayri job'lar olusturulacak. Body'de `targetServer` parametresi gondererek `cronSync`'in sadece o sunucuyu islemesi saglanacak.
 
 ```sql
-CREATE OR REPLACE FUNCTION get_period_distribution(
-  p_sunucu_adi text,
-  p_firma_kodu text,
-  p_data_source_slug text
-)
-RETURNS TABLE(donem_kodu int, record_count bigint)
-LANGUAGE sql STABLE SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-  SELECT donem_kodu::int, count(*)::bigint
-  FROM company_data_cache
-  WHERE sunucu_adi = p_sunucu_adi
-    AND firma_kodu = p_firma_kodu
-    AND data_source_slug = p_data_source_slug
-    AND is_deleted = false
-  GROUP BY donem_kodu
-$$;
+SELECT cron.schedule(
+  'dia-sync-rotayazilim-03tr',
+  '0 0 * * *',
+  $$SELECT net.http_post(
+    url := '...',
+    body := '{"action":"cronSync","targetServer":"rotayazilim","targetFirma":"20"}'::jsonb
+  )$$
+);
 ```
 
-### 3. Frontend Güncelleme (SuperAdminDataManagement.tsx)
+### Varsayilan Yapilandirma
+Yeni sunucu eklendiginde veya ilk acildiginda, sunucunun henuz cron'u yoksa "4 varsayilan zamanlama olustur" butonu gosterilir.
 
-`loadServerData` fonksiyonundaki dönem dağılımı hesaplama bölümü, yukarıdaki RPC fonksiyonunu çağıracak şekilde güncellenecek:
-
-```typescript
-// Eski: Binlerce satır çekip JS'de gruplama
-const { data: distData } = await supabase
-  .from('company_data_cache')
-  .select('donem_kodu')
-  .eq(...)
-
-// Yeni: Veritabanında GROUP BY ile verimli hesaplama
-const { data: distData } = await supabase
-  .rpc('get_period_distribution', {
-    p_sunucu_adi: sunucuAdi,
-    p_firma_kodu: firmaKodu,
-    p_data_source_slug: s.slug
-  });
-```
-
-## Sonuç
-
-- Süper Admin herhangi bir sunucuyu seçtiğinde dönem dağılımı doğru yüklenecek
-- Chevron butonu görünür olacak ve tıklandığında dönem bazlı veri + per-period sync butonları açılacak
-- 1000 satır limiti sorunu ortadan kalkacak (veritabanında GROUP BY)
-
+### Dosya Degisiklikleri
+1. **Migration**: `cron_schedules` tablosu + RLS + `get_cron_run_history` RPC
+2. **Edge Function**: `dia-data-sync/index.ts` - `manageCronSchedules` action + `cronSync`'e `targetServer` destegi
+3. **Yeni Dosya**: `src/components/admin/CronManagement.tsx`
+4. **Duzenleme**: `src/pages/SuperAdminPanel.tsx` - sidebar'a cron sekmesi ekleme
