@@ -7,11 +7,11 @@ import { ContainerBasedDashboard } from '@/components/dashboard/ContainerBasedDa
 import { DiaDataCacheProvider, useDiaDataCache } from '@/contexts/DiaDataCacheContext';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useDataSourceLoader } from '@/hooks/useDataSourceLoader';
- import { Loader2, AlertCircle, RefreshCw, WifiOff, CheckCircle, LayoutDashboard, FileText, ChevronLeft, ChevronRight, Plug, Calendar, User, Plus, Move, Check, X, Edit } from 'lucide-react';
+ import { Loader2, AlertCircle, RefreshCw, WifiOff, CheckCircle, LayoutDashboard, FileText, ChevronLeft, ChevronRight, Plug, User, Plus, Move, Check, X, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { differenceInDays, isPast } from 'date-fns';
+import { } from 'date-fns';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -27,11 +27,10 @@ interface UserPage {
 
 interface ImpersonatedDashboardProps {
   userId: string;
-  onEditLicense?: () => void;
 }
 
 // İç bileşen - cache context içinde çalışır
-function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashboardProps) {
+function ImpersonatedDashboardInner({ userId }: ImpersonatedDashboardProps) {
   const { impersonatedProfile, isDiaConfigured } = useImpersonation();
   const { setDiaConnected, clearAllCache, isDiaConnected } = useDiaDataCache();
   
@@ -54,36 +53,12 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
      onCancel: () => void;
    } | null>(null);
  
-  // Lisans durumu hesaplama
-  const getLicenseStatus = () => {
-    if (!impersonatedProfile?.license_expires_at) {
-      return { label: 'Belirsiz', variant: 'secondary' as const, days: null };
-    }
-    
-    const expiresAt = new Date(impersonatedProfile.license_expires_at);
-    const daysLeft = differenceInDays(expiresAt, new Date());
-    
-    if (isPast(expiresAt)) {
-      return { label: 'Süresi Doldu', variant: 'destructive' as const, days: daysLeft };
-    }
-    
-    if (daysLeft <= 7) {
-      return { label: `${daysLeft} gün`, variant: 'destructive' as const, days: daysLeft };
-    }
-    
-    if (daysLeft <= 30) {
-      return { label: `${daysLeft} gün`, variant: 'warning' as const, days: daysLeft };
-    }
-    
-    return { label: `${daysLeft} gün`, variant: 'success' as const, days: daysLeft };
-  };
-
   const getUserRole = () => {
     if (impersonatedProfile?.is_team_admin) return 'Şirket Yetkilisi';
     return 'Kullanıcı';
   };
 
-  const licenseStatus = getLicenseStatus();
+  
 
    // DIA bağlantı bilgisi metni
    const getDiaConnectionInfo = () => {
@@ -257,35 +232,12 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
                 {impersonatedProfile?.display_name || impersonatedProfile?.email}
               </p>
               
-              {/* Rol ve Lisans Bilgisi */}
+              {/* Rol Bilgisi */}
               <div className="flex flex-wrap gap-1 mt-1.5">
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                   {getUserRole()}
                 </Badge>
-                <Badge 
-                  variant={licenseStatus.variant === 'success' ? 'default' : licenseStatus.variant === 'warning' ? 'secondary' : licenseStatus.variant}
-                  className={cn(
-                    "text-[10px] px-1.5 py-0",
-                    licenseStatus.variant === 'warning' && "bg-warning/20 text-warning-foreground",
-                    licenseStatus.variant === 'success' && "bg-success/20 text-success"
-                  )}
-                >
-                  {impersonatedProfile?.license_type === 'demo' ? 'Demo' : 'Standart'} • {licenseStatus.label}
-                </Badge>
               </div>
-              
-              {/* Lisans Düzenle Butonu */}
-              {onEditLicense && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full mt-2 h-7 text-xs"
-                  onClick={onEditLicense}
-                >
-                  <Calendar className="w-3 h-3 mr-1" />
-                  Lisans Düzenle
-                </Button>
-              )}
             </div>
           )}
 
@@ -539,10 +491,10 @@ function ImpersonatedDashboardInner({ userId, onEditLicense }: ImpersonatedDashb
 }
 
 // Ana bileşen - kendi cache provider'ı ile
-export function ImpersonatedDashboard({ userId, onEditLicense }: ImpersonatedDashboardProps) {
+export function ImpersonatedDashboard({ userId }: ImpersonatedDashboardProps) {
   return (
     <DiaDataCacheProvider userId={userId}>
-      <ImpersonatedDashboardInner userId={userId} onEditLicense={onEditLicense} />
+      <ImpersonatedDashboardInner userId={userId} />
     </DiaDataCacheProvider>
   );
 }
