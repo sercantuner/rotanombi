@@ -786,6 +786,51 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_jobs: {
+        Row: {
+          completed_at: string | null
+          completed_tasks: number | null
+          created_at: string
+          failed_tasks: number | null
+          firma_kodu: string
+          id: string
+          skipped_tasks: number | null
+          status: string
+          sunucu_adi: string
+          total_tasks: number | null
+          triggered_by: string
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_tasks?: number | null
+          created_at?: string
+          failed_tasks?: number | null
+          firma_kodu: string
+          id?: string
+          skipped_tasks?: number | null
+          status?: string
+          sunucu_adi: string
+          total_tasks?: number | null
+          triggered_by: string
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          completed_tasks?: number | null
+          created_at?: string
+          failed_tasks?: number | null
+          firma_kodu?: string
+          id?: string
+          skipped_tasks?: number | null
+          status?: string
+          sunucu_adi?: string
+          total_tasks?: number | null
+          triggered_by?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sync_locks: {
         Row: {
           created_at: string
@@ -821,6 +866,74 @@ export type Database = {
           sync_type?: string
         }
         Relationships: []
+      }
+      sync_queue_tasks: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          data_source_slug: string
+          deleted: number | null
+          error: string | null
+          expected_records: number | null
+          fetched: number | null
+          id: string
+          job_id: string
+          period_no: number
+          sort_order: number | null
+          started_at: string | null
+          status: string
+          sync_type: string | null
+          task_name: string
+          updated_at: string
+          written: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          data_source_slug: string
+          deleted?: number | null
+          error?: string | null
+          expected_records?: number | null
+          fetched?: number | null
+          id?: string
+          job_id: string
+          period_no: number
+          sort_order?: number | null
+          started_at?: string | null
+          status?: string
+          sync_type?: string | null
+          task_name: string
+          updated_at?: string
+          written?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          data_source_slug?: string
+          deleted?: number | null
+          error?: string | null
+          expected_records?: number | null
+          fetched?: number | null
+          id?: string
+          job_id?: string
+          period_no?: number
+          sort_order?: number | null
+          started_at?: string | null
+          status?: string
+          sync_type?: string | null
+          task_name?: string
+          updated_at?: string
+          written?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_queue_tasks_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "sync_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_dashboard_settings: {
         Row: {
