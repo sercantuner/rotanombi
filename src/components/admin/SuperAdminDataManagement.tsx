@@ -517,8 +517,7 @@ export default function SuperAdminDataManagement({ users }: Props) {
                       <p>Bu sunucu için veri kaynağı bulunamadı</p>
                     </div>
                   ) : (
-                    <ScrollArea className="h-[450px]">
-                      <div className="space-y-2">
+                    <div className="space-y-2">
                         {allDataSources.map(ds => {
                           const distribution = periodDistributions[ds.slug];
                           const isExpanded = expandedDistributions[ds.slug];
@@ -691,8 +690,7 @@ export default function SuperAdminDataManagement({ users }: Props) {
                             </div>
                           );
                         })}
-                      </div>
-                    </ScrollArea>
+                    </div>
                   )}
                 </CardContent>
               </Card>
