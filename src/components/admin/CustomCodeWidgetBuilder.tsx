@@ -1648,9 +1648,66 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
       ai_suggested_tags: aiSuggestedTags.length > 0 ? aiSuggestedTags : undefined,
     };
 
+    // Widget kaydetme sonrası: requiredFields'ı data source selected_columns'a senkronize et
+    const syncFieldsToDataSource = async () => {
+      if (!autoRequiredFields.length) return;
+      
+      // Tek kaynak modu
+      if (!isMultiQueryMode && selectedDataSource) {
+        const currentColumns = selectedDataSource.selected_columns || [];
+        const newFields = autoRequiredFields.filter(f => !currentColumns.includes(f));
+        
+        if (newFields.length > 0) {
+          const updatedColumns = [...currentColumns, ...newFields];
+          await supabase
+            .from('data_sources')
+            .update({ 
+              selected_columns: updatedColumns,
+              updated_at: new Date().toISOString() 
+            })
+            .eq('id', selectedDataSource.id);
+          
+          console.log(`[FieldSync] ${newFields.length} yeni alan eklendi:`, newFields);
+          toast.info(`${newFields.length} yeni alan veri kaynağına eklendi: ${newFields.join(', ')}`);
+        }
+      }
+      
+      // Multi-query modu - her sorgunun veri kaynağına senkronize et
+      if (isMultiQueryMode && multiQuery?.queries?.length) {
+        for (const query of multiQuery.queries) {
+          if (!query.dataSourceId) continue;
+          const ds = getDataSourceById(query.dataSourceId);
+          if (!ds) continue;
+          
+          const currentColumns = ds.selected_columns || [];
+          // Kodda bu query'nin verisiyle erişilen alanları bul
+          const qData = mergedQueryData[query.id];
+          if (!qData?.length) continue;
+          
+          const availableFields = Object.keys(qData[0]);
+          const relevantFields = autoRequiredFields.filter(f => availableFields.includes(f));
+          const newFields = relevantFields.filter(f => !currentColumns.includes(f));
+          
+          if (newFields.length > 0) {
+            const updatedColumns = [...currentColumns, ...newFields];
+            await supabase
+              .from('data_sources')
+              .update({ 
+                selected_columns: updatedColumns,
+                updated_at: new Date().toISOString() 
+              })
+              .eq('id', ds.id);
+            
+            console.log(`[FieldSync] ${ds.name}: ${newFields.length} yeni alan eklendi:`, newFields);
+          }
+        }
+      }
+    };
+
     if (editingWidget) {
       const success = await updateWidget(editingWidget.id, formData);
       if (success) {
+        await syncFieldsToDataSource();
         toast.success('Widget güncellendi!');
         onSave?.();
         onOpenChange(false);
@@ -1658,6 +1715,7 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
     } else {
       const success = await createWidget(formData);
       if (success) {
+        await syncFieldsToDataSource();
         toast.success('Widget oluşturuldu!');
         onSave?.();
         onOpenChange(false);
