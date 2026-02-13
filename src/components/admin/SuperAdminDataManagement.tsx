@@ -275,25 +275,25 @@ export default function SuperAdminDataManagement({ users }: Props) {
       });
       setWidgetUsage(usage);
 
-      // Period distributions
+      // Period distributions via RPC (no row limit, bypasses RLS)
       const distributions: Record<string, PeriodDistribution> = {};
-      for (const s of result) {
-        const { data: distData } = await supabase
-          .from('company_data_cache')
-          .select('donem_kodu')
-          .eq('sunucu_adi', sunucuAdi)
-          .eq('firma_kodu', firmaKodu)
-          .eq('data_source_slug', s.slug)
-          .eq('is_deleted', false);
-        
+      const distPromises = result.map(async (s) => {
+        const { data: distData } = await supabase.rpc('get_period_distribution', {
+          p_sunucu_adi: sunucuAdi,
+          p_firma_kodu: firmaKodu,
+          p_data_source_slug: s.slug,
+        });
         if (distData && distData.length > 0) {
           const byPeriod: Record<number, number> = {};
+          let total = 0;
           distData.forEach((row: any) => {
-            byPeriod[row.donem_kodu] = (byPeriod[row.donem_kodu] || 0) + 1;
+            byPeriod[row.donem_kodu] = Number(row.record_count);
+            total += Number(row.record_count);
           });
-          distributions[s.slug] = { total: distData.length, byPeriod };
+          distributions[s.slug] = { total, byPeriod };
         }
-      }
+      });
+      await Promise.all(distPromises);
       setPeriodDistributions(distributions);
     } catch (err) {
       console.error('Error loading server data:', err);
