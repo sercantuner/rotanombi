@@ -4,9 +4,9 @@ import { useSyncOrchestrator, SyncProgress } from '@/hooks/useSyncOrchestrator';
 
 interface SyncOrchestratorContextType {
   progress: SyncProgress;
-  startFullOrchestration: (forceIncremental?: boolean) => Promise<void>;
+  startFullOrchestration: (forceIncremental?: boolean, targetUserId?: string) => Promise<void>;
   startIncrementalAll: () => Promise<void>;
-  quickSync: (slug: string, periodNo: number) => Promise<void>;
+  quickSync: (slug: string, periodNo: number, targetUserId?: string) => Promise<void>;
   abort: () => void;
 }
 

@@ -125,10 +125,14 @@ export default function SuperAdminDataManagement({ users }: Props) {
   const [widgetUsage, setWidgetUsage] = useState<WidgetUsage>({});
   const [excludedPeriods, setExcludedPeriods] = useState<{ donem_kodu: number; data_source_slug: string | null }[]>([]);
 
-  // Seçili sunucu, admin'in kendi DIA profiline ait mi?
-  const isOwnServer = selectedServer && diaProfile.isConfigured &&
-    diaProfile.sunucuAdi === selectedServer.sunucu_adi &&
-    diaProfile.firmaKodu === selectedServer.firma_kodu;
+  // Seçili sunucunun sahibi kullanıcıyı bul (sync için targetUserId olarak kullanılacak)
+  const getTargetUserId = useCallback((): string | undefined => {
+    if (!selectedServer) return undefined;
+    const ownerUser = users.find(u => u.dia_sunucu_adi === selectedServer.sunucu_adi && u.firma_kodu === selectedServer.firma_kodu);
+    return ownerUser?.user_id;
+  }, [selectedServer, users]);
+
+  const targetUserId = selectedServer ? getTargetUserId() : undefined;
 
   // Sunucu listesini kullanıcılardan derle
   const serverOptions: ServerOption[] = React.useMemo(() => {
@@ -474,8 +478,8 @@ export default function SuperAdminDataManagement({ users }: Props) {
             </div>
           ) : (
             <>
-              {/* Sync Controls - Only when own server */}
-              {isOwnServer && (
+              {/* Sync Controls */}
+              {targetUserId && (
                 <Card>
                   <CardContent className="pt-6">
                     <div className="flex items-center justify-between mb-4">
@@ -497,7 +501,7 @@ export default function SuperAdminDataManagement({ users }: Props) {
                             Durdur
                           </Button>
                         ) : (
-                          <Button onClick={() => startFullOrchestration()} disabled={progress.isRunning} size="sm" className="gap-2">
+                          <Button onClick={() => startFullOrchestration(false, targetUserId)} disabled={progress.isRunning} size="sm" className="gap-2">
                             <RefreshCw className="h-4 w-4" />
                             Tümünü Senkronize Et
                           </Button>
@@ -652,11 +656,11 @@ export default function SuperAdminDataManagement({ users }: Props) {
                 </Card>
               )}
 
-              {/* Not own server notice */}
-              {!isOwnServer && diaProfile.isConfigured && (
+              {/* No DIA user notice */}
+              {!targetUserId && (
                 <div className="p-3 rounded-lg bg-muted/50 border border-border text-xs text-muted-foreground flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 shrink-0" />
-                  Senkronizasyon kontrolleri sadece kendi DIA bağlantınıza ait sunucularda aktiftir.
+                  Bu sunucuya ait DIA bağlantısı olan kullanıcı bulunamadı. Senkronizasyon yapılamaz.
                 </div>
               )}
 
@@ -806,15 +810,15 @@ export default function SuperAdminDataManagement({ users }: Props) {
                                   )}
 
                                   {/* Quick sync button */}
-                                  {isOwnServer && (
+                                  {targetUserId && (
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <Button
                                           variant="ghost"
                                           size="sm"
                                           onClick={() => {
-                                            const pn = currentPeriod?.period_no || parseInt(diaProfile.donemKodu || '0');
-                                            if (pn) quickSync(ds.slug, pn);
+                                            const pn = currentPeriod?.period_no || 0;
+                                            if (pn) quickSync(ds.slug, pn, targetUserId);
                                           }}
                                           disabled={isCurrentlySyncing || progress.isRunning}
                                           className="h-8 w-8 p-0"
@@ -869,7 +873,7 @@ export default function SuperAdminDataManagement({ users }: Props) {
                                                   {count.toLocaleString('tr-TR')}
                                                 </span>
                                                 {/* Per-period refresh */}
-                                                {isOwnServer && (
+                                                {targetUserId && (
                                                   <Tooltip>
                                                     <TooltipTrigger asChild>
                                                       <Button
@@ -877,7 +881,7 @@ export default function SuperAdminDataManagement({ users }: Props) {
                                                         size="sm"
                                                         className="h-5 w-5 p-0 text-primary/70 hover:text-primary"
                                                         disabled={progress.isRunning}
-                                                        onClick={() => quickSync(ds.slug, periodNum)}
+                                                        onClick={() => quickSync(ds.slug, periodNum, targetUserId)}
                                                       >
                                                         {progress.isRunning && progress.tasks.some(t => t.slug === ds.slug && t.periodNo === periodNum && t.status === 'running') ? (
                                                           <Loader2 className="h-3 w-3 animate-spin" />
