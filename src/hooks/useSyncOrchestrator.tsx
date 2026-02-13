@@ -544,9 +544,10 @@ export function useSyncOrchestrator() {
         console.log('[SyncOrchestrator] Triggering widget-compute for snapshots...');
         const token = await getAuthToken();
         if (token) {
-          const computeBody: any = {
+        const computeBody: any = {
             sunucuAdi: effectiveSunucu,
             firmaKodu: effectiveFirma,
+            donemKodu: String(currentPeriod || '1'),
             syncTrigger: 'post_sync',
           };
           await fetch(`${SUPABASE_URL}/functions/v1/widget-compute`, {
