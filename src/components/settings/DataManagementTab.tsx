@@ -275,7 +275,7 @@ export function DataManagementTab() {
               </button>
 
               {expandedTasks && (
-                <ScrollArea className="max-h-48 mt-2">
+                <ScrollArea className="max-h-72 mt-2">
                   <div className="space-y-1">
                     {progress.tasks.map((task, idx) => (
                       <div
