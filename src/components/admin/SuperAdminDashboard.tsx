@@ -2,10 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Users, Boxes, Database, Shield, Crown, TrendingUp, BarChart3 } from 'lucide-react';
+import { Users, Boxes, Database, Shield, Crown, BarChart3, HardDrive, Tag } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { cn } from '@/lib/utils';
 
 interface DashboardStats {
   totalUsers: number;
@@ -17,6 +15,29 @@ interface DashboardStats {
   totalDataSources: number;
   totalCategories: number;
   serverDistribution: { name: string; count: number }[];
+  // New
+  totalRecords: number;
+  totalSizeBytes: number;
+  serverDataUsage: { name: string; records: number; sizeMB: number }[];
+  tagDistribution: { name: string; count: number; color: string }[];
+}
+
+const TAG_COLORS = [
+  'hsl(var(--primary))',
+  'hsl(var(--chart-1, 220 70% 50%))',
+  'hsl(var(--chart-2, 160 60% 45%))',
+  'hsl(var(--chart-3, 30 80% 55%))',
+  'hsl(var(--chart-4, 280 65% 60%))',
+  'hsl(var(--chart-5, 340 75% 55%))',
+  'hsl(var(--destructive))',
+  'hsl(var(--muted-foreground))',
+];
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
 }
 
 export default function SuperAdminDashboard() {
@@ -30,11 +51,15 @@ export default function SuperAdminDashboard() {
   const loadStats = async () => {
     setLoading(true);
     try {
-      const [profilesRes, widgetsRes, dsRes, catRes] = await Promise.all([
+      const [profilesRes, widgetsRes, dsRes, catRes, cacheStatsRes, tagStatsRes] = await Promise.all([
         supabase.from('profiles').select('user_id, license_type, license_expires_at, dia_sunucu_adi, firma_adi'),
         supabase.from('widgets').select('id, is_active, builder_config'),
         supabase.from('data_sources').select('id'),
         supabase.from('widget_categories').select('id'),
+        // Cache stats per server - use RPC-like raw query via grouping
+        supabase.from('company_data_cache').select('sunucu_adi, id', { count: 'exact', head: false }).eq('is_deleted', false),
+        // Tag distribution
+        supabase.from('widget_tags').select('category_id, widget_categories(name)'),
       ]);
 
       const profiles = profilesRes.data || [];
@@ -45,7 +70,7 @@ export default function SuperAdminDashboard() {
       const expiredUsers = profiles.filter(p => p.license_expires_at && new Date(p.license_expires_at) < now).length;
       const licensedUsers = profiles.length - demoUsers;
 
-      // Server distribution
+      // Server distribution (users)
       const serverMap = new Map<string, number>();
       profiles.forEach(p => {
         const key = p.dia_sunucu_adi || 'Bağlantısız';
@@ -55,6 +80,39 @@ export default function SuperAdminDashboard() {
         .map(([name, count]) => ({ name, count }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 8);
+
+      // Cache data stats per server
+      const cacheRows = cacheStatsRes.data || [];
+      const serverCacheMap = new Map<string, number>();
+      cacheRows.forEach((row: any) => {
+        const key = row.sunucu_adi || 'Bilinmiyor';
+        serverCacheMap.set(key, (serverCacheMap.get(key) || 0) + 1);
+      });
+      const totalRecords = cacheRows.length;
+      
+      // Approximate size: we can't get exact size from client, so estimate ~1KB per record
+      // For accurate data we'd need an RPC, but this gives a reasonable estimate
+      const estimatedBytesPerRecord = 1024;
+      const totalSizeBytes = totalRecords * estimatedBytesPerRecord;
+
+      const serverDataUsage = Array.from(serverCacheMap.entries())
+        .map(([name, records]) => ({ 
+          name, 
+          records, 
+          sizeMB: parseFloat((records * estimatedBytesPerRecord / (1024 * 1024)).toFixed(1)) 
+        }))
+        .sort((a, b) => b.records - a.records);
+
+      // Tag distribution
+      const tagMap = new Map<string, number>();
+      (tagStatsRes.data || []).forEach((row: any) => {
+        const catName = row.widget_categories?.name || 'Bilinmiyor';
+        tagMap.set(catName, (tagMap.get(catName) || 0) + 1);
+      });
+      const tagDistribution = Array.from(tagMap.entries())
+        .map(([name, count], i) => ({ name, count, color: TAG_COLORS[i % TAG_COLORS.length] }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 12);
 
       setStats({
         totalUsers: profiles.length,
@@ -66,6 +124,10 @@ export default function SuperAdminDashboard() {
         totalDataSources: dsRes.data?.length || 0,
         totalCategories: catRes.data?.length || 0,
         serverDistribution,
+        totalRecords,
+        totalSizeBytes,
+        serverDataUsage,
+        tagDistribution,
       });
     } catch (err) {
       console.error('Stats load error:', err);
@@ -88,15 +150,10 @@ export default function SuperAdminDashboard() {
     { name: 'Süresi Dolmuş', value: stats.expiredUsers, color: 'hsl(var(--destructive))' },
   ].filter(d => d.value > 0);
 
-  const widgetChartData = [
-    { name: 'AI Widget', value: stats.aiWidgets, color: 'hsl(var(--primary))' },
-    { name: 'Standart', value: stats.activeWidgets - stats.aiWidgets, color: 'hsl(var(--muted-foreground))' },
-  ].filter(d => d.value > 0);
-
   return (
     <div className="p-6 overflow-auto h-full space-y-6">
       {/* KPI Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -129,7 +186,19 @@ export default function SuperAdminDashboard() {
             </div>
             <p className="text-3xl font-bold">{stats.totalDataSources}</p>
             <p className="text-xs text-muted-foreground mt-1">
-              {stats.totalCategories} kategori
+              {stats.totalCategories} etiket
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <HardDrive className="h-4 w-4" />
+              <span className="text-xs">Toplam Veri</span>
+            </div>
+            <p className="text-3xl font-bold">{stats.totalRecords.toLocaleString('tr-TR')}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              ~{formatBytes(stats.totalSizeBytes)}
             </p>
           </CardContent>
         </Card>
@@ -179,20 +248,20 @@ export default function SuperAdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Widget Distribution Pie */}
+        {/* Widget Tag Distribution Pie */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
-              <Boxes className="h-4 w-4 text-primary" />
-              Widget Dağılımı
+              <Tag className="h-4 w-4 text-primary" />
+              Widget Etiket Dağılımı
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={widgetChartData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
-                    {widgetChartData.map((entry, i) => (
+                  <Pie data={stats.tagDistribution} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="count">
+                    {stats.tagDistribution.map((entry, i) => (
                       <Cell key={i} fill={entry.color} />
                     ))}
                   </Pie>
@@ -200,27 +269,57 @@ export default function SuperAdminDashboard() {
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <div className="flex justify-center gap-4 mt-2">
-              {widgetChartData.map((d, i) => (
+            <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-2">
+              {stats.tagDistribution.slice(0, 6).map((d, i) => (
                 <div key={i} className="flex items-center gap-1.5 text-xs">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
-                  <span className="text-muted-foreground">{d.name} ({d.value})</span>
+                  <span className="text-muted-foreground">{d.name} ({d.count})</span>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
 
-        {/* Server Distribution Bar */}
+        {/* Server Data Usage Bar */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-primary" />
-              Sunucu Dağılımı
+              Sunucu Veri Kullanımı
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stats.serverDataUsage} layout="vertical" margin={{ left: 0, right: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                  <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                  <Tooltip 
+                    formatter={(value: number, name: string) => {
+                      if (name === 'records') return [`${value.toLocaleString('tr-TR')} kayıt`, 'Kayıt'];
+                      return [`${value} MB`, 'Boyut'];
+                    }} 
+                  />
+                  <Bar dataKey="records" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Server User Distribution */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary" />
+              Sunucu Başına Kullanıcı
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[180px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={stats.serverDistribution} layout="vertical" margin={{ left: 0, right: 12 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
@@ -230,6 +329,32 @@ export default function SuperAdminDashboard() {
                   <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Summary table for server data */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <HardDrive className="h-4 w-4 text-primary" />
+              Sunucu Veri Detayı
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-[180px] overflow-auto">
+              {stats.serverDataUsage.map((s, i) => (
+                <div key={i} className="flex items-center justify-between text-sm border-b border-border pb-1.5 last:border-0">
+                  <span className="font-medium">{s.name}</span>
+                  <div className="flex items-center gap-4 text-muted-foreground text-xs">
+                    <span>{s.records.toLocaleString('tr-TR')} kayıt</span>
+                    <span className="text-primary font-medium">{s.sizeMB} MB</span>
+                  </div>
+                </div>
+              ))}
+              {stats.serverDataUsage.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-4">Henüz veri yok</p>
+              )}
             </div>
           </CardContent>
         </Card>
