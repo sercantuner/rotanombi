@@ -399,19 +399,25 @@ async function incrementalSync(
 }
 
 // ===== YENİ: cronSync - Tüm sunucularda artımlı senkronizasyon =====
-async function handleCronSync(sb: any, cronSecret: string) {
+async function handleCronSync(sb: any, cronSecret: string, targetServer?: string | null, targetFirma?: string | null) {
   const expectedSecret = Deno.env.get("CRON_SECRET");
   if (!expectedSecret || cronSecret !== expectedSecret) {
     return { success: false, error: "Invalid CRON_SECRET" };
   }
 
-  console.log(`[cronSync] Starting nightly sync at ${getTurkeyNow().toISOString()}`);
+  console.log(`[cronSync] Starting sync at ${getTurkeyNow().toISOString()}${targetServer ? ` for ${targetServer}:${targetFirma}` : ' (all servers)'}`);
 
   // Tüm benzersiz sunucu/firma çiftlerini bul
-  const { data: profiles } = await sb.from('profiles')
+  const profileQuery = sb.from('profiles')
     .select('user_id, dia_sunucu_adi, firma_kodu')
     .not('dia_sunucu_adi', 'is', null)
     .not('firma_kodu', 'is', null);
+
+  // targetServer varsa sadece o sunucuyu filtrele
+  if (targetServer) profileQuery.eq('dia_sunucu_adi', targetServer);
+  if (targetFirma) profileQuery.eq('firma_kodu', targetFirma);
+
+  const { data: profiles } = await profileQuery;
 
   if (!profiles?.length) {
     console.log(`[cronSync] No configured profiles found`);
@@ -542,8 +548,97 @@ Deno.serve(async (req) => {
     // ===== cronSync - özel auth (CRON_SECRET) =====
     if (action === 'cronSync') {
       const cronSecret = req.headers.get("x-cron-secret") || body.cronSecret || '';
-      const result = await handleCronSync(sb, cronSecret);
+      const targetServer = body.targetServer || null;
+      const targetFirma = body.targetFirma || null;
+      const result = await handleCronSync(sb, cronSecret, targetServer, targetFirma);
       return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ===== manageCronSchedules - pg_cron CRUD (super_admin only) =====
+    if (action === 'manageCronSchedules') {
+      const auth = req.headers.get("Authorization");
+      if (!auth) return new Response(JSON.stringify({ success: false, error: "Auth required" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const { data: { user: mUser }, error: mUe } = await sb.auth.getUser(auth.replace("Bearer ", ""));
+      if (mUe || !mUser) return new Response(JSON.stringify({ success: false, error: "Invalid token" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const { data: saCheck } = await sb.from('user_roles').select('role').eq('user_id', mUser.id).eq('role', 'super_admin').single();
+      if (!saCheck) return new Response(JSON.stringify({ success: false, error: "Super admin required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+      const { schedules: inSchedules, removeSchedules, sunucuAdi, firmaKodu } = body;
+      const dbUrl = Deno.env.get("SUPABASE_DB_URL");
+      if (!dbUrl) return new Response(JSON.stringify({ success: false, error: "DB_URL not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+      const { Pool } = await import("https://deno.land/x/postgres@v0.19.3/mod.ts");
+      const pool = new Pool(dbUrl, 1, true);
+      const conn = await pool.connect();
+      const results: any[] = [];
+
+      try {
+        // Remove schedules
+        if (removeSchedules && Array.isArray(removeSchedules)) {
+          for (const rs of removeSchedules) {
+            const jobName = `dia-sync-${sunucuAdi}-${firmaKodu}-${rs.schedule_name}`;
+            try {
+              await conn.queryObject(`SELECT cron.unschedule($1)`, [jobName]);
+              results.push({ action: 'unschedule', jobName, success: true });
+            } catch (e) {
+              results.push({ action: 'unschedule', jobName, success: false, error: (e as Error).message });
+            }
+          }
+        }
+
+        // Create/update schedules
+        if (inSchedules && Array.isArray(inSchedules)) {
+          const supabaseUrl = Deno.env.get("SUPABASE_URL");
+          const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+          const cronSecret = Deno.env.get("CRON_SECRET");
+
+          for (const s of inSchedules) {
+            const jobName = `dia-sync-${sunucuAdi}-${firmaKodu}-${s.schedule_name}`;
+            // First try to unschedule existing
+            try { await conn.queryObject(`SELECT cron.unschedule($1)`, [jobName]); } catch {}
+
+            if (s.is_enabled) {
+              const scheduleBody = JSON.stringify({
+                action: 'cronSync',
+                cronSecret,
+                targetServer: sunucuAdi,
+                targetFirma: firmaKodu,
+              });
+              const sql = `SELECT cron.schedule(
+                '${jobName}',
+                '${s.cron_expression}',
+                $$SELECT net.http_post(
+                  url := '${supabaseUrl}/functions/v1/dia-data-sync',
+                  headers := '{"Content-Type": "application/json", "Authorization": "Bearer ${anonKey}"}'::jsonb,
+                  body := '${scheduleBody}'::jsonb
+                ) as request_id$$
+              )`;
+              try {
+                const r = await conn.queryObject(sql);
+                const jobId = (r.rows[0] as any)?.schedule;
+                // Update pg_cron_jobid in cron_schedules
+                if (jobId) {
+                  await sb.from('cron_schedules')
+                    .update({ pg_cron_jobid: jobId })
+                    .eq('sunucu_adi', sunucuAdi)
+                    .eq('firma_kodu', firmaKodu)
+                    .eq('schedule_name', s.schedule_name);
+                }
+                results.push({ action: 'schedule', jobName, success: true, jobId });
+              } catch (e) {
+                results.push({ action: 'schedule', jobName, success: false, error: (e as Error).message });
+              }
+            } else {
+              results.push({ action: 'skip_disabled', jobName, success: true });
+            }
+          }
+        }
+      } finally {
+        conn.release();
+        await pool.end();
+      }
+
+      return new Response(JSON.stringify({ success: true, results }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Normal auth
