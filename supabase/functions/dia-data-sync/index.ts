@@ -523,6 +523,13 @@ Deno.serve(async (req) => {
           }
         }
 
+        // Update period_sync_status timestamp so UI shows fresh "last sync" time
+        await sb.from('period_sync_status').upsert({
+          sunucu_adi: sun, firma_kodu: fk, donem_kodu: periodNo,
+          data_source_slug: dataSourceSlug,
+          last_incremental_sync: new Date().toISOString(),
+        }, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug' });
+
         return respond({
           success: true,
           totalInDia: diaKeys.size,
