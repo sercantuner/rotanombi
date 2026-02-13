@@ -143,10 +143,6 @@ export default function SuperAdminDataManagement({ users }: Props) {
       const sunucuAdi = server.sunucu_adi;
       const firmaKodu = server.firma_kodu;
 
-      // Find a user_id for data_sources query
-      const ownerUser = users.find(u => u.dia_sunucu_adi === sunucuAdi && u.firma_kodu === firmaKodu);
-      const ownerUserId = ownerUser?.user_id;
-
       const [cacheRes, periodsRes, syncRes, excludedRes, widgetRes, allDsRes] = await Promise.all([
         supabase.rpc('get_cache_record_counts', {
           p_sunucu_adi: sunucuAdi,
@@ -168,19 +164,21 @@ export default function SuperAdminDataManagement({ users }: Props) {
           .eq('sunucu_adi', sunucuAdi)
           .eq('firma_kodu', firmaKodu),
         supabase.from('widgets')
-          .select('data_source, builder_config')
+          .select('data_source, builder_config, name')
           .eq('is_active', true),
-        ownerUserId
-          ? supabase.from('data_sources')
-              .select('slug, name, module, method, is_period_independent, last_fetched_at, is_active')
-              .eq('user_id', ownerUserId)
-          : Promise.resolve({ data: [] as any[], error: null }),
+        // Tüm veri kaynaklarını çek (user_id filtresi olmadan)
+        supabase.from('data_sources')
+          .select('id, slug, name, module, method, is_period_independent, last_fetched_at, is_active')
+          .eq('is_active', true),
       ]);
 
       // Cache stats
       const cacheData = cacheRes.data || [];
+      const cacheMap = new Map<string, number>();
+      cacheData.forEach((d: any) => cacheMap.set(d.data_source_slug, d.record_count));
+
       const result: DataSourceStats[] = cacheData.map((d: any) => {
-        const ds = dataSources.find(s => s.slug === d.data_source_slug);
+        const ds = (allDsRes.data || []).find((s: any) => s.slug === d.data_source_slug) || dataSources.find(s => s.slug === d.data_source_slug);
         return {
           slug: d.data_source_slug,
           name: ds?.name || d.data_source_slug,
@@ -193,11 +191,11 @@ export default function SuperAdminDataManagement({ users }: Props) {
       });
       setStats(result.sort((a, b) => b.count - a.count));
 
-      // All data sources
+      // All data sources - tüm kaynakları listele, cache verisi olanları işaretle
       const allDs: DataSourceStats[] = (allDsRes.data || []).map((ds: any) => ({
         slug: ds.slug,
         name: ds.name,
-        count: cacheData.find((c: any) => c.data_source_slug === ds.slug)?.record_count || 0,
+        count: cacheMap.get(ds.slug) || 0,
         module: ds.module,
         method: ds.method,
         isPeriodIndependent: ds.is_period_independent,
@@ -212,23 +210,34 @@ export default function SuperAdminDataManagement({ users }: Props) {
         data_source_slug: e.data_source_slug,
       })));
 
-      // Widget usage
+      // Widget usage - allDsRes'ten gelen id->slug mapping kullan
+      const allDsList = allDsRes.data || [];
+      const dsIdToSlug = new Map<string, string>();
+      allDsList.forEach((ds: any) => {
+        dsIdToSlug.set(ds.id, ds.slug);
+        dsIdToSlug.set(ds.slug, ds.slug);
+      });
+      // Fallback: hook'tan gelen dataSources
+      dataSources.forEach(ds => {
+        dsIdToSlug.set(ds.id, ds.slug);
+        dsIdToSlug.set(ds.slug, ds.slug);
+      });
+
       const usage: WidgetUsage = {};
       (widgetRes.data || []).forEach((w: any) => {
         if (w.data_source) {
-          const ds = dataSources.find(d => d.id === w.data_source || d.slug === w.data_source);
-          const slug = ds?.slug || w.data_source;
+          const slug = dsIdToSlug.get(w.data_source) || w.data_source;
           usage[slug] = (usage[slug] || 0) + 1;
         }
         if (w.builder_config?.dataSourceId) {
-          const ds = dataSources.find(d => d.id === w.builder_config.dataSourceId);
-          if (ds) usage[ds.slug] = (usage[ds.slug] || 0) + 1;
+          const slug = dsIdToSlug.get(w.builder_config.dataSourceId);
+          if (slug) usage[slug] = (usage[slug] || 0) + 1;
         }
         if (w.builder_config?.multiQuery?.queries) {
           w.builder_config.multiQuery.queries.forEach((q: any) => {
             if (q.dataSourceId) {
-              const ds = dataSources.find(d => d.id === q.dataSourceId);
-              if (ds) usage[ds.slug] = (usage[ds.slug] || 0) + 1;
+              const slug = dsIdToSlug.get(q.dataSourceId);
+              if (slug) usage[slug] = (usage[slug] || 0) + 1;
             }
           });
         }
@@ -433,7 +442,7 @@ export default function SuperAdminDataManagement({ users }: Props) {
           ) : (
             <>
               {/* Stats Summary */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <Card>
                   <CardContent className="pt-4">
                     <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -441,7 +450,17 @@ export default function SuperAdminDataManagement({ users }: Props) {
                       <span className="text-xs">Veri Kaynakları</span>
                     </div>
                     <p className="text-2xl font-bold">{allDataSources.length}</p>
-                    <p className="text-xs text-muted-foreground">{stats.length} aktif veri</p>
+                    <p className="text-xs text-muted-foreground">{allDataSources.filter(d => d.count > 0).length} veri çekmiş</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                      <Link2 className="h-4 w-4" />
+                      <span className="text-xs">Widget Kullanan</span>
+                    </div>
+                    <p className="text-2xl font-bold">{allDataSources.filter(d => (widgetUsage[d.slug] || 0) > 0).length}</p>
+                    <p className="text-xs text-muted-foreground">{allDataSources.filter(d => (widgetUsage[d.slug] || 0) === 0).length} kullanılmıyor</p>
                   </CardContent>
                 </Card>
                 <Card>
