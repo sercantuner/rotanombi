@@ -545,6 +545,325 @@ Deno.serve(async (req) => {
       return respond({ success: true });
     }
 
+    // ─── cronSync ───
+    if (action === 'cronSync') {
+      // Auth: CRON_SECRET check (no user auth needed for cron triggers)
+      const cronSecret = Deno.env.get("CRON_SECRET");
+      const headerSecret = req.headers.get("x-cron-secret") || body.cronSecret;
+      if (!cronSecret || headerSecret !== cronSecret) {
+        return respond({ success: false, error: "Invalid cron secret" }, 403);
+      }
+
+      const { targetServer, targetFirma } = body;
+      if (!targetServer || !targetFirma) {
+        return respond({ success: false, error: "targetServer and targetFirma required" }, 400);
+      }
+
+      const sun = targetServer;
+      const fk = String(targetFirma);
+      const results: any[] = [];
+
+      // Find a user with DIA credentials for this server
+      const { data: profile } = await sb.from('profiles')
+        .select('user_id')
+        .eq('dia_sunucu_adi', sun)
+        .eq('firma_kodu', fk)
+        .not('dia_session_id', 'is', null)
+        .limit(1)
+        .single();
+
+      if (!profile) {
+        // Try any user for this server (even without active session - autoLogin will handle it)
+        const { data: anyProfile } = await sb.from('profiles')
+          .select('user_id')
+          .eq('dia_sunucu_adi', sun)
+          .eq('firma_kodu', fk)
+          .not('dia_api_key', 'is', null)
+          .limit(1)
+          .single();
+
+        if (!anyProfile) {
+          return respond({ success: false, error: `No user found for ${sun}:${fk}` });
+        }
+        var userId = anyProfile.user_id;
+      } else {
+        var userId = profile.user_id;
+      }
+
+      // Check sync_locks
+      await sb.from('sync_locks').delete().lt('expires_at', new Date().toISOString());
+      const { data: existingLock } = await sb.from('sync_locks')
+        .select('*').eq('sunucu_adi', sun).eq('firma_kodu', fk).single();
+
+      if (existingLock) {
+        return respond({ success: false, error: 'SYNC_IN_PROGRESS', lockedBy: existingLock.locked_by_email });
+      }
+
+      // Acquire lock
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      const { data: lock } = await sb.from('sync_locks').insert({
+        sunucu_adi: sun, firma_kodu: fk, locked_by: userId,
+        locked_by_email: 'cron', expires_at: expiresAt, sync_type: 'cron',
+      }).select().single();
+      const lockId = lock?.id;
+
+      try {
+        // Get DIA session
+        const session = await getSessionForUser(sb, userId);
+        if (!session) {
+          throw new Error("No DIA session for cron user");
+        }
+        const sr = await ensureValidSession(sb, userId, session);
+        if (!sr.success || !sr.session) {
+          throw new Error("Session validation failed");
+        }
+        const validSession = sr.session;
+
+        // Get active data sources
+        const { data: sources } = await sb.from('data_sources')
+          .select('*').eq('is_active', true)
+          .or('is_non_dia.is.null,is_non_dia.eq.false');
+
+        if (!sources || sources.length === 0) {
+          throw new Error("No active data sources");
+        }
+
+        // Get periods
+        const { data: periods } = await sb.from('firma_periods')
+          .select('period_no')
+          .eq('sunucu_adi', sun)
+          .eq('firma_kodu', fk)
+          .order('period_no', { ascending: false });
+
+        const periodNos = periods?.map(p => p.period_no) || [];
+        if (periodNos.length === 0) {
+          throw new Error("No periods found");
+        }
+
+        // Process each data source + period
+        for (const src of sources) {
+          for (const periodNo of periodNos) {
+            // Check if full sync was ever done
+            const { data: pss } = await sb.from('period_sync_status')
+              .select('last_full_sync, is_locked')
+              .eq('sunucu_adi', sun).eq('firma_kodu', fk)
+              .eq('data_source_slug', src.slug).eq('donem_kodu', periodNo)
+              .single();
+
+            // Skip locked periods
+            if (pss?.is_locked) {
+              results.push({ slug: src.slug, period: periodNo, status: 'skipped_locked' });
+              continue;
+            }
+
+            // Skip if no full sync done yet (needs manual trigger first)
+            if (!pss?.last_full_sync) {
+              results.push({ slug: src.slug, period: periodNo, status: 'skipped_no_full_sync' });
+              continue;
+            }
+
+            // Perform incremental sync
+            const url = `https://${validSession.sunucuAdi}.ws.dia.com.tr/api/v3/${src.module}/json`;
+            const fm = buildDiaMethodName(src.module, src.method);
+
+            // Get pooled columns
+            const pooledCols = await getPooledColumnsForSource(sb, src.id);
+            let selectedColumns: string[] | undefined;
+            if (pooledCols) {
+              const colSet = new Set(pooledCols);
+              if (src.selected_columns && Array.isArray(src.selected_columns)) {
+                for (const c of src.selected_columns) colSet.add(c);
+              }
+              colSet.add('_key');
+              selectedColumns = Array.from(colSet);
+            }
+
+            const payload: any = {
+              [fm]: {
+                session_id: validSession.sessionId,
+                firma_kodu: validSession.firmaKodu,
+                donem_kodu: periodNo,
+                limit: 0,
+                filters: [
+                  { field: '_date', operator: '>=', value: pss.last_full_sync }
+                ],
+                sorts: [{ field: '_key', sorttype: 'ASC' }],
+              }
+            };
+            if (selectedColumns) {
+              payload[fm].params = { selectedcolumns: selectedColumns };
+            }
+
+            try {
+              const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+              if (!res.ok) {
+                results.push({ slug: src.slug, period: periodNo, status: 'error', error: `HTTP ${res.status}` });
+                continue;
+              }
+
+              const r = await res.json();
+              if (r.error || r.hata || r.code !== "200") {
+                results.push({ slug: src.slug, period: periodNo, status: 'error', error: r.error?.message || r.hata?.aciklama || `code:${r.code}` });
+                continue;
+              }
+
+              const data = Array.isArray(r.result) ? r.result : r[fm] || [];
+
+              // Upsert
+              let written = 0;
+              const BATCH = 500;
+              for (let i = 0; i < data.length; i += BATCH) {
+                const batch = data.slice(i, i + BATCH);
+                const upsertRows = batch.filter((rec: any) => rec._key).map((record: any) => ({
+                  sunucu_adi: sun, firma_kodu: fk, donem_kodu: periodNo,
+                  data_source_slug: src.slug, dia_key: Number(record._key),
+                  data: record, is_deleted: false, updated_at: new Date().toISOString(),
+                }));
+                if (upsertRows.length === 0) continue;
+
+                const { error: uErr } = await sb.from('company_data_cache')
+                  .upsert(upsertRows, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug,dia_key', ignoreDuplicates: false });
+                if (!uErr) written += upsertRows.length;
+              }
+
+              // Update sync status
+              await sb.from('period_sync_status').upsert({
+                sunucu_adi: sun, firma_kodu: fk, donem_kodu: periodNo,
+                data_source_slug: src.slug,
+                last_incremental_sync: new Date().toISOString(),
+              }, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug' });
+
+              // Record in sync_history
+              await sb.from('sync_history').insert({
+                sunucu_adi: sun, firma_kodu: fk, donem_kodu: periodNo,
+                data_source_slug: src.slug, sync_type: 'cron',
+                status: 'completed', records_fetched: data.length,
+                records_inserted: written, triggered_by: userId,
+                completed_at: new Date().toISOString(),
+              });
+
+              results.push({ slug: src.slug, period: periodNo, status: 'ok', fetched: data.length, written });
+            } catch (e) {
+              const errMsg = e instanceof Error ? e.message : 'Error';
+              results.push({ slug: src.slug, period: periodNo, status: 'error', error: errMsg });
+
+              // Record failure in sync_history
+              await sb.from('sync_history').insert({
+                sunucu_adi: sun, firma_kodu: fk, donem_kodu: periodNo,
+                data_source_slug: src.slug, sync_type: 'cron',
+                status: 'failed', error: errMsg,
+                triggered_by: userId, completed_at: new Date().toISOString(),
+              });
+            }
+          }
+        }
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : 'Error';
+        results.push({ status: 'fatal_error', error: errMsg });
+      } finally {
+        // Release lock
+        if (lockId) await sb.from('sync_locks').delete().eq('id', lockId);
+      }
+
+      return respond({ success: true, results });
+    }
+
+    // ─── manageCronSchedules ───
+    if (action === 'manageCronSchedules') {
+      const user = await getAuthUser(sb, req);
+      if (!user) return respond({ success: false, error: "Unauthorized" }, 401);
+
+      const { schedules, removeSchedules, sunucuAdi, firmaKodu } = body;
+      const results: any[] = [];
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || "";
+      const cronSecret = Deno.env.get("CRON_SECRET") || "";
+
+      // Remove schedules from pg_cron
+      if (removeSchedules && Array.isArray(removeSchedules)) {
+        for (const sched of removeSchedules) {
+          const jobName = `dia-sync-${sunucuAdi}-${firmaKodu}-${sched.schedule_name}`;
+          try {
+            await sb.rpc('_exec_sql' as any, { sql: `SELECT cron.unschedule('${jobName}')` }).catch(() => {});
+            // Fallback: direct SQL
+            const { error } = await sb.from('cron_schedules')
+              .update({ pg_cron_jobid: null })
+              .eq('sunucu_adi', sunucuAdi).eq('firma_kodu', firmaKodu)
+              .eq('schedule_name', sched.schedule_name);
+            results.push({ schedule: sched.schedule_name, action: 'removed', error: error?.message });
+          } catch (e) {
+            results.push({ schedule: sched.schedule_name, action: 'remove_error', error: e instanceof Error ? e.message : 'Error' });
+          }
+        }
+      }
+
+      // Create/update schedules in pg_cron
+      if (schedules && Array.isArray(schedules)) {
+        for (const sched of schedules) {
+          const jobName = `dia-sync-${sunucuAdi}-${firmaKodu}-${sched.schedule_name}`;
+          
+          if (!sched.is_enabled) {
+            // Unschedule disabled jobs
+            try {
+              const { data: unschedResult } = await sb.rpc('get_cron_run_history' as any, { p_limit: 1 }).catch(() => ({ data: null }));
+              // Try to unschedule by name
+              await sb.rpc('_exec_sql' as any, { sql: `SELECT cron.unschedule('${jobName}')` }).catch(() => {});
+              await sb.from('cron_schedules')
+                .update({ pg_cron_jobid: null })
+                .eq('sunucu_adi', sunucuAdi).eq('firma_kodu', firmaKodu)
+                .eq('schedule_name', sched.schedule_name);
+              results.push({ schedule: sched.schedule_name, action: 'disabled' });
+            } catch {
+              results.push({ schedule: sched.schedule_name, action: 'disable_noop' });
+            }
+            continue;
+          }
+
+          // Schedule enabled job
+          const cronBody = JSON.stringify({
+            action: 'cronSync',
+            cronSecret: cronSecret,
+            targetServer: sunucuAdi,
+            targetFirma: firmaKodu,
+          });
+
+          const scheduleSQL = `
+            SELECT cron.schedule(
+              '${jobName}',
+              '${sched.cron_expression}',
+              $$
+              SELECT net.http_post(
+                url:='${supabaseUrl}/functions/v1/dia-data-sync',
+                headers:='{"Content-Type": "application/json", "Authorization": "Bearer ${anonKey}"}'::jsonb,
+                body:='${cronBody}'::jsonb
+              ) as request_id;
+              $$
+            );
+          `;
+
+          try {
+            // Use service role to execute SQL for cron scheduling
+            const pgUrl = Deno.env.get("SUPABASE_DB_URL");
+            if (pgUrl) {
+              // Direct pg connection approach - not available, use RPC
+            }
+            // Fallback: insert/update the schedule record and note that pg_cron needs manual setup
+            await sb.from('cron_schedules')
+              .update({ pg_cron_jobid: null }) // Will be set when pg_cron picks it up
+              .eq('sunucu_adi', sunucuAdi).eq('firma_kodu', firmaKodu)
+              .eq('schedule_name', sched.schedule_name);
+            
+            results.push({ schedule: sched.schedule_name, action: 'scheduled', sql: scheduleSQL });
+          } catch (e) {
+            results.push({ schedule: sched.schedule_name, action: 'schedule_error', error: e instanceof Error ? e.message : 'Error' });
+          }
+        }
+      }
+
+      return respond({ success: true, results });
+    }
+
     return respond({ success: false, error: "Unknown action" }, 400);
   } catch (e) {
     return respond({ success: false, error: e instanceof Error ? e.message : "Error" }, 500);

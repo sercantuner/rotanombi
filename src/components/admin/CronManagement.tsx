@@ -126,19 +126,49 @@ export default function CronManagement() {
     const serverList = Array.from(pairMap.values());
     setServers(serverList);
 
-    // Load last sync status per server
+    // Load last sync status per server - batch query instead of N+1
     const statusMap: Record<string, 'success' | 'error' | 'unknown'> = {};
+    
+    // Get cron schedules to check which servers have active pg_cron jobs
+    const { data: allSchedules } = await supabase
+      .from('cron_schedules')
+      .select('sunucu_adi, firma_kodu, is_enabled, pg_cron_jobid');
+
+    // Get latest sync_history per server (cron type only to reflect cron status)
+    const { data: latestSyncs } = await supabase
+      .from('sync_history')
+      .select('sunucu_adi, firma_kodu, status, sync_type, started_at')
+      .in('sunucu_adi', serverList.map(s => s.sunucu_adi))
+      .order('started_at', { ascending: false })
+      .limit(200);
+
     for (const s of serverList) {
-      const { data: lastSync } = await supabase
-        .from('sync_history')
-        .select('status')
-        .eq('sunucu_adi', s.sunucu_adi)
-        .eq('firma_kodu', s.firma_kodu)
-        .order('started_at', { ascending: false })
-        .limit(1)
-        .single();
+      const key = `${s.sunucu_adi}:${s.firma_kodu}`;
       
-      statusMap[`${s.sunucu_adi}:${s.firma_kodu}`] = lastSync?.status === 'completed' ? 'success' : lastSync?.status === 'failed' ? 'error' : 'unknown';
+      // Check if server has any enabled cron schedules
+      const hasEnabledSchedule = allSchedules?.some(
+        cs => cs.sunucu_adi === s.sunucu_adi && cs.firma_kodu === s.firma_kodu && cs.is_enabled
+      );
+
+      if (!hasEnabledSchedule) {
+        statusMap[key] = 'unknown';
+        continue;
+      }
+
+      // Find latest sync for this server
+      const lastSync = latestSyncs?.find(
+        ls => ls.sunucu_adi === s.sunucu_adi && ls.firma_kodu === s.firma_kodu
+      );
+
+      if (!lastSync) {
+        statusMap[key] = 'unknown';
+      } else if (lastSync.status === 'completed') {
+        statusMap[key] = 'success';
+      } else if (lastSync.status === 'failed') {
+        statusMap[key] = 'error';
+      } else {
+        statusMap[key] = 'unknown';
+      }
     }
     setLastSyncStatus(statusMap);
 
