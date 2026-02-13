@@ -1,6 +1,7 @@
 // Super Admin Panel - Kullanıcı izleme, widget yönetimi ve lisans yönetimi
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate, Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useImpersonation, ImpersonatedProfile } from '@/contexts/ImpersonationContext';
 import { useTheme } from '@/hooks/useTheme';
@@ -23,22 +24,26 @@ import {
   Moon,
   User,
   Link2,
-  RefreshCw
+  RefreshCw,
+  LogOut,
+  HardDrive,
+  ChevronLeft
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { format, differenceInDays, isPast } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { UserLicenseModal } from '@/components/admin/UserLicenseModal';
 import { ImpersonatedDashboard } from '@/components/admin/ImpersonatedDashboard';
 import { cn } from '@/lib/utils';
-import { HardDrive } from 'lucide-react';
+import rotanombiLogo from '@/assets/rotanombi-logo.png';
+import rotanombiLogoDark from '@/assets/rotanombi-logo-dark.svg';
 
 // Lazy import widget management components
 const SuperAdminWidgetManager = React.lazy(() => import('@/components/admin/SuperAdminWidgetManager'));
@@ -64,6 +69,9 @@ interface UserProfile {
 }
 
 export default function SuperAdminPanel() {
+  const { isAuthenticated, isLoading: authLoading, user: authUser, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { isSuperAdmin, loading: permLoading } = usePermissions();
   const { impersonatedUserId, impersonatedProfile, startImpersonation, stopImpersonation, isImpersonating } = useImpersonation();
   const { theme, toggleTheme } = useTheme();
@@ -76,6 +84,8 @@ export default function SuperAdminPanel() {
   const [showLicenseModal, setShowLicenseModal] = useState(false);
   const [activeTab, setActiveTab] = useState('users');
   const [userSearchOpen, setUserSearchOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const sidebarLogo = theme === 'dark' ? rotanombiLogoDark : rotanombiLogo;
 
   // URL'den tab parametresiyle açılışta doğru sekmeyi seç
   useEffect(() => {
@@ -133,6 +143,19 @@ export default function SuperAdminPanel() {
 
     loadUsers();
   }, [isSuperAdmin]);
+
+  // Auth check - since not wrapped in AppLayout
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/" state={{ from: location }} replace />;
+  }
 
   // Yetki kontrolü
   if (permLoading) {
@@ -221,224 +244,256 @@ export default function SuperAdminPanel() {
     return 'Kullanıcı';
   };
 
-  return (
-     <div className="flex flex-col h-full min-h-0 bg-background">
-      {/* Ana İçerik */}
-       <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-background">
-        {/* Impersonation Banner */}
 
-        {/* Tab Navigation */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-          <div className="border-b border-border px-2 md:px-4 flex items-center justify-between gap-2 overflow-x-auto">
-            <TabsList className="h-11 w-max gap-1">
-              <TabsTrigger value="users" className="gap-1.5 text-xs md:text-sm px-2 md:px-3">
-                <Users className="w-3 h-3 md:w-4 md:h-4" />
-                <span>Kullanıcı İzleme</span>
-              </TabsTrigger>
-              <TabsTrigger value="widgets" className="gap-1.5 text-xs md:text-sm px-2 md:px-3">
-                <Boxes className="w-3 h-3 md:w-4 md:h-4" />
-                <span>Widget Yönetimi</span>
-              </TabsTrigger>
-              <TabsTrigger value="categories" className="gap-1.5 text-xs md:text-sm px-2 md:px-3">
-                <Layers className="w-3 h-3 md:w-4 md:h-4" />
-                <span>Kategoriler</span>
-              </TabsTrigger>
-              <TabsTrigger value="datasources" className="gap-1.5 text-xs md:text-sm px-2 md:px-3">
-                <Database className="w-3 h-3 md:w-4 md:h-4" />
-                <span>Veri Kaynakları</span>
-              </TabsTrigger>
-              <TabsTrigger value="datamodel" className="gap-1.5 text-xs md:text-sm px-2 md:px-3">
-                <Link2 className="w-3 h-3 md:w-4 md:h-4" />
-                <span>Veri Modeli</span>
-              </TabsTrigger>
-              <TabsTrigger value="datamanagement" className="gap-1.5 text-xs md:text-sm px-2 md:px-3">
-                <HardDrive className="w-3 h-3 md:w-4 md:h-4" />
-                <span>Veri Yönetimi</span>
-              </TabsTrigger>
-              <TabsTrigger value="feedback" className="gap-1.5 text-xs md:text-sm px-2 md:px-3">
-                <MessageSquare className="w-3 h-3 md:w-4 md:h-4" />
-                <span>Geri Bildirimler</span>
-              </TabsTrigger>
-            </TabsList>
-            
-            <div className="flex items-center gap-2">
-              {/* Kullanıcı Arama - Sadece Kullanıcı İzleme tab'ında göster */}
-              {activeTab === 'users' && (
-                <Popover open={userSearchOpen} onOpenChange={setUserSearchOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={userSearchOpen}
-                      className="w-[200px] md:w-[300px] justify-start text-muted-foreground h-9"
-                    >
-                      <Search className="w-4 h-4 mr-2 shrink-0" />
-                      {impersonatedProfile ? (
-                        <span className="text-foreground truncate">
-                          {impersonatedProfile.display_name || impersonatedProfile.email}
-                        </span>
-                      ) : (
-                        <span>Kullanıcı ara...</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[280px] md:w-[400px] p-0" align="end">
-                    <Command>
-                      <CommandInput 
-                        placeholder="İsim, e-posta veya firma ara..." 
-                        value={searchTerm}
-                        onValueChange={setSearchTerm}
-                      />
-                      <CommandList>
-                        <CommandEmpty>
-                          {loading ? (
-                            <div className="flex items-center justify-center py-4">
-                              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
-                            </div>
-                          ) : (
-                            'Kullanıcı bulunamadı'
-                          )}
-                        </CommandEmpty>
-                        <CommandGroup heading={`${filteredUsers.length} kullanıcı`}>
-                          {filteredUsers.slice(0, 10).map(user => (
-                            <CommandItem
-                              key={user.user_id}
-                              value={`${user.display_name} ${user.email} ${user.firma_adi}`}
-                              onSelect={() => {
-                                handleViewUser(user);
-                                setUserSearchOpen(false);
-                              }}
-                              className="flex items-center justify-between gap-2 py-2"
-                            >
-                              <div className="flex items-center gap-3 min-w-0 flex-1">
-                                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
-                                  <User className="w-4 h-4 text-muted-foreground" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="font-medium text-sm truncate">
-                                    {user.display_name || user.email?.split('@')[0] || 'Bilinmeyen'}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground truncate">
-                                    {user.email}
-                                  </p>
-                                </div>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant={impersonatedUserId === user.user_id ? "default" : "ghost"}
-                                className="h-7 text-xs shrink-0"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleViewUser(user);
-                                  setUserSearchOpen(false);
-                                }}
-                              >
-                                <Eye className="w-3 h-3 mr-1" />
-                                Görüntüle
-                              </Button>
-                            </CommandItem>
-                          ))}
-                          {filteredUsers.length > 10 && (
-                            <div className="text-xs text-muted-foreground text-center py-2">
-                              +{filteredUsers.length - 10} kullanıcı daha...
-                            </div>
-                          )}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              )}
-              
-              {/* Theme Toggle */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleTheme}
-                className="h-9 w-9 shrink-0"
-              >
-                {theme === 'dark' ? (
-                  <Sun className="h-4 w-4" />
-                ) : (
-                  <Moon className="h-4 w-4" />
-                )}
-              </Button>
+  const sidebarItems = [
+    { key: 'users', label: 'Kullanıcı İzleme', icon: Users },
+    { key: 'widgets', label: 'Widget Yönetimi', icon: Boxes },
+    { key: 'categories', label: 'Kategoriler', icon: Layers },
+    { key: 'datasources', label: 'Veri Kaynakları', icon: Database },
+    { key: 'datamodel', label: 'Veri Modeli', icon: Link2 },
+    { key: 'datamanagement', label: 'Veri Yönetimi', icon: HardDrive },
+    { key: 'feedback', label: 'Geri Bildirimler', icon: MessageSquare },
+  ];
+
+  const renderContent = () => {
+    const suspenseFallback = <div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>;
+
+    switch (activeTab) {
+      case 'users':
+        return isImpersonating && impersonatedUserId ? (
+          <ImpersonatedDashboard 
+            userId={impersonatedUserId} 
+            onEditLicense={() => {
+              const user = users.find(u => u.user_id === impersonatedUserId);
+              if (user) handleEditLicense(user);
+            }}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-center p-6">
+            <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-4">
+              <Users className="w-10 h-10 text-muted-foreground" />
             </div>
+            <h3 className="text-lg font-semibold mb-2">Kullanıcı Seçin</h3>
+            <p className="text-muted-foreground max-w-md">
+              Soldaki arama alanından bir kullanıcı seçerek onun dashboard'unu görüntüleyebilir, 
+              widget düzenlemelerini ve sayfa yapılandırmalarını inceleyebilirsiniz.
+            </p>
           </div>
+        );
+      case 'widgets':
+        return <React.Suspense fallback={suspenseFallback}><div className="p-6 overflow-auto h-full"><SuperAdminWidgetManager /></div></React.Suspense>;
+      case 'categories':
+        return <React.Suspense fallback={suspenseFallback}><div className="p-6 overflow-auto h-full"><CategoryManager /></div></React.Suspense>;
+      case 'datasources':
+        return <React.Suspense fallback={suspenseFallback}><div className="p-6 overflow-auto h-full"><DataSourceManager /></div></React.Suspense>;
+      case 'datamodel':
+        return <React.Suspense fallback={suspenseFallback}><div className="h-full"><DataModelView /></div></React.Suspense>;
+      case 'datamanagement':
+        return <React.Suspense fallback={suspenseFallback}><div className="p-6 overflow-auto h-full"><SuperAdminDataManagement users={users} /></div></React.Suspense>;
+      case 'feedback':
+        return <React.Suspense fallback={suspenseFallback}><div className="p-6 overflow-auto h-full"><FeedbackManager /></div></React.Suspense>;
+      default:
+        return null;
+    }
+  };
 
-          <div className="flex-1 min-h-0 overflow-hidden">
-             <TabsContent value="users" className="h-full min-h-0 m-0 bg-background">
-              {isImpersonating && impersonatedUserId ? (
-                <ImpersonatedDashboard 
-                  userId={impersonatedUserId} 
-                  onEditLicense={() => {
-                    const user = users.find(u => u.user_id === impersonatedUserId);
-                    if (user) handleEditLicense(user);
-                  }}
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center p-6">
-                  <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-4">
-                    <Users className="w-10 h-10 text-muted-foreground" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">Kullanıcı Seçin</h3>
-                  <p className="text-muted-foreground max-w-md">
-                    Yukarıdaki arama alanından bir kullanıcı seçerek onun dashboard'unu görüntüleyebilir, 
-                    widget düzenlemelerini ve sayfa yapılandırmalarını inceleyebilirsiniz.
-                  </p>
+  return (
+    <TooltipProvider delayDuration={0}>
+      <div className="min-h-screen flex bg-background">
+        {/* Left Sidebar */}
+        <aside className={cn(
+          "h-screen fixed left-0 top-0 z-50 flex flex-col glass-card border-r border-border transition-all duration-300",
+          sidebarCollapsed ? "w-16" : "w-64"
+        )}>
+          {/* Toggle Button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute -right-3 top-6 z-50 h-6 w-6 rounded-full bg-background border shadow-md hover:bg-muted"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          >
+            {sidebarCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
+          </Button>
+
+          {/* Logo */}
+          {!sidebarCollapsed && (
+            <div className="p-4 border-b border-border">
+              <div className="flex items-center gap-2">
+                <img src={sidebarLogo} alt="RotanomBI" className="h-7 w-auto" />
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                  <Crown className="w-2.5 h-2.5 mr-0.5" />
+                  Admin
+                </Badge>
+              </div>
+            </div>
+          )}
+
+          {/* Nav Items */}
+          <nav className={cn("flex-1 space-y-1 overflow-y-auto", sidebarCollapsed ? "p-2" : "p-4")}>
+            {sidebarItems.map(item => {
+              const isActive = activeTab === item.key;
+              const Icon = item.icon;
+
+              if (sidebarCollapsed) {
+                return (
+                  <Tooltip key={item.key}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => setActiveTab(item.key)}
+                        className={cn(
+                          'nav-item w-full justify-center',
+                          isActive && 'active'
+                        )}
+                      >
+                        <Icon className="w-5 h-5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">{item.label}</TooltipContent>
+                  </Tooltip>
+                );
+              }
+
+              return (
+                <button
+                  key={item.key}
+                  onClick={() => setActiveTab(item.key)}
+                  className={cn('nav-item w-full', isActive && 'active')}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span className="font-medium truncate">{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* User Search (for users tab) */}
+          {activeTab === 'users' && !sidebarCollapsed && (
+            <div className="border-t border-border p-3">
+              <Popover open={userSearchOpen} onOpenChange={setUserSearchOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start h-9 text-xs">
+                    <Search className="w-3.5 h-3.5 mr-2 shrink-0" />
+                    {impersonatedProfile ? (
+                      <span className="text-foreground truncate">
+                        {impersonatedProfile.display_name || impersonatedProfile.email}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">Kullanıcı ara...</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[320px] p-0" align="start" side="right">
+                  <Command>
+                    <CommandInput 
+                      placeholder="İsim, e-posta veya firma ara..." 
+                      value={searchTerm}
+                      onValueChange={setSearchTerm}
+                    />
+                    <CommandList>
+                      <CommandEmpty>
+                        {loading ? (
+                          <div className="flex items-center justify-center py-4">
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                          </div>
+                        ) : 'Kullanıcı bulunamadı'}
+                      </CommandEmpty>
+                      <CommandGroup heading={`${filteredUsers.length} kullanıcı`}>
+                        {filteredUsers.slice(0, 10).map(user => (
+                          <CommandItem
+                            key={user.user_id}
+                            value={`${user.display_name} ${user.email} ${user.firma_adi}`}
+                            onSelect={() => {
+                              handleViewUser(user);
+                              setUserSearchOpen(false);
+                            }}
+                            className="flex items-center gap-2 py-2"
+                          >
+                            <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+                              <User className="w-3.5 h-3.5 text-muted-foreground" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-sm truncate">
+                                {user.display_name || user.email?.split('@')[0] || 'Bilinmeyen'}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
+
+          {/* Bottom Actions */}
+          <div className={cn("border-t border-border space-y-1", sidebarCollapsed ? "p-2" : "p-3")}>
+            {sidebarCollapsed ? (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="w-full" onClick={toggleTheme}>
+                      {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Tema Değiştir</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="w-full" onClick={() => navigate('/dashboard')}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Dashboard'a Dön</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button onClick={() => logout()} className="nav-item w-full justify-center text-destructive hover:bg-destructive/10">
+                      <LogOut className="w-5 h-5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Çıkış Yap</TooltipContent>
+                </Tooltip>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" className="flex-1 justify-start text-xs" onClick={() => navigate('/dashboard')}>
+                    <ChevronLeft className="h-3.5 w-3.5 mr-1" />
+                    Dashboard'a Dön
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={toggleTheme}>
+                    {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+                  </Button>
                 </div>
-              )}
-            </TabsContent>
-
-             <TabsContent value="widgets" className="h-full m-0 p-6 bg-background">
-              <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
-                <SuperAdminWidgetManager />
-              </React.Suspense>
-            </TabsContent>
-
-             <TabsContent value="categories" className="h-full m-0 p-6 bg-background">
-              <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
-                <CategoryManager />
-              </React.Suspense>
-            </TabsContent>
-
-             <TabsContent value="datasources" className="h-full m-0 p-6 bg-background">
-              <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
-                <DataSourceManager />
-              </React.Suspense>
-            </TabsContent>
-
-             <TabsContent value="datamodel" className="h-full m-0 bg-background">
-              <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
-                <DataModelView />
-              </React.Suspense>
-            </TabsContent>
-
-             <TabsContent value="datamanagement" className="h-full m-0 p-6 bg-background overflow-auto">
-              <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
-                <SuperAdminDataManagement users={users} />
-              </React.Suspense>
-            </TabsContent>
-
-             <TabsContent value="feedback" className="h-full m-0 p-6 bg-background">
-              <React.Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
-                <FeedbackManager />
-              </React.Suspense>
-            </TabsContent>
-
+                <button onClick={() => logout()} className="nav-item w-full text-destructive hover:bg-destructive/10">
+                  <LogOut className="w-4 h-4" />
+                  <span className="font-medium text-sm">Çıkış Yap</span>
+                </button>
+              </>
+            )}
           </div>
-        </Tabs>
-      </div>
+        </aside>
 
-      {/* Lisans Modal */}
-      {selectedUser && (
-        <UserLicenseModal
-          open={showLicenseModal}
-          onOpenChange={setShowLicenseModal}
-          user={selectedUser}
-          onSave={refreshUsers}
-        />
-      )}
-    </div>
+        {/* Main Content */}
+        <div className={cn(
+          "flex-1 flex flex-col transition-all duration-300 h-screen overflow-hidden",
+          sidebarCollapsed ? "ml-16" : "ml-64"
+        )}>
+          {renderContent()}
+        </div>
+
+        {/* Lisans Modal */}
+        {selectedUser && (
+          <UserLicenseModal
+            open={showLicenseModal}
+            onOpenChange={setShowLicenseModal}
+            user={selectedUser}
+            onSave={refreshUsers}
+          />
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
