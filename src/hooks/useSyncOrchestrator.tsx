@@ -539,7 +539,7 @@ export function useSyncOrchestrator() {
     }
   }, [isConfigured, dataSources, periods, progress.isRunning, queryClient]);
 
-  // Tek kaynak incremental sync (hızlı güncelleme)
+  // Tek kaynak incremental sync (hızlı güncelleme) + resume-from-offset
   const quickSync = useCallback(async (slug: string, periodNo: number, targetUserId?: string) => {
     if (progress.isRunning) return;
     targetUserIdRef.current = targetUserId;
@@ -571,35 +571,83 @@ export function useSyncOrchestrator() {
       console.error('[SyncOrchestrator] quickSync getRecordCounts error:', e);
     }
 
+    // DB'deki mevcut kayıt sayısını çek
+    // Use edge function response for sunucu/firma when impersonating
+    let effectiveSunucu = profileSunucu || '';
+    let effectiveFirma = profileFirma || '';
+    if (targetUserId) {
+      try {
+        const statusRes = await callEdgeFunction({ action: 'getSyncStatus' });
+        effectiveSunucu = statusRes?.sunucuAdi || effectiveSunucu;
+        effectiveFirma = statusRes?.firmaKodu || effectiveFirma;
+      } catch {}
+    }
+
+    let localCount = 0;
+    try {
+      const { count } = await supabase
+        .from('company_data_cache')
+        .select('*', { count: 'exact', head: true })
+        .eq('sunucu_adi', effectiveSunucu)
+        .eq('firma_kodu', effectiveFirma)
+        .eq('data_source_slug', slug)
+        .eq('donem_kodu', periodNo)
+        .eq('is_deleted', false);
+      localCount = count || 0;
+    } catch (e) {
+      console.error('[SyncOrchestrator] quickSync local count error:', e);
+    }
+
+    // Eksik kayıt var mı kontrol et
+    const hasGap = expected > 0 && localCount < expected;
+    const syncType = hasGap ? 'full' : 'incremental';
+    
+    if (hasGap) {
+      console.log(`[SyncOrchestrator] quickSync: DB(${localCount}) < DIA(${expected}) for ${slug} D${periodNo}, will resume from offset ${localCount}`);
+    }
+
     setProgress(prev => ({
       ...prev,
       isRunning: true,
       currentSource: source.name,
       currentPeriod: periodNo,
-      currentType: 'incremental',
-      tasks: [{ slug, name: source.name, periodNo, status: 'running', type: 'incremental', fetched: 0, written: 0, deleted: 0, expectedRecords: expected, localRecords: 0 }],
+      currentType: syncType,
+      tasks: [{ slug, name: source.name, periodNo, status: 'running', type: syncType, fetched: 0, written: 0, deleted: 0, expectedRecords: expected, localRecords: localCount }],
       overallPercent: 0,
       totalExpected: expected,
-      totalFetched: 0,
+      totalFetched: hasGap ? localCount : 0,
       totalWritten: 0,
     }));
 
     try {
-      const result = await syncIncremental(slug, periodNo);
-      
-      if (result.needsFullSync) {
-        setProgress(prev => ({ ...prev, currentType: 'full', tasks: [{ ...prev.tasks[0], type: 'full' }] }));
-        const fullResult = await syncFullChunked(slug, periodNo, 0);
+      if (hasGap) {
+        // Eksik kayıtları offset'ten devam ederek tamamla
+        toast.info(`${source.name}: ${localCount}/${expected} mevcut, eksik ${expected - localCount} kayıt tamamlanıyor...`);
+        const fullResult = await syncFullChunked(slug, periodNo, 0, { pageSize: DEFAULT_PAGE_SIZE, startOffset: localCount });
+        
         if (fullResult.fetched > 0) {
-          await callEdgeFunction({ action: 'markFullSyncComplete', dataSourceSlug: slug, periodNo, totalRecords: fullResult.fetched });
+          await callEdgeFunction({ action: 'markFullSyncComplete', dataSourceSlug: slug, periodNo, totalRecords: localCount + fullResult.fetched });
         }
+        
         // Reconcile
         const recResult = await reconcileKeys(slug, periodNo);
-        toast.success(`${source.name}: ${fullResult.fetched} kayıt çekildi (tam sync)${recResult.markedDeleted > 0 ? `, ${recResult.markedDeleted} silinen tespit edildi` : ''}`);
+        toast.success(`${source.name}: ${fullResult.fetched} eksik kayıt tamamlandı (toplam: ${localCount + fullResult.fetched})${recResult.markedDeleted > 0 ? `, ${recResult.markedDeleted} silinen tespit edildi` : ''}`);
       } else {
-        // Reconcile
-        const recResult = await reconcileKeys(slug, periodNo);
-        toast.success(`${source.name}: ${result.fetched} yeni/güncellenen kayıt${recResult.markedDeleted > 0 ? `, ${recResult.markedDeleted} silinen tespit edildi` : ''}`);
+        // Normal incremental sync
+        const result = await syncIncremental(slug, periodNo);
+        
+        if (result.needsFullSync) {
+          setProgress(prev => ({ ...prev, currentType: 'full', tasks: [{ ...prev.tasks[0], type: 'full' }] }));
+          const fullResult = await syncFullChunked(slug, periodNo, 0);
+          if (fullResult.fetched > 0) {
+            await callEdgeFunction({ action: 'markFullSyncComplete', dataSourceSlug: slug, periodNo, totalRecords: fullResult.fetched });
+          }
+          const recResult = await reconcileKeys(slug, periodNo);
+          toast.success(`${source.name}: ${fullResult.fetched} kayıt çekildi (tam sync)${recResult.markedDeleted > 0 ? `, ${recResult.markedDeleted} silinen tespit edildi` : ''}`);
+        } else {
+          const recResult = await reconcileKeys(slug, periodNo);
+          toast.success(`${source.name}: ${result.fetched} yeni/güncellenen kayıt${recResult.markedDeleted > 0 ? `, ${recResult.markedDeleted} silinen tespit edildi` : ''}`);
+        }
       }
     } catch (e) {
       const error = e instanceof Error ? e.message : 'Hata';
