@@ -91,6 +91,7 @@ export default function CronManagement() {
   const [saving, setSaving] = useState(false);
   const [historyFilter, setHistoryFilter] = useState<'all' | 'errors' | 'cron'>('all');
   const [lastSyncStatus, setLastSyncStatus] = useState<Record<string, 'success' | 'error' | 'unknown'>>({});
+  const [serverSearch, setServerSearch] = useState('');
 
   // Load servers
   useEffect(() => {
@@ -299,6 +300,12 @@ export default function CronManagement() {
     return true;
   });
 
+  const filteredServers = servers.filter(server =>
+    server.sunucu_adi.toLowerCase().includes(serverSearch.toLowerCase()) ||
+    server.firma_adi?.toLowerCase().includes(serverSearch.toLowerCase()) ||
+    server.firma_kodu.toLowerCase().includes(serverSearch.toLowerCase())
+  );
+
   const getServerScheduleCount = (server: ServerPair) => {
     // We need to query this but for performance, just show from loaded data if selected
     if (selectedServer?.sunucu_adi === server.sunucu_adi && selectedServer?.firma_kodu === server.firma_kodu) {
@@ -319,15 +326,21 @@ export default function CronManagement() {
     <div className="flex h-full">
       {/* Left: Server List */}
       <div className="w-72 border-r border-border flex flex-col">
-        <div className="p-3 border-b border-border">
+        <div className="p-3 border-b border-border space-y-2">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <Server className="w-4 h-4" />
             Sunucular
           </h3>
+          <Input
+            placeholder="Sunucu ara..."
+            value={serverSearch}
+            onChange={(e) => setServerSearch(e.target.value)}
+            className="h-8 text-xs"
+          />
         </div>
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-1">
-            {servers.map(server => {
+            {filteredServers.map(server => {
               const key = `${server.sunucu_adi}:${server.firma_kodu}`;
               const isSelected = selectedServer?.sunucu_adi === server.sunucu_adi && selectedServer?.firma_kodu === server.firma_kodu;
               const status = lastSyncStatus[key] || 'unknown';
