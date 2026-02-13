@@ -28,6 +28,13 @@ export async function getAllPooledColumns(sb: any): Promise<Map<string, string[]
   // dataSourceId -> { fields: Set<string>, hasQueryWithoutColumns: boolean }
   const poolMap = new Map<string, { fields: Set<string>; noFields: boolean }>();
 
+  // Geçersiz/dahili alan adlarını filtrele (DIA'da Veri Hatası'na neden olur)
+  const INVALID_FIELD_PREFIXES = ['__dkf__', '__format'];
+
+  const isValidField = (field: string): boolean => {
+    return !INVALID_FIELD_PREFIXES.some(prefix => field.startsWith(prefix));
+  };
+
   const addToPool = (dataSourceId: string, selectedColumns: string[] | null | undefined) => {
     if (!poolMap.has(dataSourceId)) {
       poolMap.set(dataSourceId, { fields: new Set(), noFields: false });
@@ -39,7 +46,9 @@ export async function getAllPooledColumns(sb: any): Promise<Map<string, string[]
       pool.noFields = true;
     } else {
       for (const f of selectedColumns) {
-        pool.fields.add(f);
+        if (isValidField(f)) {
+          pool.fields.add(f);
+        }
       }
     }
   };
