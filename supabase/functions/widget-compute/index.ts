@@ -11,6 +11,7 @@ const corsHeaders = {
 const WIDGET_TIMEOUT_MS = 10_000; // 10 seconds per widget
 const BATCH_SIZE = 2; // Process 2 widgets at a time (reduce connection pool pressure)
 const COMPANY_BATCH_DELAY_MS = 1000; // 1 second delay between companies
+const MAX_COMPANIES_PER_INVOCATION = 2; // Self-chain after this many to avoid CPU timeout
 
 // ===== Merge Functions (mirror of frontend logic) =====
 
@@ -527,7 +528,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { sunucuAdi, firmaKodu, donemKodu, syncTrigger, cronSecret } = body;
+    const { sunucuAdi, firmaKodu, donemKodu, syncTrigger, cronSecret, _chainIndex } = body;
 
     const sb = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -551,17 +552,22 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const { data: { user }, error: ue } = await sb.auth.getUser(auth.replace("Bearer ", ""));
-      if (ue || !user) {
-        return new Response(JSON.stringify({ success: false, error: "Invalid token" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      const token = auth.replace("Bearer ", "");
+      // Allow service_role_key as auth (for self-chaining and admin calls)
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (token !== serviceKey) {
+        const { data: { user }, error: ue } = await sb.auth.getUser(token);
+        if (ue || !user) {
+          return new Response(JSON.stringify({ success: false, error: "Invalid token" }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
       }
     }
 
     if (!sunucuAdi || !firmaKodu) {
-      // If no specific company, process ALL companies (cron mode)
+      // ALL companies mode - with self-chaining to prevent CPU timeout
       const { data: profiles } = await sb.from('profiles')
         .select('dia_sunucu_adi, firma_kodu, donem_kodu')
         .not('dia_sunucu_adi', 'is', null)
@@ -574,25 +580,63 @@ Deno.serve(async (req) => {
       }
 
       // Unique company pairs
-      const pairs = new Map<string, number>();
+      const pairsArr: { sunucu: string; firma: string; donem: number }[] = [];
+      const seen = new Set<string>();
       for (const p of profiles) {
         const key = `${p.dia_sunucu_adi}:${p.firma_kodu}`;
-        if (!pairs.has(key)) {
-          pairs.set(key, parseInt(p.donem_kodu) || 1);
+        if (!seen.has(key)) {
+          seen.add(key);
+          pairsArr.push({ sunucu: p.dia_sunucu_adi, firma: p.firma_kodu, donem: parseInt(p.donem_kodu) || 1 });
         }
       }
 
+      const startIdx = _chainIndex || 0;
+      const endIdx = Math.min(startIdx + MAX_COMPANIES_PER_INVOCATION, pairsArr.length);
+      const batch = pairsArr.slice(startIdx, endIdx);
+
+      console.log(`[widget-compute] ALL mode: processing companies ${startIdx+1}-${endIdx} of ${pairsArr.length}`);
+
       const allResults: any[] = [];
-      for (const [pairKey, dk] of pairs) {
-        const [sun, fk] = pairKey.split(':');
-        console.log(`[widget-compute] Computing for ${sun}:${fk}...`);
-        const result = await computeWidgetsForCompany(sb, sun, fk, dk, syncTrigger || 'cron');
-        allResults.push({ sunucuAdi: sun, firmaKodu: fk, ...result });
-        // Delay between companies to prevent connection pool exhaustion
-        await new Promise(resolve => setTimeout(resolve, COMPANY_BATCH_DELAY_MS));
+      for (const pair of batch) {
+        console.log(`[widget-compute] Computing for ${pair.sunucu}:${pair.firma}...`);
+        const result = await computeWidgetsForCompany(sb, pair.sunucu, pair.firma, pair.donem, syncTrigger || 'cron');
+        allResults.push({ sunucuAdi: pair.sunucu, firmaKodu: pair.firma, ...result });
+        if (batch.indexOf(pair) < batch.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, COMPANY_BATCH_DELAY_MS));
+        }
       }
 
-      return new Response(JSON.stringify({ success: true, results: allResults }), {
+      // Self-chain if more companies remain
+      if (endIdx < pairsArr.length) {
+        const selfUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/widget-compute`;
+        const chainBody = JSON.stringify({
+          syncTrigger: syncTrigger || 'cron',
+          cronSecret: cronSecret || undefined,
+          _chainIndex: endIdx,
+        });
+        // Fire-and-forget via pg_net or fetch
+        try {
+          fetch(selfUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            },
+            body: chainBody,
+          }).catch(e => console.error('[widget-compute] Self-chain fetch error:', e));
+          console.log(`[widget-compute] Self-chained for companies ${endIdx+1}-${pairsArr.length}`);
+        } catch (e) {
+          console.error('[widget-compute] Self-chain failed:', e);
+        }
+      } else {
+        console.log(`[widget-compute] ALL companies completed (${pairsArr.length} total)`);
+      }
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        results: allResults,
+        progress: { processed: endIdx, total: pairsArr.length, hasMore: endIdx < pairsArr.length },
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
