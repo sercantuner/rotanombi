@@ -417,10 +417,12 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
   }, [pageId]);
 
   // Tek bir veri kaynağını yükle - DB-FIRST STRATEGY
+  // pooledFields: Widget havuzundan hesaplanan alan listesi (opsiyonel)
   const loadDataSource = useCallback(async (
     dataSource: DataSource, 
     accessToken: string,
-    forceRefresh: boolean = false
+    forceRefresh: boolean = false,
+    pooledFields?: string[] | null
   ): Promise<any[] | null> => {
     // _system modülü - lokal üretilen veri kaynakları (takvim vb.)
     if (dataSource.module === '_system') {
@@ -466,11 +468,11 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
       }
     }
 
-    // 4. Son çare: DIA API'den çek
+    // 4. Son çare: DIA API'den çek (pooledFields ile)
     console.log(`[DataSourceLoader] API FETCH: ${dataSource.name} - DB boş, API'den çekiliyor`);
     incrementCacheMiss();
 
-    return loadDataSourceFromApi(dataSource, accessToken);
+    return loadDataSourceFromApi(dataSource, accessToken, pooledFields);
   }, [getDataSourceData, getDataSourceDataWithStale, isDataSourceFetched, incrementCacheHit, incrementCacheMiss, loadSystemDataSource, loadDataSourceFromDatabase, setDataSourceData, markDataSourceFetched]);
 
   // DIA hata mesajlarını kullanıcı dostu hale getir
@@ -494,9 +496,11 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
   }, []);
 
   // API'den veri çek (helper) - useCallback ile sarmalandı
+  // pooledFields: Widget havuzundan hesaplanan alan listesi (data_sources.selected_columns yerine)
   const loadDataSourceFromApi = useCallback(async (
     dataSource: DataSource,
-    accessToken: string
+    accessToken: string,
+    pooledFields?: string[] | null
   ): Promise<any[] | null> => {
     setDataSourceLoading(dataSource.id, true);
     
@@ -514,7 +518,8 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
             method: dataSource.method,
             ...(dataSource.limit_count > 0 && { limit: dataSource.limit_count }),
             filters: dataSource.filters,
-            selectedColumns: dataSource.selected_columns,
+            // Widget pool'dan gelen alanları kullan, yoksa sunucu tarafı kendi hesaplar
+            ...(pooledFields && pooledFields.length > 0 && { selectedColumns: pooledFields }),
             sorts: dataSource.sorts,
             returnAllData: true,
             periodConfig: dataSource.period_config,
@@ -728,9 +733,9 @@ export function useDataSourceLoader(pageId: string | null): DataSourceLoaderResu
           }
         }
         
-        // DB'de yoksa normal loadDataSource akışına düş (API fetch)
+        // DB'de yoksa normal loadDataSource akışına düş (API fetch - pooledFields ile)
         if (!data) {
-          data = await loadDataSource(dataSource, session.access_token, forceRefresh);
+          data = await loadDataSource(dataSource, session.access_token, forceRefresh, pool.pooledFields);
         }
         
         if (data) {

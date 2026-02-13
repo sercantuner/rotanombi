@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getDiaSession, ensureValidSession, invalidateSession, performAutoLogin } from "../_shared/diaAutoLogin.ts";
 import { getTurkeyToday, getTurkeyNow } from "../_shared/turkeyTime.ts";
+import { getAllPooledColumns, getPooledColumnsForSource } from "../_shared/widgetFieldPool.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -295,7 +296,8 @@ async function syncOne(sb: any, uid: string, sess: any, src: any, pn: number, su
 
 // ===== YENİ: incrementalSync - _cdate/_date filtreli artımlı sync =====
 async function incrementalSync(
-  sb: any, uid: string, sess: any, src: any, pn: number, sun: string, fk: string, trig: string
+  sb: any, uid: string, sess: any, src: any, pn: number, sun: string, fk: string, trig: string,
+  pooledColumns?: string[] | null
 ) {
   // period_sync_status'tan last_incremental_sync al
   const { data: pss } = await sb.from('period_sync_status')
@@ -318,6 +320,12 @@ async function incrementalSync(
   const lastSync = pss?.last_incremental_sync || pss?.last_full_sync;
   const today = getTurkeyToday();
   
+  // Widget pool'dan selectedColumns (pooledColumns parametre olarak gelir)
+  const effectiveColumns = pooledColumns !== undefined ? (pooledColumns || undefined) : undefined;
+  if (effectiveColumns) {
+    console.log(`[incrementalSync] Using ${effectiveColumns.length} pooled columns for ${src.slug}`);
+  }
+  
   // Sync history kaydı oluştur
   const { data: h } = await sb.from('sync_history').insert({ 
     sunucu_adi: sun, firma_kodu: fk, donem_kodu: pn, data_source_slug: src.slug, 
@@ -330,7 +338,7 @@ async function incrementalSync(
     console.log(`[incrementalSync] ${src.slug} period ${pn}: fetching _cdate >= ${today}`);
     
      const cdateResult = await streamChunk(
-       sb, uid, sess, src.module, src.method, pn, sun, fk, src.slug, 0, MAX_RECORDS, cdateFilters, PAGE_SIZE, src.selected_columns
+       sb, uid, sess, src.module, src.method, pn, sun, fk, src.slug, 0, MAX_RECORDS, cdateFilters, PAGE_SIZE, effectiveColumns
      );
 
      // Sorgu 2: _date >= last_sync (son sync'ten beri değiştirilen kayıtlar)
@@ -340,7 +348,7 @@ async function incrementalSync(
      console.log(`[incrementalSync] ${src.slug} period ${pn}: fetching _date >= ${lastSyncDate}`);
      
      const dateResult = await streamChunk(
-       sb, uid, sess, src.module, src.method, pn, sun, fk, src.slug, 0, MAX_RECORDS, dateFilters, PAGE_SIZE, src.selected_columns
+       sb, uid, sess, src.module, src.method, pn, sun, fk, src.slug, 0, MAX_RECORDS, dateFilters, PAGE_SIZE, effectiveColumns
      );
 
     const totalFetched = (cdateResult.fetched || 0) + (dateResult.fetched || 0);
@@ -452,7 +460,7 @@ async function handleCronSync(sb: any, cronSecret: string, targetServer?: string
 
       // Aktif veri kaynaklarını al
       const { data: ds } = await sb.from('data_sources')
-        .select('slug, module, method, name, is_period_independent, is_non_dia, period_read_mode')
+        .select('id, slug, module, method, name, is_period_independent, is_non_dia, period_read_mode')
         .eq('is_active', true);
       
       const diaSources = (ds || []).filter((d: any) => !NON_DIA.includes(d.slug) && !d.slug.startsWith('_system') && !d.is_non_dia);
@@ -461,6 +469,10 @@ async function handleCronSync(sb: any, cronSecret: string, targetServer?: string
         console.log(`[cronSync] No active DIA sources for ${sun}:${fk}`);
         continue;
       }
+
+      // Widget pool hesapla - tüm kaynaklar için tek sorguda
+      const poolMap = await getAllPooledColumns(sb);
+      console.log(`[cronSync] Widget pool computed: ${poolMap.size} sources with projections`);
 
       // Dönemleri al
       const { data: periods } = await sb.from('firma_periods')
@@ -481,9 +493,12 @@ async function handleCronSync(sb: any, cronSecret: string, targetServer?: string
         const readMode = src.period_read_mode || 'all_periods';
         const srcPeriods = readMode === 'current_only' ? [currentPeriod] : periods.map((p: any) => p.period_no);
 
+        // Widget pool'dan bu kaynak için selectedColumns
+        const pooledColumns = poolMap.get(src.id) ?? null;
+
         for (const pn of srcPeriods) {
           try {
-            const result = await incrementalSync(sb, userId, dr.session, src, pn, sun, fk, 'cron');
+            const result = await incrementalSync(sb, userId, dr.session, src, pn, sun, fk, 'cron', pooledColumns);
             allResults.push({ sun, fk, slug: src.slug, pn, ...result });
             
             if (result.skipped) {
@@ -718,10 +733,14 @@ Deno.serve(async (req) => {
       if (!dataSourceSlug || periodNo === undefined) {
         return new Response(JSON.stringify({ success: false, error: "dataSourceSlug and periodNo required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      const { data: src } = await sb.from('data_sources').select('slug, module, method, name, selected_columns').eq('slug', dataSourceSlug).eq('is_active', true).single();
+      const { data: src } = await sb.from('data_sources').select('slug, module, method, name, id').eq('slug', dataSourceSlug).eq('is_active', true).single();
       if (!src) return new Response(JSON.stringify({ success: false, error: `Source not found: ${dataSourceSlug}` }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       
-      const result = await incrementalSync(sb, euid, session, src, periodNo, sun, fk, user.id);
+      // Widget pool'dan selectedColumns hesapla
+      const pooledColumns = await getPooledColumnsForSource(sb, src.id);
+      console.log(`[incrementalSync] Pooled columns for ${src.slug}: ${pooledColumns ? pooledColumns.length + ' fields' : 'FULL (no projection)'}`);
+      
+      const result = await incrementalSync(sb, euid, session, src, periodNo, sun, fk, user.id, pooledColumns);
       return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -731,10 +750,14 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ success: false, error: "dataSourceSlug and periodNo required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       
-      const { data: src } = await sb.from('data_sources').select('slug, module, method, name, selected_columns').eq('slug', dataSourceSlug).eq('is_active', true).single();
+      const { data: src } = await sb.from('data_sources').select('slug, module, method, name, id').eq('slug', dataSourceSlug).eq('is_active', true).single();
       if (!src) {
         return new Response(JSON.stringify({ success: false, error: `Source not found: ${dataSourceSlug}` }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
+      
+      // Widget pool'dan selectedColumns hesapla
+      const pooledColumns = await getPooledColumnsForSource(sb, src.id);
+      console.log(`[syncChunk] Pooled columns for ${src.slug}: ${pooledColumns ? pooledColumns.length + ' fields' : 'FULL (no projection)'}`);
       
       const startOffset = offset || 0;
       const requestedChunkSize = Math.min(chunkSize || DEFAULT_CHUNK_SIZE, MAX_CHUNK_SIZE);
@@ -745,7 +768,7 @@ Deno.serve(async (req) => {
       const result = await streamChunk(
         sb, euid, session, src.module, src.method, periodNo, 
         sun, fk, src.slug, startOffset, requestedChunkSize,
-        reqFilters, effectivePageSize, src.selected_columns
+        reqFilters, effectivePageSize, pooledColumns || undefined
       );
       
       if (!result.ok) {
@@ -897,7 +920,7 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ success: false, error: "dataSourceSlug and periodNo required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       
-      const { data: src } = await sb.from('data_sources').select('slug, module, method, name, selected_columns').eq('slug', dataSourceSlug).eq('is_active', true).single();
+      const { data: src } = await sb.from('data_sources').select('slug, module, method, name').eq('slug', dataSourceSlug).eq('is_active', true).single();
       if (!src) return new Response(JSON.stringify({ success: false, error: `Source not found: ${dataSourceSlug}` }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       
       console.log(`[reconcileKeys] Starting for ${src.slug} period ${periodNo}`);
