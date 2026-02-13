@@ -62,7 +62,7 @@ const App = () => (
                   
                   {/* Widget Marketplace & Builder - Tam Sayfa */}
                   <Route path="/marketplace" element={<AppLayout><WidgetMarketplacePage /></AppLayout>} />
-                  <Route path="/widget-builder" element={<AppLayout><WidgetBuilderPage /></AppLayout>} />
+                  <Route path="/widget-builder" element={<WidgetBuilderPage />} />
                   
                   {/* Dynamic user pages */}
                   <Route path="/page/:pageSlug" element={<AppLayout><DynamicPage /></AppLayout>} />
