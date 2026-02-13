@@ -685,7 +685,9 @@ Deno.serve(async (req) => {
           donem_kodu: s.periodNo, 
           limit: 0, 
           offset: 0,
-          selectedcolumns: ["_key"]
+          params: {
+            selectedcolumns: ["_key"]
+          }
         }};
 
         try {
