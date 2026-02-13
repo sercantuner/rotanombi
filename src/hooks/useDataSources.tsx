@@ -47,6 +47,7 @@ export interface DataSource {
   is_period_independent: boolean; // Dönem bağımsız mı?
   is_non_dia: boolean; // DIA dışı kaynak mı?
   period_read_mode: 'current_only' | 'all_periods'; // Dönem okuma modu
+  skip_reconcile: boolean; // Hash-key tabanlı kaynaklarda reconcile atla
   
   created_at: string;
   updated_at: string;
