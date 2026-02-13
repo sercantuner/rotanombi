@@ -51,16 +51,29 @@ export default function SuperAdminDashboard() {
   const loadStats = async () => {
     setLoading(true);
     try {
-      const [profilesRes, widgetsRes, dsRes, catRes, cacheStatsRes, tagStatsRes] = await Promise.all([
+      const [profilesRes, widgetsRes, dsRes, catRes, tagStatsRes] = await Promise.all([
         supabase.from('profiles').select('user_id, license_type, license_expires_at, dia_sunucu_adi, firma_adi'),
         supabase.from('widgets').select('id, is_active, builder_config'),
         supabase.from('data_sources').select('id'),
         supabase.from('widget_categories').select('id'),
-        // Cache stats per server - use RPC-like raw query via grouping
-        supabase.from('company_data_cache').select('sunucu_adi, id', { count: 'exact', head: false }).eq('is_deleted', false),
-        // Tag distribution
         supabase.from('widget_tags').select('category_id, widget_categories(name)'),
       ]);
+
+      // Chunked fetch for cache stats (bypass 1000 row limit)
+      const PAGE_SIZE = 5000;
+      const cacheRows: { sunucu_adi: string }[] = [];
+      let offset = 0;
+      while (true) {
+        const { data: page } = await supabase
+          .from('company_data_cache')
+          .select('sunucu_adi')
+          .eq('is_deleted', false)
+          .range(offset, offset + PAGE_SIZE - 1);
+        if (!page || page.length === 0) break;
+        cacheRows.push(...page);
+        if (page.length < PAGE_SIZE) break;
+        offset += PAGE_SIZE;
+      }
 
       const profiles = profilesRes.data || [];
       const widgets = widgetsRes.data || [];
@@ -81,10 +94,9 @@ export default function SuperAdminDashboard() {
         .sort((a, b) => b.count - a.count)
         .slice(0, 8);
 
-      // Cache data stats per server
-      const cacheRows = cacheStatsRes.data || [];
+      // Cache data stats per server (already fetched via chunked loop above)
       const serverCacheMap = new Map<string, number>();
-      cacheRows.forEach((row: any) => {
+      cacheRows.forEach((row) => {
         const key = row.sunucu_adi || 'Bilinmiyor';
         serverCacheMap.set(key, (serverCacheMap.get(key) || 0) + 1);
       });
