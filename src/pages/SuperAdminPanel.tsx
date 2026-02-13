@@ -66,6 +66,8 @@ interface UserProfile {
   is_team_admin: boolean | null;
   dia_sunucu_adi: string | null;
   firma_adi: string | null;
+  firma_kodu: string | null;
+  donem_kodu: string | null;
   donem_yili: string | null;
   roles?: { role: string; user_id: string }[];
 }
@@ -121,7 +123,7 @@ export default function SuperAdminPanel() {
       // Tüm profilleri çek
       const { data: profiles, error: profileError } = await supabase
         .from('profiles')
-        .select('user_id, email, display_name, avatar_url, license_type, license_expires_at, is_team_admin, dia_sunucu_adi, firma_adi, donem_yili')
+        .select('user_id, email, display_name, avatar_url, license_type, license_expires_at, is_team_admin, dia_sunucu_adi, firma_adi, firma_kodu, donem_kodu, donem_yili')
         .order('created_at', { ascending: false });
 
       if (profileError) {
@@ -199,7 +201,7 @@ export default function SuperAdminPanel() {
   const refreshUsers = async () => {
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('user_id, email, display_name, avatar_url, license_type, license_expires_at, is_team_admin, dia_sunucu_adi, firma_adi, donem_yili')
+      .select('user_id, email, display_name, avatar_url, license_type, license_expires_at, is_team_admin, dia_sunucu_adi, firma_adi, firma_kodu, donem_kodu, donem_yili')
       .order('created_at', { ascending: false });
 
     const { data: rolesData } = await supabase
