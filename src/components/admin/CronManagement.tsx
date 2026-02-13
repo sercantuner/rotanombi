@@ -72,12 +72,8 @@ function trHourToCron(trHour: number, trMinute: number = 0): string {
   return `${trMinute} ${utcHour} * * *`;
 }
 
-const DEFAULT_SCHEDULES = [
-  { hour: 3, minute: 0, label: '03:00' },
-  { hour: 9, minute: 0, label: '09:00' },
-  { hour: 15, minute: 0, label: '15:00' },
-  { hour: 21, minute: 0, label: '21:00' },
-];
+// Default schedules now auto-created when new server is added
+// Times: 07:00, 12:00, 17:00, 22:00 Turkey time
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => ({
   value: String(i),
@@ -186,40 +182,7 @@ export default function CronManagement() {
     if (selectedServer) loadServerData(selectedServer);
   }, [selectedServer, loadServerData]);
 
-  const createDefaultSchedules = async () => {
-    if (!selectedServer) return;
-    setSaving(true);
-
-    const newSchedules: CronSchedule[] = DEFAULT_SCHEDULES.map((s, i) => ({
-      sunucu_adi: selectedServer.sunucu_adi,
-      firma_kodu: selectedServer.firma_kodu,
-      schedule_name: `sync-${i + 1}`,
-      cron_expression: trHourToCron(s.hour, s.minute),
-      turkey_time_label: s.label,
-      is_enabled: true,
-    }));
-
-    const { error } = await supabase.from('cron_schedules').upsert(
-      newSchedules.map(s => ({
-        sunucu_adi: s.sunucu_adi,
-        firma_kodu: s.firma_kodu,
-        schedule_name: s.schedule_name,
-        cron_expression: s.cron_expression,
-        turkey_time_label: s.turkey_time_label,
-        is_enabled: s.is_enabled,
-      })),
-      { onConflict: 'sunucu_adi,firma_kodu,schedule_name' }
-    );
-
-    if (error) {
-      toast.error('Varsayılan zamanlamalar oluşturulamadı');
-    } else {
-      toast.success('4 varsayılan zamanlama oluşturuldu');
-      await saveSchedulesToPgCron(newSchedules);
-      await loadServerData(selectedServer);
-    }
-    setSaving(false);
-  };
+  // Default schedules are auto-created via DB trigger when new server is added
 
   const saveSchedulesToPgCron = async (scheds: CronSchedule[]) => {
     if (!selectedServer) return;
@@ -452,18 +415,10 @@ export default function CronManagement() {
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-sm">Cron Zamanlamaları (TR Saati)</CardTitle>
-                      <div className="flex gap-2">
-                        {schedules.length === 0 && (
-                          <Button size="sm" variant="outline" onClick={createDefaultSchedules} disabled={saving}>
-                            {saving ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Clock className="w-3.5 h-3.5 mr-1.5" />}
-                            4 Varsayılan Oluştur
-                          </Button>
-                        )}
-                        <Button size="sm" variant="outline" onClick={addSchedule}>
-                          <Plus className="w-3.5 h-3.5 mr-1.5" />
-                          Ekle
-                        </Button>
-                      </div>
+                      <Button size="sm" variant="outline" onClick={addSchedule}>
+                        <Plus className="w-3.5 h-3.5 mr-1.5" />
+                        Ekle
+                      </Button>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -471,7 +426,7 @@ export default function CronManagement() {
                       <div className="text-center py-8 text-muted-foreground text-sm">
                         <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
                         <p>Henüz zamanlama tanımlanmamış</p>
-                        <p className="text-xs mt-1">Varsayılan 4 zamanlama oluşturmak için yukarıdaki butonu kullanın</p>
+                        <p className="text-xs mt-1">Yeni sunucu eklendiğinde 4 varsayılan zamanlama otomatik oluşturulur</p>
                       </div>
                     ) : (
                       <div className="space-y-3">
