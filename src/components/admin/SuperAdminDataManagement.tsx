@@ -1,5 +1,5 @@
 // Super Admin Data Management - Sunucu bazında gelişmiş veri yönetimi
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useDataSources } from '@/hooks/useDataSources';
 import { useSyncOrchestratorContext } from '@/contexts/SyncOrchestratorContext';
@@ -126,6 +126,7 @@ export default function SuperAdminDataManagement({ users }: Props) {
   const [excludedPeriods, setExcludedPeriods] = useState<{ donem_kodu: number; data_source_slug: string | null }[]>([]);
   const [diaRecordCounts, setDiaRecordCounts] = useState<Record<string, Record<number, number>>>({});
   const [loadingDiaCounts, setLoadingDiaCounts] = useState<Record<string, boolean>>({});
+  const prevIsRunningRef = useRef(false);
 
   // Seçili sunucunun sahibi kullanıcıyı bul (sync için targetUserId olarak kullanılacak)
   const getTargetUserId = useCallback((): string | undefined => {
@@ -304,6 +305,15 @@ export default function SuperAdminDataManagement({ users }: Props) {
       setLoading(false);
     }
   }, [dataSources, users]);
+
+  // Sync tamamlandığında dönem dağılımını ve kayıt sayılarını otomatik yenile
+  useEffect(() => {
+    if (prevIsRunningRef.current && !progress.isRunning && selectedServer) {
+      console.log('[SuperAdminDataManagement] Sync completed, refreshing data...');
+      loadServerData(selectedServer);
+    }
+    prevIsRunningRef.current = progress.isRunning;
+  }, [progress.isRunning, selectedServer, loadServerData]);
 
   const handleSelectServer = (server: ServerOption) => {
     setSelectedServer(server);
