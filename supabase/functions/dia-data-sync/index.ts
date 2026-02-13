@@ -505,6 +505,27 @@ async function handleCronSync(sb: any, cronSecret: string) {
   const failCount = allResults.filter(r => !r.success && !r.skipped && !r.needsFullSync).length;
   console.log(`[cronSync] Complete: ${successCount} success, ${failCount} failed, ${allResults.length} total`);
 
+  // ===== POST-SYNC: widget-compute tetikle =====
+  // Sync tamamlandıktan sonra tüm widget snapshot'larını güncelle
+  if (successCount > 0) {
+    try {
+      console.log(`[cronSync] Triggering widget-compute for all companies...`);
+      const computeUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/widget-compute`;
+      const computeResponse = await fetch(computeUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cronSecret: Deno.env.get("CRON_SECRET"),
+          syncTrigger: 'post_sync',
+        }),
+      });
+      const computeResult = await computeResponse.json();
+      console.log(`[cronSync] widget-compute result:`, JSON.stringify(computeResult).slice(0, 500));
+    } catch (computeErr) {
+      console.log(`[cronSync] widget-compute trigger error (non-fatal):`, computeErr instanceof Error ? computeErr.message : computeErr);
+    }
+  }
+
   return { success: true, results: allResults, successCount, failCount };
 }
 
