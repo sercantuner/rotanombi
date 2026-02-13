@@ -9,7 +9,8 @@ const corsHeaders = {
 };
 
 const WIDGET_TIMEOUT_MS = 10_000; // 10 seconds per widget
-const BATCH_SIZE = 5; // Process 5 widgets at a time
+const BATCH_SIZE = 2; // Process 2 widgets at a time (reduce connection pool pressure)
+const COMPANY_BATCH_DELAY_MS = 1000; // 1 second delay between companies
 
 // ===== Merge Functions (mirror of frontend logic) =====
 
@@ -553,6 +554,8 @@ Deno.serve(async (req) => {
         console.log(`[widget-compute] Computing for ${sun}:${fk}...`);
         const result = await computeWidgetsForCompany(sb, sun, fk, dk, syncTrigger || 'cron');
         allResults.push({ sunucuAdi: sun, firmaKodu: fk, ...result });
+        // Delay between companies to prevent connection pool exhaustion
+        await new Promise(resolve => setTimeout(resolve, COMPANY_BATCH_DELAY_MS));
       }
 
       return new Response(JSON.stringify({ success: true, results: allResults }), {
