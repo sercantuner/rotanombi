@@ -40,6 +40,30 @@ function buildDiaMethodName(module: string, method: string): string {
   return method.startsWith(`${module}_`) ? method : `${module}_${method}`;
 }
 
+// Update data_sources.last_fetched_at so UI shows correct "last sync" time
+async function updateDataSourceLastFetched(sb: any, slug: string, sunucuAdi: string, firmaKodu: string) {
+  try {
+    // Count active records for this source
+    const { count } = await sb.from('company_data_cache')
+      .select('*', { count: 'exact', head: true })
+      .eq('sunucu_adi', sunucuAdi)
+      .eq('firma_kodu', firmaKodu)
+      .eq('data_source_slug', slug)
+      .eq('is_deleted', false);
+
+    await sb.from('data_sources')
+      .update({
+        last_fetched_at: new Date().toISOString(),
+        last_record_count: count || 0,
+      })
+      .eq('slug', slug);
+
+    console.log(`[updateDataSourceLastFetched] ${slug}: updated last_fetched_at, record_count=${count}`);
+  } catch (e) {
+    console.error(`[updateDataSourceLastFetched] ${slug}: error`, e);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -334,6 +358,11 @@ Deno.serve(async (req) => {
         hasMore = false;
       }
 
+      // Update data_sources.last_fetched_at after each chunk
+      if (written > 0) {
+        await updateDataSourceLastFetched(sb, dataSourceSlug, sun, fk);
+      }
+
       return respond({
         success: true,
         fetched: allRecords.length,
@@ -529,6 +558,9 @@ Deno.serve(async (req) => {
           data_source_slug: dataSourceSlug,
           last_incremental_sync: new Date().toISOString(),
         }, { onConflict: 'sunucu_adi,firma_kodu,donem_kodu,data_source_slug' });
+
+        // Update data_sources.last_fetched_at
+        await updateDataSourceLastFetched(sb, dataSourceSlug, sun, fk);
 
         return respond({
           success: true,
@@ -793,6 +825,9 @@ Deno.serve(async (req) => {
                 records_inserted: written, triggered_by: userId,
                 completed_at: new Date().toISOString(),
               });
+
+              // Update data_sources.last_fetched_at
+              await updateDataSourceLastFetched(sb, src.slug, sun, fk);
 
               results.push({ slug: src.slug, period: periodNo, status: 'ok', fetched: data.length, written });
             } catch (e) {
