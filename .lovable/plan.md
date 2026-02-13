@@ -1,39 +1,83 @@
 
 
+## Problem
 
-# Pre-Computed Widget Snapshots (Power BI Mimarisi) - ✅ TAMAMLANDI
+Süper Admin panelindeki "Tüm Veri Kaynakları" listesinde, veri kaynağının yanında donem dağılımını gösteren chevron (ok) butonu hiç görünmüyor. Bunun sebebi bir **veritabanı erişim kısıtlaması (RLS)**:
 
-## Durum: Aktif
+- `company_data_cache` tablosunun okuma politikası, kullanıcının yalnızca **kendi sunucu/firma** verilerini görmesine izin veriyor
+- Süper Admin farklı bir sunucu seçtiğinde, dönem dağılımı sorgusu boş dönüyor
+- Boş dönünce `distribution.total > 0` koşulu sağlanmıyor ve chevron butonu hiç render edilmiyor
 
-Tüm adımlar başarıyla uygulandı:
+## Çözüm
 
-### ✅ Adım 1: widget_snapshots tablosu - TAMAMLANDI
-- Tablo oluşturuldu (RLS, unique constraint, index)
-- Şirket bazlı izolasyon (sunucu_adi, firma_kodu)
+### 1. RLS Politikası Güncellemesi (Migration)
 
-### ✅ Adım 2: widget-compute edge function - TAMAMLANDI
-- `supabase/functions/widget-compute/index.ts`
-- 31 widget batch olarak (5'erli) hesaplanıyor
-- Custom code sandbox (10sn timeout)
-- KPI, Chart, Table, Custom Code desteği
-- Multi-query merge desteği
+`company_data_cache` tablosuna super_admin rolündeki kullanıcıların **tüm verileri okuyabilmesini** sağlayan yeni bir SELECT politikası eklenecek:
 
-### ✅ Adım 3: 4x günlük cron - TAMAMLANDI
-- dia-sync-00utc (03:00 TR)
-- dia-sync-06utc (09:00 TR)
-- dia-sync-12utc (15:00 TR)
-- dia-sync-18utc (21:00 TR)
+```sql
+CREATE POLICY "super_admin_read_all_cache"
+ON public.company_data_cache
+FOR SELECT
+USING (
+  EXISTS (
+    SELECT 1 FROM public.user_roles
+    WHERE user_roles.user_id = auth.uid()
+    AND user_roles.role = 'super_admin'
+  )
+);
+```
 
-### ✅ Adım 4: dia-data-sync post-sync trigger - TAMAMLANDI
-- cronSync tamamlandığında widget-compute otomatik tetiklenir
+Aynı mantık DELETE ve UPDATE politikalarına da eklenecek, böylece super admin herhangi bir sunucunun verilerini silebilir ve yönetebilir.
 
-### ✅ Adım 5: Frontend snapshot-first loading - TAMAMLANDI
-- useDynamicWidgetData hook'u snapshot kontrolü yapar
-- Snapshot varsa (< 6 saat): anında render
-- Snapshot yoksa: mevcut DB-first akış (fallback)
-- widgetDbId parametresi ile snapshot eşleştirme
+### 2. Dönem Dağılımı Sorgusunda 1000 Satır Limiti Düzeltmesi
 
-### ✅ Adım 6: Snapshot durum göstergesi - TAMAMLANDI
-- DataStatusIndicator'a 'snapshot' source eklendi
-- Mavi üçgen: snapshot'tan yüklendi
-- Tooltip: hesaplama zamanı ve süresi gösterilir
+Mevcut kodda `company_data_cache` tablosundan `donem_kodu` çekilirken Supabase'in varsayılan 1000 satır limiti uygulanıyor. 73.000+ kayıtlı veri kaynaklarında dağılım eksik hesaplanıyor.
+
+Çözüm: Supabase'de bir `SECURITY DEFINER` RPC fonksiyonu oluşturulacak — doğrudan SQL ile `GROUP BY` yaparak hem RLS sorununu hem de limit sorununu aşacak:
+
+```sql
+CREATE OR REPLACE FUNCTION get_period_distribution(
+  p_sunucu_adi text,
+  p_firma_kodu text,
+  p_data_source_slug text
+)
+RETURNS TABLE(donem_kodu int, record_count bigint)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+  SELECT donem_kodu::int, count(*)::bigint
+  FROM company_data_cache
+  WHERE sunucu_adi = p_sunucu_adi
+    AND firma_kodu = p_firma_kodu
+    AND data_source_slug = p_data_source_slug
+    AND is_deleted = false
+  GROUP BY donem_kodu
+$$;
+```
+
+### 3. Frontend Güncelleme (SuperAdminDataManagement.tsx)
+
+`loadServerData` fonksiyonundaki dönem dağılımı hesaplama bölümü, yukarıdaki RPC fonksiyonunu çağıracak şekilde güncellenecek:
+
+```typescript
+// Eski: Binlerce satır çekip JS'de gruplama
+const { data: distData } = await supabase
+  .from('company_data_cache')
+  .select('donem_kodu')
+  .eq(...)
+
+// Yeni: Veritabanında GROUP BY ile verimli hesaplama
+const { data: distData } = await supabase
+  .rpc('get_period_distribution', {
+    p_sunucu_adi: sunucuAdi,
+    p_firma_kodu: firmaKodu,
+    p_data_source_slug: s.slug
+  });
+```
+
+## Sonuç
+
+- Süper Admin herhangi bir sunucuyu seçtiğinde dönem dağılımı doğru yüklenecek
+- Chevron butonu görünür olacak ve tıklandığında dönem bazlı veri + per-period sync butonları açılacak
+- 1000 satır limiti sorunu ortadan kalkacak (veritabanında GROUP BY)
+
