@@ -21,6 +21,7 @@ import WidgetBuilderPage from "@/pages/WidgetBuilderPage";
 import DataSourceEditorPage from "@/pages/DataSourceEditorPage";
 import { DynamicPage } from "@/components/pages/DynamicPage";
 import LandingPage from "@/pages/LandingPage";
+import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -72,8 +73,9 @@ const App = () => (
                   {/* Alias for settings (English path) */}
                   <Route path="/settings" element={<Navigate to="/ayarlar" replace />} />
                   
-                  {/* Login page (standalone, no layout) */}
+                  {/* Login & Password Reset */}
                   <Route path="/login" element={<LoginPage />} />
+                  <Route path="/reset-password" element={<ResetPasswordPage />} />
                   
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
