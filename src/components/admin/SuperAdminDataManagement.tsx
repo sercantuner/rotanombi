@@ -2,10 +2,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useDataSources } from '@/hooks/useDataSources';
+import { useSyncOrchestratorContext } from '@/contexts/SyncOrchestratorContext';
+import { useDiaProfile } from '@/hooks/useDiaProfile';
 import { 
   Database, HardDrive, Server, Search, Trash2, 
   Loader2, RefreshCw, AlertCircle, CheckCircle2, BarChart3,
-  Clock, Calendar, ChevronDown, ChevronRight, Ban, Undo2, Zap, Link2
+  Clock, Calendar, ChevronDown, ChevronRight, Ban, Undo2, Zap, Link2,
+  StopCircle, ArrowDownToLine, ArrowUpFromLine, Layers, SkipForward
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -82,8 +85,29 @@ interface WidgetUsage {
   [dataSourceSlug: string]: number;
 }
 
+function TaskStatusIcon({ status }: { status: string }) {
+  switch (status) {
+    case 'completed': return <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />;
+    case 'running': return <Loader2 className="w-3.5 h-3.5 animate-spin text-primary shrink-0" />;
+    case 'failed': return <AlertCircle className="w-3.5 h-3.5 text-destructive shrink-0" />;
+    case 'skipped': return <SkipForward className="w-3.5 h-3.5 text-yellow-500 shrink-0" />;
+    default: return <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />;
+  }
+}
+
+function TaskTypeBadge({ type }: { type: string }) {
+  switch (type) {
+    case 'full': return <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1"><Layers className="w-2.5 h-2.5" />Tam</Badge>;
+    case 'incremental': return <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-1"><Zap className="w-2.5 h-2.5" />Artımlı</Badge>;
+    case 'reconcile': return <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 border-orange-500/30 text-orange-600"><Trash2 className="w-2.5 h-2.5" />Kontrol</Badge>;
+    default: return null;
+  }
+}
+
 export default function SuperAdminDataManagement({ users }: Props) {
   const { dataSources } = useDataSources();
+  const { progress, startFullOrchestration, quickSync, abort } = useSyncOrchestratorContext();
+  const diaProfile = useDiaProfile();
   const [selectedServer, setSelectedServer] = useState<ServerOption | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -96,9 +120,15 @@ export default function SuperAdminDataManagement({ users }: Props) {
   const [periods, setPeriods] = useState<PeriodInfo[]>([]);
   const [periodDistributions, setPeriodDistributions] = useState<Record<string, PeriodDistribution>>({});
   const [expandedDistributions, setExpandedDistributions] = useState<Record<string, boolean>>({});
+  const [expandedTasks, setExpandedTasks] = useState(true);
   const [syncHistory, setSyncHistory] = useState<SyncHistoryItem[]>([]);
   const [widgetUsage, setWidgetUsage] = useState<WidgetUsage>({});
   const [excludedPeriods, setExcludedPeriods] = useState<{ donem_kodu: number; data_source_slug: string | null }[]>([]);
+
+  // Seçili sunucu, admin'in kendi DIA profiline ait mi?
+  const isOwnServer = selectedServer && diaProfile.isConfigured &&
+    diaProfile.sunucuAdi === selectedServer.sunucu_adi &&
+    diaProfile.firmaKodu === selectedServer.firma_kodu;
 
   // Sunucu listesini kullanıcılardan derle
   const serverOptions: ServerOption[] = React.useMemo(() => {
@@ -166,7 +196,6 @@ export default function SuperAdminDataManagement({ users }: Props) {
         supabase.from('widgets')
           .select('data_source, builder_config, name')
           .eq('is_active', true),
-        // Tüm veri kaynaklarını çek (user_id filtresi olmadan)
         supabase.from('data_sources')
           .select('id, slug, name, module, method, is_period_independent, last_fetched_at, is_active')
           .eq('is_active', true),
@@ -191,7 +220,6 @@ export default function SuperAdminDataManagement({ users }: Props) {
       });
       setStats(result.sort((a, b) => b.count - a.count));
 
-      // All data sources - tüm kaynakları listele, cache verisi olanları işaretle
       const allDs: DataSourceStats[] = (allDsRes.data || []).map((ds: any) => ({
         slug: ds.slug,
         name: ds.name,
@@ -210,14 +238,13 @@ export default function SuperAdminDataManagement({ users }: Props) {
         data_source_slug: e.data_source_slug,
       })));
 
-      // Widget usage - allDsRes'ten gelen id->slug mapping kullan
+      // Widget usage
       const allDsList = allDsRes.data || [];
       const dsIdToSlug = new Map<string, string>();
       allDsList.forEach((ds: any) => {
         dsIdToSlug.set(ds.id, ds.slug);
         dsIdToSlug.set(ds.slug, ds.slug);
       });
-      // Fallback: hook'tan gelen dataSources
       dataSources.forEach(ds => {
         dsIdToSlug.set(ds.id, ds.slug);
         dsIdToSlug.set(ds.slug, ds.slug);
@@ -368,6 +395,12 @@ export default function SuperAdminDataManagement({ users }: Props) {
   const totalRecords = stats.reduce((sum, s) => sum + s.count, 0);
   const currentPeriod = periods.find(p => p.is_current);
 
+  const completedTasks = progress.tasks.filter(t => t.status === 'completed');
+  const failedTasks = progress.tasks.filter(t => t.status === 'failed');
+  const skippedTasks = progress.tasks.filter(t => t.status === 'skipped');
+  const runningTask = progress.tasks.find(t => t.status === 'running');
+  const activeTasks = progress.tasks.filter(t => t.status !== 'skipped');
+
   return (
     <TooltipProvider>
     <div className="space-y-6">
@@ -441,6 +474,192 @@ export default function SuperAdminDataManagement({ users }: Props) {
             </div>
           ) : (
             <>
+              {/* Sync Controls - Only when own server */}
+              {isOwnServer && (
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-primary/10">
+                          <Database className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-semibold">Veri Senkronizasyonu</h3>
+                          <p className="text-xs text-muted-foreground">
+                            DIA'dan çekilen veriler yerel veritabanında saklanır
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        {progress.isRunning ? (
+                          <Button onClick={abort} variant="destructive" size="sm" className="gap-2">
+                            <StopCircle className="h-4 w-4" />
+                            Durdur
+                          </Button>
+                        ) : (
+                          <Button onClick={() => startFullOrchestration()} disabled={progress.isRunning} size="sm" className="gap-2">
+                            <RefreshCw className="h-4 w-4" />
+                            Tümünü Senkronize Et
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Orchestrator Progress */}
+                    {progress.isRunning && (
+                      <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                            {runningTask ? (
+                              <>
+                                {runningTask.name}
+                                <Badge variant="outline" className="text-[10px]">D{runningTask.periodNo}</Badge>
+                                <TaskTypeBadge type={runningTask.type} />
+                              </>
+                            ) : 'Hazırlanıyor...'}
+                          </span>
+                          <span className="text-sm font-mono text-muted-foreground">%{progress.overallPercent}</span>
+                        </div>
+                        
+                        <Progress value={progress.overallPercent} className="h-2" />
+                        
+                        <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <ArrowDownToLine className="h-3 w-3" />
+                            {progress.totalFetched.toLocaleString('tr-TR')}{progress.totalExpected > 0 ? ` / ${progress.totalExpected.toLocaleString('tr-TR')}` : ''} çekildi
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <ArrowUpFromLine className="h-3 w-3" />
+                            {progress.totalWritten.toLocaleString('tr-TR')} yazıldı
+                          </span>
+                          {progress.totalDeleted > 0 && (
+                            <span className="flex items-center gap-1 text-orange-500">
+                              <Trash2 className="h-3 w-3" />
+                              {progress.totalDeleted.toLocaleString('tr-TR')} silindi
+                            </span>
+                          )}
+                          <span className="ml-auto">
+                            {completedTasks.length}/{activeTasks.length} görev
+                          </span>
+                        </div>
+
+                        {/* Running task chunk detail */}
+                        {runningTask && (runningTask.fetched > 0 || runningTask.expectedRecords > 0) && (
+                          <div className="p-2 rounded bg-secondary/40 text-xs space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">
+                                {runningTask.name} • Dönem {runningTask.periodNo}
+                                {runningTask.localRecords > 0 && runningTask.localRecords < runningTask.expectedRecords && (
+                                  <span className="text-primary/70 ml-1">(kaldığı yerden devam)</span>
+                                )}
+                              </span>
+                              <span className="text-muted-foreground font-mono">
+                                {(runningTask.localRecords + runningTask.fetched).toLocaleString('tr-TR')}{runningTask.expectedRecords > 0 ? ` / ${runningTask.expectedRecords.toLocaleString('tr-TR')}` : ''} kayıt
+                              </span>
+                            </div>
+                            {runningTask.expectedRecords > 0 && (
+                              <Progress value={Math.min(100, Math.round(((runningTask.localRecords + runningTask.fetched) / runningTask.expectedRecords) * 100))} className="h-1" />
+                            )}
+                          </div>
+                        )}
+
+                        {/* Collapsible task list */}
+                        <div>
+                          <button
+                            onClick={() => setExpandedTasks(!expandedTasks)}
+                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {expandedTasks ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                            Tüm görevler ({activeTasks.length})
+                          </button>
+
+                          {expandedTasks && (
+                            <ScrollArea className="max-h-48 mt-2">
+                              <div className="space-y-1">
+                                {progress.tasks.map((task, idx) => (
+                                  <div
+                                    key={`${task.slug}-${task.periodNo}-${idx}`}
+                                    className={`flex items-center gap-2 text-xs px-2 py-1.5 rounded transition-colors ${
+                                      task.status === 'running' ? 'bg-primary/10 border border-primary/20' :
+                                      task.status === 'completed' ? 'bg-green-500/5' :
+                                      task.status === 'failed' ? 'bg-destructive/5' :
+                                      task.status === 'skipped' ? 'opacity-50' : ''
+                                    }`}
+                                  >
+                                    <TaskStatusIcon status={task.status} />
+                                    <span className="truncate flex-1 font-medium">{task.name}</span>
+                                    <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">D{task.periodNo}</Badge>
+                                    <TaskTypeBadge type={task.type} />
+                                    
+                                    {(task.status === 'completed' || task.status === 'running') && task.fetched > 0 && (
+                                      <span className="text-muted-foreground font-mono shrink-0 flex items-center gap-1.5">
+                                        <span className="flex items-center gap-0.5">
+                                          <ArrowDownToLine className="h-2.5 w-2.5" />{task.fetched}
+                                        </span>
+                                        <span className="flex items-center gap-0.5">
+                                          <ArrowUpFromLine className="h-2.5 w-2.5" />{task.written}
+                                        </span>
+                                        {task.deleted > 0 && (
+                                          <span className="flex items-center gap-0.5 text-orange-500">
+                                            <Trash2 className="h-2.5 w-2.5" />{task.deleted}
+                                          </span>
+                                        )}
+                                      </span>
+                                    )}
+
+                                    {task.status === 'failed' && task.error && (
+                                      <Tooltip>
+                                        <TooltipTrigger>
+                                          <AlertCircle className="h-3 w-3 text-destructive shrink-0" />
+                                        </TooltipTrigger>
+                                        <TooltipContent className="max-w-xs">
+                                          <p className="text-xs">{task.error}</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    )}
+
+                                    {task.status === 'skipped' && (
+                                      <span className="text-yellow-600 text-[10px]">Atlandı</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </ScrollArea>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Completed summary */}
+                    {!progress.isRunning && progress.tasks.length > 0 && progress.overallPercent === 100 && (
+                      <div className="p-4 rounded-lg bg-green-500/5 border border-green-500/20 space-y-2">
+                        <div className="flex items-center gap-2 text-sm font-medium text-green-700 dark:text-green-400">
+                          <CheckCircle2 className="h-4 w-4" />
+                          Senkronizasyon Tamamlandı
+                        </div>
+                        <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                          <span>✅ {completedTasks.length} başarılı</span>
+                          {failedTasks.length > 0 && <span className="text-destructive">❌ {failedTasks.length} başarısız</span>}
+                          {skippedTasks.length > 0 && <span className="text-yellow-600">⏭ {skippedTasks.length} atlandı</span>}
+                          <span>📥 {progress.totalFetched.toLocaleString('tr-TR')} çekildi</span>
+                          <span>📤 {progress.totalWritten.toLocaleString('tr-TR')} yazıldı</span>
+                          {progress.totalDeleted > 0 && <span>🗑 {progress.totalDeleted.toLocaleString('tr-TR')} silindi</span>}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Not own server notice */}
+              {!isOwnServer && diaProfile.isConfigured && (
+                <div className="p-3 rounded-lg bg-muted/50 border border-border text-xs text-muted-foreground flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  Senkronizasyon kontrolleri sadece kendi DIA bağlantınıza ait sunucularda aktiftir.
+                </div>
+              )}
+
               {/* Stats Summary */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <Card>
@@ -522,13 +741,18 @@ export default function SuperAdminDataManagement({ users }: Props) {
                           const distribution = periodDistributions[ds.slug];
                           const isExpanded = expandedDistributions[ds.slug];
                           const widgetCount = widgetUsage[ds.slug] || 0;
+                          const isCurrentlySyncing = progress.isRunning && progress.tasks.some(t => t.slug === ds.slug && t.status === 'running');
 
                           return (
                             <div key={ds.slug} className="space-y-1">
-                              <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
+                              <div className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
+                                isCurrentlySyncing ? 'bg-primary/10 border border-primary/20' : 'bg-secondary/30 hover:bg-secondary/50'
+                              }`}>
                                 <div className="flex items-center gap-3 min-w-0 flex-1">
                                   <div className={`p-1.5 rounded ${ds.count > 0 ? 'bg-green-500/20' : 'bg-muted'}`}>
-                                    {ds.count > 0 ? (
+                                    {isCurrentlySyncing ? (
+                                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                    ) : ds.count > 0 ? (
                                       <CheckCircle2 className="h-4 w-4 text-green-500" />
                                     ) : (
                                       <AlertCircle className="h-4 w-4 text-muted-foreground" />
@@ -581,6 +805,31 @@ export default function SuperAdminDataManagement({ users }: Props) {
                                     </Button>
                                   )}
 
+                                  {/* Quick sync button */}
+                                  {isOwnServer && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => {
+                                            const pn = currentPeriod?.period_no || parseInt(diaProfile.donemKodu || '0');
+                                            if (pn) quickSync(ds.slug, pn);
+                                          }}
+                                          disabled={isCurrentlySyncing || progress.isRunning}
+                                          className="h-8 w-8 p-0"
+                                        >
+                                          {isCurrentlySyncing ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                          ) : (
+                                            <Zap className="h-4 w-4" />
+                                          )}
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Hızlı artımlı güncelleme</TooltipContent>
+                                    </Tooltip>
+                                  )}
+
                                   <Button size="sm" variant="ghost"
                                     className="text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
                                     onClick={() => setDeleteTarget({ slug: ds.slug, name: ds.name })}
@@ -608,6 +857,7 @@ export default function SuperAdminDataManagement({ users }: Props) {
                                         const period = periods.find(p => p.period_no === parseInt(periodNo));
                                         const percent = (count / distribution.total) * 100;
                                         const periodNum = parseInt(periodNo);
+                                        const excluded = isExcluded(periodNum, ds.slug);
                                         return (
                                           <div key={periodNo} className="space-y-1">
                                             <div className="flex items-center justify-between text-xs">
@@ -618,6 +868,27 @@ export default function SuperAdminDataManagement({ users }: Props) {
                                                 <span className="font-mono font-semibold">
                                                   {count.toLocaleString('tr-TR')}
                                                 </span>
+                                                {/* Per-period refresh */}
+                                                {isOwnServer && (
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-5 w-5 p-0 text-primary/70 hover:text-primary"
+                                                        disabled={progress.isRunning}
+                                                        onClick={() => quickSync(ds.slug, periodNum)}
+                                                      >
+                                                        {progress.isRunning && progress.tasks.some(t => t.slug === ds.slug && t.periodNo === periodNum && t.status === 'running') ? (
+                                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                                        ) : (
+                                                          <RefreshCw className="h-3 w-3" />
+                                                        )}
+                                                      </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>Bu dönemi güncelle</TooltipContent>
+                                                  </Tooltip>
+                                                )}
                                                 <AlertDialog>
                                                   <AlertDialogTrigger asChild>
                                                     <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-destructive/70 hover:text-destructive">
@@ -705,47 +976,57 @@ export default function SuperAdminDataManagement({ users }: Props) {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ScrollArea className="h-[250px]">
-                      <div className="space-y-2">
-                        {syncHistory.map((h) => (
-                          <div key={h.id} className="flex items-center justify-between p-2 rounded-lg bg-secondary/20 text-sm">
-                            <div className="flex items-center gap-2">
-                              {h.status === 'completed' ? (
-                                <CheckCircle2 className="h-4 w-4 text-green-500" />
-                              ) : h.status === 'failed' ? (
-                                <AlertCircle className="h-4 w-4 text-destructive" />
-                              ) : (
-                                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                              )}
-                              <span className="font-medium text-xs truncate max-w-[200px]">{h.data_source_slug}</span>
-                              <Badge variant="secondary" className="text-[10px]">
-                                {h.sync_type === 'incremental' ? (
-                                  <><Zap className="w-3 h-3 mr-1" />Artımlı</>
-                                ) : h.sync_type === 'full' ? 'Tam' : h.sync_type}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-3 text-muted-foreground text-xs">
-                              <span>+{h.records_inserted || 0} / ~{h.records_updated || 0}</span>
-                              {(h.records_deleted || 0) > 0 && (
-                                <span className="text-orange-500">-{h.records_deleted}</span>
-                              )}
-                              <span>{formatSyncTime(h.started_at)}</span>
-                              {h.error && (
-                                <Tooltip>
-                                  <TooltipTrigger>
-                                    <AlertCircle className="h-3 w-3 text-destructive" />
-                                  </TooltipTrigger>
-                                  <TooltipContent className="max-w-xs"><p className="text-xs">{h.error}</p></TooltipContent>
-                                </Tooltip>
-                              )}
-                            </div>
+                    <div className="space-y-2">
+                      {syncHistory.map((h) => (
+                        <div key={h.id} className="flex items-center justify-between p-2 rounded-lg bg-secondary/20 text-sm">
+                          <div className="flex items-center gap-2">
+                            {h.status === 'completed' ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            ) : h.status === 'failed' ? (
+                              <AlertCircle className="h-4 w-4 text-destructive" />
+                            ) : (
+                              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                            )}
+                            <span className="font-medium text-xs truncate max-w-[200px]">{h.data_source_slug}</span>
+                            <Badge variant="secondary" className="text-[10px]">
+                              {h.sync_type === 'incremental' ? (
+                                <><Zap className="w-3 h-3 mr-1" />Artımlı</>
+                              ) : h.sync_type === 'full' ? 'Tam' : h.sync_type}
+                            </Badge>
                           </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
+                          <div className="flex items-center gap-3 text-muted-foreground text-xs">
+                            <span>+{h.records_inserted || 0} / ~{h.records_updated || 0}</span>
+                            {(h.records_deleted || 0) > 0 && (
+                              <span className="text-orange-500">-{h.records_deleted}</span>
+                            )}
+                            <span>{formatSyncTime(h.started_at)}</span>
+                            {h.error && (
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <AlertCircle className="h-3 w-3 text-destructive" />
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs"><p className="text-xs">{h.error}</p></TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </CardContent>
                 </Card>
               )}
+
+              {/* Sync Architecture Info Box */}
+              <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                <h4 className="font-medium text-primary mb-2">Senkronizasyon Mimarisi</h4>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>• <strong>Chunk bazlı:</strong> Her kaynak 300'er kayıtlık parçalar halinde çekilir, timeout önlenir</li>
+                  <li>• <strong>İlk çekme:</strong> Tüm veriler tam sync ile çekilir, tamamlandığında dönem kilitlenir</li>
+                  <li>• <strong>Artımlı güncelleme:</strong> Sadece yeni ve değişen kayıtlar çekilir (⚡ hızlı)</li>
+                  <li>• <strong>Silinen kayıt tespiti:</strong> Her sync sonrası reconcileKeys ile DIA'da silinen kayıtlar tespit edilir</li>
+                  <li>• <strong>Otomatik:</strong> Her gece 03:00'te tüm sunucularda otomatik çalışır</li>
+                </ul>
+              </div>
             </>
           )}
         </>
