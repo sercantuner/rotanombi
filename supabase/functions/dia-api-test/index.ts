@@ -5,6 +5,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getDiaSession } from "../_shared/diaAutoLogin.ts";
 import { getTurkeyToday } from "../_shared/turkeyTime.ts";
+import { getPooledColumnsForSource } from "../_shared/widgetFieldPool.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -554,21 +555,24 @@ serve(async (req) => {
         console.log(`[DIA Filter] Applied ${diaFilters.length} filters:`, JSON.stringify(diaFilters.slice(0, 2)));
       }
 
-      // Seçili kolonları ekle - önce request'ten gelen, yoksa DB'den oku
+      // Seçili kolonları ekle - önce request'ten gelen (widget builder test modu),
+      // yoksa widget pool'dan hesapla (dinamik requiredFields union)
       let effectiveColumns = selectedColumns || [];
       if (effectiveColumns.length === 0) {
-        // DB'den data_sources tablosundan selected_columns'ı oku
+        // Widget pool'dan hesapla - data_sources tablosundan ID bul, sonra widget'ların requiredFields union'ı
         const { data: dsRow } = await supabase
           .from('data_sources')
-          .select('selected_columns')
+          .select('id')
           .eq('module', module)
           .eq('method', method)
-          .not('selected_columns', 'is', null)
           .limit(1)
           .single();
-        if (dsRow?.selected_columns && Array.isArray(dsRow.selected_columns) && dsRow.selected_columns.length > 0) {
-          effectiveColumns = dsRow.selected_columns;
-          console.log(`[DIA] Auto-loaded ${effectiveColumns.length} columns from data_sources for ${module}/${method}`);
+        if (dsRow?.id) {
+          const pooledColumns = await getPooledColumnsForSource(supabase, dsRow.id);
+          if (pooledColumns && pooledColumns.length > 0) {
+            effectiveColumns = pooledColumns;
+            console.log(`[DIA] Widget pool: ${effectiveColumns.length} pooled columns for ${module}/${method}`);
+          }
         }
       }
       // DIA API doğru formatı: params.selectedcolumns
