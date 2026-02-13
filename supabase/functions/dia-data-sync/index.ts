@@ -170,19 +170,30 @@ Deno.serve(async (req) => {
       // Get pooled columns for this data source
       const pooledCols = await getPooledColumnsForSource(sb, src.id);
       
+      // Filter out invalid/internal DIA fields that cause "Veri Hatası"
+      const INVALID_COL_PREFIXES = ['__dkf__', '__dk__', '__format', '__dinamik__'];
+      const isValidCol = (c: string) => !INVALID_COL_PREFIXES.some(p => c.startsWith(p));
+      
       // Build selected columns: pool + data source selected_columns + always include _key
       let selectedColumns: string[] | undefined;
       if (pooledCols) {
-        const colSet = new Set(pooledCols);
+        const colSet = new Set(pooledCols.filter(isValidCol));
         if (src.selected_columns && Array.isArray(src.selected_columns)) {
-          for (const c of src.selected_columns) colSet.add(c);
+          for (const c of src.selected_columns) { if (isValidCol(c)) colSet.add(c); }
         }
         colSet.add('_key');
         selectedColumns = Array.from(colSet);
       } else if (src.selected_columns && Array.isArray(src.selected_columns) && src.selected_columns.length > 0) {
-        const colSet = new Set(src.selected_columns);
+        const colSet = new Set<string>();
+        for (const c of src.selected_columns) { if (isValidCol(c)) colSet.add(c); }
         colSet.add('_key');
         selectedColumns = Array.from(colSet);
+      }
+
+      // DEBUG: If still getting __dkf__ errors, skip column projection entirely for this request
+      if (body.noProjection) {
+        selectedColumns = undefined;
+        console.log(`[syncChunk] ${dataSourceSlug}: noProjection mode - fetching ALL columns`);
       }
 
       // Build filters from data source + extra
@@ -231,6 +242,14 @@ Deno.serve(async (req) => {
 
         if (selectedColumns) {
           payload[fm].params = { selectedcolumns: selectedColumns };
+          if (allRecords.length === 0) {
+            console.log(`[syncChunk] ${dataSourceSlug}: Using ${selectedColumns.length} columns, pooledCols=${pooledCols ? 'yes(' + pooledCols.length + ')' : 'null'}, srcCols=${src.selected_columns?.length || 0}`);
+            // Log any __dkf__ columns
+            const badCols = selectedColumns.filter((c: string) => c.startsWith('__dkf__') || c.startsWith('__format'));
+            if (badCols.length > 0) {
+              console.error(`[syncChunk] WARNING: Bad columns found: ${badCols.join(', ')}`);
+            }
+          }
         }
         if (diaFilters.length > 0) {
           payload[fm].filters = diaFilters;
@@ -252,7 +271,14 @@ Deno.serve(async (req) => {
           }
 
           if (r.code !== "200") {
-            partialError = `DIA code: ${r.code}`;
+            // DIA 501 "Veri Hatası" with column issues - retry without projection
+            if (r.code === "501" && selectedColumns && allRecords.length === 0) {
+              console.warn(`[syncChunk] DIA 501 for ${dataSourceSlug}, retrying without column projection...`);
+              selectedColumns = undefined;
+              continue; // Retry the same offset without selectedcolumns
+            }
+            console.error(`[syncChunk] DIA non-200 response for ${dataSourceSlug} period ${periodNo}:`, JSON.stringify(r).substring(0, 500));
+            partialError = `DIA code: ${r.code} - ${r.msg || r.message || ''}`;
             break;
           }
 
