@@ -1572,6 +1572,17 @@ export type Database = {
           widget_count: number
         }[]
       }
+      get_period_distribution: {
+        Args: {
+          p_data_source_slug: string
+          p_firma_kodu: string
+          p_sunucu_adi: string
+        }
+        Returns: {
+          donem_kodu: number
+          record_count: number
+        }[]
+      }
       get_projected_cache_data: {
         Args: {
           p_data_source_slug: string
