@@ -39,7 +39,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { format, differenceInDays, isPast } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { UserLicenseModal } from '@/components/admin/UserLicenseModal';
+const LicenseManagement = React.lazy(() => import('@/components/admin/LicenseManagement'));
 import { ImpersonatedDashboard } from '@/components/admin/ImpersonatedDashboard';
 import { cn } from '@/lib/utils';
 import rotanombiLogo from '@/assets/rotanombi-logo.png';
@@ -80,8 +80,8 @@ export default function SuperAdminPanel() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
-  const [showLicenseModal, setShowLicenseModal] = useState(false);
+  
+  
   const [activeTab, setActiveTab] = useState('users');
   const [userSearchOpen, setUserSearchOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -100,6 +100,7 @@ export default function SuperAdminPanel() {
       'datamodel',
       'feedback',
       'datamanagement',
+      'licenses',
     ]);
 
     if (allowedTabs.has(tab)) {
@@ -191,10 +192,6 @@ export default function SuperAdminPanel() {
     startImpersonation(user.user_id);
   };
 
-  const handleEditLicense = (user: UserProfile) => {
-    setSelectedUser(user);
-    setShowLicenseModal(true);
-  };
 
   const refreshUsers = async () => {
     const { data: profiles } = await supabase
@@ -247,6 +244,7 @@ export default function SuperAdminPanel() {
 
   const sidebarItems = [
     { key: 'users', label: 'Kullanıcı İzleme', icon: Users },
+    { key: 'licenses', label: 'Lisans Yönetimi', icon: Shield },
     { key: 'widgets', label: 'Widget Yönetimi', icon: Boxes },
     { key: 'categories', label: 'Kategoriler', icon: Layers },
     { key: 'datasources', label: 'Veri Kaynakları', icon: Database },
@@ -263,10 +261,6 @@ export default function SuperAdminPanel() {
         return isImpersonating && impersonatedUserId ? (
           <ImpersonatedDashboard 
             userId={impersonatedUserId} 
-            onEditLicense={() => {
-              const user = users.find(u => u.user_id === impersonatedUserId);
-              if (user) handleEditLicense(user);
-            }}
           />
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center p-6">
@@ -290,6 +284,8 @@ export default function SuperAdminPanel() {
         return <React.Suspense fallback={suspenseFallback}><div className="h-full"><DataModelView /></div></React.Suspense>;
       case 'datamanagement':
         return <React.Suspense fallback={suspenseFallback}><div className="p-6 overflow-auto h-full"><SuperAdminDataManagement users={users} /></div></React.Suspense>;
+      case 'licenses':
+        return <React.Suspense fallback={suspenseFallback}><div className="p-6 overflow-auto h-full"><LicenseManagement users={users} onRefresh={refreshUsers} /></div></React.Suspense>;
       case 'feedback':
         return <React.Suspense fallback={suspenseFallback}><div className="p-6 overflow-auto h-full"><FeedbackManager /></div></React.Suspense>;
       default:
@@ -484,15 +480,6 @@ export default function SuperAdminPanel() {
           {renderContent()}
         </div>
 
-        {/* Lisans Modal */}
-        {selectedUser && (
-          <UserLicenseModal
-            open={showLicenseModal}
-            onOpenChange={setShowLicenseModal}
-            user={selectedUser}
-            onSave={refreshUsers}
-          />
-        )}
       </div>
     </TooltipProvider>
   );
