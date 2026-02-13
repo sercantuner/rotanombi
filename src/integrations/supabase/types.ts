@@ -1228,6 +1228,62 @@ export type Database = {
           },
         ]
       }
+      widget_snapshots: {
+        Row: {
+          computation_ms: number | null
+          computed_at: string
+          created_at: string
+          error: string | null
+          firma_kodu: string
+          id: string
+          raw_row_count: number | null
+          snapshot_data: Json
+          status: string
+          sunucu_adi: string
+          sync_trigger: string
+          updated_at: string
+          widget_id: string
+        }
+        Insert: {
+          computation_ms?: number | null
+          computed_at?: string
+          created_at?: string
+          error?: string | null
+          firma_kodu: string
+          id?: string
+          raw_row_count?: number | null
+          snapshot_data?: Json
+          status?: string
+          sunucu_adi: string
+          sync_trigger?: string
+          updated_at?: string
+          widget_id: string
+        }
+        Update: {
+          computation_ms?: number | null
+          computed_at?: string
+          created_at?: string
+          error?: string | null
+          firma_kodu?: string
+          id?: string
+          raw_row_count?: number | null
+          snapshot_data?: Json
+          status?: string
+          sunucu_adi?: string
+          sync_trigger?: string
+          updated_at?: string
+          widget_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "widget_snapshots_widget_id_fkey"
+            columns: ["widget_id"]
+            isOneToOne: false
+            referencedRelation: "widgets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       widget_tags: {
         Row: {
           category_id: string
