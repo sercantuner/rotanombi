@@ -1,6 +1,7 @@
 // DataSourceManager - Merkezi Veri Kaynakları Yönetimi
 
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useDataSources, DataSourceFormData } from '@/hooks/useDataSources';
 import { testDiaApi, DiaApiTestResponse } from '@/lib/diaApiTest';
 import { DiaApiFilter, DiaApiSort, DIA_MODULES, PeriodConfig, getDefaultPeriodConfig } from '@/lib/widgetBuilderTypes';
@@ -30,6 +31,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
 export function DataSourceManager() {
+  const navigate = useNavigate();
   const { 
     dataSources, 
     activeDataSources,
@@ -334,7 +336,7 @@ export function DataSourceManager() {
             DIA web servis sorgularını merkezi olarak yönetin ve paylaşın
           </p>
         </div>
-        <Button onClick={() => openForm()}>
+        <Button onClick={() => navigate('/datasource-editor?from=super-admin')}>
           <Plus className="h-4 w-4 mr-2" />
           Yeni Kaynak
         </Button>
@@ -357,7 +359,7 @@ export function DataSourceManager() {
             <div className="text-center py-8 text-muted-foreground">
               <Database className="h-12 w-12 mx-auto mb-3 opacity-30" />
               <p>Henüz veri kaynağı tanımlanmadı</p>
-              <Button variant="link" onClick={() => openForm()}>
+              <Button variant="link" onClick={() => navigate('/datasource-editor?from=super-admin')}>
                 İlk kaynağı oluştur
               </Button>
             </div>
@@ -433,7 +435,7 @@ export function DataSourceManager() {
                       <Button 
                         variant="ghost" 
                         size="icon"
-                        onClick={() => openForm(source.id)}
+                        onClick={() => navigate(`/datasource-editor?edit=${source.id}&from=super-admin`)}
                         title="Düzenle"
                       >
                         <Edit className="h-4 w-4" />

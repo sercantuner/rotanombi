@@ -18,6 +18,7 @@ import SuperAdminPanel from "@/pages/SuperAdminPanel";
 import SuperAdminUsersPage from "@/pages/SuperAdminUsersPage";
 import WidgetMarketplacePage from "@/pages/WidgetMarketplacePage";
 import WidgetBuilderPage from "@/pages/WidgetBuilderPage";
+import DataSourceEditorPage from "@/pages/DataSourceEditorPage";
 import { DynamicPage } from "@/components/pages/DynamicPage";
 import LandingPage from "@/pages/LandingPage";
 import NotFound from "./pages/NotFound";
@@ -62,7 +63,8 @@ const App = () => (
                   
                   {/* Widget Marketplace & Builder - Tam Sayfa */}
                   <Route path="/marketplace" element={<AppLayout><WidgetMarketplacePage /></AppLayout>} />
-                  <Route path="/widget-builder" element={<WidgetBuilderPage />} />
+                  <Route path="/widget-builder" element={<AppLayout><WidgetBuilderPage /></AppLayout>} />
+                  <Route path="/datasource-editor" element={<AppLayout><DataSourceEditorPage /></AppLayout>} />
                   
                   {/* Dynamic user pages */}
                   <Route path="/page/:pageSlug" element={<AppLayout><DynamicPage /></AppLayout>} />
