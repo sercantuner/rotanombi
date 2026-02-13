@@ -1,9 +1,11 @@
 // Super Admin Dashboard - Genel İstatistikler ve Grafikler
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, Boxes, Database, Shield, Crown, BarChart3, HardDrive, Tag } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+
+const CronHealthPanel = lazy(() => import('./CronHealthPanel'));
 
 interface DashboardStats {
   totalUsers: number;
@@ -364,6 +366,11 @@ export default function SuperAdminDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Cron Health Panel */}
+      <Suspense fallback={<div className="flex items-center justify-center py-8"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" /></div>}>
+        <CronHealthPanel />
+      </Suspense>
     </div>
   );
 }
