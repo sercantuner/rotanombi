@@ -1,10 +1,11 @@
 // DataManagementTab - Veri Yönetimi Sekmesi
 // Veri kaynakları listesi, kayıt sayıları, dönem kilitleme ve sync butonları
 
-import React from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useDataSources } from '@/hooks/useDataSources';
 import { useSyncStatus } from '@/hooks/useSyncData';
 import { useSyncOrchestratorContext } from '@/contexts/SyncOrchestratorContext';
+import { supabase } from '@/integrations/supabase/client';
 
 import { useDiaProfile } from '@/hooks/useDiaProfile';
 import { useCacheRecordCounts } from '@/hooks/useCacheRecordCounts';
@@ -33,6 +34,7 @@ import {
   SkipForward,
   Ban,
   Undo2,
+  Search,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -86,12 +88,58 @@ export function DataManagementTab() {
   const { data: periodDistribution, isLoading: isPeriodDistLoading } = usePeriodBasedRecordCounts();
   const { periods } = useFirmaPeriods();
   const { excludePeriod, includePeriod, isExcluded, getExcludedPeriodsForSource } = useExcludedPeriods();
-  const [expandedTasks, setExpandedTasks] = React.useState(true);
-  const [expandedDistributions, setExpandedDistributions] = React.useState<Record<string, boolean>>({});
+  const [expandedTasks, setExpandedTasks] = useState(true);
+  const [expandedDistributions, setExpandedDistributions] = useState<Record<string, boolean>>({});
+  const [diaRecordCounts, setDiaRecordCounts] = useState<Record<string, Record<number, number>>>({});
+  const [loadingDiaCounts, setLoadingDiaCounts] = useState<Record<string, boolean>>({});
+  const prevIsRunningRef = useRef(false);
 
   const activeDataSources = dataSources.filter(ds => ds.is_active);
   const getRecordCount = (slug: string) => cacheRecordCounts?.[slug] || 0;
   const currentPeriod = periods.find(p => p.is_current);
+
+  // DIA'dan anlık kayıt sayısı çek
+  const fetchDiaRecordCount = useCallback(async (dsSlug: string) => {
+    if (!diaProfile.isConfigured || periods.length === 0) return;
+    setLoadingDiaCounts(prev => ({ ...prev, [dsSlug]: true }));
+    try {
+      const sources = periods.map(p => ({ slug: dsSlug, periodNo: p.period_no }));
+      const { data, error } = await supabase.functions.invoke('dia-data-sync', {
+        body: {
+          action: 'getRecordCounts',
+          sources,
+        },
+      });
+      if (error || !data?.success) throw new Error('DIA sayısı alınamadı');
+      const byPeriod: Record<number, number> = {};
+      for (const p of periods) {
+        const key = `${dsSlug}_${p.period_no}`;
+        byPeriod[p.period_no] = data.counts[key] || 0;
+      }
+      setDiaRecordCounts(prev => ({ ...prev, [dsSlug]: byPeriod }));
+    } catch {
+      // silent
+    } finally {
+      setLoadingDiaCounts(prev => ({ ...prev, [dsSlug]: false }));
+    }
+  }, [diaProfile.isConfigured, periods]);
+
+  // Tüm kaynakların DIA sayılarını çek
+  const fetchAllDiaCounts = useCallback(async () => {
+    if (!diaProfile.isConfigured || periods.length === 0 || activeDataSources.length === 0) return;
+    for (const ds of activeDataSources) {
+      fetchDiaRecordCount(ds.slug);
+    }
+  }, [diaProfile.isConfigured, periods, activeDataSources, fetchDiaRecordCount]);
+
+  // Sync bittiğinde otomatik DIA karşılaştırması
+  useEffect(() => {
+    if (prevIsRunningRef.current && !progress.isRunning) {
+      // Sync bitti, DIA sayılarını güncelle
+      fetchAllDiaCounts();
+    }
+    prevIsRunningRef.current = progress.isRunning;
+  }, [progress.isRunning, fetchAllDiaCounts]);
 
   const formatSyncTime = (time: string | null) => {
     if (!time) return 'Henüz senkronize edilmedi';
@@ -350,10 +398,22 @@ export function DataManagementTab() {
 
       {/* Data Sources List */}
       <div className="glass-card rounded-xl p-6">
-        <h4 className="font-semibold mb-4 flex items-center gap-2">
-          <Database className="h-4 w-4" />
-          Veri Kaynakları ({activeDataSources.length})
-        </h4>
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="font-semibold flex items-center gap-2">
+            <Database className="h-4 w-4" />
+            Veri Kaynakları ({activeDataSources.length})
+          </h4>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchAllDiaCounts}
+            disabled={progress.isRunning || !diaProfile.isConfigured || periods.length === 0}
+            className="gap-1.5 text-xs"
+          >
+            <Search className="h-3.5 w-3.5" />
+            DIA ile Karşılaştır
+          </Button>
+        </div>
 
         {isDataSourcesLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -417,11 +477,57 @@ export function DataManagementTab() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
                         <Badge variant="outline" className="font-mono text-xs">
                           {recordCount !== null ? recordCount.toLocaleString('tr-TR') : '-'} kayıt
                         </Badge>
 
+                        {/* DIA gerçek kayıt sayısı badge */}
+                        {diaRecordCounts[ds.slug] && (() => {
+                          const diaTotal = Object.values(diaRecordCounts[ds.slug]).reduce((s, c) => s + c, 0);
+                          const isMatch = diaTotal === recordCount;
+                          return (
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Badge 
+                                  variant={isMatch ? 'secondary' : 'destructive'} 
+                                  className="font-mono text-[10px]"
+                                >
+                                  DIA: {diaTotal.toLocaleString('tr-TR')}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {isMatch
+                                  ? 'DIA ile eşleşiyor ✓'
+                                  : `Fark: ${(diaTotal - recordCount).toLocaleString('tr-TR')} kayıt`
+                                }
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        })()}
+
+                        {/* DIA doğrulama butonu */}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => fetchDiaRecordCount(ds.slug)}
+                              disabled={loadingDiaCounts[ds.slug] || progress.isRunning}
+                              className="h-7 w-7 p-0"
+                            >
+                              {loadingDiaCounts[ds.slug] ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Search className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>DIA'dan gerçek kayıt sayısını kontrol et</TooltipContent>
+                        </Tooltip>
+                      </div>
+
+                      <div className="flex items-center gap-1">
                         {distribution && distribution.total > 0 && (
                           <Button
                             variant="ghost"
@@ -488,10 +594,15 @@ export function DataManagementTab() {
                                     <span className="text-muted-foreground">
                                       {period?.period_name || `D${periodNo}`}
                                     </span>
-                                    <div className="flex items-center gap-0.5">
+                                    <div className="flex items-center gap-1">
                                       <span className="font-mono font-semibold">
                                         {count.toLocaleString('tr-TR')}
                                       </span>
+                                      {diaRecordCounts[ds.slug]?.[periodNum] !== undefined && (
+                                        <span className={`font-mono text-[10px] ${diaRecordCounts[ds.slug][periodNum] === count ? 'text-green-600' : 'text-destructive'}`}>
+                                          ({diaRecordCounts[ds.slug][periodNum] === count ? '✓' : `DIA:${diaRecordCounts[ds.slug][periodNum]}`})
+                                        </span>
+                                      )}
                                       <Tooltip>
                                         <TooltipTrigger asChild>
                                           <Button
