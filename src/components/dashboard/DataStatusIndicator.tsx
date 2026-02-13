@@ -14,11 +14,15 @@ import { tr } from 'date-fns/locale';
 
 // DataStatus interface - Stale-While-Revalidate stratejisi için veri durumu
 export interface DataStatus {
-  source: 'cache' | 'api' | 'pending';
+  source: 'cache' | 'api' | 'pending' | 'snapshot';
   lastSyncedAt: Date | null;
   isStale: boolean;
   isRevalidating: boolean;
   error?: string | null;
+  // Snapshot bilgileri
+  snapshotComputedAt?: Date | null;
+  snapshotStatus?: 'ready' | 'computing' | 'failed' | null;
+  snapshotComputationMs?: number | null;
 }
 
 interface DataStatusIndicatorProps {
@@ -78,6 +82,15 @@ export function DataStatusIndicator({ status, className }: DataStatusIndicatorPr
     fillColor = 'rgb(234 179 8)'; // yellow-500
     tooltipTitle = 'Önbellek';
     tooltipDetail = `Son güncelleme: ${formatLastSync(status.lastSyncedAt)}`;
+  }
+  // Snapshot'tan yüklendi - Mavi
+  else if (status.source === 'snapshot') {
+    fillColor = 'rgb(59 130 246)'; // blue-500
+    tooltipTitle = 'Snapshot';
+    const computedAt = status.snapshotComputedAt;
+    tooltipDetail = computedAt 
+      ? `Son hesaplama: ${formatLastSync(computedAt)}${status.snapshotComputationMs ? ` (${status.snapshotComputationMs}ms)` : ''}`
+      : 'Önceden hesaplanmış veri';
   }
   // Taze veri (< 5 dk) veya stale olmayan cache - Yeşil (her zaman göster)
   else if (status.source === 'api' || isDataFresh(status.lastSyncedAt) || (status.source === 'cache' && !status.isStale)) {

@@ -23,11 +23,15 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 // Veri durumu bilgisi - Stale-While-Revalidate için
 export interface DataStatusInfo {
-  source: 'cache' | 'api' | 'pending';
+  source: 'cache' | 'api' | 'pending' | 'snapshot';
   lastSyncedAt: Date | null;
   isStale: boolean;
   isRevalidating: boolean;
   error?: string | null;
+  // Snapshot bilgileri
+  snapshotComputedAt?: Date | null;
+  snapshotStatus?: 'ready' | 'computing' | 'failed' | null;
+  snapshotComputationMs?: number | null;
 }
 
 interface DynamicWidgetDataResult {
@@ -638,6 +642,53 @@ function applyWidgetFilters(data: any[], widgetFilters: WidgetLocalFilters, diaA
 
 // ============= VERİTABANINDAN VERİ OKUMA =============
 
+// widget_snapshots tablosundan snapshot çek
+interface SnapshotResult {
+  found: boolean;
+  snapshotData?: any;
+  computedAt?: Date;
+  status?: string;
+  computationMs?: number;
+  rawRowCount?: number;
+}
+
+async function fetchSnapshot(
+  widgetId: string | undefined,
+  sunucuAdi: string,
+  firmaKodu: string
+): Promise<SnapshotResult> {
+  if (!widgetId) return { found: false };
+  
+  try {
+    const { data, error } = await supabase
+      .from('widget_snapshots')
+      .select('snapshot_data, computed_at, status, computation_ms, raw_row_count, error')
+      .eq('sunucu_adi', sunucuAdi)
+      .eq('firma_kodu', firmaKodu)
+      .eq('widget_id', widgetId)
+      .eq('status', 'ready')
+      .single();
+
+    if (error || !data) return { found: false };
+    
+    // Snapshot 6 saatten eskiyse kullanma (stale)
+    const computedAt = new Date(data.computed_at);
+    const hoursSince = (Date.now() - computedAt.getTime()) / (1000 * 60 * 60);
+    if (hoursSince > 6) return { found: false };
+    
+    return {
+      found: true,
+      snapshotData: data.snapshot_data,
+      computedAt,
+      status: data.status,
+      computationMs: data.computation_ms,
+      rawRowCount: data.raw_row_count,
+    };
+  } catch {
+    return { found: false };
+  }
+}
+
 // company_data_cache tablosundan veri çek - sayfalama ile tüm veriyi çek
 // lastSyncedAt da döndürür (Stale-While-Revalidate için)
 // KRİTİK: Her zaman donem_kodu ile filtreleme yapılır - dönem karışması önlenir
@@ -770,7 +821,8 @@ async function fetchFromDatabase(
 // Hook for using widget-local filters
 export function useDynamicWidgetData(
   config: WidgetBuilderConfig | null,
-  widgetFilters?: WidgetLocalFilters
+  widgetFilters?: WidgetLocalFilters,
+  widgetDbId?: string
 ): DynamicWidgetDataResult {
   const [data, setData] = useState<any>(null);
   const [rawData, setRawData] = useState<any[]>([]);
@@ -1248,6 +1300,69 @@ export function useDynamicWidgetData(
       }
 
       let fetchedData: any[] = [];
+      
+      // ===== SNAPSHOT-FIRST: Önceden hesaplanmış snapshot varsa anında kullan =====
+      // Widget DB ID'si varsa snapshot kontrolü yap
+      if (widgetDbId) {
+        const snapshot = await fetchSnapshot(widgetDbId, sunucuAdi, firmaKodu);
+        if (snapshot.found && snapshot.snapshotData) {
+          console.log(`[Widget] SNAPSHOT HIT - ${widgetDbId}: computed ${snapshot.computationMs}ms ago, ${snapshot.rawRowCount} rows`);
+          
+          const sd = snapshot.snapshotData;
+          
+          // Snapshot'tan gelen veri tipine göre işle
+          if (sd.type === 'kpi') {
+            setData({
+              value: sd.value,
+              format: sd.format,
+              prefix: sd.prefix,
+              suffix: sd.suffix,
+              recordCount: sd.recordCount,
+            });
+          } else if (sd.processedData) {
+            // Custom/chart/table widget - raw data olarak kullan
+            const processedData = Array.isArray(sd.processedData) ? sd.processedData : [];
+            rawDataCacheRef.current = processedData;
+            hasInitialDataRef.current = true;
+            
+            // Widget filtreleri uygula
+            let filteredData = [...processedData];
+            filteredData = applyWidgetFilters(filteredData, widgetFiltersRef.current || {}, diaAutoFiltersRef.current);
+            setRawData(filteredData);
+            
+            if (sd.multiData) {
+              setMultiQueryData(sd.multiData);
+            }
+            
+            processVisualizationData(filteredData, config);
+          } else if (sd.chartData) {
+            setData({
+              chartData: sd.chartData,
+              recordCount: sd.recordCount,
+            });
+          } else {
+            // Fallback: raw data
+            const rawSnapshotData = sd.processedData || [];
+            rawDataCacheRef.current = rawSnapshotData;
+            hasInitialDataRef.current = true;
+            processVisualizationData(rawSnapshotData, config);
+          }
+          
+          // Snapshot status güncelle
+          setDataStatus({
+            source: 'snapshot',
+            lastSyncedAt: snapshot.computedAt || null,
+            isStale: false,
+            isRevalidating: false,
+            snapshotComputedAt: snapshot.computedAt || null,
+            snapshotStatus: 'ready',
+            snapshotComputationMs: snapshot.computationMs || null,
+          });
+          
+          setIsFetching(false);
+          return; // Snapshot bulundu, DB/API çekimine gerek yok
+        }
+      }
       
       // Helper: DataSource ID'den slug al
       const getDataSourceSlug = (dataSourceId: string): string | null => {
