@@ -234,6 +234,7 @@ export function useSyncOrchestrator() {
     queryClient.invalidateQueries({ queryKey: ['cache-record-counts'] });
     queryClient.invalidateQueries({ queryKey: ['last-sync-time'] });
     queryClient.invalidateQueries({ queryKey: ['period-based-record-counts'] });
+    queryClient.invalidateQueries({ queryKey: ['data-sources'] });
   };
 
   // Lightweight invalidation during sync (just counts)
