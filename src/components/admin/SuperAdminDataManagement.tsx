@@ -1,12 +1,11 @@
-// Super Admin Data Management - Kullanıcı bazında gelişmiş veri yönetimi
-// DataManagementTab'ın tüm özelliklerini kullanıcı seçimli olarak sunar
+// Super Admin Data Management - Sunucu bazında gelişmiş veri yönetimi
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useDataSources } from '@/hooks/useDataSources';
 import { 
-  Database, HardDrive, Users, Search, User, Trash2, 
+  Database, HardDrive, Server, Search, Trash2, 
   Loader2, RefreshCw, AlertCircle, CheckCircle2, BarChart3,
-  Clock, Calendar, ChevronDown, ChevronRight, Layers, Ban, Undo2, Zap, Link2
+  Clock, Calendar, ChevronDown, ChevronRight, Ban, Undo2, Zap, Link2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +34,14 @@ interface UserProfile {
 
 interface Props {
   users: UserProfile[];
+}
+
+interface ServerOption {
+  sunucu_adi: string;
+  firma_kodu: string;
+  firma_adi: string | null;
+  userCount: number;
+  userEmails: string[];
 }
 
 interface DataSourceStats {
@@ -77,7 +84,7 @@ interface WidgetUsage {
 
 export default function SuperAdminDataManagement({ users }: Props) {
   const { dataSources } = useDataSources();
-  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+  const [selectedServer, setSelectedServer] = useState<ServerOption | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [stats, setStats] = useState<DataSourceStats[]>([]);
@@ -92,12 +99,36 @@ export default function SuperAdminDataManagement({ users }: Props) {
   const [syncHistory, setSyncHistory] = useState<SyncHistoryItem[]>([]);
   const [widgetUsage, setWidgetUsage] = useState<WidgetUsage>({});
   const [excludedPeriods, setExcludedPeriods] = useState<{ donem_kodu: number; data_source_slug: string | null }[]>([]);
-  const [userProfile, setUserProfile] = useState<{ firma_kodu: string; dia_sunucu_adi: string } | null>(null);
 
-  const filteredUsers = users.filter(u =>
-    u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.display_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.firma_adi?.toLowerCase().includes(searchTerm.toLowerCase())
+  // Sunucu listesini kullanıcılardan derle
+  const serverOptions: ServerOption[] = React.useMemo(() => {
+    const map = new Map<string, ServerOption>();
+    users.forEach(u => {
+      if (!u.dia_sunucu_adi || !u.firma_kodu) return;
+      const key = `${u.dia_sunucu_adi}::${u.firma_kodu}`;
+      if (map.has(key)) {
+        const existing = map.get(key)!;
+        existing.userCount++;
+        if (u.email) existing.userEmails.push(u.email);
+        if (!existing.firma_adi && u.firma_adi) existing.firma_adi = u.firma_adi;
+      } else {
+        map.set(key, {
+          sunucu_adi: u.dia_sunucu_adi,
+          firma_kodu: u.firma_kodu,
+          firma_adi: u.firma_adi || null,
+          userCount: 1,
+          userEmails: u.email ? [u.email] : [],
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.sunucu_adi.localeCompare(b.sunucu_adi));
+  }, [users]);
+
+  const filteredServers = serverOptions.filter(s =>
+    s.sunucu_adi.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.firma_kodu.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.firma_adi?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.userEmails.some(e => e.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const formatSyncTime = (time: string | null) => {
@@ -106,59 +137,44 @@ export default function SuperAdminDataManagement({ users }: Props) {
     catch { return 'Bilinmiyor'; }
   };
 
-  const loadUserData = useCallback(async (user: UserProfile) => {
-    if (!user.dia_sunucu_adi) {
-      setStats([]); setAllDataSources([]); setPeriods([]); setSyncHistory([]); setWidgetUsage({});
-      return;
-    }
-
+  const loadServerData = useCallback(async (server: ServerOption) => {
     setLoading(true);
     try {
-      // 1. Profil bilgisi
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('firma_kodu, dia_sunucu_adi')
-        .eq('user_id', user.user_id)
-        .single();
+      const sunucuAdi = server.sunucu_adi;
+      const firmaKodu = server.firma_kodu;
 
-      if (!profile?.firma_kodu || !profile?.dia_sunucu_adi) {
-        setStats([]); setLoading(false); return;
-      }
-      setUserProfile(profile);
+      // Find a user_id for data_sources query
+      const ownerUser = users.find(u => u.dia_sunucu_adi === sunucuAdi && u.firma_kodu === firmaKodu);
+      const ownerUserId = ownerUser?.user_id;
 
-      // 2. Paralel veri çekme
       const [cacheRes, periodsRes, syncRes, excludedRes, widgetRes, allDsRes] = await Promise.all([
-        // Cache kayıt sayıları
         supabase.rpc('get_cache_record_counts', {
-          p_sunucu_adi: profile.dia_sunucu_adi,
-          p_firma_kodu: profile.firma_kodu,
+          p_sunucu_adi: sunucuAdi,
+          p_firma_kodu: firmaKodu,
         }),
-        // Dönemler
         supabase.from('firma_periods')
           .select('period_no, period_name, is_current')
-          .eq('sunucu_adi', profile.dia_sunucu_adi)
-          .eq('firma_kodu', profile.firma_kodu)
+          .eq('sunucu_adi', sunucuAdi)
+          .eq('firma_kodu', firmaKodu)
           .order('period_no', { ascending: true }),
-        // Sync geçmişi
         supabase.from('sync_history')
           .select('*')
-          .eq('sunucu_adi', profile.dia_sunucu_adi)
-          .eq('firma_kodu', profile.firma_kodu)
+          .eq('sunucu_adi', sunucuAdi)
+          .eq('firma_kodu', firmaKodu)
           .order('started_at', { ascending: false })
           .limit(30),
-        // Hariç tutulan dönemler
         supabase.from('excluded_periods')
           .select('donem_kodu, data_source_slug')
-          .eq('sunucu_adi', profile.dia_sunucu_adi)
-          .eq('firma_kodu', profile.firma_kodu),
-        // Widget kullanım sayıları
+          .eq('sunucu_adi', sunucuAdi)
+          .eq('firma_kodu', firmaKodu),
         supabase.from('widgets')
           .select('data_source, builder_config')
           .eq('is_active', true),
-        // Tüm veri kaynakları (kullanıcıya ait)
-        supabase.from('data_sources')
-          .select('slug, name, module, method, is_period_independent, last_fetched_at, is_active')
-          .eq('user_id', user.user_id),
+        ownerUserId
+          ? supabase.from('data_sources')
+              .select('slug, name, module, method, is_period_independent, last_fetched_at, is_active')
+              .eq('user_id', ownerUserId)
+          : Promise.resolve({ data: [] as any[], error: null }),
       ]);
 
       // Cache stats
@@ -177,7 +193,7 @@ export default function SuperAdminDataManagement({ users }: Props) {
       });
       setStats(result.sort((a, b) => b.count - a.count));
 
-      // Tüm veri kaynakları (cache'de verisi olmayanlar dahil)
+      // All data sources
       const allDs: DataSourceStats[] = (allDsRes.data || []).map((ds: any) => ({
         slug: ds.slug,
         name: ds.name,
@@ -189,33 +205,25 @@ export default function SuperAdminDataManagement({ users }: Props) {
       }));
       setAllDataSources(allDs.sort((a, b) => b.count - a.count));
 
-      // Dönemler
       setPeriods(periodsRes.data || []);
-
-      // Sync geçmişi
       setSyncHistory(syncRes.data || []);
-
-      // Excluded periods
       setExcludedPeriods((excludedRes.data || []).map((e: any) => ({
         donem_kodu: e.donem_kodu,
         data_source_slug: e.data_source_slug,
       })));
 
-      // Widget kullanım sayıları
+      // Widget usage
       const usage: WidgetUsage = {};
       (widgetRes.data || []).forEach((w: any) => {
         if (w.data_source) {
-          // data_source slug ile eşleştir
           const ds = dataSources.find(d => d.id === w.data_source || d.slug === w.data_source);
           const slug = ds?.slug || w.data_source;
           usage[slug] = (usage[slug] || 0) + 1;
         }
-        // builder_config içindeki dataSourceId'leri de say
         if (w.builder_config?.dataSourceId) {
           const ds = dataSources.find(d => d.id === w.builder_config.dataSourceId);
           if (ds) usage[ds.slug] = (usage[ds.slug] || 0) + 1;
         }
-        // multi-query
         if (w.builder_config?.multiQuery?.queries) {
           w.builder_config.multiQuery.queries.forEach((q: any) => {
             if (q.dataSourceId) {
@@ -227,14 +235,14 @@ export default function SuperAdminDataManagement({ users }: Props) {
       });
       setWidgetUsage(usage);
 
-      // Dönem bazlı dağılım (veri olan kaynaklar için)
+      // Period distributions
       const distributions: Record<string, PeriodDistribution> = {};
       for (const s of result) {
         const { data: distData } = await supabase
           .from('company_data_cache')
           .select('donem_kodu')
-          .eq('sunucu_adi', profile.dia_sunucu_adi)
-          .eq('firma_kodu', profile.firma_kodu)
+          .eq('sunucu_adi', sunucuAdi)
+          .eq('firma_kodu', firmaKodu)
           .eq('data_source_slug', s.slug)
           .eq('is_deleted', false);
         
@@ -247,39 +255,36 @@ export default function SuperAdminDataManagement({ users }: Props) {
         }
       }
       setPeriodDistributions(distributions);
-
     } catch (err) {
-      console.error('Error loading user data:', err);
+      console.error('Error loading server data:', err);
       toast.error('Veri yüklenemedi');
     } finally {
       setLoading(false);
     }
-  }, [dataSources]);
+  }, [dataSources, users]);
 
-  const handleSelectUser = (user: UserProfile) => {
-    setSelectedUser(user);
+  const handleSelectServer = (server: ServerOption) => {
+    setSelectedServer(server);
     setSearchOpen(false);
     setExpandedDistributions({});
-    loadUserData(user);
+    loadServerData(server);
   };
 
   const handleDeleteDataSource = async () => {
-    if (!selectedUser || !deleteTarget || !userProfile) return;
+    if (!selectedServer || !deleteTarget) return;
     setDeleting(true);
     try {
       await supabase.from('company_data_cache').delete()
-        .eq('sunucu_adi', userProfile.dia_sunucu_adi)
-        .eq('firma_kodu', userProfile.firma_kodu)
+        .eq('sunucu_adi', selectedServer.sunucu_adi)
+        .eq('firma_kodu', selectedServer.firma_kodu)
         .eq('data_source_slug', deleteTarget.slug);
-      
       await supabase.from('period_sync_status').delete()
-        .eq('sunucu_adi', userProfile.dia_sunucu_adi)
-        .eq('firma_kodu', userProfile.firma_kodu)
+        .eq('sunucu_adi', selectedServer.sunucu_adi)
+        .eq('firma_kodu', selectedServer.firma_kodu)
         .eq('data_source_slug', deleteTarget.slug);
-
       toast.success(`${deleteTarget.name} verileri silindi`);
       setDeleteTarget(null);
-      loadUserData(selectedUser);
+      loadServerData(selectedServer);
     } catch (err) {
       toast.error('Silme işlemi başarısız');
     } finally {
@@ -288,22 +293,21 @@ export default function SuperAdminDataManagement({ users }: Props) {
   };
 
   const handleDeleteAllData = async () => {
-    if (!selectedUser || !userProfile) return;
+    if (!selectedServer) return;
     setDeleting(true);
     try {
       await supabase.from('company_data_cache').delete()
-        .eq('sunucu_adi', userProfile.dia_sunucu_adi)
-        .eq('firma_kodu', userProfile.firma_kodu);
+        .eq('sunucu_adi', selectedServer.sunucu_adi)
+        .eq('firma_kodu', selectedServer.firma_kodu);
       await supabase.from('period_sync_status').delete()
-        .eq('sunucu_adi', userProfile.dia_sunucu_adi)
-        .eq('firma_kodu', userProfile.firma_kodu);
+        .eq('sunucu_adi', selectedServer.sunucu_adi)
+        .eq('firma_kodu', selectedServer.firma_kodu);
       await supabase.from('sync_history').delete()
-        .eq('sunucu_adi', userProfile.dia_sunucu_adi)
-        .eq('firma_kodu', userProfile.firma_kodu);
-
+        .eq('sunucu_adi', selectedServer.sunucu_adi)
+        .eq('firma_kodu', selectedServer.firma_kodu);
       toast.success('Tüm veriler silindi');
       setDeleteAllConfirm(false);
-      loadUserData(selectedUser);
+      loadServerData(selectedServer);
     } catch (err) {
       toast.error('Silme işlemi başarısız');
     } finally {
@@ -312,41 +316,38 @@ export default function SuperAdminDataManagement({ users }: Props) {
   };
 
   const handleExcludePeriod = async (donemKodu: number, dataSourceSlug: string) => {
-    if (!userProfile || !selectedUser) return;
+    if (!selectedServer) return;
     try {
-      // Insert exclusion
+      const ownerUser = users.find(u => u.dia_sunucu_adi === selectedServer.sunucu_adi && u.firma_kodu === selectedServer.firma_kodu);
       await supabase.from('excluded_periods').insert({
-        sunucu_adi: userProfile.dia_sunucu_adi,
-        firma_kodu: userProfile.firma_kodu,
+        sunucu_adi: selectedServer.sunucu_adi,
+        firma_kodu: selectedServer.firma_kodu,
         donem_kodu: donemKodu,
         data_source_slug: dataSourceSlug,
-        excluded_by: selectedUser.user_id,
+        excluded_by: ownerUser?.user_id || '',
       });
-      // Delete data for this period
       await supabase.from('company_data_cache').delete()
-        .eq('sunucu_adi', userProfile.dia_sunucu_adi)
-        .eq('firma_kodu', userProfile.firma_kodu)
+        .eq('sunucu_adi', selectedServer.sunucu_adi)
+        .eq('firma_kodu', selectedServer.firma_kodu)
         .eq('data_source_slug', dataSourceSlug)
         .eq('donem_kodu', donemKodu);
-      
       toast.success(`Dönem ${donemKodu} hariç tutuldu`);
-      loadUserData(selectedUser);
+      loadServerData(selectedServer);
     } catch (err) {
       toast.error('İşlem başarısız');
     }
   };
 
   const handleIncludePeriod = async (donemKodu: number, dataSourceSlug: string) => {
-    if (!userProfile || !selectedUser) return;
+    if (!selectedServer) return;
     try {
       await supabase.from('excluded_periods').delete()
-        .eq('sunucu_adi', userProfile.dia_sunucu_adi)
-        .eq('firma_kodu', userProfile.firma_kodu)
+        .eq('sunucu_adi', selectedServer.sunucu_adi)
+        .eq('firma_kodu', selectedServer.firma_kodu)
         .eq('donem_kodu', donemKodu)
         .eq('data_source_slug', dataSourceSlug);
-      
       toast.success(`Dönem ${donemKodu} dahil edildi`);
-      loadUserData(selectedUser);
+      loadServerData(selectedServer);
     } catch (err) {
       toast.error('İşlem başarısız');
     }
@@ -361,12 +362,12 @@ export default function SuperAdminDataManagement({ users }: Props) {
   return (
     <TooltipProvider>
     <div className="space-y-6">
-      {/* User Picker */}
+      {/* Server Picker */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <Users className="w-4 h-4" />
-            Kullanıcı Seçimi
+            <Server className="w-4 h-4" />
+            Sunucu Seçimi
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -374,35 +375,43 @@ export default function SuperAdminDataManagement({ users }: Props) {
             <PopoverTrigger asChild>
               <Button variant="outline" className="w-full justify-start h-10">
                 <Search className="w-4 h-4 mr-2 shrink-0" />
-                {selectedUser ? (
+                {selectedServer ? (
                   <span className="truncate">
-                    {selectedUser.display_name || selectedUser.email} 
-                    {selectedUser.firma_adi && ` — ${selectedUser.firma_adi}`}
+                    {selectedServer.sunucu_adi} — Firma: {selectedServer.firma_kodu}
+                    {selectedServer.firma_adi && ` (${selectedServer.firma_adi})`}
                   </span>
                 ) : (
-                  <span className="text-muted-foreground">Kullanıcı seçin...</span>
+                  <span className="text-muted-foreground">Sunucu seçin...</span>
                 )}
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[400px] p-0" align="start">
+            <PopoverContent className="w-[450px] p-0" align="start">
               <Command>
-                <CommandInput placeholder="İsim, e-posta veya firma ara..." value={searchTerm} onValueChange={setSearchTerm} />
+                <CommandInput placeholder="Sunucu, firma veya e-posta ara..." value={searchTerm} onValueChange={setSearchTerm} />
                 <CommandList>
-                  <CommandEmpty>Kullanıcı bulunamadı</CommandEmpty>
+                  <CommandEmpty>Sunucu bulunamadı</CommandEmpty>
                   <CommandGroup>
-                    {filteredUsers.slice(0, 15).map(user => (
+                    {filteredServers.slice(0, 20).map(server => (
                       <CommandItem
-                        key={user.user_id}
-                        value={`${user.display_name} ${user.email} ${user.firma_adi}`}
-                        onSelect={() => handleSelectUser(user)}
+                        key={`${server.sunucu_adi}::${server.firma_kodu}`}
+                        value={`${server.sunucu_adi} ${server.firma_kodu} ${server.firma_adi} ${server.userEmails.join(' ')}`}
+                        onSelect={() => handleSelectServer(server)}
                         className="flex items-center gap-3 py-2"
                       >
                         <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
-                          <User className="w-3.5 h-3.5 text-muted-foreground" />
+                          <Server className="w-3.5 h-3.5 text-muted-foreground" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium truncate">{user.display_name || user.email?.split('@')[0]}</p>
-                          <p className="text-xs text-muted-foreground truncate">{user.email} {user.firma_adi && `• ${user.firma_adi}`}</p>
+                          <p className="text-sm font-medium truncate">
+                            {server.sunucu_adi}
+                            <span className="text-muted-foreground font-normal"> — Firma {server.firma_kodu}</span>
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {server.firma_adi && `${server.firma_adi} • `}
+                            {server.userCount} kullanıcı
+                            {server.userEmails.length > 0 && ` • ${server.userEmails[0]}`}
+                            {server.userEmails.length > 1 && ` +${server.userEmails.length - 1}`}
+                          </p>
                         </div>
                       </CommandItem>
                     ))}
@@ -414,18 +423,10 @@ export default function SuperAdminDataManagement({ users }: Props) {
         </CardContent>
       </Card>
 
-      {/* User Data */}
-      {selectedUser && (
+      {/* Server Data */}
+      {selectedServer && (
         <>
-          {!selectedUser.dia_sunucu_adi ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                <AlertCircle className="h-10 w-10 text-muted-foreground mb-3" />
-                <h3 className="font-semibold mb-1">DIA Bağlantısı Yok</h3>
-                <p className="text-sm text-muted-foreground">Bu kullanıcının DIA bağlantısı yapılandırılmamış.</p>
-              </CardContent>
-            </Card>
-          ) : loading ? (
+          {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
@@ -471,7 +472,7 @@ export default function SuperAdminDataManagement({ users }: Props) {
                       <span className="text-xs">İşlemler</span>
                     </div>
                     <div className="flex gap-2 mt-auto">
-                      <Button size="sm" variant="outline" onClick={() => loadUserData(selectedUser)}>
+                      <Button size="sm" variant="outline" onClick={() => loadServerData(selectedServer)}>
                         <RefreshCw className="h-3.5 w-3.5" />
                       </Button>
                       <Button size="sm" variant="destructive" onClick={() => setDeleteAllConfirm(true)} disabled={totalRecords === 0}>
@@ -482,7 +483,7 @@ export default function SuperAdminDataManagement({ users }: Props) {
                 </Card>
               </div>
 
-              {/* All Data Sources with Widget Usage */}
+              {/* All Data Sources */}
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
@@ -494,7 +495,7 @@ export default function SuperAdminDataManagement({ users }: Props) {
                   {allDataSources.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
                       <Database className="h-10 w-10 mx-auto mb-2 opacity-20" />
-                      <p>Bu kullanıcı için veri kaynağı bulunamadı</p>
+                      <p>Bu sunucu için veri kaynağı bulunamadı</p>
                     </div>
                   ) : (
                     <ScrollArea className="h-[450px]">
@@ -540,7 +541,6 @@ export default function SuperAdminDataManagement({ users }: Props) {
                                 </div>
 
                                 <div className="flex items-center gap-2 shrink-0">
-                                  {/* Widget kullanım sayısı */}
                                   <Tooltip>
                                     <TooltipTrigger>
                                       <Badge variant={widgetCount > 0 ? 'default' : 'outline'} className="text-[10px] gap-1">
@@ -573,7 +573,7 @@ export default function SuperAdminDataManagement({ users }: Props) {
                                 </div>
                               </div>
 
-                              {/* Dönem Dağılımı */}
+                              {/* Period Distribution */}
                               {isExpanded && distribution && distribution.total > 0 && (
                                 <div className="ml-3 p-3 rounded-lg bg-secondary/20 border border-secondary/40">
                                   <div className="flex items-center gap-2 mb-2">
@@ -590,7 +590,6 @@ export default function SuperAdminDataManagement({ users }: Props) {
                                         const period = periods.find(p => p.period_no === parseInt(periodNo));
                                         const percent = (count / distribution.total) * 100;
                                         const periodNum = parseInt(periodNo);
-                                        const excluded = isExcluded(periodNum, ds.slug);
                                         return (
                                           <div key={periodNo} className="space-y-1">
                                             <div className="flex items-center justify-between text-xs">
@@ -636,7 +635,7 @@ export default function SuperAdminDataManagement({ users }: Props) {
                                       })}
                                   </div>
 
-                                  {/* Hariç tutulan dönemler */}
+                                  {/* Excluded periods */}
                                   {(() => {
                                     const excludedForSource = excludedPeriods
                                       .filter(e => e.data_source_slug === ds.slug || e.data_source_slug === null)
@@ -741,7 +740,7 @@ export default function SuperAdminDataManagement({ users }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle>Veri Kaynağını Sil</AlertDialogTitle>
             <AlertDialogDescription>
-              "{deleteTarget?.name}" verileri <strong>{selectedUser?.display_name || selectedUser?.email}</strong> için kalıcı olarak silinecek.
+              "{deleteTarget?.name}" verileri <strong>{selectedServer?.sunucu_adi} / {selectedServer?.firma_kodu}</strong> için kalıcı olarak silinecek.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -759,7 +758,7 @@ export default function SuperAdminDataManagement({ users }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle>Tüm Verileri Sil</AlertDialogTitle>
             <AlertDialogDescription>
-              <strong>{selectedUser?.display_name || selectedUser?.email}</strong> kullanıcısına ait {totalRecords.toLocaleString('tr-TR')} kayıt kalıcı olarak silinecek.
+              <strong>{selectedServer?.sunucu_adi} / {selectedServer?.firma_kodu}</strong> sunucusuna ait {totalRecords.toLocaleString('tr-TR')} kayıt kalıcı olarak silinecek.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
