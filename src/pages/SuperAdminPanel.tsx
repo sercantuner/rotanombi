@@ -27,7 +27,8 @@ import {
   RefreshCw,
   LogOut,
   HardDrive,
-  ChevronLeft
+  ChevronLeft,
+  LayoutDashboard
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +41,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { format, differenceInDays, isPast } from 'date-fns';
 import { tr } from 'date-fns/locale';
 const LicenseManagement = React.lazy(() => import('@/components/admin/LicenseManagement'));
+const SuperAdminDashboard = React.lazy(() => import('@/components/admin/SuperAdminDashboard'));
 import { ImpersonatedDashboard } from '@/components/admin/ImpersonatedDashboard';
 import { cn } from '@/lib/utils';
 import rotanombiLogo from '@/assets/rotanombi-logo.png';
@@ -82,7 +84,7 @@ export default function SuperAdminPanel() {
   const [searchTerm, setSearchTerm] = useState('');
   
   
-  const [activeTab, setActiveTab] = useState('users');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [userSearchOpen, setUserSearchOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const sidebarLogo = theme === 'dark' ? rotanombiLogoDark : rotanombiLogo;
@@ -93,6 +95,7 @@ export default function SuperAdminPanel() {
     if (!tab) return;
 
     const allowedTabs = new Set([
+      'dashboard',
       'users',
       'widgets',
       'categories',
@@ -243,6 +246,7 @@ export default function SuperAdminPanel() {
 
 
   const sidebarItems = [
+    { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { key: 'users', label: 'Kullanıcı İzleme', icon: Users },
     { key: 'licenses', label: 'Lisans Yönetimi', icon: Shield },
     { key: 'widgets', label: 'Widget Yönetimi', icon: Boxes },
@@ -257,6 +261,8 @@ export default function SuperAdminPanel() {
     const suspenseFallback = <div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>;
 
     switch (activeTab) {
+      case 'dashboard':
+        return <React.Suspense fallback={suspenseFallback}><SuperAdminDashboard /></React.Suspense>;
       case 'users':
         return isImpersonating && impersonatedUserId ? (
           <ImpersonatedDashboard 
@@ -437,14 +443,6 @@ export default function SuperAdminPanel() {
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="w-full" onClick={() => navigate('/dashboard')}>
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">Dashboard'a Dön</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
                     <button onClick={() => logout()} className="nav-item w-full justify-center text-destructive hover:bg-destructive/10">
                       <LogOut className="w-5 h-5" />
                     </button>
@@ -454,11 +452,7 @@ export default function SuperAdminPanel() {
               </>
             ) : (
               <>
-                <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="sm" className="flex-1 justify-start text-xs" onClick={() => navigate('/dashboard')}>
-                    <ChevronLeft className="h-3.5 w-3.5 mr-1" />
-                    Dashboard'a Dön
-                  </Button>
+                <div className="flex items-center justify-end">
                   <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={toggleTheme}>
                     {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
                   </Button>
