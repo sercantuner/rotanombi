@@ -1,96 +1,41 @@
 
-# Cron Senkronizasyon Sistemini Yeniden Yapılandırma
+# Senkronizasyon Zamanı Güncellenmeme Sorunu - Düzeltme Planı
 
-## Sorunun Kök Nedeni
+## Sorunun Kökü
 
-Edge function'dan `cronSync` ve `manageCronSchedules` aksiyonları tamamen eksik. pg_cron job'ları her gün zamanında HTTP isteklerini gonderiyor, ancak edge function "Unknown action" hatasi donduruyor. pg_cron bunu basarili olarak raporluyor cunku sadece HTTP isteginin gonderilip gonderilmedigini kontrol ediyor, yanitini degil.
+Arayüzde her veri kaynağının yanında gösterilen "yaklaşık X saat önce" bilgisi `data_sources.last_fetched_at` alanından okunuyor. Ancak arka plan senkronizasyon motoru (dia-data-sync edge fonksiyonu) bu alanı **hiç güncellemiyor**. Motor sadece `period_sync_status.last_incremental_sync` tablosuna yazıyor -- bu tamamen farklı bir tablo.
 
-## Cozum Plani
+Dolayısıyla senkronizasyon başarıyla tamamlansa bile arayüz eski zamandan okumaya devam ediyor.
 
-### Adim 1: Edge Function'a `cronSync` Aksiyonu Ekleme
+## Çözüm
 
-`supabase/functions/dia-data-sync/index.ts` dosyasina yeni bir `cronSync` handler eklenecek:
+`dia-data-sync` edge fonksiyonunda, bir veri kaynağının senkronizasyonu tamamlandığında `data_sources.last_fetched_at` alanını da güncellemek.
 
-- Kimlik dogrulama: `x-cron-secret` header'i veya `cronSecret` body parametresi ile CRON_SECRET kontrolu (kullanici auth'u gerektirmez)
-- `targetServer` ve `targetFirma` parametreleri ile hangi sunucunun senkronize edilecegini belirler
-- Parametre yoksa: `cron_schedules` tablosundan aktif tum sunuculari bulur ve sirayla isler
-- Her sunucu icin:
-  1. O sunucuya ait bir kullaniciyi `profiles` tablosundan bulur (DIA credentials icin)
-  2. `sync_locks` kontrolu yapar (zaten calisan varsa atlar)
-  3. Aktif `data_sources` listesini ceker
-  4. `firma_periods` tablosundan donemleri alir
-  5. Her veri kaynagi + donem icin incremental sync yapar (daha once full sync yapilmissa)
-  6. Full sync yapilmamissa atlar (ilk full sync manuel tetiklenmeli)
-  7. Sonuclari `sync_history` tablosuna yazar
+### Yapılacak Değişiklikler
 
-Cron sync akisi:
-```text
-pg_cron tetikler
-  --> dia-data-sync?action=cronSync&targetServer=X&targetFirma=Y
-    --> profiles'dan kullanici bul (DIA credentials)
-    --> sync_locks kontrolu
-    --> data_sources listesi
-    --> her kaynak icin incrementalSync calistir
-    --> sync_history'ye kaydet
+**1. `supabase/functions/dia-data-sync/index.ts`**
+
+- `syncChunk` aksiyonunda, chunk tamamlandığında (tüm veriler yazıldıktan sonra) ilgili data source'un `last_fetched_at` ve `last_record_count` alanlarını güncelle.
+- `reconcileKeys` aksiyonunda da aynı güncellemeyi yap.
+- `fullSyncDirect` aksiyonunda da sync bittiğinde güncelle.
+- Güncelleme mantığı basit bir SQL:
+```sql
+UPDATE data_sources 
+SET last_fetched_at = NOW(), 
+    last_record_count = <toplam_kayit>
+WHERE slug = <slug>
 ```
 
-### Adim 2: Edge Function'a `manageCronSchedules` Aksiyonu Ekleme
+**2. `src/hooks/useSyncOrchestrator.tsx`**
 
-UI'dan zamanlama kaydetme isleminin pg_cron'a yansimasi icin:
+- Senkronizasyon tamamlandığında (`progress.isRunning` false olduğunda) `data-sources` query cache'ini invalidate ederek arayüzün yeni zamanları okumasını sağla.
 
-- `cron_schedules` tablosundaki kayitlari okur
-- Aktif olanlar icin `cron.schedule()` SQL komutu calistirir
-- Deaktif olanlar icin `cron.unschedule()` calistirir
-- Her cron job'un body'sine `targetServer` ve `targetFirma` ekler (sunucu bazli tetikleme)
-- Basarili olursa `pg_cron_jobid` alanini gunceller
+### Teknik Detay
 
-### Adim 3: Mevcut pg_cron Job'larini Temizleme
+Edge fonksiyondaki 3 kritik noktada `data_sources` tablosu güncellenecek:
 
-Eski calismayen genel `cronSync` job'lari (dia-sync-00utc, dia-sync-06utc vb.) kaldirilacak. Sadece sunucu bazli job'lar (`dia-sync-corlugrup-1-sync-1` gibi) kalacak ve dogru formatta guncellenecek.
+1. **syncChunk** - Son chunk tamamlandığında
+2. **reconcileKeys** - Uzlaştırma bittiğinde  
+3. **fullSyncDirect** (cron modu) - Her kaynak tamamlandığında
 
-SQL migration ile:
-- Eski 4 genel job'u (`dia-sync-00utc` vb.) `cron.unschedule()` ile kaldir
-- Mevcut sunucu bazli job'larin body formatini `cronSync` + `targetServer` + `targetFirma` + dogru secret ile guncelle
-
-### Adim 4: UI Iyilestirmeleri (CronManagement.tsx)
-
-- Yesil/kirmizi nokta: `sync_history` yerine `cron.job_run_details` + edge function log sonuclarina gore goster
-- Cron calisma gecmisinde: Sadece ilgili sunucunun job'larini filtrele
-- Zamanlama kaydedildiginde `manageCronSchedules` basarili olursa `pg_cron_jobid` guncelle ve UI'da goster
-
-### Teknik Detaylar
-
-**cronSync handler yapisi:**
-```text
-1. Secret dogrula (CRON_SECRET)
-2. targetServer/targetFirma'yi al
-3. profiles'dan kullanici bul
-4. sync_locks kontrol et (varsa atla)
-5. Kilit al (30dk TTL)
-6. data_sources listele (is_active=true, is_non_dia=false)
-7. firma_periods'dan donemleri al
-8. Her kaynak+donem icin:
-   - period_sync_status kontrol et
-   - last_full_sync varsa -> incrementalSync
-   - yoksa -> atla (log birak)
-9. Kilidi birak
-10. sync_history'ye "cron" tipiyle kaydet
-```
-
-**manageCronSchedules handler yapisi:**
-```text
-1. Auth kontrolu (super_admin)
-2. schedules dizisini al
-3. Her schedule icin:
-   - is_enabled=true: cron.schedule() calistir
-   - is_enabled=false: cron.unschedule() calistir
-4. pg_cron_jobid'leri cron_schedules tablosuna kaydet
-```
-
-**Edge function timeout sorunu:** Cron sync birden fazla veri kaynagini sirayla isleyecegi icin 60 saniyelik edge function limitine dikkat edilmeli. Her veri kaynagi icin ayri bir `incrementalSync` cagrisi yapilacak, timeout riski olursa sonraki cron tetiklemesinde devam edilecek.
-
-### Dosya Degisiklikleri
-
-1. `supabase/functions/dia-data-sync/index.ts` - cronSync ve manageCronSchedules aksiyonlari ekleme
-2. `src/components/admin/CronManagement.tsx` - Yesil nokta mantigi ve calisma gecmisi iyilestirmesi
-3. SQL migration - Eski genel cron job'larini temizleme ve mevcut job'lari guncelleme
+Her durumda `company_data_cache` tablosundan güncel kayıt sayısı da hesaplanarak `last_record_count` alanı da güncellenecek.
