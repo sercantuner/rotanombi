@@ -1514,6 +1514,7 @@ export type Database = {
       get_all_cache_stats: {
         Args: never
         Returns: {
+          data_bytes: number
           record_count: number
           sunucu_adi: string
         }[]

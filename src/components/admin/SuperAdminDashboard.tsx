@@ -18,8 +18,9 @@ interface DashboardStats {
   // New
   totalRecords: number;
   totalSizeBytes: number;
-  serverDataUsage: { name: string; records: number; sizeMB: number }[];
+  serverDataUsage: { name: string; records: number; sizeBytes: number }[];
   tagDistribution: { name: string; count: number; color: string }[];
+  dbTotalBytes: number;
 }
 
 const TAG_COLORS = [
@@ -51,16 +52,17 @@ export default function SuperAdminDashboard() {
   const loadStats = async () => {
     setLoading(true);
     try {
-      const [profilesRes, widgetsRes, dsRes, catRes, tagStatsRes] = await Promise.all([
+      const [profilesRes, widgetsRes, dsRes, catRes, tagStatsRes, cacheStatsRes, dbSizeRes] = await Promise.all([
         supabase.from('profiles').select('user_id, license_type, license_expires_at, dia_sunucu_adi, firma_adi'),
         supabase.from('widgets').select('id, is_active, builder_config'),
         supabase.from('data_sources').select('id'),
         supabase.from('widget_categories').select('id'),
         supabase.from('widget_tags').select('category_id, widget_categories(name)'),
+        supabase.rpc('get_all_cache_stats'),
+        (supabase.rpc as any)('get_db_size_stats'),
       ]);
 
-      // Use SECURITY DEFINER RPC to get cache stats across ALL servers
-      const { data: cacheStats } = await supabase.rpc('get_all_cache_stats');
+      const cacheStats = cacheStatsRes.data;
 
       const profiles = profilesRes.data || [];
       const widgets = widgetsRes.data || [];
@@ -82,21 +84,26 @@ export default function SuperAdminDashboard() {
         .slice(0, 8);
 
       // Build server cache map from RPC results
-      const serverCacheMap = new Map<string, number>();
+      const serverCacheMap = new Map<string, { records: number; bytes: number }>();
       let totalRecords = 0;
-      (cacheStats || []).forEach((row: { sunucu_adi: string; record_count: number }) => {
-        serverCacheMap.set(row.sunucu_adi, Number(row.record_count));
-        totalRecords += Number(row.record_count);
+      let totalSizeBytes = 0;
+      (cacheStats || []).forEach((row: any) => {
+        const records = Number(row.record_count);
+        const bytes = Number(row.data_bytes || 0);
+        serverCacheMap.set(row.sunucu_adi, { records, bytes });
+        totalRecords += records;
+        totalSizeBytes += bytes;
       });
-      
-      const estimatedBytesPerRecord = 1024;
-      const totalSizeBytes = totalRecords * estimatedBytesPerRecord;
+
+      // Add DB total (tables + indexes) from get_db_size_stats
+      const dbStats = dbSizeRes.data || [];
+      const dbTotalBytes = (dbStats as any[]).reduce((sum: number, r: any) => sum + Number(r.total_bytes || 0), 0);
 
       const serverDataUsage = Array.from(serverCacheMap.entries())
-        .map(([name, records]) => ({ 
+        .map(([name, { records, bytes }]) => ({ 
           name, 
           records, 
-          sizeMB: parseFloat((records * estimatedBytesPerRecord / (1024 * 1024)).toFixed(1)) 
+          sizeBytes: bytes,
         }))
         .sort((a, b) => b.records - a.records);
 
@@ -125,6 +132,7 @@ export default function SuperAdminDashboard() {
         totalSizeBytes,
         serverDataUsage,
         tagDistribution,
+        dbTotalBytes,
       });
     } catch (err) {
       console.error('Stats load error:', err);
@@ -195,7 +203,7 @@ export default function SuperAdminDashboard() {
             </div>
             <p className="text-3xl font-bold">{stats.totalRecords.toLocaleString('tr-TR')}</p>
             <p className="text-xs text-muted-foreground mt-1">
-              ~{formatBytes(stats.totalSizeBytes)}
+              Veri: {formatBytes(stats.totalSizeBytes)} · DB: {formatBytes(stats.dbTotalBytes)}
             </p>
           </CardContent>
         </Card>
@@ -345,7 +353,7 @@ export default function SuperAdminDashboard() {
                   <span className="font-medium">{s.name}</span>
                   <div className="flex items-center gap-4 text-muted-foreground text-xs">
                     <span>{s.records.toLocaleString('tr-TR')} kayıt</span>
-                    <span className="text-primary font-medium">{s.sizeMB} MB</span>
+                    <span className="text-primary font-medium">{formatBytes(s.sizeBytes)}</span>
                   </div>
                 </div>
               ))}
