@@ -52,6 +52,7 @@ export function useSyncOrchestrator() {
   const { getExcludedPeriodsForSource } = useExcludedPeriods();
   const abortRef = useRef(false);
   const lockIdRef = useRef<string | null>(null);
+  const targetUserIdRef = useRef<string | undefined>(undefined);
   
   const [progress, setProgress] = useState<SyncProgress>({
     isRunning: false,
@@ -75,11 +76,16 @@ export function useSyncOrchestrator() {
     const token = await getAuthToken();
     if (!token) throw new Error('Oturum bulunamadı');
 
+    // Inject targetUserId if set (super admin mode)
+    const payload = targetUserIdRef.current 
+      ? { ...body, targetUserId: targetUserIdRef.current }
+      : body;
+
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/dia-data-sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
       });
       const result = await res.json();
       return result;
@@ -231,8 +237,9 @@ export function useSyncOrchestrator() {
   };
 
   // Tam orkestrasyon
-  const startFullOrchestration = useCallback(async (forceIncremental = false) => {
-    if (!isConfigured || progress.isRunning) return;
+  const startFullOrchestration = useCallback(async (forceIncremental = false, targetUserId?: string) => {
+    if ((!isConfigured && !targetUserId) || progress.isRunning) return;
+    targetUserIdRef.current = targetUserId;
     abortRef.current = false;
 
     const activeSources = getActiveSources();
@@ -259,6 +266,9 @@ export function useSyncOrchestrator() {
       const statusRes = await callEdgeFunction({ action: 'getSyncStatus' });
       const periodStatuses = statusRes?.periodStatus || [];
       const currentPeriod = periods.find(p => p.is_current)?.period_no || statusRes?.currentPeriod;
+      // Use sunucu/firma from edge function response (supports targetUserId)
+      const effectiveSunucu = statusRes?.sunucuAdi || profileSunucu || '';
+      const effectiveFirma = statusRes?.firmaKodu || profileFirma || '';
 
       // Task listesi oluştur (önce expected 0 ile, sonra DIA'dan güncellenecek)
       const tasks: SyncTask[] = [];
@@ -340,8 +350,8 @@ export function useSyncOrchestrator() {
           const { count } = await supabase
             .from('company_data_cache')
             .select('*', { count: 'exact', head: true })
-            .eq('sunucu_adi', profileSunucu || '')
-            .eq('firma_kodu', profileFirma || '')
+            .eq('sunucu_adi', effectiveSunucu)
+            .eq('firma_kodu', effectiveFirma)
             .eq('data_source_slug', item.slug)
             .eq('donem_kodu', item.periodNo)
             .eq('is_deleted', false);
@@ -525,12 +535,14 @@ export function useSyncOrchestrator() {
       }
     } finally {
       await releaseLock();
+      targetUserIdRef.current = undefined;
     }
   }, [isConfigured, dataSources, periods, progress.isRunning, queryClient]);
 
   // Tek kaynak incremental sync (hızlı güncelleme)
-  const quickSync = useCallback(async (slug: string, periodNo: number) => {
+  const quickSync = useCallback(async (slug: string, periodNo: number, targetUserId?: string) => {
     if (progress.isRunning) return;
+    targetUserIdRef.current = targetUserId;
     const source = dataSources.find(ds => ds.slug === slug);
     if (!source) return;
 
@@ -602,6 +614,7 @@ export function useSyncOrchestrator() {
         overallPercent: 100,
       }));
       await releaseLock();
+      targetUserIdRef.current = undefined;
       invalidateCaches();
     }
   }, [dataSources, progress.isRunning, queryClient]);

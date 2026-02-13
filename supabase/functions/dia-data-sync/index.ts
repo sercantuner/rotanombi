@@ -555,7 +555,7 @@ Deno.serve(async (req) => {
     
     const { dataSourceSlug, periodNo, targetUserId, syncAllPeriods, offset, chunkSize, filters: reqFilters, pageSize: reqPageSize } = body;
     let euid = user.id;
-    if ((action === 'syncAllForUser' || action === 'syncSingleSource' || action === 'syncChunk' || action === 'incrementalSync') && targetUserId) {
+    if (targetUserId) {
       const { data: rc } = await sb.from('user_roles').select('role').eq('user_id', user.id).eq('role', 'super_admin').single();
       if (!rc) return new Response(JSON.stringify({ success: false, error: "Super admin required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       euid = targetUserId;
@@ -697,7 +697,7 @@ Deno.serve(async (req) => {
         if (rcPage.length < RC_PAGE) break;
         rcOffset += RC_PAGE;
       }
-      return new Response(JSON.stringify({ success: true, syncHistory: sh||[], periodStatus: ps||[], recordCounts: cnt, currentPeriod: curDon }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ success: true, syncHistory: sh||[], periodStatus: ps||[], recordCounts: cnt, currentPeriod: curDon, sunucuAdi: sun, firmaKodu: fk }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     
     if (action === 'lockPeriod' && periodNo) {
