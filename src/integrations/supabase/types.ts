@@ -259,6 +259,7 @@ export type Database = {
           period_read_mode: string | null
           refresh_schedule: string | null
           selected_columns: string[] | null
+          skip_reconcile: boolean | null
           slug: string
           sorts: Json | null
           updated_at: string | null
@@ -289,6 +290,7 @@ export type Database = {
           period_read_mode?: string | null
           refresh_schedule?: string | null
           selected_columns?: string[] | null
+          skip_reconcile?: boolean | null
           slug: string
           sorts?: Json | null
           updated_at?: string | null
@@ -319,6 +321,7 @@ export type Database = {
           period_read_mode?: string | null
           refresh_schedule?: string | null
           selected_columns?: string[] | null
+          skip_reconcile?: boolean | null
           slug?: string
           sorts?: Json | null
           updated_at?: string | null

@@ -221,6 +221,12 @@ export function useSyncOrchestrator() {
     );
   };
 
+  // Check if a source should skip reconcile (hash-key based sources)
+  const shouldSkipReconcile = (slug: string): boolean => {
+    const src = dataSources.find(ds => ds.slug === slug);
+    return !!src?.skip_reconcile;
+  };
+
   // Cache invalidation helper
   const invalidateCaches = () => {
     queryClient.invalidateQueries({ queryKey: ['company-data'] });
@@ -420,7 +426,10 @@ export function useSyncOrchestrator() {
 
           if (task.type === 'reconcile') {
             // Kilitli dönem veya tamamlanmış: sadece silinen kayıt kontrolü
-            const recResult = await reconcileKeys(task.slug, task.periodNo);
+            let recResult = { markedDeleted: 0 };
+            if (!shouldSkipReconcile(task.slug)) {
+              recResult = await reconcileKeys(task.slug, task.periodNo);
+            }
             setProgress(prev => ({
               ...prev,
               tasks: prev.tasks.map((t, idx) => idx === i ? { ...t, status: 'completed', deleted: recResult.markedDeleted } : t),
@@ -447,7 +456,7 @@ export function useSyncOrchestrator() {
 
             // Sync sonrası silinen kayıt kontrolü
             let deletedCount = 0;
-            if (!abortRef.current) {
+            if (!abortRef.current && !shouldSkipReconcile(task.slug)) {
               const recResult = await reconcileKeys(task.slug, task.periodNo);
               deletedCount = recResult.markedDeleted;
             }
@@ -470,7 +479,7 @@ export function useSyncOrchestrator() {
 
               // Full sync sonrası reconcile
               let deletedCount = 0;
-              if (!abortRef.current) {
+              if (!abortRef.current && !shouldSkipReconcile(task.slug)) {
                 const recResult = await reconcileKeys(task.slug, task.periodNo);
                 deletedCount = recResult.markedDeleted;
               }
@@ -484,7 +493,7 @@ export function useSyncOrchestrator() {
             } else {
               // Incremental sonrası reconcile
               let deletedCount = 0;
-              if (!abortRef.current) {
+              if (!abortRef.current && !shouldSkipReconcile(task.slug)) {
                 const recResult = await reconcileKeys(task.slug, task.periodNo);
                 deletedCount = recResult.markedDeleted;
               }
@@ -528,6 +537,30 @@ export function useSyncOrchestrator() {
       }));
 
       invalidateCaches();
+
+      // Trigger snapshot computation after sync
+      try {
+        console.log('[SyncOrchestrator] Triggering widget-compute for snapshots...');
+        const token = await getAuthToken();
+        if (token) {
+          const computeBody: any = {
+            sunucuAdi: effectiveSunucu,
+            firmaKodu: effectiveFirma,
+            syncTrigger: 'post_sync',
+          };
+          await fetch(`${SUPABASE_URL}/functions/v1/widget-compute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify(computeBody),
+          }).then(r => r.json()).then(r => {
+            console.log('[SyncOrchestrator] widget-compute result:', r.success ? 'OK' : r.error);
+          }).catch(e => {
+            console.error('[SyncOrchestrator] widget-compute error:', e);
+          });
+        }
+      } catch (e) {
+        console.error('[SyncOrchestrator] Snapshot trigger error:', e);
+      }
 
       const failedCount = tasks.filter(t => t.status === 'failed').length;
       const completedCount = tasks.filter(t => t.status === 'completed').length;
@@ -638,8 +671,11 @@ export function useSyncOrchestrator() {
           await callEdgeFunction({ action: 'markFullSyncComplete', dataSourceSlug: slug, periodNo, totalRecords: localCount + fullResult.fetched });
         }
         
-        // Reconcile
-        const recResult = await reconcileKeys(slug, periodNo);
+        // Reconcile (skip for hash-key sources)
+        let recResult = { markedDeleted: 0 };
+        if (!shouldSkipReconcile(slug)) {
+          recResult = await reconcileKeys(slug, periodNo);
+        }
         toast.success(`${source.name}: ${fullResult.fetched} eksik kayıt tamamlandı (toplam: ${localCount + fullResult.fetched})${recResult.markedDeleted > 0 ? `, ${recResult.markedDeleted} silinen tespit edildi` : ''}`);
       } else {
         // Normal incremental sync
@@ -651,10 +687,16 @@ export function useSyncOrchestrator() {
           if (fullResult.fetched > 0) {
             await callEdgeFunction({ action: 'markFullSyncComplete', dataSourceSlug: slug, periodNo, totalRecords: fullResult.fetched });
           }
-          const recResult = await reconcileKeys(slug, periodNo);
+          let recResult = { markedDeleted: 0 };
+          if (!shouldSkipReconcile(slug)) {
+            recResult = await reconcileKeys(slug, periodNo);
+          }
           toast.success(`${source.name}: ${fullResult.fetched} kayıt çekildi (tam sync)${recResult.markedDeleted > 0 ? `, ${recResult.markedDeleted} silinen tespit edildi` : ''}`);
         } else {
-          const recResult = await reconcileKeys(slug, periodNo);
+          let recResult = { markedDeleted: 0 };
+          if (!shouldSkipReconcile(slug)) {
+            recResult = await reconcileKeys(slug, periodNo);
+          }
           toast.success(`${source.name}: ${result.fetched} yeni/güncellenen kayıt${recResult.markedDeleted > 0 ? `, ${recResult.markedDeleted} silinen tespit edildi` : ''}`);
         }
       }
