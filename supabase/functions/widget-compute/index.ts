@@ -597,8 +597,20 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Specific company
-    const dk = parseInt(donemKodu) || 1;
+    // Specific company - resolve period code with fallback
+    let dk = parseInt(donemKodu);
+    if (isNaN(dk) || dk < 1) {
+      // Fallback: detect correct period from profiles table
+      const { data: profileData } = await sb.from('profiles')
+        .select('donem_kodu')
+        .eq('dia_sunucu_adi', sunucuAdi)
+        .eq('firma_kodu', firmaKodu)
+        .not('donem_kodu', 'is', null)
+        .limit(1)
+        .single();
+      dk = parseInt(profileData?.donem_kodu) || 1;
+      console.log(`[widget-compute] donemKodu not provided, resolved from profile: ${dk}`);
+    }
     const result = await computeWidgetsForCompany(sb, sunucuAdi, firmaKodu, dk, syncTrigger || 'manual');
 
     return new Response(JSON.stringify({ success: true, ...result }), {
