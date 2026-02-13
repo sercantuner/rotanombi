@@ -1,0 +1,239 @@
+// Super Admin Dashboard - Genel İstatistikler ve Grafikler
+import React, { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Users, Boxes, Database, Shield, Crown, TrendingUp, BarChart3 } from 'lucide-react';
+import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { cn } from '@/lib/utils';
+
+interface DashboardStats {
+  totalUsers: number;
+  demoUsers: number;
+  licensedUsers: number;
+  expiredUsers: number;
+  activeWidgets: number;
+  aiWidgets: number;
+  totalDataSources: number;
+  totalCategories: number;
+  serverDistribution: { name: string; count: number }[];
+}
+
+export default function SuperAdminDashboard() {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    setLoading(true);
+    try {
+      const [profilesRes, widgetsRes, dsRes, catRes] = await Promise.all([
+        supabase.from('profiles').select('user_id, license_type, license_expires_at, dia_sunucu_adi, firma_adi'),
+        supabase.from('widgets').select('id, is_active, builder_config'),
+        supabase.from('data_sources').select('id'),
+        supabase.from('widget_categories').select('id'),
+      ]);
+
+      const profiles = profilesRes.data || [];
+      const widgets = widgetsRes.data || [];
+      const now = new Date();
+
+      const demoUsers = profiles.filter(p => p.license_type === 'demo').length;
+      const expiredUsers = profiles.filter(p => p.license_expires_at && new Date(p.license_expires_at) < now).length;
+      const licensedUsers = profiles.length - demoUsers;
+
+      // Server distribution
+      const serverMap = new Map<string, number>();
+      profiles.forEach(p => {
+        const key = p.dia_sunucu_adi || 'Bağlantısız';
+        serverMap.set(key, (serverMap.get(key) || 0) + 1);
+      });
+      const serverDistribution = Array.from(serverMap.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 8);
+
+      setStats({
+        totalUsers: profiles.length,
+        demoUsers,
+        licensedUsers,
+        expiredUsers,
+        activeWidgets: widgets.filter(w => w.is_active).length,
+        aiWidgets: widgets.filter(w => w.builder_config).length,
+        totalDataSources: dsRes.data?.length || 0,
+        totalCategories: catRes.data?.length || 0,
+        serverDistribution,
+      });
+    } catch (err) {
+      console.error('Stats load error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading || !stats) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  const licenseChartData = [
+    { name: 'Lisanslı', value: stats.licensedUsers, color: 'hsl(var(--primary))' },
+    { name: 'Demo', value: stats.demoUsers, color: 'hsl(var(--muted-foreground))' },
+    { name: 'Süresi Dolmuş', value: stats.expiredUsers, color: 'hsl(var(--destructive))' },
+  ].filter(d => d.value > 0);
+
+  const widgetChartData = [
+    { name: 'AI Widget', value: stats.aiWidgets, color: 'hsl(var(--primary))' },
+    { name: 'Standart', value: stats.activeWidgets - stats.aiWidgets, color: 'hsl(var(--muted-foreground))' },
+  ].filter(d => d.value > 0);
+
+  return (
+    <div className="p-6 overflow-auto h-full space-y-6">
+      {/* KPI Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Users className="h-4 w-4" />
+              <span className="text-xs">Toplam Kullanıcı</span>
+            </div>
+            <p className="text-3xl font-bold">{stats.totalUsers}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.licensedUsers} lisanslı · {stats.demoUsers} demo
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Boxes className="h-4 w-4" />
+              <span className="text-xs">Aktif Widget</span>
+            </div>
+            <p className="text-3xl font-bold">{stats.activeWidgets}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.aiWidgets} AI ile üretilmiş
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Database className="h-4 w-4" />
+              <span className="text-xs">Veri Kaynağı</span>
+            </div>
+            <p className="text-3xl font-bold">{stats.totalDataSources}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.totalCategories} kategori
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2 text-destructive mb-1">
+              <Shield className="h-4 w-4" />
+              <span className="text-xs">Süresi Dolmuş</span>
+            </div>
+            <p className="text-3xl font-bold">{stats.expiredUsers}</p>
+            <p className="text-xs text-muted-foreground mt-1">lisans yenilenmeli</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* License Distribution Pie */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Crown className="h-4 w-4 text-primary" />
+              Lisans Dağılımı
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={licenseChartData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
+                    {licenseChartData.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: number, name: string) => [`${value} kullanıcı`, name]} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex justify-center gap-4 mt-2">
+              {licenseChartData.map((d, i) => (
+                <div key={i} className="flex items-center gap-1.5 text-xs">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+                  <span className="text-muted-foreground">{d.name} ({d.value})</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Widget Distribution Pie */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Boxes className="h-4 w-4 text-primary" />
+              Widget Dağılımı
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={widgetChartData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
+                    {widgetChartData.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: number, name: string) => [`${value} widget`, name]} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex justify-center gap-4 mt-2">
+              {widgetChartData.map((d, i) => (
+                <div key={i} className="flex items-center gap-1.5 text-xs">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+                  <span className="text-muted-foreground">{d.name} ({d.value})</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Server Distribution Bar */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              Sunucu Dağılımı
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stats.serverDistribution} layout="vertical" margin={{ left: 0, right: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                  <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                  <Tooltip formatter={(value: number) => [`${value} kullanıcı`]} />
+                  <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
