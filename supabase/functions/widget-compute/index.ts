@@ -284,18 +284,52 @@ async function computeWidgetsForCompany(
 ): Promise<{ computed: number; failed: number; skipped: number; details: any[] }> {
   const stats = { computed: 0, failed: 0, skipped: 0, details: [] as any[] };
 
-  // Get all active widgets with builder_config
-  const { data: widgets, error: widgetErr } = await sb.from('widgets')
+  // Step 1: Find which widgets are actually USED by users in this company
+  const { data: usedWidgetIds } = await sb.rpc('get_used_widget_ids_for_company', {
+    p_sunucu_adi: sunucuAdi,
+    p_firma_kodu: firmaKodu,
+  });
+
+  // Fallback: if RPC doesn't exist yet, query directly
+  let widgetIdSet: Set<string>;
+  if (usedWidgetIds && usedWidgetIds.length > 0) {
+    widgetIdSet = new Set(usedWidgetIds.map((r: any) => r.widget_id));
+  } else {
+    // Direct query fallback
+    const { data: cwData } = await sb
+      .from('container_widgets')
+      .select('widget_id, page_containers!inner(page_id, user_pages!inner(user_id, profiles_lookup:user_id))')
+      .limit(1000);
+    
+    // If direct query also fails, fall back to ALL widgets
+    if (!cwData || cwData.length === 0) {
+      console.log(`[widget-compute] No used widgets found for ${sunucuAdi}:${firmaKodu}, computing all`);
+      widgetIdSet = new Set<string>(); // empty = compute all
+    } else {
+      widgetIdSet = new Set(cwData.map((r: any) => r.widget_id));
+    }
+  }
+
+  // Step 2: Get active widgets with builder_config, filtered to used ones
+  let widgetQuery = sb.from('widgets')
     .select('id, name, widget_key, builder_config')
     .eq('is_active', true)
     .not('builder_config', 'is', null);
 
+  // Only filter if we found specific widget IDs
+  if (widgetIdSet.size > 0) {
+    widgetQuery = widgetQuery.in('id', Array.from(widgetIdSet));
+  }
+
+  const { data: widgets, error: widgetErr } = await widgetQuery;
+
   if (widgetErr || !widgets?.length) {
-    console.log(`[widget-compute] No active widgets found: ${widgetErr?.message || 'empty'}`);
+    console.log(`[widget-compute] No widgets to compute for ${sunucuAdi}:${firmaKodu}: ${widgetErr?.message || 'none used'}`);
     return stats;
   }
 
-  console.log(`[widget-compute] Processing ${widgets.length} widgets for ${sunucuAdi}:${firmaKodu}`);
+  const totalActive = widgetIdSet.size > 0 ? widgetIdSet.size : widgets.length;
+  console.log(`[widget-compute] Processing ${widgets.length}/${totalActive} used widgets for ${sunucuAdi}:${firmaKodu}`);
 
   // Get data source slug mapping
   const { data: dataSources } = await sb.from('data_sources')

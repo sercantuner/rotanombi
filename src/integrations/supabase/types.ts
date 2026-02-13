@@ -1592,6 +1592,12 @@ export type Database = {
         }[]
       }
       get_team_members: { Args: { _admin_id: string }; Returns: string[] }
+      get_used_widget_ids_for_company: {
+        Args: { p_firma_kodu: string; p_sunucu_adi: string }
+        Returns: {
+          widget_id: string
+        }[]
+      }
       get_user_company_scope: {
         Args: { _user_id: string }
         Returns: {
