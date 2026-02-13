@@ -35,8 +35,9 @@ import {
   LayoutGrid, AlertCircle, FileJson, Wand2, X,
   RefreshCw, Loader2, Download, Sparkles, Send, MessageSquare, 
   Link2, Layers, ChevronLeft, ChevronRight, CheckCircle2, Circle,
-  Search, Folder, Filter
+  Search, Folder, Filter, Users
 } from 'lucide-react';
+import { usePermissions } from '@/hooks/usePermissions';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -663,6 +664,30 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
   const { activeCategories, isLoading: isCategoriesLoading, getCategoryBySlug } = useWidgetCategories();
   const { user } = useAuth();
   const { impersonatedUserId, isImpersonating } = useImpersonation();
+  const { isSuperAdmin } = usePermissions();
+  
+  // Super admin: başka kullanıcının verisini çekebilmek için hedef kullanıcı
+  const [targetUser, setTargetUser] = useState<{ user_id: string; email: string; firma_adi: string | null } | null>(null);
+  const [allUsers, setAllUsers] = useState<{ user_id: string; email: string; firma_adi: string | null; display_name: string | null }[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [userSearchOpen, setUserSearchOpen] = useState(false);
+  
+  // Super admin ise kullanıcı listesini yükle
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    setIsLoadingUsers(true);
+    supabase
+      .from('profiles')
+      .select('user_id, email, firma_adi, display_name, dia_sunucu_adi')
+      .not('dia_sunucu_adi', 'is', null)
+      .then(({ data }) => {
+        setAllUsers((data || []).map(d => ({ user_id: d.user_id, email: d.email || '', firma_adi: d.firma_adi, display_name: d.display_name })));
+        setIsLoadingUsers(false);
+      });
+  }, [isSuperAdmin]);
+  
+  // Efektif targetUserId: manuel seçim > impersonation > null
+  const effectiveTargetUserId = targetUser?.user_id || (isImpersonating ? impersonatedUserId : null);
   
   // Wizard state
   const [currentStep, setCurrentStep] = useState(0);
@@ -947,7 +972,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
                   filters: ds.filters || [],
                   sorts: ds.sorts || [],
                   limit: Math.min(ds.limit_count || 100, 100),
-                  ...(isImpersonating && impersonatedUserId ? { targetUserId: impersonatedUserId } : {}),
+                  ...(effectiveTargetUserId ? { targetUserId: effectiveTargetUserId } : {}),
                 },
               });
               
@@ -1049,7 +1074,7 @@ export function CustomCodeWidgetBuilder({ open, onOpenChange, onSave, editingWid
           sorts: dataSource.sorts || [],
           selectedColumns: dataSource.selected_columns || [],
           limit: Math.min(dataSource.limit_count || 100, 100),
-          ...(isImpersonating && impersonatedUserId ? { targetUserId: impersonatedUserId } : {}),
+          ...(effectiveTargetUserId ? { targetUserId: effectiveTargetUserId } : {}),
         },
       });
 
@@ -1998,34 +2023,76 @@ Yukarıdaki KOD ve VERİ bilgilerini dikkatlice analiz ederek:
       {/* Sağ: JSON Önizleme - Mobilde gizli veya daraltılabilir */}
       <Card className="flex flex-col min-h-[200px] lg:min-h-0">
         <CardHeader className="pb-2 md:pb-3">
-          <CardTitle className="text-xs md:text-sm flex items-center justify-between gap-2">
-            <span className="flex items-center gap-2">
-              <FileJson className="h-3.5 w-3.5 md:h-4 md:w-4" />
-              <span className="hidden sm:inline">JSON Veri Önizleme</span>
-              <span className="sm:hidden">JSON</span>
-            </span>
-            <div className="flex items-center gap-1 md:gap-2">
-              {sampleData.length > 0 && (
-                <>
-                  <Slider
-                    value={[jsonPreviewCount]}
-                    onValueChange={([val]) => setJsonPreviewCount(val)}
-                    min={5}
-                    max={Math.min(100, sampleData.length)}
-                    step={5}
-                    className="w-12 md:w-20"
-                  />
-                  <span className="text-[10px] md:text-xs font-mono w-4 md:w-6">{jsonPreviewCount}</span>
-                </>
-              )}
-              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
-                const jsonData = isMultiQueryMode ? getMultiQueryJsonData() : sampleData;
-                navigator.clipboard.writeText(JSON.stringify(jsonData, null, 2));
-                toast.success('JSON kopyalandı');
-              }}>
-                <Copy className="h-3 w-3" />
-              </Button>
+          <CardTitle className="text-xs md:text-sm flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <FileJson className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                <span className="hidden sm:inline">JSON Veri Önizleme</span>
+                <span className="sm:hidden">JSON</span>
+              </span>
+              <div className="flex items-center gap-1 md:gap-2">
+                {sampleData.length > 0 && (
+                  <>
+                    <Slider
+                      value={[jsonPreviewCount]}
+                      onValueChange={([val]) => setJsonPreviewCount(val)}
+                      min={5}
+                      max={Math.min(100, sampleData.length)}
+                      step={5}
+                      className="w-12 md:w-20"
+                    />
+                    <span className="text-[10px] md:text-xs font-mono w-4 md:w-6">{jsonPreviewCount}</span>
+                  </>
+                )}
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
+                  const jsonData = isMultiQueryMode ? getMultiQueryJsonData() : sampleData;
+                  navigator.clipboard.writeText(JSON.stringify(jsonData, null, 2));
+                  toast.success('JSON kopyalandı');
+                }}>
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
+            {/* Super Admin: Hedef kullanıcı seçici */}
+            {isSuperAdmin && allUsers.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Users className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                <Select
+                  value={targetUser?.user_id || '_self'}
+                  onValueChange={(val) => {
+                    if (val === '_self') {
+                      setTargetUser(null);
+                    } else {
+                      const u = allUsers.find(u => u.user_id === val);
+                      if (u) setTargetUser({ user_id: u.user_id, email: u.email, firma_adi: u.firma_adi });
+                    }
+                    // Veriyi sıfırla - yeni kullanıcı seçildiğinde tekrar çekilecek
+                    setSampleData([]);
+                    setMergedQueryData({});
+                  }}
+                >
+                  <SelectTrigger className="h-7 text-[10px] md:text-xs flex-1">
+                    <SelectValue placeholder="Kullanıcı seç..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_self">
+                      <span className="text-xs">Kendi Verim (Varsayılan)</span>
+                    </SelectItem>
+                    {allUsers.map(u => (
+                      <SelectItem key={u.user_id} value={u.user_id}>
+                        <span className="text-xs">{u.firma_adi || u.display_name || u.email}</span>
+                        <span className="text-[10px] text-muted-foreground ml-1">({u.email})</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {targetUser && (
+                  <Badge variant="secondary" className="text-[10px] flex-shrink-0">
+                    {targetUser.firma_adi || targetUser.email}
+                  </Badge>
+                )}
+              </div>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden p-2 md:p-4 pt-0">
