@@ -474,8 +474,8 @@ export function BuilderWidgetRenderer({
   // CSS izolasyonu - konteyner stillerinin widget'ı etkilememesi için
   const isolatedClassName = cn(className, 'isolate overflow-visible');
   
-  // Veri çekme - widget-bazlı filtreler ile
-  const { data, rawData, unfilteredData, multiQueryData, isLoading, error, refetch, dataStatus } = useDynamicWidgetData(builderConfig, widgetFilters);
+  // Veri çekme - widget-bazlı filtreler ile, snapshot-first loading için widgetId geçilir
+  const { data, rawData, unfilteredData, multiQueryData, isLoading, error, refetch, dataStatus } = useDynamicWidgetData(builderConfig, widgetFilters, widgetId);
   
   // DEBUG: Widget veri durumu - SADECE development modunda
   if (process.env.NODE_ENV === 'development') {
