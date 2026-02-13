@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
 import { Mail, Lock, Loader2, UserPlus, ArrowLeft, Shield, Eye, KeyRound, Server, ShieldCheck } from 'lucide-react';
@@ -264,7 +265,15 @@ export function LoginPage() {
       if (!result.success) {
         setError(result.error || 'Giriş başarısız');
       } else {
-        navigate(location.state?.from?.pathname || '/dashboard', { replace: true });
+        // Check if super_admin -> redirect accordingly
+        const { data: session } = await supabase.auth.getSession();
+        const userId = session?.session?.user?.id;
+        let defaultPath = '/dashboard';
+        if (userId) {
+          const { data: isSA } = await supabase.rpc('is_super_admin', { _user_id: userId });
+          if (isSA) defaultPath = '/super-admin-panel';
+        }
+        navigate(location.state?.from?.pathname || defaultPath, { replace: true });
       }
     }
   };

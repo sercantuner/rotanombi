@@ -1511,6 +1511,13 @@ export type Database = {
       }
     }
     Functions: {
+      get_all_cache_stats: {
+        Args: never
+        Returns: {
+          record_count: number
+          sunucu_adi: string
+        }[]
+      }
       get_cache_record_counts: {
         Args: {
           p_donem_kodu?: number
