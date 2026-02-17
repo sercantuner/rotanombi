@@ -7,8 +7,8 @@ import { Badge } from '@/components/ui/badge';
 
 const plans = [
   { name: 'Demo', price: 'Ücretsiz', period: '1 Ay', desc: 'Tüm özellikleri 1 ay boyunca deneyin.', badge: null, features: ['Tüm özellikler', '1 ay süre', 'Sınırsız widget', 'DIA ERP bağlantısı'], highlight: false },
-  { name: 'Aylık', price: '2.315', period: '/ ay + KDV', desc: 'Aylık esneklik ile tüm özellikler.', badge: null, features: ['Tüm özellikler', 'Aylık faturalandırma', 'Öncelikli destek', 'Sınırsız widget'], highlight: false },
-  { name: 'Yıllık', price: '25.000', period: '/ yıl + KDV', desc: 'Aylık ~2.083 ₺ ile %10 tasarruf.', badge: '%10 İndirim', features: ['Tüm özellikler', 'Yıllık faturalandırma', 'Öncelikli destek', '%10 tasarruf', 'Sınırsız widget'], highlight: true },
+  { name: 'Aylık', price: '3.241', period: '/ ay + KDV', desc: 'Aylık esneklik ile tüm özellikler.', badge: null, features: ['Tüm özellikler', 'Aylık faturalandırma', 'Öncelikli destek', 'Sınırsız widget'], highlight: false },
+  { name: 'Yıllık', price: '35.000', period: '/ yıl + KDV', desc: 'Aylık ~2.917 ₺ ile %10 tasarruf.', badge: '%10 İndirim', features: ['Tüm özellikler', 'Yıllık faturalandırma', 'Öncelikli destek', '%10 tasarruf', 'Sınırsız widget'], highlight: true },
 ];
 
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.12 } } };
