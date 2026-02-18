@@ -57,6 +57,7 @@ const CategoryManager = React.lazy(() => import('@/components/admin/CategoryMana
 const FeedbackManager = React.lazy(() => import('@/components/admin/FeedbackManager').then(m => ({ default: m.FeedbackManager })));
 const DataModelView = React.lazy(() => import('@/components/admin/DataModelView').then(m => ({ default: m.DataModelView })));
 const SuperAdminDataManagement = React.lazy(() => import('@/components/admin/SuperAdminDataManagement'));
+const WidgetDataSourceMap = React.lazy(() => import('@/components/admin/WidgetDataSourceMap'));
 
 // UserProfile, ImpersonatedProfile'ın bir parçasını kullanır - sadece gösterim için gerekli alanlar
 interface UserProfile {
@@ -106,6 +107,7 @@ export default function SuperAdminPanel() {
       'categories',
       'datasources',
       'datamodel',
+      'widget-ds-map',
       'feedback',
       'datamanagement',
       'licenses',
@@ -259,6 +261,7 @@ export default function SuperAdminPanel() {
     { key: 'categories', label: 'Kategoriler', icon: Layers },
     { key: 'datasources', label: 'Veri Kaynakları', icon: Database },
     { key: 'datamodel', label: 'Veri Modeli', icon: Link2 },
+    { key: 'widget-ds-map', label: 'Widget ↔ Kaynak', icon: Layers },
     { key: 'datamanagement', label: 'Veri Yönetimi', icon: HardDrive },
     { key: 'cron', label: 'Cron Yönetimi', icon: Clock },
     { key: 'feedback', label: 'Geri Bildirimler', icon: MessageSquare },
@@ -295,6 +298,8 @@ export default function SuperAdminPanel() {
         return <React.Suspense fallback={suspenseFallback}><div className="p-6 overflow-auto h-full"><DataSourceManager /></div></React.Suspense>;
       case 'datamodel':
         return <React.Suspense fallback={suspenseFallback}><div className="h-full"><DataModelView /></div></React.Suspense>;
+      case 'widget-ds-map':
+        return <React.Suspense fallback={suspenseFallback}><div className="p-6 overflow-auto h-full"><WidgetDataSourceMap /></div></React.Suspense>;
       case 'datamanagement':
         return <React.Suspense fallback={suspenseFallback}><div className="p-6 overflow-auto h-full"><SuperAdminDataManagement users={users} /></div></React.Suspense>;
       case 'licenses':
